@@ -91,7 +91,8 @@ R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar
 R5-022 shared checked UInt128/UInt256→UInt16 SafeCast、
 R5-023 shared checked UInt128/UInt256→UInt8 SafeCast、
 R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv、
-R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul；
+R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul、
+R1-026 shared allocation-free UInt64 floor log2/log10/log256；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -397,6 +398,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   分别绑定 capacity 与 quote policy；structural extraction guard 钉住 guard/operand 关系并拒绝
   target extension effect。默认 `+/-/*` 仍为 checked；signed/wide/full-precision math 继续
   fail closed。详见 `docs/plan/tasks/r1-025.md`。
+
+- R1-026 shared UInt64 integer logarithms 已完成：`Core.Math.UInt64` 增加 floor log2/log10/
+  log256，统一把零映射到零；6/5/7-step static ladders 复用既有 bounded loop、local frame、
+  compare/shift/div arithmetic，不把中间表达式指数复制到 target。BatchSizer/EvmPriceBand
+  分别绑定 capacity/encoding 与 quote-band policy；extraction guard 钉住 exact loop bounds 并
+  拒绝 target extension effect。round-up log、sqrt、wide/full-precision math 继续 fail closed。
+  详见 `docs/plan/tasks/r1-026.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

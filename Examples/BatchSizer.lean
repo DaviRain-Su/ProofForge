@@ -60,4 +60,19 @@ def amplify (state : State) (factor : UInt64) : Except Error (State × UInt64) :
   let next := Math.UInt64.saturatingMul state.lastBatchCount factor
   .ok ({ state with lastBatchCount := next }, next)
 
+/-- Zero-based binary magnitude for bounded batching and capacity bucketing. -/
+@[pf_entry]
+def binaryOrder (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log2 value
+
+/-- Zero-based decimal magnitude for human-scale batch limits. -/
+@[pf_entry]
+def decimalOrder (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log10 value
+
+/-- Zero-based highest occupied byte for fixed account encodings. -/
+@[pf_entry]
+def byteOrder (_state : State) (value : UInt64) : UInt64 :=
+  Math.UInt64.log256 value
+
 end Examples.BatchSizer

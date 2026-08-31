@@ -1,4 +1,4 @@
-//! Cross-target UInt64 math, SVM half: bounded helpers and saturating arithmetic.
+//! Cross-target UInt64 math, SVM half: bounded helpers, saturation, and integer logarithms.
 
 mod common;
 
@@ -97,6 +97,36 @@ fn scalar_queries_preserve_unsigned_boundary_laws() {
             Check::return_data(&(u64::MAX / 2).to_le_bytes()),
         ],
     );
+}
+
+#[test]
+fn integer_logs_cover_zero_powers_and_uint64_maximum() {
+    let (program_id, fixture, account) = initialized(7);
+    for (name, input, expected) in [
+        ("binaryOrder", 0, 0u64),
+        ("binaryOrder", 1, 0),
+        ("binaryOrder", 2, 1),
+        ("binaryOrder", u64::MAX, 63),
+        ("decimalOrder", 9, 0),
+        ("decimalOrder", 10, 1),
+        ("decimalOrder", 10_000_000_000_000_000_000, 19),
+        ("decimalOrder", u64::MAX, 19),
+        ("byteOrder", 255, 0),
+        ("byteOrder", 256, 1),
+        ("byteOrder", u64::MAX, 7),
+    ] {
+        fixture.call(
+            program_id,
+            account.clone(),
+            name,
+            &[input],
+            false,
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+    }
 }
 
 #[test]

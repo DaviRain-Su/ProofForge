@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared UInt64 math EVM consumer: bounded helpers and saturating arithmetic.
+# Shared UInt64 math EVM consumer: bounded helpers, saturation, and integer logarithms.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +25,22 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'upper(uint64,uint64)(uint64)' "$max" 7)" "$max" "maximum boundary"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'midpoint(uint64,uint64)(uint64)' 0 "$max")" "$half" "overflow-safe midpoint"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'binaryBand(uint64)(uint64)' 0)" 0 "binary log zero policy"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'binaryBand(uint64)(uint64)' 2)" 1 "binary log exact power"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'binaryBand(uint64)(uint64)' "$max")" 63 "binary log maximum"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimalBand(uint64)(uint64)' 9)" 0 "decimal log below first power"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'decimalBand(uint64)(uint64)' 10000000000000000000)" 19 "decimal log 10^19"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'byteBand(uint64)(uint64)' 255)" 0 "byte log below first power"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'byteBand(uint64)(uint64)' 256)" 1 "byte log exact power"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'byteBand(uint64)(uint64)' "$max")" 7 "byte log maximum"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'roundUp(uint64,uint64)(uint64)' "$max" 2)" "$half_up" "maximum ceil-div by two"
@@ -63,4 +79,4 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'scale(uint64)' 2 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "saturating scale persists"
 
-echo "evm-anvil-math-price-band: ok (bounded and saturating UInt64 math; engineering only)"
+echo "evm-anvil-math-price-band: ok (bounded/saturating/logarithmic UInt64 math; engineering only)"

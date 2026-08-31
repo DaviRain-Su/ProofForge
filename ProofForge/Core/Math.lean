@@ -6,8 +6,8 @@ namespace ProofForge.Core.Math.UInt64
 # Allocation-free bounded UInt64 math
 
 These helpers are target-neutral ordinary Lean policy. They use only existing scalar comparisons,
-bit operations, and arithmetic, so SVM and EVM consumers share laws without sharing a physical
-ABI, storage layout, Runtime effect, or emitter recipe.
+bit operations, arithmetic, and statically bounded loops, so SVM and EVM consumers share laws
+without sharing a physical ABI, storage layout, Runtime effect, or emitter recipe.
 -/
 
 /-- The smaller operand. -/
@@ -52,5 +52,45 @@ branch guards division; otherwise `upper / left` exactly preflights the checked 
     if upper / left < right then upper else left * right
   else
     0
+
+/-- Floor of the base-2 logarithm, returning zero for zero. The fixed six-stage ladder is the
+UInt64 specialization of a most-significant-bit search; every shift is bounded by 32. -/
+@[pf_inline] def log2 (input : UInt64) : UInt64 := Id.run do
+  let mut value := input
+  let mut result : UInt64 := 0
+  for i in [0:6] do
+    let shift := (32 : UInt64) >>> UInt64.ofNat i
+    if 0 < value >>> shift then
+      value := value >>> shift
+      result := result ||| shift
+  return result
+
+/-- Floor of the base-10 logarithm, returning zero for zero. The fixed decimal ladder reduces the
+operand by powers 10^16, 10^8, 10^4, 10^2, and 10 without allocation or an unbounded loop. -/
+@[pf_inline] def log10 (input : UInt64) : UInt64 := Id.run do
+  let mut value := input
+  let mut result : UInt64 := 0
+  for i in [0:5] do
+    let divisor : UInt64 :=
+      if i == 0 then 10000000000000000
+      else if i == 1 then 100000000
+      else if i == 2 then 10000
+      else if i == 3 then 100
+      else 10
+    if divisor ≤ value then
+      value := value / divisor
+      result := result ||| ((16 : UInt64) >>> UInt64.ofNat i)
+  return result
+
+/-- Floor of the base-256 logarithm, returning zero for zero. This is the zero-based index of the
+highest nonzero byte and therefore the floor base-2 logarithm divided by eight. -/
+@[pf_inline] def log256 (input : UInt64) : UInt64 := Id.run do
+  let mut value := input
+  let mut result : UInt64 := 0
+  for _ in [0:7] do
+    if 0xff < value then
+      value := value >>> 8
+      result := result + 1
+  return result
 
 end ProofForge.Core.Math.UInt64

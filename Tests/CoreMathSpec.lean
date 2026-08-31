@@ -3,9 +3,9 @@ import Examples.EvmPriceBand
 import ProofForge
 
 /-!
-Host truth tables plus live SVM/EVM extraction for the same allocation-free bounded/saturating
-math component. The two consumers own different errors and state fields; neither gains a target
-component operation.
+Host truth tables plus live SVM/EVM extraction for the same allocation-free bounded, saturating,
+and integer-logarithm component. The two consumers own different errors and state fields; neither
+gains a target component operation.
 -/
 
 namespace Tests.CoreMathSpec
@@ -47,6 +47,22 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard Math.UInt64.saturatingMul u64Max 0 == 0
 #guard Math.UInt64.saturatingMul (u64Max / 2) 2 == u64Max - 1
 #guard Math.UInt64.saturatingMul (u64Max / 2 + 1) 2 == u64Max
+#guard Math.UInt64.log2 0 == 0
+#guard Math.UInt64.log2 1 == 0
+#guard Math.UInt64.log2 2 == 1
+#guard Math.UInt64.log2 3 == 1
+#guard Math.UInt64.log2 0x8000000000000000 == 63
+#guard Math.UInt64.log2 u64Max == 63
+#guard Math.UInt64.log10 0 == 0
+#guard Math.UInt64.log10 9 == 0
+#guard Math.UInt64.log10 10 == 1
+#guard Math.UInt64.log10 9999999999999999999 == 18
+#guard Math.UInt64.log10 10000000000000000000 == 19
+#guard Math.UInt64.log10 u64Max == 19
+#guard Math.UInt64.log256 0 == 0
+#guard Math.UInt64.log256 255 == 0
+#guard Math.UInt64.log256 256 == 1
+#guard Math.UInt64.log256 u64Max == 7
 
 open Examples.BatchSizer in
 #guard (smaller (init 8) 11 4 == 4) && (larger (init 8) 11 4 == 11) &&
@@ -66,7 +82,9 @@ open Examples.BatchSizer in
   | _ => false) &&
   (match amplify (init (u64Max / 2 + 1)) 2 with
   | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
-  | _ => false)
+  | _ => false) &&
+  binaryOrder (init 8) 65535 == 15 && decimalOrder (init 8) 1000000 == 6 &&
+  byteOrder (init 8) 0x100000000 == 4
 
 open Examples.EvmPriceBand in
 #guard (lower (init 9) 13 5 == 5) && (upper (init 9) 13 5 == 13) &&
@@ -85,7 +103,9 @@ open Examples.EvmPriceBand in
   | _ => false) &&
   (match scale (init (u64Max / 2 + 1)) 2 with
   | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
-  | _ => false)
+  | _ => false) &&
+  binaryBand (init 9) u64Max == 63 && decimalBand (init 9) u64Max == 19 &&
+  byteBand (init 9) u64Max == 7
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
 private partial def noTargetEffects (ops : Array ProofForge.Extract.IR.Op) : Bool :=
@@ -118,11 +138,19 @@ private def isSaturatingMul : ProofForge.Extract.IR.Val → Bool
         mulLeft == left && mulRight == right
   | _ => false
 
+private partial def loopBounds (ops : Array ProofForge.Extract.IR.Op) : Array Nat :=
+  ops.foldl (init := #[]) fun bounds op =>
+    match op with
+    | .ite _ _ _ yes no => bounds ++ loopBounds yes ++ loopBounds no
+    | .forBody bound body => bounds.push bound ++ loopBounds body
+    | _ => bounds
+
 private def methodValue? (program : ProofForge.Extract.IR.Program) (name : String) :
     Option ProofForge.Extract.IR.Val := do
   let method ← program.methods.find? (·.ixName == name)
   method.ops.findSome? fun
     | .letLocal 0 value => some value
+    | .returnU64 value => some value
     | _ => none
 
 elab "#pf_guard_core_math_no_effects" : command => do
@@ -145,6 +173,16 @@ elab "#pf_guard_core_math_no_effects" : command => do
     for (name, valid) in checks do
       unless (methodValue? source name).any valid do
         throwError s!"{module}.{name}: saturating preflight no longer dominates its arithmetic"
+    let logNames : Array (String × Nat) :=
+      if module == `Examples.BatchSizer then
+        #[⟨"binaryOrder", 6⟩, ⟨"decimalOrder", 5⟩, ⟨"byteOrder", 7⟩]
+      else
+        #[⟨"binaryBand", 6⟩, ⟨"decimalBand", 5⟩, ⟨"byteBand", 7⟩]
+    for (name, expectedBound) in logNames do
+      let some method := source.methods.find? (·.ixName == name)
+        | throwError s!"{module}.{name}: missing integer-log consumer"
+      unless loopBounds method.ops == #[expectedBound] do
+        throwError s!"{module}.{name}: expected exactly one {expectedBound}-step bounded ladder"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer

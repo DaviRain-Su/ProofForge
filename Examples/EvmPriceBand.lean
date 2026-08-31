@@ -60,4 +60,19 @@ def scale (state : State) (factor : UInt64) : Except Error (State × UInt64) :=
   let next := Math.UInt64.saturatingMul state.lastQuote factor
   .ok ({ state with lastQuote := next }, next)
 
+/-- Zero-based binary magnitude for quote band selection. -/
+@[pf_entry]
+def binaryBand (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log2 quote
+
+/-- Zero-based decimal magnitude for quote decimal policy. -/
+@[pf_entry]
+def decimalBand (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log10 quote
+
+/-- Zero-based highest occupied byte for compact quote encoding. -/
+@[pf_entry]
+def byteBand (_state : State) (quote : UInt64) : UInt64 :=
+  Math.UInt64.log256 quote
+
 end Examples.EvmPriceBand
