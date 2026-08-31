@@ -1,3 +1,4 @@
+import ProofForge.Core.SafeCast
 import ProofForge.Svm.Sdk.Account
 import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.Program
@@ -46,4 +47,8 @@ instruction-word recipes; the existing Runtime/IR verifier still owns their targ
 
 `Sdk.Sysvar` similarly gives contracts stable Clock, EpochSchedule, and compile-time Rent names
 without exposing raw Runtime stubs or introducing a second syscall implementation.
+
+Target-neutral allocation-free helpers such as `Core.SafeCast` are re-exported through this facade
+without inventing an SVM syscall or emitter recipe; applications still own typed error and state
+transition policy.
 -/

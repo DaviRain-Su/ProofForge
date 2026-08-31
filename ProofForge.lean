@@ -4,6 +4,7 @@ import ProofForge.Core.Schema
 import ProofForge.Core.Eval
 import ProofForge.Core.Codec
 import ProofForge.Core.Value
+import ProofForge.Core.SafeCast
 import ProofForge.Core.Collections
 import ProofForge.Core.IR
 import ProofForge.Core.Target

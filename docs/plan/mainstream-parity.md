@@ -62,7 +62,7 @@
 
 | 能力 | 当前 | Parity gap | 优先级 |
 |---|---|---|---|
-| integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、safe narrowing/casts、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
+| integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；shared checked u128/u256→u64 narrowing；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、其余 consumer-driven safe cast targets、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
 | aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set/Queue/BitSet、bytes、UTF-8 string logical contracts；bytes/string 已分别绑定 SVM/EVM input；BitSet 与 enumerable-Set pure policy 已分别绑定 SVM account state 与 EVM storage | richer collection persistence bindings、bounded mutation writeback、wide/aggregate dynamic elements；nested bounded shapes | F0 |
 | codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings；两边 independent top-level bounded/tagged output plan；SVM fixed-account reusable version/discriminator header | nested/constructed/wide dynamic returns、typed reusable payload codecs/migrations | F0 |
 | control/resources | checked arithmetic、bounded `for`、fixed scalar frame | per-method collection/codec/memory budget manifest；禁止隐式 allocation/clone/format | F1 |
@@ -116,7 +116,7 @@ EVM Runtime 以 Solidity 的 [types](https://docs.soliditylang.org/en/latest/typ
 
 | 类别 | 当前 source surface | 主要缺口 | 优先级 |
 |---|---|---|---|
-| values/ABI | typed scalars、Address/u128/u256/bytesN、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded/tagged output、strict UTF-8 | signed ints、safe casts、nested/constructed/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
+| values/ABI | typed scalars、Address/u128/u256/bytesN、shared checked u128/u256→u64 narrowing、static aggregates、tagged input、bounded dynamic-array/bytes/string input、top-level one-limb bounded/tagged output、strict UTF-8 | signed ints、其余 safe cast targets、nested/constructed/wide dynamic return、dynamic constructor/fallback returndata | F0/F1 |
 | data/storage | ordinary typed State flattening、static declarations、address/address-pair hashed maps、bounded UInt64 storage vector、packed static bitmap、persistent ring queue、enumerable set/map 与 bounded checkpoints | explicit bounded memory/transient contracts；richer persistent shapes；namespaced storage | F0/F2 |
 | environment | caller/origin/self/coinbase、`msg.sig`、exact `msg.data.length`、block number/hash、timestamp/chain id/value/selfBalance/immutables；full-width gasleft/gasprice/basefee/prevrandao/gaslimit/blobbasefee/blobhash/blockhash；Address balance/codeSize/codeHash；solc 0.8.34 + Cancun target pin | blob payload、bounded raw `msg.data` byte view、broader target-version matrix；raw code bytes 不进入 safe SDK，blockhash/blobhash input 暂为 checked UInt64 index/height | F1 |
 | call/create | closed ERC-20/WETH/router/permit CALL/STATICCALL、typed ≤32-byte result policies、safe ETH send、explicit ordered reentrancy guard；ERC-20 exact canonical `1` / code-backed empty 与 success-only empty-code policy；`Address.hasCode` 提供诚实的观察点 predicate | bounded generic call data/result/revert bubbling；static/delegate semantics；CREATE/CREATE2；arbitrary-call policy | F1/F2 |
@@ -132,7 +132,7 @@ typed bounded call 和验证后的 result contract。
 
 | 组件 | 当前 | 主要缺口 | 优先级 |
 |---|---|---|---|
-| collections/math | typed maps、static declarations、capacity-2 role set、checked u256 operations、persistent bounded UInt64 vector/bitmap/ring/enumerable set/map/checkpoints | SafeCast/Math/String/Bytes utilities、richer keys/values/elements、wider checkpoints and iteration shapes | F0/F2 |
+| collections/math | shared checked u128/u256→u64 SafeCast、typed maps、static declarations、capacity-2 role set、checked u256 operations、persistent bounded UInt64 vector/bitmap/ring/enumerable set/map/checkpoints | richer SafeCast/Math/String/Bytes utilities、richer keys/values/elements、wider checkpoints and iteration shapes | F0/F2 |
 | access/safety | owner/two-step ownership、bounded static roles、explicit Pausable、OpenZeppelin-shaped nonzero-sentinel Reentrancy guard | typed Paused/Unpaused events, enumerable/admin roles, timelock/access manager | F1/F2 |
 | calls/payments | `Evm.Sdk.Payments` bounded Ether/ERC20/WETH/fixed-router facade；共享 CallResult 拒绝 false/noncanonical/no-code empty，并兼容 code-backed no-return；`Effect.thenTrue` 提供 canonical Bool composition；exact-32 比 OpenZeppelin ≥32 更严格 | bounded revert bubbling、pull payment/multicall；generic/arbitrary call 继续留在 advanced boundary | F1/F2 |
 | signatures | permit-specific ecrecover/domain paths | ECDSA/SignatureChecker/EIP-712/nonce/deadline/Merkle reusable components | F2 |
