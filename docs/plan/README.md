@@ -229,6 +229,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |
+| [wsm-near-json-ft-on-transfer-input-001](tasks/wsm-near-json-ft-on-transfer-input-001.md) | done | bounded three-field FT receiver callback parser |
 | [wsm-near-ft-transfer-call-001](tasks/wsm-near-ft-transfer-call-001.md) | done | integrated BAL2 transfer, weighted child, and private resolver returned call |
 | [wsm-near-storage-001](tasks/wsm-near-storage-001.md) | done | NEAR bounded raw binary storage + exact host status/register semantics |
 | [wsm-near-vector-001](tasks/wsm-near-vector-001.md) | done | NEAR bounded direct-write Vector64 element layout foundation |

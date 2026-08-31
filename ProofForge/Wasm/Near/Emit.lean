@@ -2326,6 +2326,7 @@ private def methodUsesArena (method : Method ValKind OpExt) : Bool :=
     method.inputSchema == some Codec.boundedMessage64Schema ||
     method.inputSchema == some Codec.ftTransferArgsSchema ||
     method.inputSchema == some Codec.ftTransferCallArgsSchema ||
+    method.inputSchema == some Codec.ftOnTransferArgsSchema ||
     method.inputSchema == some Codec.ftResolveTransferArgsSchema ||
     method.ops.any opUsesArena
 
@@ -2336,6 +2337,7 @@ private def methodUsesJsonAccountInput (method : Method ValKind OpExt) : Bool :=
   method.inputSchema == some Codec.accountIdSchema ||
     method.inputSchema == some Codec.ftTransferArgsSchema ||
     method.inputSchema == some Codec.ftTransferCallArgsSchema ||
+    method.inputSchema == some Codec.ftOnTransferArgsSchema ||
     method.inputSchema == some Codec.ftResolveTransferArgsSchema
 
 private def programUsesJsonAccountInput (p : Program ValKind OpExt) : Bool :=
@@ -2345,6 +2347,7 @@ private def methodUsesJsonU128Input (method : Method ValKind OpExt) : Bool :=
   method.inputSchema == some (.scalar .uint128) ||
     method.inputSchema == some Codec.ftTransferArgsSchema ||
     method.inputSchema == some Codec.ftTransferCallArgsSchema ||
+    method.inputSchema == some Codec.ftOnTransferArgsSchema ||
     method.inputSchema == some Codec.ftResolveTransferArgsSchema
 
 private def programUsesJsonU128Input (p : Program ValKind OpExt) : Bool :=
@@ -2375,6 +2378,12 @@ private def methodUsesJsonFtTransferCallInput (method : Method ValKind OpExt) : 
 
 private def programUsesJsonFtTransferCallInput (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonFtTransferCallInput p.initializer || p.entries.any methodUsesJsonFtTransferCallInput
+
+private def methodUsesJsonFtOnTransferInput (method : Method ValKind OpExt) : Bool :=
+  method.inputSchema == some Codec.ftOnTransferArgsSchema
+
+private def programUsesJsonFtOnTransferInput (p : Program ValKind OpExt) : Bool :=
+  methodUsesJsonFtOnTransferInput p.initializer || p.entries.any methodUsesJsonFtOnTransferInput
 
 private def methodUsesJsonFtResolveInput (method : Method ValKind OpExt) : Bool :=
   method.inputSchema == some Codec.ftResolveTransferArgsSchema
@@ -2678,6 +2687,37 @@ private def loadArg (method : Method ValKind OpExt) (level : Nat) :
           " (i64.load (i32.add (local.get $pf_ft_call_args_ptr) (i32.const " ++
           toString (off * 8) ++ "))))"))
       return lines
+    if plan == .jsonFtOnTransferArgs then
+      let mut lines := #[
+        indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
+        indent level ("(local.set $pf_input_size (call $pf_register_len (i64.const " ++
+          toString inputReg ++ ")) )"),
+        indent level ("(if (i64.gt_u (local.get $pf_input_size) (i64.const " ++
+          toString Codec.maxJsonFtOnTransferInputBytes ++ "))"),
+        indent (level + 2) "(then",
+        panicInput (level + 4),
+        indent (level + 2) "))",
+        indent level ("(local.set $pf_input_ptr (call $pf_arena_alloc (i64.const " ++
+          toString Codec.maxJsonFtOnTransferInputBytes ++ ") (i64.const 1)))"),
+        indent level "(local.set $pf_ft_on_transfer_args_ptr (call $pf_arena_alloc (i64.const 160) (i64.const 8)))"
+      ]
+      for off in [0:20] do
+        lines := lines.push (indent level ("(i64.store (i32.add (local.get $pf_ft_on_transfer_args_ptr) " ++
+          "(i32.const " ++ toString (off * 8) ++ ")) (i64.const 0))"))
+      lines := lines ++ #[
+        indent level ("(call $pf_read_register (i64.const " ++ toString inputReg ++
+          ") (i64.extend_i32_u (local.get $pf_input_ptr)))"),
+        indent level ("(if (i64.eqz (call $pf_json_ft_on_transfer_args (local.get $pf_input_ptr) " ++
+          "(i32.wrap_i64 (local.get $pf_input_size)) (local.get $pf_ft_on_transfer_args_ptr)))"),
+        indent (level + 2) "(then",
+        panicInput (level + 4),
+        indent (level + 2) "))"
+      ]
+      for off in [0:20] do
+        lines := lines.push (indent level ("(local.set " ++ localOfArg off ++
+          " (i64.load (i32.add (local.get $pf_ft_on_transfer_args_ptr) (i32.const " ++
+          toString (off * 8) ++ "))))"))
+      return lines
     if plan == .jsonFtResolveTransferArgs then
       let mut lines := #[
         indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
@@ -2851,6 +2891,9 @@ private def renderFn (p : Program ValKind OpExt)
   if inputPlan == some .jsonFtTransferCallArgs then
     lines := lines.push "    (local $pf_input_ptr i32)"
     lines := lines.push "    (local $pf_ft_call_args_ptr i32)"
+  if inputPlan == some .jsonFtOnTransferArgs then
+    lines := lines.push "    (local $pf_input_ptr i32)"
+    lines := lines.push "    (local $pf_ft_on_transfer_args_ptr i32)"
   if inputPlan == some .jsonFtResolveTransferArgs then
     lines := lines.push "    (local $pf_input_ptr i32)"
     lines := lines.push "    (local $pf_ft_resolve_args_ptr i32)"
@@ -3271,6 +3314,7 @@ private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
   method.inputSchema == some Codec.boundedMessage64Schema ||
   method.inputSchema == some Codec.ftTransferArgsSchema ||
   method.inputSchema == some Codec.ftTransferCallArgsSchema ||
+  method.inputSchema == some Codec.ftOnTransferArgsSchema ||
   method.inputSchema == some Codec.ftResolveTransferArgsSchema ||
   (match method.outputSchema with
     | some (.boundedString _) => true
@@ -4080,6 +4124,91 @@ private def jsonFtTransferCallInputHelpers : Array String := #[
   "    (i64.const 0))"
 ]
 
+/-- Required any-order receiver callback parser. It shares AccountId, quoted-u128, and Unicode
+string decoding with the other bounded FT argument frames; the required message may be empty. -/
+private def jsonFtOnTransferInputHelpers : Array String := #[
+  "  (func $pf_json_ft_on_transfer_key (param $ptr i32) (param $len i32) (param $pos i32) (result i32)",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 11)) (local.get $len))",
+  "      (then (if (i32.and",
+  "        (i64.eq (i64.load (i32.add (local.get $ptr) (local.get $pos))) (i64.const 6877671062971446050))",
+  "        (i64.eq (i64.and (i64.load (i32.add (local.get $ptr) (i32.add (local.get $pos) (i32.const 8))))",
+  "                          (i64.const 16777215)) (i64.const 2253929)))",
+  "        (then (return (i32.const 1))))))",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 8)) (local.get $len))",
+  "      (then (if (i64.eq (i64.load (i32.add (local.get $ptr) (local.get $pos)))",
+  "                         (i64.const 2482730745247654178))",
+  "        (then (return (i32.const 2))))))",
+  "    (if (i32.le_u (i32.add (local.get $pos) (i32.const 5)) (local.get $len))",
+  "      (then (if (i64.eq (i64.and (i64.load (i32.add (local.get $ptr) (local.get $pos)))",
+  "                                  (i64.const 1099511627775)) (i64.const 147764505890))",
+  "        (then (return (i32.const 3))))))",
+  "    (i32.const 0))",
+  "  (func $pf_json_ft_on_transfer_args (param $ptr i32) (param $len i32) (param $out i32) (result i64)",
+  "    (local $i i32) (local $before i32) (local $ws i32) (local $key i32)",
+  "    (local $seen i32) (local $bit i32)",
+  "    (block $invalid",
+  "      (local.set $before (local.get $i))",
+  "      (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "      (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "      (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "      (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 123)))",
+  "      (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "      (block $done (loop $fields",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (local.set $key (call $pf_json_ft_on_transfer_key (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (br_if $invalid (i32.eqz (local.get $key)))",
+  "        (local.set $bit (i32.shl (i32.const 1) (i32.sub (local.get $key) (i32.const 1))))",
+  "        (br_if $invalid (i32.and (local.get $seen) (local.get $bit)))",
+  "        (if (i32.eq (local.get $key) (i32.const 1))",
+  "          (then (local.set $i (i32.add (local.get $i) (i32.const 11))))",
+  "          (else (if (i32.eq (local.get $key) (i32.const 2))",
+  "            (then (local.set $i (i32.add (local.get $i) (i32.const 8))))",
+  "            (else (local.set $i (i32.add (local.get $i) (i32.const 5)))))))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 58)))",
+  "        (local.set $i (i32.add (local.get $i) (i32.const 1)))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (if (i32.eq (local.get $key) (i32.const 1))",
+  "          (then",
+  "            (local.set $i (call $pf_json_account_string (local.get $ptr) (local.get $len) (local.get $i) (local.get $out)))",
+  "            (br_if $invalid (i32.eqz (local.get $i))))",
+  "          (else (if (i32.eq (local.get $key) (i32.const 2))",
+  "            (then",
+  "              (local.set $i (call $pf_json_u128_string (local.get $ptr) (local.get $len) (local.get $i)",
+  "                (i32.add (local.get $out) (i32.const 72))))",
+  "              (br_if $invalid (i32.eqz (local.get $i))))",
+  "            (else",
+  "              (local.set $i (call $pf_json_memo_string (local.get $ptr) (local.get $len) (local.get $i)",
+  "                (i32.add (local.get $out) (i32.const 88)) (i32.const 8) (i32.const 64) (i32.const 0)))",
+  "              (br_if $invalid (i32.eqz (local.get $i)))))))",
+  "        (local.set $seen (i32.or (local.get $seen) (local.get $bit)))",
+  "        (local.set $before (local.get $i))",
+  "        (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "        (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "        (br_if $invalid (i32.ge_u (local.get $i) (local.get $len)))",
+  "        (if (i32.eq (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 44))",
+  "          (then (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $fields)))",
+  "        (br_if $invalid (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.const 125)))",
+  "        (local.set $i (i32.add (local.get $i) (i32.const 1))) (br $done)))",
+  "      (br_if $invalid (i32.ne (local.get $seen) (i32.const 7)))",
+  "      (local.set $before (local.get $i))",
+  "      (local.set $i (call $pf_json_memo_skip_ws (local.get $ptr) (local.get $len) (local.get $i)))",
+  "      (local.set $ws (i32.add (local.get $ws) (i32.sub (local.get $i) (local.get $before))))",
+  "      (br_if $invalid (i32.gt_u (local.get $ws) (i32.const 32)))",
+  "      (br_if $invalid (i32.ne (local.get $i) (local.get $len)))",
+  "      (return (i64.const 1)))",
+  "    (i64.const 0))"
+]
+
 /-- Bounded any-order parser for the exact private resolver argument frame. Account and amount
 values reuse the same checked string decoders as the transfer parser; only field dispatch and
 independent sender/receiver presence bits are resolver-specific. -/
@@ -4303,15 +4432,18 @@ def emit (p : IR.Program) : Except String String := do
   if programUsesJsonU128Input p then
     lines := lines ++ jsonU128InputHelpers
   if programUsesJsonOptionalMemoInput p || programUsesJsonMessageInput p ||
-      programUsesJsonFtTransferCallInput p || programUsesJsonFtResolveInput p then
+      programUsesJsonFtTransferCallInput p || programUsesJsonFtOnTransferInput p ||
+      programUsesJsonFtResolveInput p then
     lines := lines ++ jsonOptionalMemoInputHelpers
   if programUsesJsonMessageInput p then
     lines := lines ++ jsonMessageInputHelpers
   if programUsesJsonFtTransferInput p || programUsesJsonFtTransferCallInput p ||
-      programUsesJsonFtResolveInput p then
+      programUsesJsonFtOnTransferInput p || programUsesJsonFtResolveInput p then
     lines := lines ++ jsonFtTransferInputHelpers
   if programUsesJsonFtTransferCallInput p then
     lines := lines ++ jsonFtTransferCallInputHelpers
+  if programUsesJsonFtOnTransferInput p then
+    lines := lines ++ jsonFtOnTransferInputHelpers
   if programUsesJsonFtResolveInput p then
     lines := lines ++ jsonFtResolveInputHelpers
   lines := lines.push ""

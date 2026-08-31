@@ -215,6 +215,18 @@ json_ft_transfer_call_input_anchors = (
     '(func (export "receiverLength")',
     '(func (export "messageW7")',
 )
+json_ft_on_transfer_input_anchors = (
+    '(func $pf_json_ft_on_transfer_args',
+    '(func $pf_json_ft_on_transfer_key',
+    '(func $pf_json_account_string',
+    '(func $pf_json_u128_string',
+    '(func $pf_json_memo_string',
+    '(i64.const 1071)',
+    '(call $pf_arena_alloc (i64.const 160) (i64.const 8))',
+    '(func (export "senderLength")',
+    '(func (export "messageW7")',
+    '(func (export "commitAmountHigh")',
+)
 json_unit_output_anchors = (
     '(func (export "setMarker")',
     '(func (export "setMarkerVoid")',
@@ -494,6 +506,8 @@ for wat in wats:
         extra = json_ft_transfer_input_anchors
     elif wat.stem == "NearJsonFtTransferCallInput":
         extra = json_ft_transfer_call_input_anchors
+    elif wat.stem == "NearJsonFtOnTransferInput":
+        extra = json_ft_on_transfer_input_anchors
     elif wat.stem == "NearJsonUnitOutput":
         extra = json_unit_output_anchors
     elif wat.stem == "NearJsonU128Mutation":

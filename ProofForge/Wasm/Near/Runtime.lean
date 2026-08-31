@@ -79,6 +79,14 @@ only decodes arguments; it neither transfers tokens nor creates a Promise. -/
   msg : BoundedMessage64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for bounded canonical `ft_on_transfer` receiver arguments. This
+carrier only decodes `{sender_id,amount,msg}`; it implements no receiver policy or Promise effect. -/
+@[pf_boundary] structure FtOnTransferArgs where
+  senderId : AccountId
+  amount : ProofForge.Core.Value.UInt128
+  msg : BoundedMessage64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned exact frame for the bounded canonical private resolver argument parser.
 This carrier only decodes `{sender_id,receiver_id,amount}`; it performs no ledger reconciliation. -/
 @[pf_boundary] structure FtResolveTransferArgs where

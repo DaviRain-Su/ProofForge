@@ -715,6 +715,40 @@ private partial def rewriteJsonFtTransferCallInputRoot
       else pure none
   | _ => pure none
 
+private partial def rewriteJsonFtOnTransferInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.field (.arg 0) "senderId") name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg index))
+      | none => throw s!"near/codec: unsupported FtOnTransferArgs sender projection {name}"
+  | .field (.field (.arg 0) "amount") "w0" => pure (some (.arg 9))
+  | .field (.field (.arg 0) "amount") "w1" => pure (some (.arg 10))
+  | .field (.field (.arg 0) "amount") name =>
+      throw s!"near/codec: unsupported FtOnTransferArgs amount projection {name}"
+  | .field (.field (.arg 0) "msg") name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg (11 + index)))
+      | none => throw s!"near/codec: unsupported FtOnTransferArgs message projection {name}"
+  | .field (.arg 0) name =>
+      if name.startsWith "senderId_" then
+        match accountInputFieldIndex? (name.drop 9).toString with
+        | some index => pure (some (.arg index))
+        | none => throw s!"near/codec: unsupported FtOnTransferArgs sender projection {name}"
+      else if name == "amount_w0" then pure (some (.arg 9))
+      else if name == "amount_w1" then pure (some (.arg 10))
+      else if name.startsWith "msg_" then
+        match accountInputFieldIndex? (name.drop 4).toString with
+        | some index => pure (some (.arg (11 + index)))
+        | none => throw s!"near/codec: unsupported FtOnTransferArgs message projection {name}"
+      else throw s!"near/codec: FtOnTransferArgs projection {name} requires a scalar leaf"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: FtOnTransferArgs input requires a scalar leaf projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 20))
+      else pure none
+  | _ => pure none
+
 private partial def rewriteJsonFtResolveInputRoot
     (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
   | .field (.field (.arg 0) "senderId") name =>
@@ -773,6 +807,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .jsonMessage64 => rewriteJsonMessageInputRoot method
     | .jsonFtTransferArgs => rewriteJsonFtTransferInputRoot method
     | .jsonFtTransferCallArgs => rewriteJsonFtTransferCallInputRoot method
+    | .jsonFtOnTransferArgs => rewriteJsonFtOnTransferInputRoot method
     | .jsonFtResolveTransferArgs => rewriteJsonFtResolveInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount

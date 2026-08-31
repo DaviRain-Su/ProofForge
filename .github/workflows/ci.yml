@@ -260,6 +260,9 @@ jobs:
       - name: Run NEAR sandbox combined bounded FT transfer-call argument gate
         run: runtime-tests/near/json_ft_transfer_call_input.sh
 
+      - name: Run NEAR sandbox bounded FT receiver argument gate
+        run: runtime-tests/near/json_ft_on_transfer_input.sh
+
       - name: Run NEAR sandbox bounded FT resolver argument gate
         run: runtime-tests/near/json_ft_resolve_input.sh
 

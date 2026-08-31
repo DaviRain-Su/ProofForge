@@ -22,7 +22,7 @@ open ProofForge
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names ==
-  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtResolveInput", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
+  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtOnTransferInput", "NearJsonFtResolveInput", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "f85fa4f3182ec1eb"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "f45af507fc51f527"
@@ -38,6 +38,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonMessageInput" == some "6c9214fea46b5772"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonFtTransferInput" == some "21ac8e6e13ab0ef8"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonFtTransferCallInput" == some "c634c3a5c29242eb"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonFtOnTransferInput" == some "8a74f45cfcf09b58"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonFtResolveInput" == some "f16d9836431a6bb0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorage" == some "cd97bb762dac8be3"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageEconomics" == some "9c98eca433f99470"

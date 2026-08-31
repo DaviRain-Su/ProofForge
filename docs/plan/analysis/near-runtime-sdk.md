@@ -259,6 +259,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    24-leaf frame adds required bounded `msg` to receiver/amount/optional memo. The any-order loop
    shares all existing value decoders, uses a 1179-byte exact worst-case wire budget, clears every
    inactive frame, and deliberately has no standard export or effects.
+   **NEAR-JSON-FT-ON-TRANSFER-INPUT (wsm-near-json-ft-on-transfer-input-001 done):** the distinct
+   20-leaf receiver frame combines sender AccountId, full u128 amount, and required Message64.
+   One any-order loop reuses all established value decoders, accepts empty message, and enforces
+   independent presence bits. Exact geometry is 1071 wire bytes and 32 aggregate whitespace;
+   inactive leaves are zero. This bounded parser has no standard export or receiver behavior.
    **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** the distinct exact
    `FtResolveTransferArgs` schema lowers sender AccountId, receiver AccountId, and full u128 amount
    to 20 ordered leaves. One bounded field loop accepts all six raw-key permutations with separate
