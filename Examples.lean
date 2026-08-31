@@ -98,6 +98,7 @@ import Examples.XrplCinder
 import Examples.XrplRevoke
 import Examples.XrplReed
 import Examples.XrplRake
+import Examples.XrplRaid
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

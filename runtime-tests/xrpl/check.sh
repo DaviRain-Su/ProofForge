@@ -323,6 +323,19 @@ need_exports_treasury = (
     '(i32.const 524313)',
     '(import "host_lib" "emit_built_txn"',
 )
+need_exports_raid = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "grant") (result i32)',
+    '(func (export "takeB") (result i32)',
+    '(func (export "clawB") (result i32)',
+    '(func (export "cashSelf") (result i32)',
+    '(func (export "freeze") (result i32)',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+    '(i32.store8 (i32.const 92) (i32.const 97))',
+    '(i32.store8 (i32.const 96) (i32.const 108))',
+)
 need_exports_rake = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -784,6 +797,8 @@ for wat in wats:
         exports = need_exports_reed
     elif wat.stem == "XrplRake":
         exports = need_exports_rake
+    elif wat.stem == "XrplRaid":
+        exports = need_exports_raid
     else:
         exports = need_exports_counter
     for needle in exports:
