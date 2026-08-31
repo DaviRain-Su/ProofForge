@@ -83,6 +83,7 @@ import Examples.XrplDual
 import Examples.XrplLatch
 import Examples.XrplEscape
 import Examples.XrplFrost
+import Examples.XrplGlaze
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
