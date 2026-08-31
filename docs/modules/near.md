@@ -44,6 +44,11 @@ wsm-near-json-ft-transfer-input-001 combines those value decoders behind one bou
 required `receiver_id`/`amount` and optional `memo`. All key permutations are accepted; duplicate,
 unknown, escaped-key, and trailing forms reject. The compiler-owned 15-leaf frame is parser-only
 and deliberately does not export or implement `ft_transfer`.
+wsm-near-json-ft-resolve-input-001 adds the separate exact 20-leaf `sender_id`/`receiver_id`/`amount`
+frame needed by a future private resolver. Its bounded any-order field loop reuses the same
+AccountId and quoted-u128 value decoders, while independent presence bits and zeroed 64-byte frames
+keep the two identities isolated. It accepts at most 1079 wire bytes and 32 structural whitespace
+bytes; the diagnostic fixture has no Promise result, ledger reconciliation, or standard export.
 wsm-near-json-unit-output-001 binds only an explicit mutating `Unit` result to exact JSON `null`.
 The four-byte `near-json-null-unit-v1` return is distinct from historical raw UInt64 output and
 from an initializer's omitted return; it is the output prerequisite for the later transfer method,
@@ -241,5 +246,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

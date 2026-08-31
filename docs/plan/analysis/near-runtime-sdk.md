@@ -255,6 +255,13 @@ asynchronous; dynamic handles and multi-action builders are absent.
    and reuses the checked value cursors. Exact geometry is 786 wire bytes and 32 aggregate
    structural-whitespace bytes. Unknown keys reject (unlike the broader generated serde wrapper),
    and this parser fixture intentionally has no standard `ft_transfer` export or ledger effect.
+   **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** the distinct exact
+   `FtResolveTransferArgs` schema lowers sender AccountId, receiver AccountId, and full u128 amount
+   to 20 ordered leaves. One bounded field loop accepts all six raw-key permutations with separate
+   presence bits and reuses the checked AccountId/decimal value cursors. Exact maximum wire is 1079
+   bytes with 32 aggregate structural whitespace bytes. The fixture supports view and mutation
+   diagnostics but has no Promise result, private callback, ledger reconciliation, or standard
+   resolver export.
    **NEAR-JSON-UNIT-OUTPUT (wsm-near-json-unit-output-001 done):** an explicit logical Unit result
    on a mutating entry selects exactly one four-byte JSON `null` return after state persistence.
    Initializers, raw UInt64 methods, and view outputs retain their previous policies. This pins the
@@ -321,6 +328,9 @@ asynchronous; dynamic handles and multi-action builders are absent.
     noncanonical spellings, and overflow produce invalid zero limbs without trapping. The future
     resolver owns `results_count == 1` and index zero. This is narrower than near-sdk-rs serde
     `U128`, which also admits plus, leading zeros, escapes, and bounded surrounding whitespace.
+    **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** a separate exact
+    sender/receiver/amount object parser now provides the 20-leaf callback argument prerequisite;
+    Promise-result validation and balance reconciliation remain intentionally uncomposed.
 16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and

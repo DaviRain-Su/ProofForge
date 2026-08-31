@@ -661,6 +661,40 @@ private partial def rewriteJsonFtTransferInputRoot
         pure none
   | _ => pure none
 
+private partial def rewriteJsonFtResolveInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.field (.arg 0) "senderId") name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg index))
+      | none => throw s!"near/codec: unsupported FtResolveTransferArgs sender projection {name}"
+  | .field (.field (.arg 0) "receiverId") name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg (9 + index)))
+      | none => throw s!"near/codec: unsupported FtResolveTransferArgs receiver projection {name}"
+  | .field (.field (.arg 0) "amount") "w0" => pure (some (.arg 18))
+  | .field (.field (.arg 0) "amount") "w1" => pure (some (.arg 19))
+  | .field (.field (.arg 0) "amount") name =>
+      throw s!"near/codec: unsupported FtResolveTransferArgs amount projection {name}"
+  | .field (.arg 0) name =>
+      if name.startsWith "senderId_" then
+        match accountInputFieldIndex? (name.drop 9).toString with
+        | some index => pure (some (.arg index))
+        | none => throw s!"near/codec: unsupported FtResolveTransferArgs sender projection {name}"
+      else if name.startsWith "receiverId_" then
+        match accountInputFieldIndex? (name.drop 11).toString with
+        | some index => pure (some (.arg (9 + index)))
+        | none => throw s!"near/codec: unsupported FtResolveTransferArgs receiver projection {name}"
+      else if name == "amount_w0" then pure (some (.arg 18))
+      else if name == "amount_w1" then pure (some (.arg 19))
+      else throw s!"near/codec: FtResolveTransferArgs projection {name} requires a scalar leaf"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: FtResolveTransferArgs input requires a scalar leaf projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 20))
+      else pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
@@ -684,6 +718,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .jsonOptionalMemo16 => rewriteJsonOptionalMemoInputRoot method
     | .jsonMessage64 => rewriteJsonMessageInputRoot method
     | .jsonFtTransferArgs => rewriteJsonFtTransferInputRoot method
+    | .jsonFtResolveTransferArgs => rewriteJsonFtResolveInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)

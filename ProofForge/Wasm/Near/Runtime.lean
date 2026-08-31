@@ -70,6 +70,14 @@ This is an input carrier only: it does not implement or claim the public NEP-141
   memo : OptionalMemo16
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for the bounded canonical private resolver argument parser.
+This carrier only decodes `{sender_id,receiver_id,amount}`; it performs no ledger reconciliation. -/
+@[pf_boundary] structure FtResolveTransferArgs where
+  senderId : AccountId
+  receiverId : AccountId
+  amount : ProofForge.Core.Value.UInt128
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Current block height. Extractor matches this name and the NEAR emitter
 imports `env.block_index` (u64, view-safe). Not Solana `Clock.slot`, not
