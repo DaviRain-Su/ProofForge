@@ -152,6 +152,19 @@ output_anchors = (
     '(func (export "echoBytes")',
     '(call $pf_value_return (i64.add (i64.const 4)',
 )
+storage_balance_output_anchors = (
+    '(func $pf_u128_decimal',
+    '(local $pf_output_second_length i64)',
+    '(call $pf_arena_alloc (i64.const 105) (i64.const 1))',
+    '(func (export "none")',
+    '(func (export "someZero")',
+    '(func (export "someAsymmetric")',
+    '(func (export "someMax")',
+    '(func (export "malformedPresence")',
+    '(func (export "malformedPresenceMax")',
+    '(i64.const 2480464647488283259)',
+    '(i64.const 7811882189714500642)',
+)
 json_account_input_anchors = (
     '(func $pf_json_account_id',
     '(func $pf_json_account_key',
@@ -520,6 +533,8 @@ for wat in wats:
         extra = memory_anchors
     elif wat.stem == "NearOutput":
         extra = output_anchors
+    elif wat.stem == "NearStorageBalanceOutput":
+        extra = storage_balance_output_anchors
     elif wat.stem == "NearJsonAccountInput":
         extra = json_account_input_anchors
     elif wat.stem == "NearJsonAmountInput":

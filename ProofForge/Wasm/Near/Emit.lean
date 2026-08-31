@@ -754,6 +754,51 @@ private def returnJsonU128Instr (st : EState) (values : Array (Val ValKind))
     indent level "(call $pf_value_return (i64.add (local.get $pf_output_length) (i64.const 2)) (i64.extend_i32_u (local.get $pf_output_ptr)))"
   ]
 
+/-- Serialize the exact compiler-owned `Option<StorageBalance>` frame. `None` is JSON `null` and
+requires zero inactive quantity limbs; `Some` has declaration-order quoted-u128 fields. The
+105-byte arena is exact for two maximum 39-digit quantities. -/
+private def returnJsonStorageBalanceInstr (st : EState) (values : Array (Val ValKind))
+    (level : Nat) : Except String (Array String) := do
+  unless values.size == 5 do
+    throw "near/codec: StorageBalance output plan does not match result leaves"
+  let registered ← renderVal st values[0]!
+  let totalLo ← renderVal st values[1]!
+  let totalHi ← renderVal st values[2]!
+  let availableLo ← renderVal st values[3]!
+  let availableHi ← renderVal st values[4]!
+  return #[
+    indent level ("(if (i64.gt_u " ++ registered ++ " (i64.const 1)) (then unreachable))"),
+    indent level ("(if (i64.eqz " ++ registered ++ ")"),
+    indent (level + 2) "(then",
+    indent (level + 4) ("(if (i64.ne (i64.or (i64.or " ++ totalLo ++ " " ++ totalHi ++ ") " ++
+      "(i64.or " ++ availableLo ++ " " ++ availableHi ++ ")) (i64.const 0)) " ++
+      "(then unreachable))"),
+    indent (level + 4) "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 4) (i64.const 1)))",
+    indent (level + 4) "(i32.store (local.get $pf_output_ptr) (i32.const 1819047278))",
+    indent (level + 4) "(call $pf_value_return (i64.const 4) (i64.extend_i32_u (local.get $pf_output_ptr)))",
+    indent (level + 2) ")",
+    indent (level + 2) "(else",
+    indent (level + 4) "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 105) (i64.const 1)))",
+    -- `{"total":"` as 8-byte + 2-byte little-endian stores.
+    indent (level + 4) "(i64.store (local.get $pf_output_ptr) (i64.const 2480464647488283259))",
+    indent (level + 4) "(i64.store16 (i32.add (local.get $pf_output_ptr) (i32.const 8)) (i64.const 8762))",
+    indent (level + 4) "(local.set $pf_output_digits_ptr (call $pf_arena_alloc (i64.const 39) (i64.const 1)))",
+    indent (level + 4) ("(local.set $pf_output_length (call $pf_u128_decimal " ++ totalLo ++ " " ++
+      totalHi ++ " (local.get $pf_output_digits_ptr) " ++
+      "(i32.add (local.get $pf_output_ptr) (i32.const 10))))"),
+    -- `","available":"` starts immediately after the total digits.
+    indent (level + 4) "(i64.store (i32.add (local.get $pf_output_ptr) (i32.wrap_i64 (i64.add (local.get $pf_output_length) (i64.const 10)))) (i64.const 7811882189714500642))",
+    indent (level + 4) "(i64.store (i32.add (local.get $pf_output_ptr) (i32.wrap_i64 (i64.add (local.get $pf_output_length) (i64.const 18)))) (i64.const 9634068613063265))",
+    indent (level + 4) ("(local.set $pf_output_second_length (call $pf_u128_decimal " ++
+      availableLo ++ " " ++ availableHi ++ " (local.get $pf_output_digits_ptr) " ++
+      "(i32.add (local.get $pf_output_ptr) (i32.wrap_i64 " ++
+      "(i64.add (local.get $pf_output_length) (i64.const 25))))))"),
+    -- Closing `"}` and exact total length `27 + totalDigits + availableDigits`.
+    indent (level + 4) "(i64.store16 (i32.add (local.get $pf_output_ptr) (i32.wrap_i64 (i64.add (i64.add (local.get $pf_output_length) (local.get $pf_output_second_length)) (i64.const 25)))) (i64.const 32034))",
+    indent (level + 4) "(call $pf_value_return (i64.add (i64.add (local.get $pf_output_length) (local.get $pf_output_second_length)) (i64.const 27)) (i64.extend_i32_u (local.get $pf_output_ptr)))",
+    indent (level + 2) "))"
+  ]
+
 private def emitChecked (st : EState) (kind : String) (lhs rhs : String) (level : Nat) :
     Except String (Array String × EState) := do
   let temp := localOfTemp st.fresh
@@ -1992,6 +2037,10 @@ private partial def emitRegion (p : Program ValKind OpExt)
             if st.pendingPromiseReturn.isSome then
               throw "extract/unsupported: JSON u128 output cannot also return a promise"
             return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
+        | some .jsonStorageBalanceOption =>
+            if st.pendingPromiseReturn.isSome then
+              throw "extract/unsupported: StorageBalance output cannot also return a promise"
+            return { lines := ← returnJsonStorageBalanceInstr st values level, st, terminal := true }
         | some .promiseOrJsonU128 =>
             match st.pendingPromiseReturn with
             | some promiseLocal =>
@@ -2916,6 +2965,9 @@ private def renderFn (p : Program ValKind OpExt)
     lines := lines.push "    (local $pf_output_length i64)"
   if outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 then
     lines := lines.push "    (local $pf_output_digits_ptr i32)"
+  if outputPlan == some .jsonStorageBalanceOption then
+    lines := lines.push "    (local $pf_output_digits_ptr i32)"
+    lines := lines.push "    (local $pf_output_second_length i64)"
   if isPrivate || methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
@@ -3338,7 +3390,8 @@ private def programUsesUtf8Codec (p : Program ValKind OpExt) : Bool :=
   methodUsesUtf8Codec p.initializer || p.entries.any methodUsesUtf8Codec
 
 private def methodUsesJsonU128Output (method : Method ValKind OpExt) : Bool :=
-  method.outputSchema == some (.scalar .uint128)
+  method.outputSchema == some (.scalar .uint128) ||
+    method.outputSchema == some Codec.storageBalanceResultSchema
 
 private def programUsesJsonU128Output (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonU128Output p.initializer || p.entries.any methodUsesJsonU128Output

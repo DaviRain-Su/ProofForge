@@ -95,6 +95,16 @@ This carrier only decodes `{sender_id,receiver_id,amount}`; it performs no ledge
   amount : ProofForge.Core.Value.UInt128
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
+`registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
+serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record
+JSON encoder and does not choose registration economics. -/
+@[pf_boundary] structure StorageBalanceResult where
+  registered : UInt64
+  total : ProofForge.Core.Value.UInt128
+  available : ProofForge.Core.Value.UInt128
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Current block height. Extractor matches this name and the NEAR emitter
 imports `env.block_index` (u64, view-safe). Not Solana `Clock.slot`, not

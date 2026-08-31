@@ -903,6 +903,18 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       retSchema := .scalar .uint64
       retCount := 1 }, some {
         ixName := method.ixName, schema := .scalar .uint128, plan })
+  if method.retSchema == Codec.storageBalanceResultSchema then
+    unless method.kind == .get do
+      throw s!"near/codec: {method.ixName} StorageBalance output currently requires a view"
+    let plan := Codec.OutputPlan.jsonStorageBalanceOption
+    unless method.retCount == plan.sourceValueCount do
+      throw s!"near/codec: {method.ixName} output frame does not match its StorageBalance plan"
+    return ({ method with
+      retWidths := #[8]
+      retTypes := #[.uint64]
+      retSchema := .scalar .uint64
+      retCount := 1 }, some {
+        ixName := method.ixName, schema := Codec.storageBalanceResultSchema, plan })
   match method.retSchema with
   | .boundedArray .. | .boundedBytes _ | .boundedString _ =>
       unless method.kind == .get do

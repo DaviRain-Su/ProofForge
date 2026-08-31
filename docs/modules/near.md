@@ -25,6 +25,11 @@ schema to one canonical quoted-decimal JSON string (`near-json-u128-string-v1`),
 decimal routine. wsm-near-json-u128-mutation-output-001 extends that same exact wire policy only to
 an `Except Error (State × UInt128)` mutation: all state fields persist before one return, while a
 failed branch traps and rolls back. Other two-field records and Promise-return combinations reject.
+wsm-near-storage-balance-output-001 separately binds only the exact compiler-owned five-leaf
+`StorageBalanceResult` view to `null` or declaration-order quoted-u128 `total`/`available` JSON.
+Absent frames require zero inactive limbs; the exact maximum object is 105 bytes. This is an
+output-only prerequisite: it exports no NEP-145 method and deliberately does not choose between
+ProofForge's variable AccountId-key economics and near-sdk's configured fixed registration cost.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
@@ -207,7 +212,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   分配/复用/清零以及 bounds、stale handle、wrong capacity、double begin traps（nearcore
   可把 initial memory 规范化得更大，实际 grow 路径由 model + WAT gate 钉住）。不是
   「artifact 已被证明」；`output.sh` 验证 exact bytes/String/UInt16-array Borsh、input/output
-  round-trip、capacity 和 output UTF-8 failures；`json_account_input.sh` 验证 bounded
+  round-trip、capacity 和 output UTF-8 failures；`storage_balance_output.sh` 验证 exact
+  `null`/object bytes、独立 full-u128 total/available limbs、105-byte max wire、malformed
+  presence/inactive traps 与 stale isolation；`json_account_input.sh` 验证 bounded
   `{"account_id":"..."}` view input 的 raw/escaped 2..64-byte decoding、九叶 carrier、exact
   433-byte wire/32-whitespace bounds 与 malformed object/string/account fail-closed matrix；
   `json_amount_input.sh` 验证 canonical `{"amount":"digits"}` 的完整两 limb decimal
@@ -288,5 +295,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearStorageBalanceOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

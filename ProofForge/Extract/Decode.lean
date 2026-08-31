@@ -2406,8 +2406,16 @@ private def asRegisteredBoundaryCtorFields (env : Environment) (e : Expr) :
   let args := e.getAppArgs
   unless info.numFields ≤ args.size do none
   let fields := args.extract (args.size - info.numFields) args.size
-  let values ← fields.mapM (val env)
-  unless values.size == info.numFields do none
+  let mut values : Array Ops.Val := #[]
+  for field in fields do
+    -- Boundary records may contain an exact compiler-owned wide scalar. Preserve every ordered
+    -- limb instead of letting generic `val` turn the nested constructor into a field projection
+    -- rooted at persistent State (for example `total_w0`).
+    match asWideCtorFields env field with
+    | some limbs => values := values ++ limbs
+    | none =>
+        let value ← val env field
+        values := values.push value
   return values
 
 /-- `xs.set i v`：只抽出被改的那一叶。 -/

@@ -226,6 +226,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-memory-001](tasks/wsm-near-memory-001.md) | done | NEAR invocation-local checked Wasm arena + SDK `Buffer64` |
 | [wsm-near-output-001](tasks/wsm-near-output-001.md) | done | NEAR allocator-backed canonical bounded Borsh view output |
 | [wsm-near-json-u128-output-001](tasks/wsm-near-json-u128-output-001.md) | done | output-only canonical quoted-decimal full-u128 JSON scalar |
+| [wsm-near-storage-balance-output-001](tasks/wsm-near-storage-balance-output-001.md) | done | output-only exact bounded optional StorageBalance JSON object |
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |

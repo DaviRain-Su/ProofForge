@@ -213,6 +213,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    full balance from two-limb supply before entering the same live reclaim/refund sequence. Current
    near-contract-standards removes first, directly subtracts supply, and emits no `ft_burn` event;
    this slice likewise leaves event compliance explicit rather than inventing a log.
+   **NEAR-STORAGE-BALANCE-OUTPUT (wsm-near-storage-balance-output-001 done):** the exact nominal
+   five-leaf view frame emits current near-sdk `Option<StorageBalance>` bytes: absent `null` or a
+   declaration-order object with independent quoted-u128 `total` and `available`. It remains an
+   output-only prerequisite and does not select a fixed minimum, reuse one short-account
+   measurement for all callers, or expose a public NEP-145 method.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.
