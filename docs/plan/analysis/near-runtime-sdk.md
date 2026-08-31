@@ -316,6 +316,13 @@ asynchronous; dynamic handles and multi-action builders are absent.
    `pf_near_promise_or_value` boundary now grants one exact mutating U128 method a branch-local
    immediate quoted result or returned Promise terminal. State persists first in either branch;
    ordinary U128/Unit/view/Promise methods remain unchanged and fail closed on mixed use.
+   **NEAR-FT-RECEIVER-DUAL (wsm-near-ft-receiver-dual-001 done):** one exact non-payable
+   `ft_on_transfer` now applies that dual terminal to the bounded 20-leaf receiver frame. Its
+   invocation-time message branch returns immediate full/zero/partial unused U128 values or a
+   valid/failed/malformed child Promise after persisting independent receiver state. Real nearcore
+   `ft_transfer_call → receiver → private resolver` receipts pin outer used/refund values, event
+   order, BAL2 conservation, present-zero registration, asynchronous child-state persistence, and
+   synchronous rollback. The 1071-byte canonical input subset remains narrower than serde.
    **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
    non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
    Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A

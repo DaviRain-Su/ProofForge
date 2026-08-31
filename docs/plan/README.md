@@ -232,6 +232,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-json-ft-on-transfer-input-001](tasks/wsm-near-json-ft-on-transfer-input-001.md) | done | bounded three-field FT receiver callback parser |
 | [wsm-near-ft-receiver-value-001](tasks/wsm-near-ft-receiver-value-001.md) | done | exact immediate-value `ft_on_transfer` reject-all receiver boundary |
 | [wsm-near-promise-or-value-u128-001](tasks/wsm-near-promise-or-value-u128-001.md) | done | explicit mutating quoted-u128 or returned-Promise terminal policy |
+| [wsm-near-ft-receiver-dual-001](tasks/wsm-near-ft-receiver-dual-001.md) | done | runtime immediate-U128/returned-Promise `ft_on_transfer` integration |
 | [wsm-near-ft-transfer-call-001](tasks/wsm-near-ft-transfer-call-001.md) | done | integrated BAL2 transfer, weighted child, and private resolver returned call |
 | [wsm-near-storage-001](tasks/wsm-near-storage-001.md) | done | NEAR bounded raw binary storage + exact host status/register semantics |
 | [wsm-near-vector-001](tasks/wsm-near-vector-001.md) | done | NEAR bounded direct-write Vector64 element layout foundation |

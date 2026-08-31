@@ -244,6 +244,15 @@ promise_or_value_anchors = (
     '(call $pf_promise_return',
     '(call $pf_value_return',
 )
+ft_receiver_dual_anchors = (
+    '(func (export "ft_on_transfer")',
+    '(func $pf_json_ft_on_transfer_args',
+    '(func $pf_u128_decimal',
+    '(call $pf_promise_batch_create',
+    '(call $pf_promise_batch_action_function_call',
+    '(call $pf_promise_return',
+    '(call $pf_value_return',
+)
 json_unit_output_anchors = (
     '(func (export "setMarker")',
     '(func (export "setMarkerVoid")',
@@ -529,6 +538,8 @@ for wat in wats:
         extra = ft_receiver_value_anchors
     elif wat.stem == "NearPromiseOrValue":
         extra = promise_or_value_anchors
+    elif wat.stem == "NearFtReceiverDual":
+        extra = ft_receiver_dual_anchors
     elif wat.stem == "NearJsonUnitOutput":
         extra = json_unit_output_anchors
     elif wat.stem == "NearJsonU128Mutation":

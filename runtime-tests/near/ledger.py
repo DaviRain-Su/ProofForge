@@ -322,6 +322,9 @@ def main() -> None:
         account = f"{outcome}.{self_id}"
         client.create_subaccount_with_key(account, 10**25)
         client.deploy_to(account, fixture_dir / f"ft-on-transfer-{outcome}.wasm")
+    child_result = f"json-result.{self_id}"
+    client.create_subaccount_with_key(child_result, 10**25)
+    client.deploy_to(child_result, fixture_dir / "ft-receiver-result.wasm")
 
     if _view(client, "balanceSelfHas") != 0 or _balance(client.view_state_values(), self_id) is not None:
         raise AssertionError("missing balance must remain distinct from present zero")
@@ -757,6 +760,65 @@ def main() -> None:
     if client.view_state_values() != before:
         raise AssertionError("direct private resolver call changed state")
     print("near-ledger: private/nonpayable/count/malformed/overflow failures roll back without events ok")
+
+    # Redeploy one already registered receiver only after every fixed-WAT scene above. One exact
+    # ft_on_transfer method now selects immediate U128 or returned Promise at runtime; the token's
+    # real ft_transfer_call/resolver chain observes both terminals and reconciles the same BAL2 map.
+    dual_receiver = "partial.test.near"
+    client.deploy_to(dual_receiver, Path(_require("PF_NEAR_RECEIVER_DUAL_WASM")))
+    client.call_on(dual_receiver, "initialize", b"", signer=dual_receiver)
+    dual_scenes = (
+        ("", 0, 0, 10, transfer_call_supply, 0, False),
+        ("a", 1, 10, 0, transfer_call_supply - 10, 10, False),
+        ("ab", 2, 7, 3, transfer_call_supply - 7, 7, False),
+        ("雪", 3, 7, 3, transfer_call_supply - 7, 7, False),
+        ("abcd", 4, 0, 10, transfer_call_supply, 0, True),
+        ("abcde", 5, 0, 10, transfer_call_supply, 0, False),
+    )
+    for call_index, (
+        msg, decoded_length, used, refund, sender_after, receiver_after, child_failed
+    ) in enumerate(dual_scenes, start=1):
+        _call(client, "fixtureTransferCall")
+        _ft_transfer_call(
+            client,
+            dual_receiver,
+            10,
+            msg,
+            used,
+            refund,
+            child_failure=child_failed,
+        )
+        state = client.view_state_values()
+        if _balance(state, self_id) != sender_after or _balance(state, dual_receiver) != receiver_after:
+            raise AssertionError(f"dual receiver msg byte length {decoded_length}: BAL2 reconciliation mismatch")
+        if _key(dual_receiver) not in state or _supply(client) != transfer_call_supply:
+            raise AssertionError(f"dual receiver msg byte length {decoded_length}: registration/supply changed")
+        if client.view_u64_on(dual_receiver, "get") != call_index or \
+                client.view_u64_on(dual_receiver, "lastMsgLength") != decoded_length:
+            raise AssertionError(
+                f"dual receiver msg byte length {decoded_length}: state did not persist before terminal"
+            )
+
+    calls_before = client.view_u64_on(dual_receiver, "get")
+    valid_wire = json.dumps(
+        {"sender_id": self_id, "amount": "10", "msg": "rollback"},
+        separators=(",", ":"),
+    ).encode()
+    client.call_on(dual_receiver, "ft_on_transfer", valid_wire, deposit=1, expect_success=False)
+    client.call_on(dual_receiver, "ft_on_transfer", valid_wire + b"0", expect_success=False)
+    if client.view_u64_on(dual_receiver, "get") != calls_before:
+        raise AssertionError("dual receiver nonpayable/parse failure did not roll state back")
+    client.call_on(dual_receiver, "fixtureSetCallsMax", b"")
+    _call(client, "fixtureTransferCall")
+    _ft_transfer_call(client, dual_receiver, 10, "a", 0, 10, child_failure=True)
+    state = client.view_state_values()
+    if _balance(state, self_id) != transfer_call_supply or _balance(state, dual_receiver) != 0 or \
+            _supply(client) != transfer_call_supply:
+        raise AssertionError("dual receiver source error did not trigger full resolver refund")
+    if client.view_u64_on(dual_receiver, "get") != (1 << 64) - 1 or \
+            client.view_u64_on(dual_receiver, "lastMsgLength") != 63:
+        raise AssertionError("dual receiver source error changed state before failed receipt")
+    print("near-ledger: runtime immediate/Promise receiver branches reconcile end-to-end and roll back ok")
     print("suite NearFungibleLedger: PASS")
 
 

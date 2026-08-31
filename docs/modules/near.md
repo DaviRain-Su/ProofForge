@@ -226,6 +226,11 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   amount、non-payable/parse rollback、state-before-output，以及真实 weighted child returned receipt；
   `promise_or_value.sh` 验证显式 `pf_near_promise_or_value` 的两条 state-first terminal：
   immediate quoted-u128 与真实 child `promise_return`，并钉住普通 u128/Unit/view 不获该能力；
+  `ledger.sh` 还把同一 dual terminal 应用到 exact `ft_on_transfer`：真实 token
+  `ft_transfer_call → receiver → resolver` 覆盖 immediate full/zero/partial unused amount 与
+  returned valid/failed/malformed child，核对外层 quoted used amount、event、BAL2/supply、
+  receiver state persistence 和同步失败回滚；该 receiver 输入仍是 1071-byte bounded
+  canonical subset，不声称完整 serde/NEP-141 ABI compatibility；
   `json_ft_resolve_input.sh` 验证 two-AccountId/u128 20-leaf resolver frame 的六种字段排列、
   exact 1079-wire boundary、late failure/stale clearing 与 mutating parser rollback；`ledger.sh`
   additionally drives genuine child → private resolver receipts and checks result fallback/clamp,
@@ -283,5 +288,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

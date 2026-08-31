@@ -36,9 +36,10 @@ if ! "$python" -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import
 fi
 
 wasm="${PWD}/build/near/NearFungibleLedger.wasm"
-echo "near-local-ledger: building NearFungibleLedger.wasm" >&2
-lake exe pf -- build --target near --out build/near NearFungibleLedger
-[[ -f "$wasm" ]] || die "missing $wasm"
+receiver_dual_wasm="${PWD}/build/near/NearFtReceiverDual.wasm"
+echo "near-local-ledger: building ledger and dual receiver artifacts" >&2
+lake exe pf -- build --target near --out build/near NearFungibleLedger NearFtReceiverDual
+[[ -f "$wasm" && -f "$receiver_dual_wasm" ]] || die "missing ledger/dual receiver artifact"
 "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$wasm" \
   || die "$wasm is not wasm"
 
@@ -54,6 +55,8 @@ for outcome in partial full malformed failed; do
   "$wat2wasm" "runtime-tests/near/fixture/ft-on-transfer-${outcome}.wat" \
     -o "$workdir/ft-on-transfer-${outcome}.wasm"
 done
+"$wat2wasm" "runtime-tests/near/fixture/ft-receiver-result.wat" \
+  -o "$workdir/ft-receiver-result.wasm"
 sandbox_pid=""
 cleanup() {
   if [[ -n "${sandbox_pid:-}" ]] && kill -0 "$sandbox_pid" 2>/dev/null; then
@@ -116,6 +119,7 @@ done
 export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
+export PF_NEAR_RECEIVER_DUAL_WASM="$receiver_dual_wasm"
 export PF_NEAR_FIXTURE_DIR="$workdir"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 "$python" runtime-tests/near/ledger.py
