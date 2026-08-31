@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared UInt64 bounded-math EVM consumer: exact min/max/average boundaries and atomic ceil-div.
+# Shared UInt64 math EVM consumer: bounded helpers and saturating arithmetic.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,4 +46,21 @@ solana_lean_require_storage "$addr" 0 "$half_up" "zero denominator is atomic"
   "$addr" 'roundUp(uint64,uint64)' "$max" 1 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "ceil-div maximum by one"
 
-echo "evm-anvil-math-price-band: ok (min/max/average/ceil-div boundaries and atomic zero policy; engineering only)"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'increase(uint64)(uint64)' 1)" "$max" "saturating increase at maximum"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'discount(uint64)' "$max" >/dev/null
+solana_lean_require_storage "$addr" 0 0 "saturating discount floors at zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'scale(uint64)(uint64)' "$max")" 0 "zero scale avoids division"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'increase(uint64)' "$half_up" >/dev/null
+solana_lean_require_storage "$addr" 0 "$half_up" "exact increase after zero"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'scale(uint64)(uint64)' 2)" "$max" "saturating scale preview"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'scale(uint64)' 2 >/dev/null
+solana_lean_require_storage "$addr" 0 "$max" "saturating scale persists"
+
+echo "evm-anvil-math-price-band: ok (bounded and saturating UInt64 math; engineering only)"

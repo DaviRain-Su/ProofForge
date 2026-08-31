@@ -3,8 +3,9 @@ import Examples.EvmPriceBand
 import ProofForge
 
 /-!
-Host truth tables plus live SVM/EVM extraction for the same allocation-free math component. The
-two consumers own different errors and state fields; neither gains a target component operation.
+Host truth tables plus live SVM/EVM extraction for the same allocation-free bounded/saturating
+math component. The two consumers own different errors and state fields; neither gains a target
+component operation.
 -/
 
 namespace Tests.CoreMathSpec
@@ -37,6 +38,15 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard match Math.UInt64.ceilDiv 7 0 false with
   | .error false => true
   | _ => false
+#guard Math.UInt64.saturatingAdd (u64Max - 1) 1 == u64Max
+#guard Math.UInt64.saturatingAdd u64Max 1 == u64Max
+#guard Math.UInt64.saturatingAdd 1 u64Max == u64Max
+#guard Math.UInt64.saturatingSub 3 7 == 0
+#guard Math.UInt64.saturatingSub u64Max 1 == u64Max - 1
+#guard Math.UInt64.saturatingMul 0 u64Max == 0
+#guard Math.UInt64.saturatingMul u64Max 0 == 0
+#guard Math.UInt64.saturatingMul (u64Max / 2) 2 == u64Max - 1
+#guard Math.UInt64.saturatingMul (u64Max / 2 + 1) 2 == u64Max
 
 open Examples.BatchSizer in
 #guard (smaller (init 8) 11 4 == 4) && (larger (init 8) 11 4 == 11) &&
@@ -47,6 +57,15 @@ open Examples.BatchSizer in
   | _ => false) &&
   (match plan (init 8) 7 0 with
   | .error .zeroCapacity => true
+  | _ => false) &&
+  (match reserve (init (u64Max - 2)) 5 with
+  | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
+  | _ => false) &&
+  (match consume (init 3) 5 with
+  | .ok (state, result) => state.lastBatchCount == 0 && result == 0
+  | _ => false) &&
+  (match amplify (init (u64Max / 2 + 1)) 2 with
+  | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
   | _ => false)
 
 open Examples.EvmPriceBand in
@@ -57,6 +76,15 @@ open Examples.EvmPriceBand in
   | _ => false) &&
   (match roundUp (init 9) 7 0 with
   | .error .zeroTick => true
+  | _ => false) &&
+  (match increase (init (u64Max - 2)) 5 with
+  | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
+  | _ => false) &&
+  (match discount (init 3) 5 with
+  | .ok (state, result) => state.lastQuote == 0 && result == 0
+  | _ => false) &&
+  (match scale (init (u64Max / 2 + 1)) 2 with
+  | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
   | _ => false)
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
@@ -66,6 +94,36 @@ private partial def noTargetEffects (ops : Array ProofForge.Extract.IR.Op) : Boo
     | .ite _ _ _ yes no => noTargetEffects yes && noTargetEffects no
     | .forBody _ body => noTargetEffects body
     | _ => true
+
+private def isUpper : ProofForge.Extract.IR.Val → Bool
+  | .bitNot (.lit 0) => true
+  | _ => false
+
+/-- The unsafe arithmetic node must remain inside the exact preflight select that proves it fits. -/
+private def isSaturatingAdd : ProofForge.Extract.IR.Val → Bool
+  | .select .lt (.subU64 upper left) right capped (.addU64 addLeft addRight) =>
+      isUpper upper && capped == upper && addLeft == left && addRight == right
+  | _ => false
+
+private def isSaturatingSub : ProofForge.Extract.IR.Val → Bool
+  | .select .lt left right (.lit 0) (.subU64 subLeft subRight) =>
+      subLeft == left && subRight == right
+  | _ => false
+
+private def isSaturatingMul : ProofForge.Extract.IR.Val → Bool
+  | .select .lt (.lit 0) left
+      (.select .lt (.divU64 upper divisor) right capped (.mulU64 mulLeft mulRight))
+      (.lit 0) =>
+      isUpper upper && divisor == left && capped == upper &&
+        mulLeft == left && mulRight == right
+  | _ => false
+
+private def methodValue? (program : ProofForge.Extract.IR.Program) (name : String) :
+    Option ProofForge.Extract.IR.Val := do
+  let method ← program.methods.find? (·.ixName == name)
+  method.ops.findSome? fun
+    | .letLocal 0 value => some value
+    | _ => none
 
 elab "#pf_guard_core_math_no_effects" : command => do
   let env ← getEnv
@@ -77,6 +135,16 @@ elab "#pf_guard_core_math_no_effects" : command => do
     for method in source.methods do
       unless noTargetEffects method.ops do
         throwError s!"{module}.{method.ixName}: shared math unexpectedly emitted a target effect"
+    let checks : Array (String × (ProofForge.Extract.IR.Val → Bool)) :=
+      if module == `Examples.BatchSizer then
+        #[⟨"reserve", isSaturatingAdd⟩, ⟨"consume", isSaturatingSub⟩,
+          ⟨"amplify", isSaturatingMul⟩]
+      else
+        #[⟨"increase", isSaturatingAdd⟩, ⟨"discount", isSaturatingSub⟩,
+          ⟨"scale", isSaturatingMul⟩]
+    for (name, valid) in checks do
+      unless (methodValue? source name).any valid do
+        throwError s!"{module}.{name}: saturating preflight no longer dominates its arithmetic"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer

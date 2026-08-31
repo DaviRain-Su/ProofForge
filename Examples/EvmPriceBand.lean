@@ -2,7 +2,7 @@ import ProofForge
 
 /-!
 EVM consumer of shared bounded UInt64 math. Quote rounding owns its zero-tick error and state
-transition independently from the SVM batch-sizing policy.
+transition independently from the SVM batch-sizing and saturating-capacity policy.
 -/
 
 namespace Examples.EvmPriceBand
@@ -41,5 +41,23 @@ def midpoint (_state : State) (left right : UInt64) : UInt64 :=
 def roundUp (state : State) (amount tick : UInt64) : Except Error (State × UInt64) := do
   let quote ← Math.UInt64.ceilDiv amount tick .zeroTick
   .ok ({ state with lastQuote := quote }, quote)
+
+/-- A quote increase clamps at the ABI/storage width instead of reverting. -/
+@[pf_entry]
+def increase (state : State) (amount : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingAdd state.lastQuote amount
+  .ok ({ state with lastQuote := next }, next)
+
+/-- A discount larger than the quote floors the quote to zero. -/
+@[pf_entry]
+def discount (state : State) (amount : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingSub state.lastQuote amount
+  .ok ({ state with lastQuote := next }, next)
+
+/-- Quote scaling clamps at the representable ABI/storage ceiling. -/
+@[pf_entry]
+def scale (state : State) (factor : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingMul state.lastQuote factor
+  .ok ({ state with lastQuote := next }, next)
 
 end Examples.EvmPriceBand

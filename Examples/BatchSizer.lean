@@ -2,7 +2,7 @@ import ProofForge
 
 /-!
 SVM consumer of shared bounded UInt64 math. Batch sizing owns its zero-capacity error and state
-transition while min/max/average/ceilDiv remain target-neutral pure policy.
+transition while bounded and saturating operations remain target-neutral pure policy.
 -/
 
 namespace Examples.BatchSizer
@@ -41,5 +41,23 @@ def midpoint (_state : State) (left right : UInt64) : UInt64 :=
 def plan (state : State) (items capacity : UInt64) : Except Error (State × UInt64) := do
   let batches ← Math.UInt64.ceilDiv items capacity .zeroCapacity
   .ok ({ state with lastBatchCount := batches }, batches)
+
+/-- Capacity accumulation clamps rather than turning an oversized external batch into a failure. -/
+@[pf_entry]
+def reserve (state : State) (additional : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingAdd state.lastBatchCount additional
+  .ok ({ state with lastBatchCount := next }, next)
+
+/-- Capacity consumption floors at zero, matching unsigned quota semantics. -/
+@[pf_entry]
+def consume (state : State) (amount : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingSub state.lastBatchCount amount
+  .ok ({ state with lastBatchCount := next }, next)
+
+/-- Scaling an externally supplied capacity clamps to the representable account-state ceiling. -/
+@[pf_entry]
+def amplify (state : State) (factor : UInt64) : Except Error (State × UInt64) :=
+  let next := Math.UInt64.saturatingMul state.lastBatchCount factor
+  .ok ({ state with lastBatchCount := next }, next)
 
 end Examples.BatchSizer

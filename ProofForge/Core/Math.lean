@@ -34,4 +34,23 @@ operations are representable under those branch conditions. -/
   else
     .ok ((numerator - 1) / denominator + 1)
 
+/-- Addition bounded to the maximum UInt64 value instead of failing on overflow. The subtraction
+in the preflight is always representable, and the checked addition is reached only when it fits. -/
+@[pf_inline] def saturatingAdd (left right : UInt64) : UInt64 :=
+  let upper := ~~~(0 : UInt64)
+  if upper - left < right then upper else left + right
+
+/-- Subtraction bounded to zero instead of failing on underflow. -/
+@[pf_inline] def saturatingSub (left right : UInt64) : UInt64 :=
+  if left < right then 0 else left - right
+
+/-- Multiplication bounded to the maximum UInt64 value instead of failing on overflow. The zero
+branch guards division; otherwise `upper / left` exactly preflights the checked product. -/
+@[pf_inline] def saturatingMul (left right : UInt64) : UInt64 :=
+  if 0 < left then
+    let upper := ~~~(0 : UInt64)
+    if upper / left < right then upper else left * right
+  else
+    0
+
 end ProofForge.Core.Math.UInt64

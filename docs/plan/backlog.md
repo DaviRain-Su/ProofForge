@@ -90,7 +90,8 @@ R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
 R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind、
 R5-022 shared checked UInt128/UInt256→UInt16 SafeCast、
 R5-023 shared checked UInt128/UInt256→UInt8 SafeCast、
-R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv；
+R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv、
+R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -389,6 +390,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   re-export 同一纯值 API，extraction guard 拒绝 target extension effect；没有新增 Runtime/
   Ops/IR/Component/Emit、allocation、pointer 或 shared physical layout。Mollusk/Anvil focused
   matrices 及 Surfpool 1.5.0 Loader-v3 exact-ELF 部署通过。详见 `docs/plan/tasks/r1-024.md`。
+
+- R1-025 shared saturating UInt64 arithmetic 已完成：同一 `Core.Math.UInt64` 增加 explicit
+  saturatingAdd/saturatingSub/saturatingMul，分别以 max-left、left<right 与 zero + max/left
+  preflight 保证不执行 overflow/underflow/zero-divisor arithmetic。BatchSizer/EvmPriceBand
+  分别绑定 capacity 与 quote policy；structural extraction guard 钉住 guard/operand 关系并拒绝
+  target extension effect。默认 `+/-/*` 仍为 checked；signed/wide/full-precision math 继续
+  fail closed。详见 `docs/plan/tasks/r1-025.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

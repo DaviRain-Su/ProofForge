@@ -1,4 +1,4 @@
-//! Cross-target shared UInt64 math, SVM half: min/max/overflow-safe average and checked ceil-div.
+//! Cross-target UInt64 math, SVM half: bounded helpers and saturating arithmetic.
 
 mod common;
 
@@ -9,14 +9,14 @@ use {
     solana_pubkey::Pubkey,
 };
 
-fn initialized() -> (Pubkey, MolluskFixture, solana_account::Account) {
+fn initialized(initial: u64) -> (Pubkey, MolluskFixture, solana_account::Account) {
     let (program_id, mollusk) = harness("BatchSizer", "PF_BATCH_SIZER_SO");
     let state_key = Pubkey::new_unique();
     let ix = instruction(
         program_id,
         state_key,
         "initialize",
-        &[7],
+        &[initial],
         true,
         true,
         vec![],
@@ -66,7 +66,7 @@ impl MolluskFixture {
 
 #[test]
 fn scalar_queries_preserve_unsigned_boundary_laws() {
-    let (program_id, fixture, account) = initialized();
+    let (program_id, fixture, account) = initialized(7);
     fixture.call(
         program_id,
         account.clone(),
@@ -101,7 +101,7 @@ fn scalar_queries_preserve_unsigned_boundary_laws() {
 
 #[test]
 fn ceil_div_handles_maximum_and_rejects_zero_atomically() {
-    let (program_id, fixture, account) = initialized();
+    let (program_id, fixture, account) = initialized(7);
     let planned = fixture.call(
         program_id,
         account,
@@ -142,4 +142,84 @@ fn ceil_div_handles_maximum_and_rejects_zero_atomically() {
         .expect("state after rejected plan")
         .1;
     assert_eq!(account.data, before_failure);
+}
+
+#[test]
+fn saturating_mutations_clamp_both_bounds_and_preserve_exact_products() {
+    let (program_id, fixture, account) = initialized(u64::MAX - 2);
+    let reserved = fixture.call(
+        program_id,
+        account,
+        "reserve",
+        &[5],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&u64::MAX.to_le_bytes()),
+        ],
+    );
+    let account = reserved
+        .get_account(&fixture.state_key)
+        .expect("state after reserve")
+        .clone();
+    assert_eq!(slot(&account, 0), u64::MAX);
+
+    let consumed = fixture.call(
+        program_id,
+        account,
+        "consume",
+        &[u64::MAX],
+        true,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let account = consumed
+        .get_account(&fixture.state_key)
+        .expect("state after consume")
+        .clone();
+    assert_eq!(slot(&account, 0), 0);
+
+    let amplified_zero = fixture.call(
+        program_id,
+        account,
+        "amplify",
+        &[u64::MAX],
+        true,
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let account = amplified_zero
+        .get_account(&fixture.state_key)
+        .expect("state after zero amplify")
+        .clone();
+    assert_eq!(slot(&account, 0), 0);
+
+    let reserved = fixture.call(
+        program_id,
+        account,
+        "reserve",
+        &[u64::MAX / 2 + 1],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&(u64::MAX / 2 + 1).to_le_bytes()),
+        ],
+    );
+    let account = reserved
+        .get_account(&fixture.state_key)
+        .expect("state before amplify")
+        .clone();
+    let amplified = fixture.call(
+        program_id,
+        account,
+        "amplify",
+        &[2],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&u64::MAX.to_le_bytes()),
+        ],
+    );
+    let account = amplified
+        .get_account(&fixture.state_key)
+        .expect("state after amplify");
+    assert_eq!(slot(account, 0), u64::MAX);
 }
