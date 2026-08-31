@@ -8,6 +8,11 @@ Contract-facing names over existing Runtime leaves. Every public definition is
 `@[pf_inline]` and erases to `ProofForge.Wasm.Xrpl.Runtime.*`. No new host import,
 Op, or storage layout. Ownable and Pausable remain source `if`s on AccountId
 limbs and a UInt64 flag.
+
+wasm v0 rejects `bitAnd` / `bitOr`, so `&&` / `||` / `Bool.and` cannot
+appear in an entry. Boolean gates use nested `if` or `Gate.and2`. Sequential
+`flush*` / `storeOwner` stay nested `if Gate.ok …` — those are effects, not
+AND. Do not flatten them.
 -/
 
 namespace ProofForge.Wasm.Xrpl.Sdk
@@ -241,6 +246,31 @@ Not EVM `Revert.unauthorized(address)`. -/
     AccountId.eq Context.caller operator
 
 end Access
+
+namespace Gate
+
+/-- Not `@[pf_inline]`: `~~~(0)` in an entry body is `bitNot`, which wasm v0
+rejects. A named def is a UInt64 constant. -/
+def u64Max : UInt64 := ~~~(0 : UInt64)
+
+/-- Nested `if`, not `&&`. `Bool.and` extracts as `bitAnd` and wasm v0 rejects
+it. Effects in `a` run before `b`. -/
+@[pf_inline] def and2 (a b : Bool) : Bool :=
+  if a then b else false
+
+/-- Nested `if`, not `&&`. Effects run `a` then `b` then `c`. -/
+@[pf_inline] def and3 (a b c : Bool) : Bool :=
+  if a then
+    if b then c else false
+  else
+    false
+
+/-- `flush*` / `storeOwner` return the stored value. Compare against `u64Max`
+to sequence the effect. Not a real overflow check on the host result. -/
+@[pf_inline] def ok (v : UInt64) : Bool :=
+  v ≤ u64Max
+
+end Gate
 
 namespace Card
 
