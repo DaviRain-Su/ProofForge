@@ -235,6 +235,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-094](tasks/wsm-094.md) | done | 本地 send/claw + cashSelf（XrplReed）；公开仍 -22/-196 |
 | [wsm-095](tasks/wsm-095.md) | done | 本地 allowance take 再兑 XRP（XrplRake）；公开仍 -22/-196 |
 | [wsm-096](tasks/wsm-096.md) | done | 本地 takeB+clawB 再兑 XRP（XrplRaid）；公开仍 -22/-196 |
+| [wsm-097](tasks/wsm-097.md) | done | 本地 pause-gated take 再兑 XRP（XrplRamp）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)

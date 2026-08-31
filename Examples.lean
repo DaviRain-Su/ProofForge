@@ -99,6 +99,7 @@ import Examples.XrplRevoke
 import Examples.XrplReed
 import Examples.XrplRake
 import Examples.XrplRaid
+import Examples.XrplRamp
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

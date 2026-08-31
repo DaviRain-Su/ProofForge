@@ -70,7 +70,8 @@ def entries : Array Entry := #[
   { name := "XrplRevoke", digest := "67d5b2529f86c2c7" },
   { name := "XrplReed", digest := "852be7802d80e57a" },
   { name := "XrplRake", digest := "cab8e6b2c0b4f8e7" },
-  { name := "XrplRaid", digest := "fec942260f477144" }
+  { name := "XrplRaid", digest := "fec942260f477144" },
+  { name := "XrplRamp", digest := "3eaeb4e07e501d84" }
   ]
 
 def names : Array String := entries.map (·.name)
