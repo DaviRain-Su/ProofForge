@@ -4,17 +4,44 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-step() {
-  printf '\n==> %s\n' "$1"
-}
-
 if [[ "$EUID" -eq 0 ]]; then
   sudo=()
 else
   sudo=(sudo -n)
 fi
 
-step "Installing required system packages"
+run_timed() {
+  local label="$1"
+  shift
+  local started_at=$SECONDS
+  printf '\n==> %s\n' "$label"
+  "$@"
+  printf '<== %s (%ss)\n' "$label" "$((SECONDS - started_at))"
+}
+
+run_parallel() {
+  local task
+  local -a pids=()
+  local -a labels=()
+  local status=0
+
+  for task in "$@"; do
+    run_timed "${task//_/ }" "$task" &
+    pids+=("$!")
+    labels+=("$task")
+  done
+
+  for task in "${!pids[@]}"; do
+    if ! wait "${pids[$task]}"; then
+      echo "Setup task failed: ${labels[$task]}" >&2
+      status=1
+    fi
+  done
+
+  return "$status"
+}
+
+install_system_packages() {
 packages=(build-essential curl elan jq openssl python3)
 missing_packages=()
 for package in "${packages[@]}"; do
@@ -28,8 +55,9 @@ if ((${#missing_packages[@]})); then
 else
   echo "System packages are already installed."
 fi
+}
 
-step "Configuring login-shell tool paths"
+configure_tool_paths() {
 mkdir -p "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/.foundry/bin"
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.foundry/bin:$PATH"
 
@@ -43,8 +71,9 @@ if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
 fi
 EOF
 fi
+}
 
-step "Installing the pinned Lean toolchain"
+install_lean_stack() {
 lean_toolchain="$(tr -d '[:space:]' <lean-toolchain)"
 if ! elan toolchain list | grep -Fq "$lean_toolchain"; then
   elan toolchain install "$lean_toolchain"
@@ -53,10 +82,19 @@ else
 fi
 lake --version
 
-step "Fetching pinned Lean dependencies"
-lake update solanalib
+lean_dependency_fingerprint="$(sha256sum lean-toolchain lake-manifest.json | sha256sum | cut -d' ' -f1)"
+lean_dependency_marker=".lake/.proofforge-dependencies"
+if [[ -d .lake/packages/solanalib ]] &&
+    [[ "$(cat "$lean_dependency_marker" 2>/dev/null || true)" == "$lean_dependency_fingerprint" ]]; then
+  echo "Pinned Lean dependencies are already installed."
+else
+  lake update solanalib
+  lean_dependency_fingerprint="$(sha256sum lean-toolchain lake-manifest.json | sha256sum | cut -d' ' -f1)"
+  printf '%s\n' "$lean_dependency_fingerprint" >"$lean_dependency_marker"
+fi
+}
 
-step "Installing Rust 1.90.0"
+install_rust_stack() {
 rust_toolchain="1.90.0"
 if [[ ! -x "$HOME/.cargo/bin/rustup" ]]; then
   curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs |
@@ -67,7 +105,6 @@ fi
 rustup default "$rust_toolchain"
 rustc --version
 
-step "Installing pinned sbpf 0.2.2"
 sbpf_revision="d835bc6e638e4f55b88f31a31bbc92e3a2e0a5ba"
 if [[ "$(sbpf --version 2>/dev/null || true)" != "sbpf 0.2.2" ]]; then
   cargo install \
@@ -81,7 +118,10 @@ else
 fi
 sbpf --version
 
-step "Installing pinned Surfpool 1.5.0"
+cargo fetch --locked --manifest-path runtime-tests/solana/Cargo.toml
+}
+
+install_binary_tools() {
 surfpool_version="1.5.0"
 surfpool_archive="surfpool-linux-x64.tar.gz"
 surfpool_url="https://github.com/solana-foundation/surfpool/releases/download/v${surfpool_version}/${surfpool_archive}"
@@ -102,7 +142,6 @@ else
 fi
 surfpool --version
 
-step "Installing pinned solc 0.8.34"
 solc_url="https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
 solc_sha256="d40adc6f9fdbb22a97d32a02fa05688bf2ee7886affc48c9851b0afd4a726b39"
 if ! solc --version 2>/dev/null | grep -Fq "Version: 0.8.34+commit.80d5c536"; then
@@ -118,7 +157,6 @@ else
 fi
 solc --version | sed -n '1,3p'
 
-step "Installing Foundry 1.7.1"
 foundry_version="1.7.1"
 foundry_archive="foundry_v${foundry_version}_linux_amd64.tar.gz"
 foundry_url="https://github.com/foundry-rs/foundry/releases/download/v${foundry_version}/${foundry_archive}"
@@ -137,8 +175,10 @@ else
 fi
 anvil --version
 cast --version
+}
 
-step "Fetching locked Solana runtime-test dependencies"
-cargo fetch --locked --manifest-path runtime-tests/solana/Cargo.toml
+run_timed "Installing required system packages" install_system_packages
+run_timed "Configuring login-shell tool paths" configure_tool_paths
+run_parallel install_lean_stack install_rust_stack install_binary_tools
 
 printf '\nOrb setup complete.\n'
