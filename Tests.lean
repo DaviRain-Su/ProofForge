@@ -104,6 +104,7 @@ import Tests.SvmSdkStorageSpec
 import Tests.SvmSdkQueueSpec
 import Tests.SvmSdkStorageBitSetSpec
 import Tests.SvmSdkStorageEnumerableSetSpec
+import Tests.SvmVersionedCodecSpec
 import Tests.SvmSdkAccountSpec
 import Tests.SvmTransientSpec
 import Tests.SvmSdkPdaSystemSpec

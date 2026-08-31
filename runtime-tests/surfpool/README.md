@@ -12,6 +12,7 @@ runtime-tests/surfpool/smoke.sh RawEntry
 runtime-tests/surfpool/smoke.sh LamportTransfer
 runtime-tests/surfpool/smoke.sh FeatureBits
 runtime-tests/surfpool/smoke.sh MemberDirectory
+runtime-tests/surfpool/smoke.sh VersionedLedger
 ```
 
 The script generates temporary payer/program keypairs under ignored `build/surfpool`, receives a
@@ -22,5 +23,5 @@ recovery log are removed when the script exits; non-secret RPC evidence remains 
 
 Successful local deployment proves that the selected ELF passed Surfpool's transaction and Loader
 path. Supported smoke targets are `Phoenix`, `PhoenixV1Profile`, `RawEntry`, `Info`,
-`LamportTransfer`, `FeatureBits`, and `MemberDirectory`. This is not a public-network deployment
-claim.
+`LamportTransfer`, `FeatureBits`, `MemberDirectory`, and `VersionedLedger`. This is not a
+public-network deployment claim.

@@ -46,7 +46,7 @@
 |---|---|---|---|
 | source/ABI 边界 | compile-time capacity + runtime length + fixed scalar frame | shared `BoundedVec` operations、Map/Set/Queue/BitSet laws、distinct bounded bytes/string + strict UTF-8 source contract；SVM Borsh 与 EVM ABI generic bounded/bytes/string input 已有；两边 top-level one-limb bounded/tagged return 已有独立 target plan；packed BitSet 与 enumerable Set 的纯策略已由 SVM/EVM 分别绑定持久状态 | richer collection persistence bindings、nested/constructed tagged shapes、wide/aggregate dynamic elements |
 | invocation-local | bounded scratch/heap region，OOM 显式失败，调用结束即失效 | SVM `Sdk.Transient.Vector64` 与 `Bytes` 各有两个可同时 active 的编译期 slot；`Record64` 在同一 Vector64 slot 上提供派生 geometry、aligned count/access 和 fixed-arity `append1..4` whole-record preflight；共同提供 begin/pop/truncate/clear/finish、独立 metadata/payload 与真实 OOM | wider/typed POD element shapes、更多 resource-manifest slots、insert/remove-at/iteration；EVM bounded memory binding |
-| SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、packed BitSet、enumerable UInt64 Set、ordered Map/RBMap、allocator 已有 u64/固定 schema | richer POD element/key/value shapes、versioned codecs |
+| SVM persistent | canonical account bytes + count/capacity/index，绝不存 pointer | `Sdk.Storage.BoundedVec`、Queue、packed BitSet、enumerable UInt64 Set、ordered Map/RBMap、allocator 已有 u64/固定 schema；`Sdk.Versioned` 提供 fixed discriminator/version header 与一个 explicit migration edge | richer POD element/key/value shapes、typed payload migration/close policy |
 | EVM persistent | static consecutive slots 或 typed hashed namespace | fixed `Vector` state、static declarations、typed maps、bounded UInt64 storage vector、packed bitmap、ring queue、enumerable set/map 与 capacity-4 checkpoints 均为 compile-time geometry 和显式 checked policy | richer key/value/element shapes、wider checkpoint ceiling、bulk bounded iteration 与 namespaced storage |
 
 因此：
@@ -64,7 +64,7 @@
 |---|---|---|---|
 | integers/fixed bytes | Bool、u8/16/32/64、allocation-free u128/u256/`FixedBytes n`；u256 EVM arithmetic 已覆盖主要 unsigned op | signed widths、safe narrowing/casts、saturating/full-precision helpers、统一 overflow vocabulary | F0/F1 |
 | aggregate values | record/tuple/Option/bounded enum/fixed Vector；bounded input carrier；capacity-preserving bounded Vec semantics 与 cross-target scalar dynamic read；bounded Map/Set/Queue/BitSet、bytes、UTF-8 string logical contracts；bytes/string 已分别绑定 SVM/EVM input；BitSet 与 enumerable-Set pure policy 已分别绑定 SVM account state 与 EVM storage | richer collection persistence bindings、bounded mutation writeback、wide/aggregate dynamic elements；nested bounded shapes | F0 |
-| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings；两边 independent top-level bounded/tagged output plan | nested/constructed/wide dynamic returns、version/discriminator、reusable account/storage codecs | F0 |
+| codecs | target-neutral schema；SVM Borsh 与 EVM static/tagged/bounded/bytes/string input bindings；两边 independent top-level bounded/tagged output plan；SVM fixed-account reusable version/discriminator header | nested/constructed/wide dynamic returns、typed reusable payload codecs/migrations | F0 |
 | control/resources | checked arithmetic、bounded `for`、fixed scalar frame | per-method collection/codec/memory budget manifest；禁止隐式 allocation/clone/format | F1 |
 
 Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可以在 SVM 绑定为 Borsh
@@ -87,7 +87,7 @@ Shared 层只定义 logical value 和 operation laws。同一 `BoundedVec` 可�
 | sysvar/runtime query | `Svm.Sdk.Sysvar` 已通过 target-owned Component 覆盖 Clock/EpochSchedule 全部 unsigned/Bool native fields 与 compile-time Rent；Telemetry 覆盖 remaining compute/stack height | signed Clock timestamps、generic sliced sysvar、instructions sysvar；advanced sysvars on demand | F1/F2 |
 | crypto | literal SHA-256/Keccak first word、PDA host calls | full 32-byte/multi-slice hashes；Blake3/SHA-512/secp recovery/Poseidon/curve/big-mod-exp；signature-program instruction validation | F1/F2 |
 | log/error | authenticated bounded `sol_log_data` recorder；active transient bytes 可作为一个 bounded field 直接发布；custom failure terminal | multi-field/字符串/numeric/key log API；stable typed event convention；complete ProgramError/custom-code mapping | F1 |
-| serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、top-level one-limb bounded/tagged Borsh return、raw entry、Token-2022 TLV envelope | nested/constructed/wide dynamic returns、Pack/POD/COption/versioned account codecs、strict reusable readers/writers | F0/F2 |
+| serialization | exact scalar/static/tagged/bounded Borsh input、canonical bounded bytes/String（strict UTF-8）、top-level one-limb bounded/tagged Borsh return、raw entry、Token-2022 TLV envelope、fixed-account discriminator/version header + explicit one-edge migration | nested/constructed/wide dynamic returns、Pack/POD/COption payload codecs、strict reusable readers/writers 与 typed migration transforms | F0/F2 |
 
 Rust 的 `Rc<RefCell<_>>` borrow API 是 Rust host representation，不应原样复制成 Lean SDK。
 ProofForge 要保存的是相同的安全合同：写权限、owner、alias、长度和 CPI 前状态必须被验证，且
@@ -102,7 +102,7 @@ ProofForge 要保存的是相同的安全合同：写权限、owner、alias、�
 | Token-2022 | base-layout transfer + bounded TLV envelope，未知 extension 原子拒绝 | typed extension lookup/account-size；transfer-fee/hook/memo/CPI-guard 等逐扩展完整语义 | F2 |
 | ATA/Memo | SDK 已有 canonical ATA/Memo ids、role-typed static ATA Create/CreateIdempotent/RecoverNested（Token 与 ATA program 由 caller account 显式提供）与 ≤512-byte compile-time ASCII Memo；`writeOk` 仅为兼容 delegate | canonical derived-address validation、runtime-selected account geometry；runtime-selected/UTF-8 Memo bytes | F1/F2 |
 | loader/lifecycle | Loader-v3 assembly/deploy qualification exists | typed loader state/instructions、upgrade authority/immutability lifecycle facade | F3 |
-| persistent collections | POD Field、Vec、Queue、packed BitSet、enumerable UInt64 Set、ordered Map/RBMap、allocator | generic bounded POD records、richer key/value shapes、versioned initialization/close policy | F1/F2 |
+| persistent collections | POD Field、Vec、Queue、packed BitSet、enumerable UInt64 Set、ordered Map/RBMap、allocator；fixed version/discriminator header 可由 application 组合 | generic bounded POD records、richer key/value shapes、typed payload migration/close policy | F1/F2 |
 
 SPL Token 对照官方 [`token/interface`](https://github.com/solana-program/token/tree/master/interface)，
 ATA 必须显式携带 token program id，不能把 classic Token 的默认值误用于 Token-2022。

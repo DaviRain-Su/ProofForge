@@ -85,6 +85,8 @@ import Examples.FeatureBits
 import Examples.ClaimBits
 import Examples.MemberDirectory
 import Examples.UniqueRoster
+import Examples.VersionedLedger
+import Examples.VersionedMigrator
 import Examples.PhoenixV1Layout
 import Examples.Phoenix
 import Examples.PhoenixV1Profile
