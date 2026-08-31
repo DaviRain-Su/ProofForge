@@ -420,6 +420,16 @@ elab "#pf_near_promise_check" : command => do
       throwError s!"strict callback UInt64 WAT missing {anchor}\n{callbackSuccessWat}"
   if callbackSuccessWat.contains "(local.set $marker (local.get $pf_v0))" then
     throwError "callback tuple result overwrote its independently persisted state field"
+  let record ← match program.entries.find? (·.ixName == "record") with
+    | some method => pure method
+    | none => throwError "missing record entry"
+  let recordWat ← match Emit.emit { program with entries := #[record] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless (recordWat.splitOn
+      "(call $pf_storage_write (i64.const 9) (i64.const 1039)").length == 2 &&
+      recordWat.contains "(i64.store (i32.const 0) (local.get $pf_p0))" do
+    throwError "argument-valued tuple result overwrote the final persisted state field"
   let callbackBody ← match callbackSuccessWat.splitOn "(func (export \"callbackSuccess\")" with
     | [_preamble, body] => pure body
     | _ => throwError "callbackSuccess WAT must contain exactly one exported body"

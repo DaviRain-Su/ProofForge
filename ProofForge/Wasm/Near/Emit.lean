@@ -1366,29 +1366,29 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let lines :=
           #[indent level ("(local.set " ++ localOfSlot name ++ " " ++ v ++ ")")] ++
           storeSlot p name ("(local.get " ++ localOfSlot name ++ ")") level
-        let region ← emitRegion p outputPlan view echo level defaultSlot tail
-          { st with last := some (localOfSlot name), lastValue := some value, pendingDest := some name, lastStored := true }
+        let st' := { st with last := some (localOfSlot name), lastValue := some value }
+        let st' := { st' with pendingDest := some name, lastStored := true }
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail st'
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
-        if st.lastStored then
-          match value with
-          | .local _ =>
-              -- The state field was already persisted by `storeField`; an explicitly materialized
-              -- tuple result is a separate return channel and must not overwrite that field.
-              unless tail.all isExitOp do
-                throw "extract/unsupported: near v0 instructions follow terminal operation"
-              let v ← renderVal st value
-              let mut lines : Array String := #[]
-              if st.initializer then lines := lines ++ markInitialized p level
-              match st.pendingPromiseReturn with
-              | some promiseLocal =>
-                  lines := lines.push (indent level
-                    ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))"))
-              | none =>
-                  if echo then lines := lines ++ returnU64Instr v level
-              return { lines, st, terminal := true }
-          | _ => pure ()
+        if st.lastStored && echo && (fieldOf value).isNone then
+          -- A non-field terminal after an explicit state store is the `(State × UInt64)` result
+          -- channel. It may be an argument or literal as well as an extractor local; never route
+          -- it back through the last field destination. A field projection still owns the final
+          -- state destination and is handled below.
+          unless tail.all isExitOp do
+            throw "extract/unsupported: near v0 instructions follow terminal operation"
+          let v ← renderVal st value
+          let mut lines : Array String := #[]
+          if st.initializer then lines := lines ++ markInitialized p level
+          match st.pendingPromiseReturn with
+          | some promiseLocal =>
+              lines := lines.push (indent level
+                ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))"))
+          | none =>
+              if echo then lines := lines ++ returnU64Instr v level
+          return { lines, st, terminal := true }
         -- A terminal state value identifies its own field when it is a projection. `pendingDest`
         -- is only the fallback for a scalar temporary produced by a preceding checked operation;
         -- preferring it here can overwrite the previous field in multi-field state construction.
