@@ -220,6 +220,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-079](tasks/wsm-079.md) | done | 本地冻结门托管 latch（XrplFrost）；公开仍 -22/-196 |
 | [wsm-080](tasks/wsm-080.md) | done | SDK Card.flushCallerLock；冻结门双向锁（XrplGlaze）；公开仍 -22/-196 |
 | [wsm-081](tasks/wsm-081.md) | done | SDK Card.addSelfEsc；冻结门托管（XrplHinge）；公开仍 -22/-196 |
+| [wsm-082](tasks/wsm-082.md) | done | SDK 助手冻结门双向锁（XrplBrace）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)

@@ -47,6 +47,7 @@ import Examples.XrplEscape
 import Examples.XrplFrost
 import Examples.XrplGlaze
 import Examples.XrplHinge
+import Examples.XrplBrace
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -120,7 +121,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplFrost" == some "28539392e2861945"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplGlaze" == some "3775987a7dfab228"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplHinge" == some "fa616b8741dc3412"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBrace" == some "d7c8b2171694729a"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -236,6 +238,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplGlaze
 
 #pf_xrpl_build Examples.XrplHinge
+
+#pf_xrpl_build Examples.XrplBrace
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -1527,6 +1531,38 @@ elab "#pf_xrpl_hinge_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-hinge: {source.length} bytes of WAT passed hinge anchor check"
 
 #pf_xrpl_hinge_emit_check Examples.XrplHinge
+
+open Lean Elab Command in
+elab "#pf_xrpl_brace_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"lockIn\") (result i32)",
+          "(func (export \"cancel\") (result i32)",
+          "(func (export \"cashB\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\"",
+          "(i32.store8 (i32.const 76) (i32.const 100))",
+          "(i32.store8 (i32.const 100) (i32.const 101))",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing brace anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-brace: {source.length} bytes of WAT passed brace anchor check"
+
+#pf_xrpl_brace_emit_check Examples.XrplBrace
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
