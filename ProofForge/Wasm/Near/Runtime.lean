@@ -38,6 +38,20 @@ packed little-endian into `w0,w1`, and bytes at/above `length` are zero. -/
   w1 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Required bounded `msg` JSON string for the future transfer-call path. Decoded UTF-8 bytes are
+packed little-endian; bytes at/above `length` are zero. -/
+@[pf_boundary] structure BoundedMessage64 where
+  length : UInt64
+  w0 : UInt64
+  w1 : UInt64
+  w2 : UInt64
+  w3 : UInt64
+  w4 : UInt64
+  w5 : UInt64
+  w6 : UInt64
+  w7 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned exact frame for the bounded canonical `ft_transfer`-shaped JSON parser.
 This is an input carrier only: it does not implement or claim the public NEP-141 method. -/
 @[pf_boundary] structure FtTransferArgs where

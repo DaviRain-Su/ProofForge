@@ -597,6 +597,20 @@ private partial def rewriteJsonOptionalMemoInputRoot
         pure none
   | _ => pure none
 
+private partial def rewriteJsonMessageInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg index))
+      | none => throw s!"near/codec: unsupported BoundedMessage64 input projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: BoundedMessage64 input requires a scalar field projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 9))
+      else pure none
+  | _ => pure none
+
 private partial def rewriteJsonFtTransferInputRoot
     (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
   | .field (.field (.arg 0) "receiverId") name =>
@@ -653,6 +667,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .jsonAccountId => rewriteJsonAccountInputRoot method
     | .jsonU128Amount => rewriteJsonU128InputRoot method
     | .jsonOptionalMemo16 => rewriteJsonOptionalMemoInputRoot method
+    | .jsonMessage64 => rewriteJsonMessageInputRoot method
     | .jsonFtTransferArgs => rewriteJsonFtTransferInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount

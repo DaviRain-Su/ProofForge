@@ -76,6 +76,7 @@ import Tests.NearJsonUnitOutputSpec
 import Tests.NearJsonAccountInputSpec
 import Tests.NearJsonAmountInputSpec
 import Tests.NearJsonMemoInputSpec
+import Tests.NearJsonMessageInputSpec
 import Tests.NearJsonFtTransferInputSpec
 import Tests.NearStorageSpec
 import Tests.NearStorageEconomicsSpec

@@ -237,6 +237,13 @@ asynchronous; dynamic handles and multi-action builders are absent.
    escapes, BMP escapes, and valid surrogate pairs, with exact 16 decoded-byte, 139 wire-byte, and
    32 structural-whitespace bounds. near-sdk has no memo length bound and accepts broader object
    grammar; this is a closed prerequisite for a later specialized transfer object.
+   **NEAR-JSON-MESSAGE-INPUT (wsm-near-json-message-input-001 done):** compiler-owned
+   `BoundedMessage64` carries exact decoded length plus eight packed little-endian words. Its
+   required `{"msg":"..."}` object accepts empty strings and reuses the memo Unicode cursor with
+   independent 64-byte decoded, 426-byte wire, and 32-whitespace bounds. Missing/null/wrong-type,
+   unknown/duplicate/escaped keys, malformed UTF-8/escapes, and overflow reject. The diagnostic
+   fixture has no Promise or standard export; dynamic function-call payload composition remains
+   the next transfer-call prerequisite.
    **NEAR-JSON-FT-TRANSFER-INPUT (wsm-near-json-ft-transfer-input-001 done):** one compiler-owned
    `FtTransferArgs` frame binds exactly receiver AccountId, full u128 amount, and optional memo.
    A bounded field loop accepts every known-field permutation, enforces required/presence bits,

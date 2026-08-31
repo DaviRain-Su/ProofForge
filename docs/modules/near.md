@@ -32,6 +32,10 @@ wsm-near-json-memo-input-001 adds compiler-owned `OptionalMemo16` and canonical 
 `{"memo":null|string}` parsing. It preserves None versus Some-empty, decodes short/BMP/surrogate
 JSON escapes plus raw UTF-8 into at most 16 bytes, and remains a closed prerequisite rather than a
 generic serde wrapper.
+wsm-near-json-message-input-001 adds compiler-owned `BoundedMessage64` and required canonical
+`{"msg":"..."}` parsing for a later transfer-call path. It shares the memo Unicode string cursor,
+but has independent exact 64-byte decoded, 426-byte wire, and 32-whitespace bounds. The diagnostic
+fixture has no Promise effect or standard `ft_transfer_call` export.
 wsm-near-json-ft-transfer-input-001 combines those value decoders behind one bounded field loop for
 required `receiver_id`/`amount` and optional `memo`. All key permutations are accepted; duplicate,
 unknown, escaped-key, and trailing forms reject. The compiler-owned 15-leaf frame is parser-only
@@ -123,7 +127,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 |---|---|---|
 | `Near.Ops` | NEAR context 值叶、static log、Promise/callback/result value/effect 与方言检查 | 其它链的方言、collection recipe |
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
-| `Near.Codec` | bounded bytes/String canonical Borsh, specialized quoted-u128 output, exact-schema AccountId/amount inputs, and compiler-owned optional bounded memo JSON input | generic JSON、general nullable/string schemas、multi-parameter JSON、collection layout |
+| `Near.Codec` | bounded bytes/String canonical Borsh, specialized quoted-u128 output, exact-schema AccountId/amount inputs, and compiler-owned optional memo/required message JSON inputs | generic JSON、general nullable/string schemas、multi-parameter JSON、collection layout |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Context/Access` | lossless context wrappers including dynamic storage usage、full-AccountId equality/self-call predicate | protocol-config storage byte price、general private/payable/init entry metadata |
 | `Near.Sdk.NearToken` | checked unsigned u128 add/sub and exact u128×u64 predicates/result limbs | byte-price policy、balances、supply、public FT methods |
@@ -164,6 +168,8 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `json_memo_input.sh` 验证 missing/null/Some-empty、short/BMP/surrogate/raw UTF-8 decode、
   decoded 16-byte/exact 139-wire/32 structural-whitespace bounds、inactive zeroing 与 malformed
   UTF-8/escape/object fail-closed matrix；
+  `json_message_input.sh` 验证 required/empty message、shared Unicode decode、exact packed nine-leaf
+  frame、64 decoded-byte/426-wire/32-whitespace bounds、mutating use 与 malformed matrix；
   `json_ft_transfer_input.sh` 验证三字段任意排列、required/optional/duplicate presence、完整
   AccountId/u128/memo leaves、exact 786-wire/32-whitespace geometry 与各 value decoder 的组合失败矩阵；
   `storage.sh` 验证 binary/empty keys、

@@ -183,6 +183,16 @@ json_memo_input_anchors = (
     '(func (export "memoW0")',
     '(func (export "memoW1")',
 )
+json_message_input_anchors = (
+    '(func $pf_json_message64',
+    '(func $pf_json_memo_string',
+    '(func $pf_json_memo_put_cp',
+    '(i64.const 426)',
+    '(call $pf_arena_alloc (i64.const 72) (i64.const 8))',
+    '(func (export "messageLength")',
+    '(func (export "messageW0")',
+    '(func (export "messageW7")',
+)
 json_ft_transfer_input_anchors = (
     '(func $pf_json_ft_transfer_args',
     '(func $pf_json_ft_key',
@@ -440,6 +450,8 @@ for wat in wats:
         extra = json_amount_input_anchors
     elif wat.stem == "NearJsonMemoInput":
         extra = json_memo_input_anchors
+    elif wat.stem == "NearJsonMessageInput":
+        extra = json_message_input_anchors
     elif wat.stem == "NearJsonFtTransferInput":
         extra = json_ft_transfer_input_anchors
     elif wat.stem == "NearJsonUnitOutput":
