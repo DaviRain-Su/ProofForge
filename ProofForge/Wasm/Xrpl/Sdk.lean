@@ -408,6 +408,26 @@ Not a Map. -/
 @[pf_inline] def allwLitIsOne (hex : String) : Bool :=
   Context.peekAllwLit hex = (1 : UInt64)
 
+/-- Persist `cap` onto the compile-time minter card. Else-if, not `&&`.
+Hex is 40 lowercase chars. `0` means unlimited. Caller must
+`restoreCaller` afterwards. Not a Map. -/
+@[pf_inline] def flushCapLit (hex : String) (v : UInt64) : Bool :=
+  if !Gate.ok (Context.storeOwnerLit hex) then
+    false
+  else
+    Gate.ok (Context.flushCap v)
+
+/-- True when compile-time minter `cap` is missing/0 (unlimited) or
+`need ≤ cap - supp`. Rewrites persist Owner onto the contract card
+via `peekSelfSupp`. Not a Map. -/
+@[pf_inline] def selfSuppFitsCapLit (hex : String) (need : UInt64) : Bool :=
+  if Context.peekCapLit hex = (0 : UInt64) then
+    true
+  else if !(need ≤ Context.peekCapLit hex) then
+    false
+  else
+    peekSelfSupp ≤ Context.peekCapLit hex - need
+
 end Card
 
 namespace Pay

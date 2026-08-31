@@ -50,6 +50,7 @@ import Examples.XrplHinge
 import Examples.XrplBrace
 import Examples.XrplClamp
 import Examples.XrplClasp
+import Examples.XrplCleft
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -126,7 +127,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplBrace" == some "d7c8b2171694729a"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplClamp" == some "d10847e4aee069a2"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplClasp" == some "44ca3ba8ccd77e29"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCleft" == some "c52ef3441e5af62a"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -248,6 +250,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplClamp
 
 #pf_xrpl_build Examples.XrplClasp
+
+#pf_xrpl_build Examples.XrplCleft
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -1641,6 +1645,42 @@ elab "#pf_xrpl_clasp_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-clasp: {source.length} bytes of WAT passed clasp anchor check"
 
 #pf_xrpl_clasp_emit_check Examples.XrplClasp
+
+open Lean Elab Command in
+elab "#pf_xrpl_cleft_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"lockIn\") (result i32)",
+          "(func (export \"cancel\") (result i32)",
+          "(func (export \"cashB\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(func (export \"pause\") (result i32)",
+          "(func (export \"setCap10\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\"",
+          "(i32.store8 (i32.const 72) (i32.const 99))",
+          "(i32.store8 (i32.const 80) (i32.const 104))",
+          "(i32.store8 (i32.const 76) (i32.const 100))",
+          "(i32.store8 (i32.const 100) (i32.const 101))",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing cleft anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-cleft: {source.length} bytes of WAT passed cleft anchor check"
+
+#pf_xrpl_cleft_emit_check Examples.XrplCleft
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
