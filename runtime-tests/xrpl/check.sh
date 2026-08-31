@@ -323,6 +323,16 @@ need_exports_treasury = (
     '(i32.const 524313)',
     '(import "host_lib" "emit_built_txn"',
 )
+need_exports_dual = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "lockIn") (result i32)',
+    '(func (export "cancel") (result i32)',
+    '(func (export "claimB") (result i32)',
+    '(i32.const 524313)',
+    '(i32.store8 (i32.const 76) (i32.const 100))',
+    '(i32.store8 (i32.const 100) (i32.const 101))',
+)
 need_exports_payout = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -498,6 +508,8 @@ for wat in wats:
         exports = need_exports_claim
     elif wat.stem == "XrplPayout":
         exports = need_exports_payout
+    elif wat.stem == "XrplDual":
+        exports = need_exports_dual
     else:
         exports = need_exports_counter
     for needle in exports:

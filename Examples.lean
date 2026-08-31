@@ -79,6 +79,7 @@ import Examples.XrplHoldEsc
 import Examples.XrplVest
 import Examples.XrplClaim
 import Examples.XrplPayout
+import Examples.XrplDual
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

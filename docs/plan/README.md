@@ -214,6 +214,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-073](tasks/wsm-073.md) | done | 本地时间门托管 due≤ledgerSqn（XrplVest）；公开仍 -22/-196 |
 | [wsm-074](tasks/wsm-074.md) | done | 本地受益人领取 claimB after due（XrplClaim）；公开仍 -22/-196 |
 | [wsm-075](tasks/wsm-075.md) | done | 本地受益人兑 XRP cashB after due（XrplPayout）；公开仍 -22/-196 |
+| [wsm-076](tasks/wsm-076.md) | done | 本地双向时间锁 A cancel / B claimB（XrplDual）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)
