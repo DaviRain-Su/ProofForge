@@ -89,7 +89,8 @@ R5-018 persistent bounded UInt64 checkpoints、R5-019 persistent bounded enumera
 R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
 R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind、
 R5-022 shared checked UInt128/UInt256→UInt16 SafeCast、
-R5-023 shared checked UInt128/UInt256→UInt8 SafeCast；
+R5-023 shared checked UInt128/UInt256→UInt8 SafeCast、
+R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -98,11 +99,11 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-31）**：Lean 汇总 411 jobs；SVM manifest 全 67 programs；
-  Mollusk 全量 421/421（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
+- **当前可验证基线（2026-08-31）**：Lean 汇总 415 jobs；SVM manifest 全 70 programs；
+  Mollusk 全量 431/431（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
-  40 programs 且 Anvil 40/40。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 411-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  41 programs 且 Anvil 41/41。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
+  并保留汇总 `test` gate；完整 415-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。两个 target lane 在 runtime fixtures 前核对实际 clean build manifest；
   Surfpool 同时等待 health/version RPC，并在退出时 bounded cleanup。任一 lane 失败不会跳过
   或延迟另两条 lane 的反馈。详见
@@ -381,6 +382,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `retCount` fail closed 校验每个 successful non-init exit，禁止从可复用 local 猜测缺失叶；
   未新增 Runtime/Ops/IR constructor/Component/Emit recipe。focused Lean 176 jobs、全量 Tests
   407 jobs 通过。详见 `docs/plan/tasks/r1-023.md`。
+
+- R1-024 shared bounded UInt64 math 已完成：`Core.Math.UInt64` 用 ordinary inline Lean 提供
+  min/max、overflow-safe floor average 与 caller-typed checked ceilDiv；BatchSizer 与
+  EvmPriceBand 分别拥有 SVM/EVM state、error 和 target binding。两个 target SDK facade
+  re-export 同一纯值 API，extraction guard 拒绝 target extension effect；没有新增 Runtime/
+  Ops/IR/Component/Emit、allocation、pointer 或 shared physical layout。Mollusk/Anvil focused
+  matrices 及 Surfpool 1.5.0 Loader-v3 exact-ELF 部署通过。详见 `docs/plan/tasks/r1-024.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
@@ -1022,15 +1030,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 411 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 67 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 421/421，其中 MemoryOps 20/20、LamportTransfer 15/15、
+- `lake build Tests` 当前 415 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 70 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 431/431，其中 MemoryOps 20/20、LamportTransfer 15/15、
   RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。
-- EVM registry 40 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
+- EVM registry 41 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /
   EvmAllowlist / EvmIdRegistry / EvmConfigMap / EvmScoreMap / EvmCheckpointBook /
-  EvmCheckpointTrace / EvmSafeCastAccumulator / EvmSafeCastConfig /
+  EvmCheckpointTrace / EvmSafeCastAccumulator / EvmSafeCastConfig / EvmPriceBand /
   Collectible / Badge / TipJar / Lang / Vault /
   Ownable / Token / Capped / MultiToken / CraftToken / TwoStepCounter / Credits / Window / Phase /
   Wide / Const 均进入

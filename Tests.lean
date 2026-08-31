@@ -78,6 +78,7 @@ import Tests.EvmStorageEnumerableSetSpec
 import Tests.EvmStorageEnumerableMapSpec
 import Tests.EvmStorageCheckpointsSpec
 import Tests.EvmSafeCastSpec
+import Tests.CoreMathSpec
 import Tests.EvmPausableSpec
 import Tests.TipJarSpec
 import Tests.LangSpec

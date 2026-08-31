@@ -1,4 +1,5 @@
 import ProofForge.Core.SafeCast
+import ProofForge.Core.Math
 import ProofForge.Svm.Sdk.Account
 import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.Program
@@ -53,7 +54,7 @@ without exposing raw Runtime stubs or introducing a second syscall implementatio
 two-slot `Record64` / `Vector64` lifecycle. They preserve fixed two- and four-word alignment and the
 shared bounded bump allocator rather than adding a generic host collection or another emitter.
 
-Target-neutral allocation-free helpers such as `Core.SafeCast` are re-exported through this facade
-without inventing an SVM syscall or emitter recipe; applications still own typed error and state
-transition policy.
+Target-neutral allocation-free helpers such as `Core.SafeCast` and `Core.Math` are re-exported
+through this facade without inventing an SVM syscall or emitter recipe; applications still own
+typed error and state-transition policy.
 -/
