@@ -15,6 +15,7 @@ structure State where
 
 inductive Error where
   | zeroCapacity
+  | ratioOverflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_entry]
@@ -99,5 +100,13 @@ def byteOrderUp (_state : State) (value : UInt64) : UInt64 :=
 @[pf_entry]
 def capacityRootUp (_state : State) (capacity : UInt64) : UInt64 :=
   Math.UInt64.sqrtCeil capacity
+
+/-- Apply a full-precision fractional capacity weight without overflowing the intermediate
+product. A zero total weight and an unrepresentable result remain distinct application errors. -/
+@[pf_entry]
+def prorate (state : State) (items weight totalWeight : UInt64) :
+    Except Error (State × UInt64) := do
+  let batches ← Math.UInt64.mulDiv items weight totalWeight .zeroCapacity .ratioOverflow
+  .ok ({ state with lastBatchCount := batches }, batches)
 
 end Examples.BatchSizer

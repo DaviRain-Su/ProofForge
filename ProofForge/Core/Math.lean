@@ -179,4 +179,53 @@ steps. The final division-based correction avoids squaring an intermediate estim
         quotient := predecessor / estimate
       return min estimate quotient + 1
 
+/-- Floor of `(left * right) / denominator` with a full 128-bit intermediate product.
+
+The two caller-owned errors distinguish a zero denominator from a quotient that does not fit in
+UInt64. Multiplication is split into four 32-bit partial products, then a fixed 64-step restoring
+division consumes the low product word with the high word as its initial remainder. The
+`denominator ≤ high` preflight is exactly the quotient-overflow condition. No target needs a wide
+integer opcode, heap value, or hidden wrapping arithmetic. -/
+@[pf_inline] def mulDiv (left right denominator : UInt64)
+    (divisionByZero overflow : ε) : Except ε UInt64 :=
+  if denominator == 0 then
+    .error divisionByZero
+  else
+    let mask : UInt64 := 0xffffffff
+    let leftLow := left &&& mask
+    let leftHigh := left >>> 32
+    let rightLow := right &&& mask
+    let rightHigh := right >>> 32
+    let lowLow := leftLow * rightLow
+    let lowHigh := leftLow * rightHigh
+    let highLow := leftHigh * rightLow
+    let highHigh := leftHigh * rightHigh
+    let middle := (lowLow >>> 32) + (lowHigh &&& mask) + (highLow &&& mask)
+    let productLow := (lowLow &&& mask) ||| ((middle &&& mask) <<< 32)
+    let productHigh :=
+      highHigh + (lowHigh >>> 32) + (highLow >>> 32) + (middle >>> 32)
+    if denominator ≤ productHigh then
+      .error overflow
+    else
+      .ok (Id.run do
+        let upper := ~~~(0 : UInt64)
+        let complement := upper - denominator + 1
+        let mut remainder := productHigh
+        let mut quotient : UInt64 := 0
+        for i in [0:64] do
+          let shift := (63 : UInt64) - UInt64.ofNat i
+          let bit := (productLow >>> shift) &&& 1
+          let carry := remainder >>> 63
+          let shifted := (remainder <<< 1) ||| bit
+          quotient := quotient <<< 1
+          if 0 < carry then
+            remainder := shifted + complement
+            quotient := quotient ||| 1
+          else if denominator ≤ shifted then
+            remainder := shifted - denominator
+            quotient := quotient ||| 1
+          else
+            remainder := shifted
+        return quotient)
+
 end ProofForge.Core.Math.UInt64

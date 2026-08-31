@@ -242,6 +242,49 @@ fn ceil_div_handles_maximum_and_rejects_zero_atomically() {
 }
 
 #[test]
+fn full_precision_mul_div_handles_wide_product_and_atomic_errors() {
+    let (program_id, fixture, account) = initialized(7);
+    let exact = fixture.call(
+        program_id,
+        account,
+        "prorate",
+        &[u64::MAX, 2, 2],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&u64::MAX.to_le_bytes()),
+        ],
+    );
+    let account = exact
+        .get_account(&fixture.state_key)
+        .expect("state after full-precision ratio")
+        .clone();
+    assert_eq!(slot(&account, 0), u64::MAX);
+
+    for (params, error) in [
+        ([7, 9, 0], ProgramError::Custom(1)),
+        ([1u64 << 63, 2, 1], ProgramError::Custom(1)),
+    ] {
+        let before = account.data.clone();
+        let rejected = fixture.call(
+            program_id,
+            account.clone(),
+            "prorate",
+            &params,
+            true,
+            &[
+                Check::err(error),
+                Check::account(&fixture.state_key).data(&before).build(),
+            ],
+        );
+        let rejected_account = rejected
+            .get_account(&fixture.state_key)
+            .expect("state after rejected full-precision ratio");
+        assert_eq!(rejected_account.data, before);
+    }
+}
+
+#[test]
 fn saturating_mutations_clamp_both_bounds_and_preserve_exact_products() {
     let (program_id, fixture, account) = initialized(u64::MAX - 2);
     let reserved = fixture.call(

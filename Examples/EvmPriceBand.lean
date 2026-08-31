@@ -15,6 +15,7 @@ structure State where
 
 inductive Error where
   | zeroTick
+  | quoteOverflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_entry]
@@ -99,5 +100,13 @@ def byteBandUp (_state : State) (quote : UInt64) : UInt64 :=
 @[pf_entry]
 def quoteRootUp (_state : State) (quote : UInt64) : UInt64 :=
   Math.UInt64.sqrtCeil quote
+
+/-- Scale a quote by a rational weight using a full-width intermediate product. The EVM policy
+owns its named zero-denominator and quotient-overflow errors independently from SVM. -/
+@[pf_entry]
+def weighted (state : State) (quote numerator denominator : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← Math.UInt64.mulDiv quote numerator denominator .zeroTick .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
 
 end Examples.EvmPriceBand

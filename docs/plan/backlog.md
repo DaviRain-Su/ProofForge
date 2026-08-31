@@ -95,6 +95,7 @@ R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul�
 R1-026 shared allocation-free UInt64 floor log2/log10/log256、
 R1-027 shared allocation-free UInt64 floor integer sqrt、
 R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
+R1-029 shared allocation-free full-precision UInt64 mulDiv；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -104,7 +105,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 ## 已做
 
 - **当前可验证基线（2026-08-31）**：Lean 汇总 415 jobs；SVM manifest 全 70 programs；
-  Mollusk 全量 431/431（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
+  Mollusk 全量 435/435（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
   41 programs 且 Anvil 41/41。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
   并保留汇总 `test` gate；完整 415-job `lake build Tests` 只在 Lean lane 执行一次，不再被
@@ -423,6 +424,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   BatchSizer/EvmPriceBand 分别绑定 covering capacity 与 quote-band policy。不新增 Runtime/
   Ops/IR/CFG/Component/Emit、allocation、power table 或 shared layout。详见
   `docs/plan/tasks/r1-028.md`。
+
+- R1-029 shared full-precision UInt64 `mulDiv` 已完成：四个 safe 32-bit partial products 组成
+  exact 128-bit intermediate，再用固定 64-step restoring division 求 floor quotient；
+  `denominator ≤ productHigh` 在循环前精确拒绝 UInt64 quotient overflow，零 denominator 与
+  overflow 使用 caller-owned distinct typed errors。BatchSizer/EvmPriceBand 分别绑定 SVM
+  capacity-ratio 与 EVM weighted-quote policy；不新增 Runtime/Ops/IR/CFG/Component/Emit、
+  allocation、pointer、wide heap value 或 shared layout。ceiling `mulDiv`、signed/fixed-point
+  与 wider returned quotient 继续 fail closed。详见 `docs/plan/tasks/r1-029.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
@@ -1066,7 +1075,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 - `lake build Tests` 当前 415 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 70 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 431/431，其中 MemoryOps 20/20、LamportTransfer 15/15、
+  `pf build` 当前通过；全套 Mollusk 435/435，其中 MemoryOps 20/20、LamportTransfer 15/15、
   RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。
 - EVM registry 41 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /

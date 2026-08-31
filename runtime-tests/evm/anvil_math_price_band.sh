@@ -93,6 +93,26 @@ solana_lean_require_storage "$addr" 0 "$half_up" "zero denominator is atomic"
 solana_lean_require_storage "$addr" 0 "$max" "ceil-div maximum by one"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'weighted(uint64,uint64,uint64)(uint64)' "$max" 2 2)" "$max" \
+  "full-precision product divided back to maximum"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'weighted(uint64,uint64,uint64)' "$max" 2 2 >/dev/null
+solana_lean_require_storage "$addr" 0 "$max" "full-precision ratio persists"
+
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'weighted(uint64,uint64,uint64)' 7 9 0)" 'zeroTick()' \
+  "full-precision zero denominator"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'weighted(uint64,uint64,uint64)' "$half_up" 2 1)" \
+  'quoteOverflow()' "full-precision quotient overflow"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'weighted(uint64,uint64,uint64)' "$half_up" 2 1 >/dev/null 2>&1; then
+  echo "FAIL: overflowing full-precision quotient unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 0 "$max" "full-precision failure is atomic"
+
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'increase(uint64)(uint64)' 1)" "$max" "saturating increase at maximum"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'discount(uint64)' "$max" >/dev/null
@@ -109,4 +129,4 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'scale(uint64)' 2 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "saturating scale persists"
 
-echo "evm-anvil-math-price-band: ok (bounded/saturating/floor-and-ceiling UInt64 math; engineering only)"
+echo "evm-anvil-math-price-band: ok (bounded/saturating/rounded/full-precision UInt64 math; engineering only)"

@@ -103,6 +103,52 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard Math.UInt64.sqrtCeil 18446744065119617025 == 4294967295
 #guard Math.UInt64.sqrtCeil 18446744065119617026 == 4294967296
 #guard Math.UInt64.sqrtCeil u64Max == 4294967296
+#guard match Math.UInt64.mulDiv 10 20 3 false true with
+  | .ok value => value == 66
+  | _ => false
+#guard match Math.UInt64.mulDiv u64Max 2 2 false true with
+  | .ok value => value == u64Max
+  | _ => false
+#guard match Math.UInt64.mulDiv u64Max u64Max u64Max false true with
+  | .ok value => value == u64Max
+  | _ => false
+#guard match Math.UInt64.mulDiv u64Max u64Max (u64Max - 1) false true with
+  | .error true => true
+  | _ => false
+#guard match Math.UInt64.mulDiv ((1 : UInt64) <<< 63) 2 u64Max false true with
+  | .ok value => value == 1
+  | _ => false
+#guard match Math.UInt64.mulDiv ((1 : UInt64) <<< 63) 2 1 false true with
+  | .error true => true
+  | _ => false
+#guard match Math.UInt64.mulDiv 7 9 0 false true with
+  | .error false => true
+  | _ => false
+
+private def mulDivSamples : List UInt64 :=
+  [0, 1, 2, 3, 7, 31, 0xffffffff, 0x100000000,
+    0x7fffffffffffffff, 0x8000000000000000, u64Max - 1, u64Max]
+
+private def validMulDiv (left right denominator : UInt64) : Bool :=
+  let result := Math.UInt64.mulDiv left right denominator false true
+  if denominator == 0 then
+    match result with
+    | .error false => true
+    | _ => false
+  else
+    let quotient := (left.toNat * right.toNat) / denominator.toNat
+    if u64Max.toNat < quotient then
+      match result with
+      | .error true => true
+      | _ => false
+    else
+      match result with
+      | .ok value => value.toNat == quotient
+      | _ => false
+
+#guard mulDivSamples.all fun left =>
+  mulDivSamples.all fun right =>
+    mulDivSamples.all fun denominator => validMulDiv left right denominator
 
 private def validFloorRoot (value : UInt64) : Bool :=
   let root := Math.UInt64.sqrt value
@@ -148,7 +194,13 @@ open Examples.BatchSizer in
   binaryOrder (init 8) 65535 == 15 && decimalOrder (init 8) 1000000 == 6 &&
   byteOrder (init 8) 0x100000000 == 4 && capacityRoot (init 8) 1000000 == 1000 &&
   binaryOrderUp (init 8) 65535 == 16 && decimalOrderUp (init 8) 1000001 == 7 &&
-  byteOrderUp (init 8) 0x100000001 == 5 && capacityRootUp (init 8) 1000001 == 1001
+  byteOrderUp (init 8) 0x100000001 == 5 && capacityRootUp (init 8) 1000001 == 1001 &&
+  (match prorate (init 8) u64Max 2 2 with
+  | .ok (state, result) => state.lastBatchCount == u64Max && result == u64Max
+  | _ => false) &&
+  (match prorate (init 8) ((1 : UInt64) <<< 63) 2 1 with
+  | .error .ratioOverflow => true
+  | _ => false)
 
 open Examples.EvmPriceBand in
 #guard (lower (init 9) 13 5 == 5) && (upper (init 9) 13 5 == 13) &&
@@ -171,7 +223,13 @@ open Examples.EvmPriceBand in
   binaryBand (init 9) u64Max == 63 && decimalBand (init 9) u64Max == 19 &&
   byteBand (init 9) u64Max == 7 && quoteRoot (init 9) u64Max == 4294967295 &&
   binaryBandUp (init 9) u64Max == 64 && decimalBandUp (init 9) u64Max == 20 &&
-  byteBandUp (init 9) u64Max == 8 && quoteRootUp (init 9) u64Max == 4294967296
+  byteBandUp (init 9) u64Max == 8 && quoteRootUp (init 9) u64Max == 4294967296 &&
+  (match weighted (init 9) u64Max 2 2 with
+  | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
+  | _ => false) &&
+  (match weighted (init 9) ((1 : UInt64) <<< 63) 2 1 with
+  | .error .quoteOverflow => true
+  | _ => false)
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
 private partial def noTargetEffects (ops : Array ProofForge.Extract.IR.Op) : Bool :=
@@ -268,6 +326,13 @@ elab "#pf_guard_core_math_no_effects" : command => do
         throwError s!"{module}.{rootName}: expected exact five-step seed and six-step Newton ladders"
       unless noAccumLoop root.ops do
         throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
+    let mulDivName := if module == `Examples.BatchSizer then "prorate" else "weighted"
+    let some mulDiv := source.methods.find? (·.ixName == mulDivName)
+      | throwError s!"{module}.{mulDivName}: missing full-precision multiply/divide consumer"
+    unless loopBounds mulDiv.ops == #[64] do
+      throwError s!"{module}.{mulDivName}: expected exact 64-step restoring-division frame"
+    unless noAccumLoop mulDiv.ops do
+      throwError s!"{module}.{mulDivName}: restoring division was incorrectly lowered as accumulation"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer
