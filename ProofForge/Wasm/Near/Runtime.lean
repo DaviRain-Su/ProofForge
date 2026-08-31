@@ -28,6 +28,16 @@ plan validates syntax before constructing it, and any future decoder must do lik
   w7 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned optional bounded memo decoded from a specialized JSON input policy.
+`present = 0` means `None`; `present = 1` preserves `Some ""` separately. Active UTF-8 bytes are
+packed little-endian into `w0,w1`, and bytes at/above `length` are zero. -/
+@[pf_boundary] structure OptionalMemo16 where
+  present : UInt64
+  length : UInt64
+  w0 : UInt64
+  w1 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Current block height. Extractor matches this name and the NEAR emitter
 imports `env.block_index` (u64, view-safe). Not Solana `Clock.slot`, not

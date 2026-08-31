@@ -231,6 +231,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    digit-producing Unicode escapes, and rejects overflow before multiply/add. Exact wire and
    aggregate whitespace bounds are 279 and 32. Unlike near-sdk-rs U128 parsing, leading plus and
    leading zeros reject, so this remains a named canonical subset rather than serde compatibility.
+   **NEAR-JSON-MEMO-INPUT (wsm-near-json-memo-input-001 done):** compiler-owned
+   `OptionalMemo16` distinguishes missing/null None from Some-empty and carries exact decoded
+   length plus two packed byte limbs. Its reusable string decoder handles raw UTF-8, all short
+   escapes, BMP escapes, and valid surrogate pairs, with exact 16 decoded-byte, 139 wire-byte, and
+   32 structural-whitespace bounds. near-sdk has no memo length bound and accepts broader object
+   grammar; this is a closed prerequisite for a later specialized transfer object.
    **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
    `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
    existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero

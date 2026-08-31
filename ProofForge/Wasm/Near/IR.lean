@@ -578,6 +578,25 @@ private partial def rewriteJsonU128InputRoot
         pure none
   | _ => pure none
 
+private def optionalMemoInputFieldIndex? : String → Option Nat
+  | "present" => some 0 | "length" => some 1 | "w0" => some 2 | "w1" => some 3
+  | _ => none
+
+private partial def rewriteJsonOptionalMemoInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) name =>
+      match optionalMemoInputFieldIndex? name with
+      | some index => pure (some (.arg index))
+      | none => throw s!"near/codec: unsupported OptionalMemo16 input projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: OptionalMemo16 input requires a scalar field projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 4))
+      else
+        pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
@@ -598,6 +617,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .borsh borsh => rewriteInputRoot method borsh
     | .jsonAccountId => rewriteJsonAccountInputRoot method
     | .jsonU128Amount => rewriteJsonU128InputRoot method
+    | .jsonOptionalMemo16 => rewriteJsonOptionalMemoInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)

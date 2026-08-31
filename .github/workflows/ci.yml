@@ -248,6 +248,9 @@ jobs:
       - name: Run NEAR sandbox canonical quoted-u128 amount JSON input gate
         run: runtime-tests/near/json_amount_input.sh
 
+      - name: Run NEAR sandbox optional bounded memo JSON input gate
+        run: runtime-tests/near/json_memo_input.sh
+
       - name: Run NEAR sandbox raw storage gate
         run: runtime-tests/near/storage.sh
 

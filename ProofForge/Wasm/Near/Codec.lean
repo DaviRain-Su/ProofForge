@@ -103,6 +103,11 @@ decoded decimal digits, each represented raw or as one six-byte `\u00xx` escape.
 def maxJsonU128Whitespace : Nat := 32
 def maxJsonU128InputBytes : Nat := 13 + 39 * 6 + maxJsonU128Whitespace
 
+/-- Optional memo input has 11 structural bytes in its largest string form, at most sixteen
+decoded UTF-8 bytes each represented by a six-byte JSON escape, and separately bounded whitespace. -/
+def maxJsonMemoWhitespace : Nat := 32
+def maxJsonMemoInputBytes : Nat := 11 + 16 * 6 + maxJsonMemoWhitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -111,18 +116,25 @@ def accountIdSchema : Core.Codec.Schema :=
     ("w4", .scalar .uint64), ("w5", .scalar .uint64),
     ("w6", .scalar .uint64), ("w7", .scalar .uint64)]
 
+def optionalMemo16Schema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.OptionalMemo16" #[
+    ("present", .scalar .uint64), ("length", .scalar .uint64),
+    ("w0", .scalar .uint64), ("w1", .scalar .uint64)]
+
 /-- Closed target input policies. The AccountId plan accepts one bounded one-field JSON object;
 it is deliberately narrower than generic serde_json-generated method wrappers. -/
 inductive InputPlan where
   | borsh (plan : BorshInputPlan)
   | jsonAccountId
   | jsonU128Amount
+  | jsonOptionalMemo16
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
   | .borsh plan => plan.localCount
   | .jsonAccountId => 9
   | .jsonU128Amount => 2
+  | .jsonOptionalMemo16 => 4
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
@@ -132,10 +144,14 @@ def InputPlan.canonical : InputPlan → String
   | .jsonU128Amount =>
       s!"near-json-u128-amount-object-canonical-v1(max-wire={maxJsonU128InputBytes}," ++
         s!"ws={maxJsonU128Whitespace},digits=1..39,unknown=reject)"
+  | .jsonOptionalMemo16 =>
+      s!"near-json-optional-memo16-object-canonical-v1(max-wire={maxJsonMemoInputBytes}," ++
+        s!"ws={maxJsonMemoWhitespace},decoded-bytes=0..16,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
   if schema == .scalar .uint128 then return .jsonU128Amount
+  if schema == optionalMemo16Schema then return .jsonOptionalMemo16
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)
