@@ -36,5 +36,5 @@ ProofForge implements only the explicit logical Unit case and does not add a gen
 
 ## Next
 
-Compose this output with the bounded `FtTransferArgs` input, one-yocto guard, existing `BAL2`
-ledger, and exact NEP-141 event in a separate `ft_transfer` slice.
+The separate [wsm-near-void-output-001](wsm-near-void-output-001.md) policy covers near-sdk's
+distinct omitted-return wrapper before transfer integration.

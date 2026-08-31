@@ -629,7 +629,12 @@ private def outputPlanOf (method : Method ValKind OpExt) :
         throw s!"near/codec: {method.ixName} output policy has no schema"
       pure none
   | some schema =>
-      let plan ← Codec.targetOutputPlan schema
+      let plan ←
+        if method.outputPolicy == Codec.OutputPlan.voidEmpty.canonical then
+          unless schema == .unit do
+            throw s!"near/codec: {method.ixName} empty output policy requires Unit schema"
+          pure Codec.OutputPlan.voidEmpty
+        else Codec.targetOutputPlan schema
       unless method.outputPolicy == plan.canonical do
         throw s!"near/codec: {method.ixName} output policy does not match its schema"
       pure (some plan)
@@ -1457,6 +1462,13 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
+        if outputPlan == some .voidEmpty then
+          unless tail.all isExitOp do
+            throw "extract/unsupported: near v0 instructions follow terminal operation"
+          if st.pendingPromiseReturn.isSome then
+            throw "extract/unsupported: empty Unit output cannot also return a promise"
+          let lines := if st.initializer then markInitialized p level else #[]
+          return { lines, st, terminal := true }
         if outputPlan == some .jsonNullUnit then
           unless tail.all isExitOp do
             throw "extract/unsupported: near v0 instructions follow terminal operation"
@@ -1774,6 +1786,8 @@ private partial def emitRegion (p : Program ValKind OpExt)
             return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
         | some .jsonNullUnit =>
             throw "extract/unsupported: JSON null Unit output requires a mutating state terminal"
+        | some .voidEmpty =>
+            throw "extract/unsupported: empty Unit output requires a mutating state terminal"
         | none =>
             unless values.size == 1 do
               throw "extract/unsupported: near v0 view wants exactly one UInt64"

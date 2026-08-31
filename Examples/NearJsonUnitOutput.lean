@@ -17,4 +17,9 @@ inductive Error where
 @[pf_entry] def setMarker (_state : State) (marker : UInt64) : Except Error (State × Unit) :=
   if marker != 0 then .ok ({ marker }, ()) else .error .overflow
 
+/-- near-sdk omitted-return wrapper semantics: successful mutation returns no bytes. -/
+@[pf_entry, pf_near_void]
+def setMarkerVoid (_state : State) (marker : UInt64) : Except Error (State × Unit) :=
+  if marker != 0 then .ok ({ marker }, ()) else .error .overflow
+
 end Examples.NearJsonUnitOutput

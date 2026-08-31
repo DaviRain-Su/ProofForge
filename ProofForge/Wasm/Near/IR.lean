@@ -676,14 +676,18 @@ private structure BoundEntry where
 private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry := do
   let privateAnnotations := method.annotations.filter (· == "near.private.v1")
   let payableAnnotations := method.annotations.filter (· == "near.payable.v1")
+  let voidAnnotations := method.annotations.filter (· == "near.void.v1")
   let migrationAnnotations := method.annotations.filter (·.startsWith "near.migrate.v1:")
-  unless privateAnnotations.size + payableAnnotations.size + migrationAnnotations.size ==
+  unless privateAnnotations.size + payableAnnotations.size + voidAnnotations.size +
+      migrationAnnotations.size ==
       method.annotations.size do
     throw s!"extract/unsupported: near cannot consume foreign target annotations on {method.ixName}"
   unless privateAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near private annotations"
   unless payableAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near payable annotations"
+  unless voidAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate near void annotations"
   unless migrationAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near migration annotations"
   let migrateFrom ← match migrationAnnotations[0]? with
@@ -715,6 +719,14 @@ private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry :=
 
 private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundOutput) := do
+  let voidAnnotations := method.annotations.filter (· == "near.void.v1")
+  if !voidAnnotations.isEmpty then
+    unless method.kind == .increment do
+      throw s!"near/codec: {method.ixName} empty return requires a mutating entry"
+    unless method.retSchema == .unit && method.retCount == 0 do
+      throw s!"near/codec: {method.ixName} empty return requires an exact zero-leaf Unit result"
+    let plan := Codec.OutputPlan.voidEmpty
+    return (method, some { ixName := method.ixName, schema := .unit, plan })
   match method.retSchema with
   | .boundedArray .. | .boundedBytes _ | .boundedString _ =>
       unless method.kind == .get do
@@ -765,7 +777,7 @@ private def decorateMethod (entries : Array BoundEntry) (inputs : Array BoundInp
   match outputs.find? (·.ixName == method.ixName) with
   | some output =>
       let tupleArity :=
-        if output.plan == .jsonNullUnit then method.tupleArity
+        if output.plan == .jsonNullUnit || output.plan == .voidEmpty then method.tupleArity
         else some output.plan.sourceValueCount
       { method with
         outputSchema := some output.schema

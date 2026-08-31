@@ -40,6 +40,9 @@ wsm-near-json-unit-output-001 binds only an explicit mutating `Unit` result to e
 The four-byte `near-json-null-unit-v1` return is distinct from historical raw UInt64 output and
 from an initializer's omitted return; it is the output prerequisite for the later transfer method,
 not generic JSON serialization.
+wsm-near-void-output-001 adds the distinct compiler-owned `pf_near_void` wrapper used by
+near-sdk methods with an omitted result. `near-void-empty-v1` persists state but emits no
+`value_return`, yielding exact empty SuccessValue bytes; explicit Unit remains JSON null.
 wsm-near-ft-balance-of-001 composes those two exact policies into an exact `ft_balance_of` export
 over the existing `BAL2` balance map. Missing and present-zero balances both return `"0"`, while
 malformed present values trap; the bounded input grammar remains narrower than serde_json, so the

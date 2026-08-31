@@ -127,6 +127,20 @@ def main() -> None:
         raise AssertionError("second Unit mutation did not return exact JSON null")
     _expect(client, "get", b"", NearClient.encode_u64_le(99))
     print("near-output: exact null bytes, state persistence, repeated calls, and rollback ok")
+
+    success = client.call("setMarkerVoid", NearClient.encode_u64_le(123))
+    if NearClient.success_value_bytes(success) != b"":
+        raise AssertionError("void mutation did not return exact empty SuccessValue")
+    _expect(client, "get", b"", NearClient.encode_u64_le(123))
+    failed = client.call("setMarkerVoid", NearClient.encode_u64_le(0), expect_success=False)
+    if NearClient.success_value_bytes(failed) is not None:
+        raise AssertionError("failed void mutation unexpectedly returned a SuccessValue")
+    _expect(client, "get", b"", NearClient.encode_u64_le(123))
+    success = client.call("setMarkerVoid", NearClient.encode_u64_le(456))
+    if NearClient.success_value_bytes(success) != b"":
+        raise AssertionError("repeated void mutation did not return exact empty SuccessValue")
+    _expect(client, "get", b"", NearClient.encode_u64_le(456))
+    print("near-output: exact empty return, state persistence, repeated calls, and rollback ok")
     print("suite NearOutput: PASS")
 
 

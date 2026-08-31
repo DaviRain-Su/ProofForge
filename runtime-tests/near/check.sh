@@ -196,6 +196,7 @@ json_ft_transfer_input_anchors = (
 )
 json_unit_output_anchors = (
     '(func (export "setMarker")',
+    '(func (export "setMarkerVoid")',
     '(call $pf_arena_alloc (i64.const 4) (i64.const 1))',
     '(i32.store (local.get $pf_output_ptr) (i32.const 1819047278))',
     '(call $pf_value_return (i64.const 4)',

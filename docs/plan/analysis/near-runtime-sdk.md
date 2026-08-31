@@ -247,6 +247,10 @@ asynchronous; dynamic handles and multi-action builders are absent.
    on a mutating entry selects exactly one four-byte JSON `null` return after state persistence.
    Initializers, raw UInt64 methods, and view outputs retain their previous policies. This pins the
    near-sdk-rs explicit-`()` result shape without introducing generic JSON serialization.
+   **NEAR-VOID-OUTPUT (wsm-near-void-output-001 done):** compiler-owned `pf_near_void` selects the
+   separate near-sdk omitted-return semantics for an exact zero-leaf Unit mutation. Successful
+   state writes complete with no `value_return` and empty SuccessValue bytes; explicit Unit still
+   returns JSON `null`, and views/scalar results/Promise return cannot select this policy.
    **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
    `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
    existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero
