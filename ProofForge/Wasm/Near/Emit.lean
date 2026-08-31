@@ -1389,7 +1389,10 @@ private partial def emitRegion (p : Program ValKind OpExt)
                   if echo then lines := lines ++ returnU64Instr v level
               return { lines, st, terminal := true }
           | _ => pure ()
-        let dest := st.pendingDest <|> fieldOf value |>.getD defaultSlot
+        -- A terminal state value identifies its own field when it is a projection. `pendingDest`
+        -- is only the fallback for a scalar temporary produced by a preceding checked operation;
+        -- preferring it here can overwrite the previous field in multi-field state construction.
+        let dest := (fieldOf value).orElse (fun _ => st.pendingDest) |>.getD defaultSlot
         let v ← match st.last, st.lastValue with
           | some e, some prior =>
               if prior == value then .ok ("(local.get " ++ e ++ ")") else renderVal st value

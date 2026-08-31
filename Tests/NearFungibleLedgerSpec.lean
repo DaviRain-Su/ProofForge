@@ -65,6 +65,19 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "i64.add", "i64.sub", "i64.lt_u", "i64.ge_u", "i64.and", "i64.or"] do
     unless wat.contains anchor do
       throwError s!"NEAR fungible ledger WAT missing {anchor}\n{wat}"
+  let fixtureBody ← match wat.splitOn "(func (export \"fixtureSetSupplyMax\")" with
+    | [_before, tail] =>
+        match tail.splitOn "\n  )\n" with
+        | body :: _ => pure body
+        | [] => throwError "fixtureSetSupplyMax body terminator is missing"
+    | _ => throwError "fixtureSetSupplyMax body must occur exactly once"
+  unless (fixtureBody.splitOn
+      "(call $pf_storage_write (i64.const 8) (i64.const 1024)").length == 2 &&
+      (fixtureBody.splitOn
+        "(call $pf_storage_write (i64.const 8) (i64.const 1032)").length == 2 &&
+      (fixtureBody.splitOn
+        "(call $pf_storage_write (i64.const 6) (i64.const 1040)").length == 2 do
+    throwError "fixtureSetSupplyMax did not persist each supply/marker field exactly once"
   logInfo m!"proofforge-near-fungible-ledger: digest = {IR.digestHex program}"
 
 #pf_near_fungible_ledger_check
