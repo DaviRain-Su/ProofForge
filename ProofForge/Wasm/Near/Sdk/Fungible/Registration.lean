@@ -1,18 +1,20 @@
 import ProofForge.Attr
 import ProofForge.Wasm.Near.Runtime
 import ProofForge.Wasm.Near.Sdk.Storage
+import ProofForge.Wasm.Near.Sdk.Store.Codec
 
 /-!
 # Closed storage-registration economics helpers
 
-These pure descriptor helpers support a caller-only measured-cost registration policy. They do not
-perform storage or Promise effects and do not define the public NEP-145 ABI, unregister policy, or
-the trusted source of `storage_amount_per_byte`.
+These pure descriptor helpers support caller-only measured-cost registration and zero-balance
+unregister policies. They do not perform storage or Promise effects, define the public NEP-145 ABI
+or force-unregister, or choose the trusted source of `storage_amount_per_byte`.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Fungible.Registration
 
 open ProofForge.Wasm.Near.Sdk.Storage
+open ProofForge.Wasm.Near.Sdk.Store
 
 /-- The active exact-value storage read observed no entry. -/
 @[pf_inline] def readWasMissing : Bool :=
@@ -42,5 +44,14 @@ free. The price itself must come from trusted immutable/configured state. -/
     (deposit cost : ProofForge.Wasm.Near.Runtime.NearToken) : Bool :=
   ProofForge.Wasm.Near.Runtime.nearTokenSubOk
     deposit.w0 deposit.w1 cost.w0 cost.w1 != 0
+
+/-- Closed unregister calls mirror near-sdk's strict one-yocto security deposit. -/
+@[pf_inline] def attachedIsOne
+    (deposit : ProofForge.Wasm.Near.Runtime.NearToken) : Bool :=
+  deposit.w0 = 1 && deposit.w1 = 0
+
+/-- Only an exact decoded zero balance is eligible for the first non-force unregister policy. -/
+@[pf_inline] def loadedBalanceIsZero : Bool :=
+  resultNearTokenW0D 1 = 0 && resultNearTokenW1D 1 = 0
 
 end ProofForge.Wasm.Near.Sdk.Fungible.Registration

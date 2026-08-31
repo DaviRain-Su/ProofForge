@@ -169,7 +169,7 @@ asynchronous; dynamic handles and multi-action builders are absent.
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
 | N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy complete; no public token method contract | standard-specific integration suites |
-| N11 storage economics | real invocation-dynamic `storage_usage` and closed caller-only measured registration complete; storage byte price remains explicit trusted protocol config | variable AccountId-key cost, speculative-write rollback, exact excess refund; no fabricated host price import or public NEP-145 ABI |
+| N11 storage economics | real invocation-dynamic `storage_usage`, closed caller-only measured registration, and exact-zero unregister complete; storage byte price remains explicit trusted protocol config | variable AccountId-key cost/reclaim, speculative mutation rollback, exact refunds; no force or public NEP-145 ABI |
 
 ## 6. Near-term task cuts
 
@@ -202,6 +202,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    NEP-145 ABI already exists. It registers only `Context.caller` as a present-zero balance,
    measures that caller's actual variable key delta, and relies on nearcore receipt rollback after
    the speculative write for insufficient-deposit or arithmetic failures.
+   wsm-near-storage-unregister-001 separately requires exactly one attached yocto, removes only an
+   exact present-zero caller key, measures the live reclaim, and refunds `reclaim × trustedPrice + 1`.
+   Missing returns false and retains the yocto as current near-sdk-rs does; current near-sdk-rs
+   otherwise refunds a configured fixed maximum, whereas this closed policy deliberately prices
+   the live variable key. A synchronous post-remove panic rolls storage back, but later detached
+   refund receipt failure does not restore the committed key.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

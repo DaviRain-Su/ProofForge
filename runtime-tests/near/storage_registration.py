@@ -38,6 +38,68 @@ def _register(client: NearClient, contract: str, caller: str, deposit: int,
     )
 
 
+def _unregister(client: NearClient, contract: str, caller: str, deposit: int,
+                *, success: bool = True) -> dict:
+    return client.call_on(
+        contract, "unregisterCaller", b"", signer=caller, deposit=deposit,
+        expect_success=success,
+    )
+
+
+def _assert_transfer_receipt(
+    client: NearClient, outcome: dict, receiver: str, amount: int
+) -> None:
+    observed: list[object] = []
+    for record in outcome.get("receipts_outcome", []):
+        receipt_id = record.get("id")
+        if not receipt_id:
+            continue
+        receipt = client.rpc_call("EXPERIMENTAL_receipt", {"receipt_id": receipt_id})
+        observed.append(receipt)
+        if receipt.get("receiver_id") != receiver:
+            continue
+        actions = receipt.get("receipt", {}).get("Action", {}).get("actions", [])
+        if any(
+            int(action.get("Transfer", {}).get("deposit", -1)) == amount
+            for action in actions
+            if isinstance(action, dict)
+        ):
+            status = record.get("outcome", {}).get("status", {})
+            if not (isinstance(status, dict) and "SuccessValue" in status):
+                raise AssertionError(f"refund transfer receipt failed: {status!r}")
+            return
+    raise AssertionError(
+        f"missing exact transfer receipt receiver={receiver} amount={amount}: {observed!r}"
+    )
+
+
+def _assert_exact_reclaim(
+    client: NearClient, contract: str, caller: str, expected_delta: int, per_byte: int
+) -> None:
+    key = _key(caller)
+    state_before = client.view_state_values(contract)
+    if state_before.get(key) != b"\0" * 16:
+        raise AssertionError(f"{caller} was not present exact zero before unregister")
+    balance_before = client.view_account_balance(caller)
+    outcome = _unregister(client, contract, caller, 1)
+    balance_after = client.view_account_balance(caller)
+    if _result_u64(outcome) != 1:
+        raise AssertionError(f"{caller} unregister did not return true")
+    reclaimed = client.view_u64_on(contract, "lastDelta")
+    expected_cost = reclaimed * per_byte
+    if reclaimed != expected_delta:
+        raise AssertionError(
+            f"{caller} reclaim delta {reclaimed} != registration delta {expected_delta}"
+        )
+    _assert_transfer_receipt(client, outcome, caller, expected_cost + 1)
+    if balance_after <= balance_before:
+        raise AssertionError(
+            f"{caller} did not observe positive net balance after its successful exact refund"
+        )
+    if key in client.view_state_values(contract):
+        raise AssertionError(f"{caller} canonical registration key survived unregister")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
@@ -45,10 +107,14 @@ def main() -> None:
     short = "a.test.near"
     long = "x" * (64 - len(".test.near")) + ".test.near"
     malformed = "bad.test.near"
+    nonzero = "one.test.near"
     overflow = "overflow.test.near"
+    add_overflow = "y" * 11 + ".test.near"
     zero_cost = "zero.test.near"
 
-    for account in (contract, short, long, malformed, overflow, zero_cost):
+    for account in (
+        contract, short, long, malformed, nonzero, overflow, add_overflow, zero_cost
+    ):
         client.create_subaccount_with_key(account, 10**27)
     client.deploy_to(contract, wasm)
     per_byte = 10**19
@@ -106,20 +172,64 @@ def main() -> None:
     if client.view_state_values(contract).get(_key(long)) != b"\0" * 16:
         raise AssertionError("max-length caller key was not exact active AccountId bytes")
 
+    # The strict guard runs before lookup/removal. Both rejected deposits leave the complete
+    # contract state untouched, including the present-zero key and diagnostic envelope.
+    for caller in (short, long):
+        for deposit in (0, 2):
+            guarded = client.view_state_values(contract)
+            _unregister(client, contract, caller, deposit, success=False)
+            if client.view_state_values(contract) != guarded:
+                raise AssertionError("failed one-yocto guard changed registration state")
+
+    # Reverse insertion order so each live measured removal exactly reverses its corresponding
+    # variable-length registration geometry, without assuming a fixed AccountId storage charge.
+    _assert_exact_reclaim(client, contract, long, long_delta, per_byte)
+    _assert_exact_reclaim(client, contract, short, short_delta, per_byte)
+    missing_before = client.view_state_values(contract)
+    if _result_u64(_unregister(client, contract, short, 1)) != 0:
+        raise AssertionError("missing unregister did not return false")
+    if _key(short) in client.view_state_values(contract):
+        raise AssertionError("missing unregister recreated the registration key")
+    # Like near-sdk-rs, the strict attached yocto is retained on the missing/false path. The
+    # ProofForge state envelope may be rewritten to carry the false result, but the map is untouched.
+    if set(client.view_state_values(contract)) != set(missing_before):
+        raise AssertionError("missing unregister changed the storage key set")
+
     client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
     malformed_before = client.view_state_values(contract)
-    _register(client, contract, malformed, generous, success=False)
+    _unregister(client, contract, malformed, 1, success=False)
     if client.view_state_values(contract) != malformed_before:
-        raise AssertionError("malformed present value rejection changed storage/state")
+        raise AssertionError("malformed unregister rejection changed storage/state")
+
+    client.call_on(contract, "seedCallerOne", b"", signer=nonzero)
+    nonzero_before = client.view_state_values(contract)
+    _unregister(client, contract, nonzero, 1, success=False)
+    if client.view_state_values(contract) != nonzero_before:
+        raise AssertionError("nonzero unregister rejection changed storage/state")
 
     client.deploy_to(overflow, wasm)
     client.call_on(
         overflow, "initialize", NearClient.encode_u64_le((1 << 64) - 1), signer=overflow
     )
+    client.call_on(overflow, "fixtureSetCostMax", b"", signer=overflow)
+    client.call_on(overflow, "seedCallerZero", b"", signer=short)
     overflow_before = client.view_state_values(overflow)
-    _register(client, overflow, short, 0, success=False)
-    if client.view_state_values(overflow) != overflow_before or _key(short) in overflow_before:
-        raise AssertionError("cost multiplication overflow did not roll back speculative write")
+    _unregister(client, overflow, short, 1, success=False)
+    if client.view_state_values(overflow) != overflow_before or _key(short) not in overflow_before:
+        raise AssertionError("reclaim-cost overflow did not roll back speculative removal")
+
+    client.deploy_to(add_overflow, wasm)
+    client.call_on(
+        add_overflow, "initialize", NearClient.encode_u64_le(1), signer=add_overflow
+    )
+    client.call_on(
+        add_overflow, "fixtureSetCostAddOverflow", b"", signer=add_overflow
+    )
+    client.call_on(add_overflow, "seedCallerZero", b"", signer=add_overflow)
+    add_overflow_before = client.view_state_values(add_overflow)
+    _unregister(client, add_overflow, add_overflow, 1, success=False)
+    if client.view_state_values(add_overflow) != add_overflow_before:
+        raise AssertionError("refund addition overflow did not roll back speculative removal")
 
     client.deploy_to(zero_cost, wasm)
     client.call_on(zero_cost, "initialize", NearClient.encode_u64_le(0), signer=zero_cost)
@@ -128,7 +238,7 @@ def main() -> None:
     if client.view_state_values(zero_cost) != zero_before:
         raise AssertionError("zero trusted cost was not rejected before storage effects")
 
-    print("near-storage-registration: measured costs, refunds, and rollback boundaries ok")
+    print("near-storage-registration: register/unregister costs, refunds, and rollback boundaries ok")
     print("suite NearStorageRegistration: PASS")
 
 

@@ -36,5 +36,6 @@ panic path. All checks that can run before insertion do so.
 
 ## Not included
 
-Public NEP-145/JSON methods, arbitrary-account registration, unregister/force-unregister, storage
-withdrawal, protocol-price discovery, automatic ledger enforcement, resolver, or FT method ABI.
+Public NEP-145/JSON methods, arbitrary-account registration, force-unregister, storage withdrawal,
+protocol-price discovery, automatic ledger enforcement, resolver, or FT method ABI. The separate
+wsm-near-storage-unregister-001 slice now supplies only caller exact-zero removal/refund.

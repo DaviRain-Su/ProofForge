@@ -111,6 +111,48 @@ def registerCaller (state : State) : Except Error (State × UInt64) :=
     else .error .overflow
   else .error .overflow
 
+/-- Remove only the caller's exact present-zero registration. Unlike current near-sdk-rs, this
+closed policy prices the caller's live reclaimed bytes rather than a constructor-time fixed maximum.
+The strict attached yocto is returned together with that reclaim amount. -/
+@[pf_entry, pf_near_payable]
+def unregisterCaller (state : State) : Except Error (State × UInt64) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit then
+    let caller := Context.caller
+    if DirectAccountNearTokenMap.accountLengthValid caller then
+      let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+      if Registration.trustedCostValid perByteCost then
+        let _ := registrations.read caller
+        if Registration.readWasMissing then
+          .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
+            state.lastCostW0, state.lastCostW1, 0⟩, 0)
+        else if Registration.readWasValidPresent && Registration.loadedBalanceIsZero then
+          let before := ProofForge.Wasm.Near.Runtime.storageUsage
+          let removeStatus := registrations.remove caller
+          if removeStatus = 1 then
+            let after := ProofForge.Wasm.Near.Runtime.storageUsage
+            if after < before then
+              let reclaimed := before - after
+              if NearToken.canMulUInt64 perByteCost reclaimed then
+                let cost : NearToken :=
+                  ⟨NearToken.mulUInt64W0 perByteCost reclaimed,
+                    NearToken.mulUInt64W1 perByteCost reclaimed⟩
+                let one : NearToken := ⟨1, 0⟩
+                if NearToken.canAdd cost one then
+                  let refund : NearToken :=
+                    ⟨NearToken.addW0 cost one, NearToken.addW1 cost one⟩
+                  let _ := Promises.transferAccountDetached caller refund
+                  .ok (⟨state.perByteCostW0, state.perByteCostW1,
+                    reclaimed, cost.w0, cost.w1, 1⟩, 1)
+                else .error .overflow
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-! Fixture-only malformed-value seed/removal paths. They expose fail-closed descriptor behavior
 without extending the SDK registration contract. -/
 
@@ -122,6 +164,27 @@ def seedCallerMalformed8 (state : State) : Except Error (State × UInt64) :=
   let status := result.status
   .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
     state.lastCostW0, state.lastCostW1, status⟩, status)
+
+@[pf_entry]
+def seedCallerZero (state : State) : Except Error (State × UInt64) :=
+  let status := registrations.put Context.caller (⟨0, 0⟩ : NearToken)
+  .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
+    state.lastCostW0, state.lastCostW1, status⟩, status)
+
+@[pf_entry]
+def seedCallerOne (state : State) : Except Error (State × UInt64) :=
+  let status := registrations.put Context.caller (⟨1, 0⟩ : NearToken)
+  .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
+    state.lastCostW0, state.lastCostW1, status⟩, status)
+
+@[pf_entry]
+def fixtureSetCostMax (_state : State) : Except Error (State × UInt64) :=
+  .ok (⟨0xffffffffffffffff, 0xffffffffffffffff, 0, 0, 0, 1⟩, 1)
+
+/-- `(2^128 - 1) / 85`; a 21-byte caller's 85-byte entry makes refund `cost + 1` overflow. -/
+@[pf_entry]
+def fixtureSetCostAddOverflow (_state : State) : Except Error (State × UInt64) :=
+  .ok (⟨0x0303030303030303, 0x0303030303030303, 0, 0, 0, 1⟩, 1)
 
 @[pf_entry]
 def fixtureRemoveCaller (state : State) : Except Error (State × UInt64) :=

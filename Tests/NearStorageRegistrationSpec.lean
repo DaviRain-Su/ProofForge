@@ -14,6 +14,7 @@ private partial def registrationSteps : Array ProofForge.Extract.IR.Op → Array
       steps ++ match op with
       | .ext (.near (.storageRead ..)) => #["read"]
       | .ext (.near (.storageWrite ..)) => #["write"]
+      | .ext (.near (.storageRemove ..)) => #["remove"]
       | .ext (.near (.promiseTransferAccountDetached ..)) => #["refund"]
       | .letLocal _ (.ext (.near .storageUsage) _) => #["usage"]
       | .ite _ _ _ thn els => registrationSteps thn ++ registrationSteps els
@@ -29,9 +30,15 @@ elab "#pf_near_storage_registration_check" : command => do
   let register ← match source.methods.find? (·.ixName == "registerCaller") with
     | some method => pure method
     | none => throwError "missing registerCaller"
+  let unregister ← match source.methods.find? (·.ixName == "unregisterCaller") with
+    | some method => pure method
+    | none => throwError "missing unregisterCaller"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
+  let unregisterSteps := registrationSteps unregister.ops
+  unless unregisterSteps == #["read", "usage", "remove", "usage", "refund"] do
+    throwError s!"unregister effect order changed: {unregisterSteps}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -42,9 +49,13 @@ elab "#pf_near_storage_registration_check" : command => do
     | .error reason => throwError reason
   for anchor in #[
       "(func (export \"registerCaller\")", "(func (export \"probeCaller\")",
-      "(call $pf_storage_read", "(call $pf_storage_write", "(call $pf_storage_usage)",
+      "(func (export \"unregisterCaller\")", "(func (export \"seedCallerZero\")",
+      "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
+      "(func (export \"fixtureSetCostAddOverflow\")", "(call $pf_storage_read",
+      "(call $pf_storage_write", "(call $pf_storage_remove", "(call $pf_storage_usage)",
       "(call $pf_promise_batch_create", "(call $pf_promise_batch_action_transfer",
-      "(call $pf_mul64_lo", "(call $pf_mul64_hi", "i64.ge_u", "i64.sub",
+      "(call $pf_mul64_lo", "(call $pf_mul64_hi", "i64.ge_u", "i64.lt_u",
+      "i64.add", "i64.sub",
       "(call $pf_arena_alloc (i64.const 72) (i64.const 1))",
       "(call $pf_arena_alloc (i64.const 16) (i64.const 8))"] do
     unless wat.contains anchor do
@@ -55,7 +66,12 @@ elab "#pf_near_storage_registration_check" : command => do
 
 #pf_near_storage_registration_check
 
+#guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨0, 0⟩
+#guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 0⟩
+#guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨2, 0⟩
+#guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 1⟩
+
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "551039da8ad472c9"
+  some "aae9b34aaac4900a"
 
 end Tests.NearStorageRegistrationSpec
