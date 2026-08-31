@@ -138,6 +138,12 @@ def maxJsonFtResolveWhitespace : Nat := 32
 def maxJsonFtResolveInputBytes : Nat :=
   45 + 2 * 64 * 6 + 39 * 6 + maxJsonFtResolveWhitespace
 
+/-- Exact largest storage-deposit-shaped wire: the string-account and `false` boolean form has
+43 structural bytes, with the established AccountId escape and aggregate whitespace bounds. -/
+def maxJsonStorageDepositWhitespace : Nat := 32
+def maxJsonStorageDepositInputBytes : Nat :=
+  43 + 64 * 6 + maxJsonStorageDepositWhitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -179,6 +185,11 @@ def ftResolveTransferArgsSchema : Core.Codec.Schema :=
     ("senderId", accountIdSchema), ("receiverId", accountIdSchema),
     ("amount", .scalar .uint128)]
 
+def storageDepositArgsSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.StorageDepositArgs" #[
+    ("accountPresent", .scalar .uint64), ("accountId", accountIdSchema),
+    ("registrationOnly", .scalar .uint64)]
+
 def storageBalanceResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageBalanceResult" #[
     ("registered", .scalar .uint64), ("total", .scalar .uint128),
@@ -201,6 +212,7 @@ inductive InputPlan where
   | jsonFtTransferCallArgs
   | jsonFtOnTransferArgs
   | jsonFtResolveTransferArgs
+  | jsonStorageDepositArgs
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
@@ -213,6 +225,7 @@ def InputPlan.localCount : InputPlan → Nat
   | .jsonFtTransferCallArgs => 24
   | .jsonFtOnTransferArgs => 20
   | .jsonFtResolveTransferArgs => 20
+  | .jsonStorageDepositArgs => 11
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
@@ -240,6 +253,9 @@ def InputPlan.canonical : InputPlan → String
   | .jsonFtResolveTransferArgs =>
       s!"near-json-ft-resolve-args-bounded-v1(max-wire={maxJsonFtResolveInputBytes}," ++
         s!"ws={maxJsonFtResolveWhitespace},order=any,keys=raw,unknown=reject)"
+  | .jsonStorageDepositArgs =>
+      s!"near-json-storage-deposit-args-bounded-v1(max-wire={maxJsonStorageDepositInputBytes}," ++
+        s!"ws={maxJsonStorageDepositWhitespace},order=any,keys=raw,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
@@ -250,6 +266,7 @@ def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == ftTransferCallArgsSchema then return .jsonFtTransferCallArgs
   if schema == ftOnTransferArgsSchema then return .jsonFtOnTransferArgs
   if schema == ftResolveTransferArgsSchema then return .jsonFtResolveTransferArgs
+  if schema == storageDepositArgsSchema then return .jsonStorageDepositArgs
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)

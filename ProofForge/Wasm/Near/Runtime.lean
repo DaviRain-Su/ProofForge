@@ -95,6 +95,16 @@ This carrier only decodes `{sender_id,receiver_id,amount}`; it performs no ledge
   amount : ProofForge.Core.Value.UInt128
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for bounded canonical `storage_deposit`-shaped JSON.
+`accountPresent = 0` represents a missing or null account and requires a zero AccountId frame;
+`registrationOnly = 0/1/2` represents `None`/`Some false`/`Some true`. This carrier only decodes
+arguments; it neither registers an account nor handles an attached deposit. -/
+@[pf_boundary] structure StorageDepositArgs where
+  accountPresent : UInt64
+  accountId : AccountId
+  registrationOnly : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
 `registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
 serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record

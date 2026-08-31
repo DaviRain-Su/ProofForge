@@ -278,6 +278,9 @@ jobs:
       - name: Run NEAR sandbox bounded FT resolver argument gate
         run: runtime-tests/near/json_ft_resolve_input.sh
 
+      - name: Run NEAR sandbox bounded storage-deposit argument gate
+        run: runtime-tests/near/json_storage_deposit_input.sh
+
       - name: Run NEAR sandbox raw storage gate
         run: runtime-tests/near/storage.sh
 

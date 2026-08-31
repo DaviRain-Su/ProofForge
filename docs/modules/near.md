@@ -48,6 +48,11 @@ near-account-id and all ProofForge AccountId parsers' 2..64-byte syntax. It has 
 zero price or overflow traps. ProofForge no-argument wrappers require empty bytes unlike near-sdk's
 ignored input, and the variable extrema differ from the stock FT's fixed equal bounds, so this
 official-shaped export still does not claim complete NEP-145 compatibility.
+wsm-near-json-storage-deposit-input-001 adds the next operation prerequisite without exporting it:
+an exact eleven-leaf optional AccountId plus optional Boolean carrier and one any-order field loop.
+Its 459-byte bound covers a 64-byte maximally escaped account, `false`, and 32 whitespace bytes;
+missing/null options and inactive AccountId leaves are zero. Unknown/escaped keys reject, unlike
+near-sdk's default unknown-field acceptance, so it remains a named bounded canonical subset.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.

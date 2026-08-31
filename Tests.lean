@@ -84,6 +84,7 @@ import Tests.NearJsonFtTransferInputSpec
 import Tests.NearJsonFtTransferCallInputSpec
 import Tests.NearJsonFtOnTransferInputSpec
 import Tests.NearJsonFtResolveInputSpec
+import Tests.NearJsonStorageDepositInputSpec
 import Tests.NearFtReceiverValueSpec
 import Tests.NearPromiseOrValueSpec
 import Tests.NearFtReceiverDualSpec

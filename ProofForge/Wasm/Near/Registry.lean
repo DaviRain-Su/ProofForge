@@ -31,6 +31,7 @@ def entries : Array Entry := #[
   { name := "NearPromiseOrValue", digest := "dc1a13ff32595de5" },
   { name := "NearFtReceiverDual", digest := "d03ecd932c8aebc0" },
   { name := "NearJsonFtResolveInput", digest := "f16d9836431a6bb0" },
+  { name := "NearJsonStorageDepositInput", digest := "d592930fd54837e9" },
   { name := "NearStorage", digest := "cd97bb762dac8be3" },
   { name := "NearStorageEconomics", digest := "9c98eca433f99470" },
   { name := "NearStorageRegistration", digest := "c0b52ece5f4da6bf" },

@@ -22,7 +22,7 @@ open ProofForge
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "Counter" == some "121a0c8f7e697642"
 #guard ProofForge.Wasm.Near.Registry.names ==
-  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearStorageBalanceOutput", "NearStorageBalanceBoundsOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtOnTransferInput", "NearFtReceiverValue", "NearPromiseOrValue", "NearFtReceiverDual", "NearJsonFtResolveInput", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
+  #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearStorageBalanceOutput", "NearStorageBalanceBoundsOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtOnTransferInput", "NearFtReceiverValue", "NearPromiseOrValue", "NearFtReceiverDual", "NearJsonFtResolveInput", "NearJsonStorageDepositInput", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "f85fa4f3182ec1eb"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "f45af507fc51f527"
@@ -45,6 +45,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearPromiseOrValue" == some "dc1a13ff32595de5"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFtReceiverDual" == some "d03ecd932c8aebc0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonFtResolveInput" == some "f16d9836431a6bb0"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonStorageDepositInput" == some "d592930fd54837e9"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorage" == some "cd97bb762dac8be3"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageEconomics" == some "9c98eca433f99470"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" == some "c0b52ece5f4da6bf"

@@ -238,6 +238,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    products are checked; invalid config/overflow traps without map or effects. This differs from the
    stock FT's fixed equal bounds and retains ProofForge's exact-empty no-argument input policy, so
    method/output shape is not a complete NEP-145 ABI claim.
+   **NEAR-STORAGE-DEPOSIT-INPUT (wsm-near-json-storage-deposit-input-001 done):** an exact
+   compiler-owned eleven-leaf frame now decodes optional `account_id` and `registration_only` in
+   either field order. Missing/null, false, and true remain distinct; account values reuse the
+   2..64-byte decoder and inactive words are zero. The exact wire cap is 459 with ws32. Duplicate,
+   unknown, escaped keys and malformed/trailing input fail closed. This is parser-only and narrower
+   than near-sdk serde's default unknown-field behavior; no `storage_deposit` export exists yet.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

@@ -783,6 +783,28 @@ private partial def rewriteJsonFtResolveInputRoot
       else pure none
   | _ => pure none
 
+private partial def rewriteJsonStorageDepositInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) "accountPresent" => pure (some (.arg 0))
+  | .field (.field (.arg 0) "accountId") name =>
+      match accountInputFieldIndex? name with
+      | some index => pure (some (.arg (1 + index)))
+      | none => throw s!"near/codec: unsupported StorageDepositArgs account projection {name}"
+  | .field (.arg 0) "registrationOnly" => pure (some (.arg 10))
+  | .field (.arg 0) name =>
+      if name.startsWith "accountId_" then
+        match accountInputFieldIndex? (name.drop 10).toString with
+        | some index => pure (some (.arg (1 + index)))
+        | none => throw s!"near/codec: unsupported StorageDepositArgs account projection {name}"
+      else throw s!"near/codec: unsupported StorageDepositArgs projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: StorageDepositArgs input requires a scalar leaf projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 11))
+      else pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
@@ -809,6 +831,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .jsonFtTransferCallArgs => rewriteJsonFtTransferCallInputRoot method
     | .jsonFtOnTransferArgs => rewriteJsonFtOnTransferInputRoot method
     | .jsonFtResolveTransferArgs => rewriteJsonFtResolveInputRoot method
+    | .jsonStorageDepositArgs => rewriteJsonStorageDepositInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)
