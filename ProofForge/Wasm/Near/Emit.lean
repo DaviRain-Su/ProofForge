@@ -2751,7 +2751,8 @@ def emit (p : IR.Program) : Except String String := do
   if !(logMessages p).isEmpty || programHasBoundedLog p then
     lines := lines.push
       "  (import \"env\" \"log_utf8\" (func $pf_log_utf8 (param i64 i64)))"
-  if !(promiseLiterals p).isEmpty then
+  -- Dynamic AccountId transfers have no static Promise literal but still create a batch.
+  if !(promiseLiterals p).isEmpty || programCallsPromiseFunction p || programTransfersPromise p then
     lines := lines.push
       "  (import \"env\" \"promise_batch_create\" (func $pf_promise_batch_create (param i64 i64) (result i64)))"
   if programCallsPromiseFunction p then

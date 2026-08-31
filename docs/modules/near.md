@@ -40,6 +40,11 @@ attached-deposit policy, or automatic event coupling.
 wsm-near-storage-economics-001 adds the real invocation-dynamic `env.storage_usage` u64 context
 leaf. It deliberately exposes no `storage_byte_cost`: current near-sdk-rs/nearcore provide no such
 host import, and protocol `storage_amount_per_byte` must come from explicit trusted network config.
+wsm-near-storage-registration-001 composes that measured usage with checked full-width cost
+arithmetic, the specialized AccountId map, attached deposit, and dynamic detached refund. The
+closed policy registers only the nominal caller as present zero, measures its own variable key,
+refunds positive excess, and depends on executing-receipt atomic rollback after speculative insert.
+It is not a public NEP-145 ABI and does not make the ledger registration-enforcing.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

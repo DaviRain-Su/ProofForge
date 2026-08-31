@@ -74,6 +74,7 @@ import Tests.NearMemorySpec
 import Tests.NearOutputSpec
 import Tests.NearStorageSpec
 import Tests.NearStorageEconomicsSpec
+import Tests.NearStorageRegistrationSpec
 import Tests.NearVectorSpec
 import Tests.NearLookupSpec
 import Tests.NearQueueSpec

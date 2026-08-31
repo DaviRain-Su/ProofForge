@@ -248,6 +248,9 @@ jobs:
       - name: Run NEAR sandbox storage economics gate
         run: runtime-tests/near/storage_economics.sh
 
+      - name: Run NEAR sandbox closed storage-registration gate
+        run: runtime-tests/near/storage_registration.sh
+
       - name: Run NEAR sandbox direct Vector gate
         run: runtime-tests/near/vector.sh
 

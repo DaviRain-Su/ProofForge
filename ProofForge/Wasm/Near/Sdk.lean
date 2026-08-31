@@ -4,6 +4,7 @@ import ProofForge.Wasm.Near.Sdk.Transient
 import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Wasm.Near.Sdk.Promise
 import ProofForge.Wasm.Near.Sdk.Fungible.Ledger
+import ProofForge.Wasm.Near.Sdk.Fungible.Registration
 import ProofForge.Wasm.Near.Sdk.Store.AccountTokenLookup
 import ProofForge.Wasm.Near.Sdk.Store.Codec
 import ProofForge.Wasm.Near.Sdk.Store.Iterable

@@ -176,6 +176,23 @@ storage_economics_anchors = (
     '(call $pf_storage_write',
     '(call $pf_storage_remove',
 )
+storage_registration_anchors = (
+    '(func (export "registerCaller")',
+    '(func (export "probeCaller")',
+    '(func (export "seedCallerMalformed8")',
+    '(import "env" "storage_usage" (func $pf_storage_usage (result i64)))',
+    '(import "env" "attached_deposit"',
+    '(import "env" "predecessor_account_id"',
+    '(call $pf_storage_read',
+    '(call $pf_storage_write',
+    '(call $pf_storage_usage)',
+    '(call $pf_promise_batch_create',
+    '(call $pf_promise_batch_action_transfer',
+    '(call $pf_mul64_lo',
+    '(call $pf_mul64_hi',
+    '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
+    '(call $pf_arena_alloc (i64.const 16) (i64.const 8))',
+)
 vector_anchors = (
     '(func (export "push")',
     '(func (export "setFirst")',
@@ -344,6 +361,8 @@ for wat in wats:
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":
         extra = storage_economics_anchors
+    elif wat.stem == "NearStorageRegistration":
+        extra = storage_registration_anchors
     elif wat.stem == "NearVector":
         extra = vector_anchors
     elif wat.stem == "NearLookup":

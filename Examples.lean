@@ -72,6 +72,7 @@ import Examples.NearMemory
 import Examples.NearOutput
 import Examples.NearStorage
 import Examples.NearStorageEconomics
+import Examples.NearStorageRegistration
 import Examples.NearVector
 import Examples.NearLookup
 import Examples.NearFungibleTokenEvent

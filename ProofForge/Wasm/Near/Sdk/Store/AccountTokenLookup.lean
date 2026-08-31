@@ -25,7 +25,7 @@ abbrev DirectAccountNearTokenMap := UInt64
 def DirectAccountNearTokenMap.wellFormed (map : DirectAccountNearTokenMap) : Bool :=
   map ≤ 0xffffffff
 
-def DirectAccountNearTokenMap.accountLengthValid
+@[pf_inline] def DirectAccountNearTokenMap.accountLengthValid
     (account : ProofForge.Wasm.Near.Runtime.AccountId) : Bool :=
   2 ≤ account.length && account.length ≤ 64
 
