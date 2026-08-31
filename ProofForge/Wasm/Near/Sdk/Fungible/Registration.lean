@@ -20,9 +20,16 @@ open ProofForge.Wasm.Near.Sdk.Store
 `Prefix4(4) + Borsh AccountId length(4) + active AccountId bytes + NearToken(16) +
 num_extra_bytes_record(40)`. This is deliberately variable by AccountId length; it is not
 near-contract-standards' constructor-time maximum-account measurement. -/
+@[pf_inline] def variableAccountEntryBytesForLength (length : UInt64) : UInt64 :=
+  length + 64
+
 @[pf_inline] def variableAccountEntryBytes
     (account : ProofForge.Wasm.Near.Runtime.AccountId) : UInt64 :=
-  account.length + 64
+  variableAccountEntryBytesForLength account.length
+
+/-- Global entry-byte extrema for the compiler-owned valid AccountId geometry. -/
+@[pf_inline] def minimumAccountEntryBytes : UInt64 := variableAccountEntryBytesForLength 2
+@[pf_inline] def maximumAccountEntryBytes : UInt64 := variableAccountEntryBytesForLength 64
 
 /-- The active exact-value storage read observed no entry. -/
 @[pf_inline] def readWasMissing : Bool :=

@@ -42,6 +42,12 @@ wsm-near-storage-balance-bounds-output-001 adds the distinct exact five-leaf
 zero inactive maximum limbs and a 97-byte exact maximum arena. It deliberately exports no
 `storage_balance_bounds`: standard bounds are global, so a later policy must truthfully map
 ProofForge's variable 2..64-byte AccountId costs rather than reuse one fixed-account measurement.
+wsm-near-storage-balance-bounds-001 makes that policy explicit: exact `storage_balance_bounds`
+reports checked `66 × trustedPrice` minimum and `128 × trustedPrice` maximum, matching current
+near-account-id and all ProofForge AccountId parsers' 2..64-byte syntax. It has no map/effect path;
+zero price or overflow traps. ProofForge no-argument wrappers require empty bytes unlike near-sdk's
+ignored input, and the variable extrema differ from the stock FT's fixed equal bounds, so this
+official-shaped export still does not claim complete NEP-145 compatibility.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.

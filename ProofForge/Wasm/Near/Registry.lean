@@ -33,7 +33,7 @@ def entries : Array Entry := #[
   { name := "NearJsonFtResolveInput", digest := "f16d9836431a6bb0" },
   { name := "NearStorage", digest := "cd97bb762dac8be3" },
   { name := "NearStorageEconomics", digest := "9c98eca433f99470" },
-  { name := "NearStorageRegistration", digest := "d15fa3f4bcdbdfe" },
+  { name := "NearStorageRegistration", digest := "c0b52ece5f4da6bf" },
   { name := "NearVector", digest := "cd60fb0f3ce40ade" },
   { name := "NearLookup", digest := "d14778ca02c69012" },
   { name := "NearQueue", digest := "a8bf10c3476ef45f" },

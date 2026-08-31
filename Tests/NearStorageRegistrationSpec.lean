@@ -39,6 +39,9 @@ elab "#pf_near_storage_registration_check" : command => do
   let balanceOf ← match source.methods.find? (·.ixName == "storage_balance_of") with
     | some method => pure method
     | none => throwError "missing storage_balance_of"
+  let bounds ← match source.methods.find? (·.ixName == "storage_balance_bounds") with
+    | some method => pure method
+    | none => throwError "missing storage_balance_bounds"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
@@ -52,6 +55,9 @@ elab "#pf_near_storage_registration_check" : command => do
       balanceOf.paramSchemas == #[Codec.accountIdSchema] &&
       balanceOf.retSchema == Codec.storageBalanceResultSchema && balanceOf.retCount == 5 do
     throwError "storage_balance_of lost its one-read AccountId/StorageBalance source contract"
+  unless registrationSteps bounds.ops == #[] && bounds.paramSchemas.isEmpty &&
+      bounds.retSchema == Codec.storageBalanceBoundsResultSchema && bounds.retCount == 5 do
+    throwError "storage_balance_bounds lost its no-effect/no-arg exact bounds source contract"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -66,6 +72,14 @@ elab "#pf_near_storage_registration_check" : command => do
       targetBalanceOf.outputPolicy == "near-json-storage-balance-option-v1" &&
       targetBalanceOf.tupleArity == some 5 do
     throwError "storage_balance_of did not combine its exact input/output target policies"
+  let targetBounds ← match program.entries.find? (·.ixName == "storage_balance_bounds") with
+    | some method => pure method
+    | none => throwError "missing target storage_balance_bounds"
+  unless targetBounds.inputSchema.isNone && targetBounds.inputPolicy.isEmpty &&
+      targetBounds.outputSchema == some Codec.storageBalanceBoundsResultSchema &&
+      targetBounds.outputPolicy == "near-json-storage-balance-bounds-v1" &&
+      targetBounds.paramCount == 0 && targetBounds.tupleArity == some 5 do
+    throwError "storage_balance_bounds lost its no-input exact bounds output policy"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat
@@ -75,6 +89,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(func (export \"unregisterCaller\")", "(func (export \"seedCallerZero\")",
       "(func (export \"forceUnregisterCaller\")",
       "(func (export \"storage_balance_of\")",
+      "(func (export \"storage_balance_bounds\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
       "(func (export \"fixtureSeedCallerMixedSupply\")",
       "(func (export \"fixtureSeedCallerMaxSupply\")",
@@ -87,6 +102,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(call $pf_arena_alloc (i64.const 72) (i64.const 1))",
       "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
       "(call $pf_arena_alloc (i64.const 105) (i64.const 1))",
+      "(call $pf_arena_alloc (i64.const 97) (i64.const 1))",
       "(func $pf_json_account_id", "(func $pf_u128_decimal"] do
     unless wat.contains anchor do
       throwError s!"NEAR storage registration WAT missing {anchor}\n{wat}"
@@ -102,6 +118,17 @@ elab "#pf_near_storage_registration_check" : command => do
       !balanceBody.contains "(call $pf_log_utf8" &&
       !balanceBody.contains "(call $pf_promise_" do
     throwError "storage_balance_of must read state/map and have no write/log/Promise effects"
+  let boundsParts := wat.splitOn "(func (export \"storage_balance_bounds\")"
+  unless boundsParts.length == 2 do
+    throwError "missing unique storage_balance_bounds export body"
+  let boundsBody := (boundsParts[1]!).splitOn "(func (export \"" |>.head!
+  unless (boundsBody.splitOn "(call $pf_input").length == 2 &&
+      (boundsBody.splitOn "(call $pf_value_return").length == 5 &&
+      !boundsBody.contains "(call $pf_storage_write" &&
+      !boundsBody.contains "(call $pf_storage_remove" &&
+      !boundsBody.contains "(call $pf_log_utf8" &&
+      !boundsBody.contains "(call $pf_promise_" do
+    throwError "storage_balance_bounds must enforce empty input and return one branch without effects"
   logInfo m!"proofforge-near-storage-registration: digest = {IR.digestHex program}"
 
 #pf_near_storage_registration_check
@@ -110,8 +137,10 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 0⟩
 #guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨2, 0⟩
 #guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 1⟩
+#guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.minimumAccountEntryBytes == 66
+#guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "d15fa3f4bcdbdfe"
+  some "c0b52ece5f4da6bf"
 
 end Tests.NearStorageRegistrationSpec

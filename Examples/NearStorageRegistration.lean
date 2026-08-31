@@ -68,6 +68,27 @@ def storage_balance_of (state : State)
   else
     { registered := 2, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
 
+/-- Global closed bounds for the variable 2..64-byte AccountId policy. Unlike the stock FT's fixed
+max-account measurement, this reports the true minimum and maximum accepted retained cost. The
+existing no-parameter wrapper accepts only an empty request body, which is narrower than near-sdk's
+generated wrapper that ignores request bytes. -/
+@[pf_entry]
+def storage_balance_bounds (state : State) :
+    ProofForge.Wasm.Near.Runtime.StorageBalanceBoundsResult :=
+  let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+  let minBytes := Registration.minimumAccountEntryBytes
+  let maxBytes := Registration.maximumAccountEntryBytes
+  if Registration.trustedCostValid perByteCost &&
+      NearToken.canMulUInt64 perByteCost minBytes &&
+      NearToken.canMulUInt64 perByteCost maxBytes then
+    { min := ⟨NearToken.mulUInt64W0 perByteCost minBytes,
+        NearToken.mulUInt64W1 perByteCost minBytes⟩,
+      hasMax := 1,
+      max := ⟨NearToken.mulUInt64W0 perByteCost maxBytes,
+        NearToken.mulUInt64W1 perByteCost maxBytes⟩ }
+  else
+    { min := ⟨0, 0⟩, hasMax := 2, max := ⟨0, 0⟩ }
+
 @[pf_entry]
 def probeCaller (state : State) : Except Error (State × UInt64) :=
   let status := registrations.has Context.caller

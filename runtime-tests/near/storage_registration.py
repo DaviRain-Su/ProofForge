@@ -59,6 +59,31 @@ def _expect_storage_balance_failure(
     raise AssertionError(f"{scene}: expected storage_balance_of failure")
 
 
+def _expect_storage_bounds(client: NearClient, contract: str, per_byte: int) -> None:
+    before = client.view_state_values(contract)
+    got = client.view_on(contract, "storage_balance_bounds", b"")
+    expected = (
+        f'{{"min":"{66 * per_byte}","max":"{128 * per_byte}"}}'.encode("ascii")
+    )
+    if got != expected:
+        raise AssertionError(f"storage_balance_bounds: expected {expected!r}, got {got!r}")
+    if client.view_state_values(contract) != before:
+        raise AssertionError("storage_balance_bounds changed contract state")
+
+
+def _expect_storage_bounds_failure(
+    client: NearClient, contract: str, wire: bytes, scene: str
+) -> None:
+    before = client.view_state_values(contract)
+    try:
+        client.view_on(contract, "storage_balance_bounds", wire)
+    except NearRpcError:
+        if client.view_state_values(contract) != before:
+            raise AssertionError(f"{scene}: failed bounds view changed contract state")
+        return
+    raise AssertionError(f"{scene}: expected storage_balance_bounds failure")
+
+
 def _result_u64(outcome: dict) -> int:
     raw = NearClient.success_value_bytes(outcome)
     if raw is None or len(raw) != 8:
@@ -182,6 +207,13 @@ def main() -> None:
     client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
 
     baseline_state = client.view_state_values(contract)
+    _expect_storage_bounds(client, contract, per_byte)
+    _expect_storage_bounds_failure(
+        client, contract, b"{}", "nonempty no-argument bounds input"
+    )
+    _expect_storage_bounds_failure(
+        client, contract, b"not-json", "arbitrary nonempty bounds input"
+    )
     _expect_storage_balance(client, contract, short, None)
     _register(client, contract, short, 0, success=False)
     if client.view_state_values(contract) != baseline_state:
@@ -263,6 +295,7 @@ def main() -> None:
     # variable-length registration geometry, without assuming a fixed AccountId storage charge.
     _assert_exact_reclaim(client, contract, long, long_delta, per_byte)
     _assert_exact_reclaim(client, contract, short, short_delta, per_byte)
+    _expect_storage_bounds(client, contract, per_byte)
     _expect_storage_balance(client, contract, short, None)
     missing_before = client.view_state_values(contract)
     if _result_u64(_unregister(client, contract, short, 1)) != 0:
@@ -345,6 +378,9 @@ def main() -> None:
     client.call_on(overflow, "fixtureSetCostMax", b"", signer=overflow)
     client.call_on(overflow, "seedCallerZero", b"", signer=short)
     overflow_before = client.view_state_values(overflow)
+    _expect_storage_bounds_failure(
+        client, overflow, b"", "registration bounds multiply overflow"
+    )
     _expect_storage_balance_failure(
         client, overflow, short, "registration-cost multiply overflow query"
     )
@@ -368,6 +404,7 @@ def main() -> None:
     client.deploy_to(zero_cost, wasm)
     client.call_on(zero_cost, "initialize", NearClient.encode_u64_le(0), signer=zero_cost)
     zero_before = client.view_state_values(zero_cost)
+    _expect_storage_bounds_failure(client, zero_cost, b"", "zero trusted cost bounds")
     _register(client, zero_cost, short, 0, success=False)
     if client.view_state_values(zero_cost) != zero_before:
         raise AssertionError("zero trusted cost was not rejected before storage effects")

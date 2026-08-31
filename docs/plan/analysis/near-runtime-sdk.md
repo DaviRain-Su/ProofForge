@@ -232,6 +232,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    bytes with one shared decimal helper. This remains output-only: the standard API exposes global
    bounds, whereas ProofForge's current economics vary by 2..64-byte AccountId length, so a later
    policy must choose truthful global extrema rather than claim the stock fixed-cost FT behavior.
+   **NEAR-STORAGE-BOUNDS (wsm-near-storage-balance-bounds-001 done):** the closed exact export now
+   chooses those extrema consistently with authoritative near-account-id and ProofForge's existing
+   parsers: `(2 + 64) × trustedPrice` minimum and `(64 + 64) × trustedPrice` maximum. Both full-u128
+   products are checked; invalid config/overflow traps without map or effects. This differs from the
+   stock FT's fixed equal bounds and retains ProofForge's exact-empty no-argument input policy, so
+   method/output shape is not a complete NEP-145 ABI claim.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.
