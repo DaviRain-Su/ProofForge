@@ -20,6 +20,14 @@
 | 程序拥有 ContractData | host **-22** | **绿**（`Card.storeSelf` / `XrplVault`） | `Sdk.Map` **关** |
 | Create `tfSendAmount` / Function.ParameterType | 新 Create 常 temBAD_SIGNATURE；Call Parameters **已绿** | 注资 Create **绿**；Parameters **不能签**（skip） | 不发明 PDA |
 
+2026-08-31 复测（不改本仓能过）：
+
+- 公开 `https://alphanet.xrpl.org` 仍 **3.3.0-rc1** / nid **21337** / SmartContract on。
+- `probe-emit.sh`：Create + `pokeBuild` tesSUCCESS/0；`pokeEmit` 仍 **tecBYTECODE_REJECTED / vmReturnCode=-196**。
+- `probe-owner.sh`：`pokeCaller` tesSUCCESS/0；`pokeSelf` 仍 **-22**，合约卡 ContractData missing。
+- 本地 2.6.1-rc1 / 63456 仍在跑：emit Payment 和 `Card.storeSelf` 已由 `emit.sh` / `vault.sh` / 后续 SDK 例程绿过。Parameters 本地 `sign` 仍 skip。
+- rippled 3.3.0 changelog：伪账户签名的交易在 `LendingProtocol` / `BatchV1_1` / `fixCleanup3_3_0` 下 **固定 `tefBAD_AUTH`**。合约是伪账户；`emit_built_txn` Payment 走这条检查。本仓改 WAT/SDK **攻不掉**。程序卡 -22 同样是公开节点 host，不是 IR。
+
 所以：
 
 1. **本地能 tesSUCCESS 的，就在本地接线**（Runtime 叶 → `pf_inline` → Example → `runtime-tests/xrpl/*.sh`）。

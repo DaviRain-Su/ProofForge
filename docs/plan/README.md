@@ -231,6 +231,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-090](tasks/wsm-090.md) | done | 本地 allowance 进托管（XrplCrate）；公开仍 -22/-196 |
 | [wsm-091](tasks/wsm-091.md) | done | 本地 burnFrom 双向锁（XrplCinder）；公开仍 -22/-196 |
 | [wsm-092](tasks/wsm-092.md) | done | 本地 revoke 清 allowance（XrplRevoke）；公开仍 -22/-196 |
+| [wsm-093](tasks/wsm-093.md) | done | 复测公开 pokeEmit -196 / pokeSelf -22；本仓攻不掉 |
 
 
 积压：[backlog.md](backlog.md)
