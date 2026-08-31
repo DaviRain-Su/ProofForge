@@ -100,4 +100,25 @@ private theorem counter_seq_matches_model :
       | .error _ => false) = true := by
   native_decide
 
+
+/-! ## 全量 Golden 管线门：所有合约的发射文本必须可解析
+
+这一个定理覆盖 `ProofForge.Golden.programs` 的全部合约，
+比逐合约写差分更通用：发射器若引入解析器不认识的语法，这里会立即失败。 -/
+
+private def allGoldenParseOk : Bool :=
+  (ProofForge.Golden.programs.toList.map
+      (fun p =>
+        -- 跨树合约（含 EVM 叶子）由发射器 fail-closed 拒绝，属于合法跳过；
+        -- 凡是发射成功的 .s，必须全部可解析（fail-closed 对齐）。
+        match ProofForge.Svm.Emit.emitCounterAsm p with
+        | .error _ => true
+        | .ok asm => match assembleSf asm with
+          | .ok _ => true
+          | .error _ => false))
+    |>.foldl (fun acc b => acc && b) true
+
+private theorem golden_corpus_parses : allGoldenParseOk = true := by
+  native_decide
+
 end Tests.SemanticsSpec
