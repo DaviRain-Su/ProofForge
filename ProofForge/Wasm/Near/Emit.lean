@@ -465,6 +465,21 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext .accountBalance #[] => .ok "(local.get $pf_bal)"
   | .ext .accountBalanceW0 #[] => .ok "(local.get $pf_bal)"
   | .ext .accountBalanceW1 #[] => .ok "(local.get $pf_bal_hi)"
+  | .ext kind #[valueLo, valueHi, factor] => do
+      let lo ← renderVal st valueLo
+      let hi ← renderVal st valueHi
+      let m ← renderVal st factor
+      let loLo := "(call $pf_mul64_lo " ++ lo ++ " " ++ m ++ ")"
+      let loHi := "(call $pf_mul64_hi " ++ lo ++ " " ++ m ++ ")"
+      let hiLo := "(call $pf_mul64_lo " ++ hi ++ " " ++ m ++ ")"
+      let hiHi := "(call $pf_mul64_hi " ++ hi ++ " " ++ m ++ ")"
+      let resultHi := "(i64.add " ++ loHi ++ " " ++ hiLo ++ ")"
+      if kind == .nearTokenMulU64Ok then
+        return "(i64.extend_i32_u (i32.and (i64.eq " ++ hiHi ++ " (i64.const 0)) " ++
+          "(i64.ge_u " ++ resultHi ++ " " ++ loHi ++ ")))"
+      else if kind == .nearTokenMulU64W0 then return loLo
+      else if kind == .nearTokenMulU64W1 then return resultHi
+      else throw s!"extract/unsupported: near v0 value extension {repr kind}/3"
   | .ext kind #[leftLo, leftHi, rightLo, rightHi] => do
       let a0 ← renderVal st leftLo
       let a1 ← renderVal st leftHi
@@ -2592,6 +2607,34 @@ private def utf8Validator : Array String := #[
   "    (i32.const 0))"
 ]
 
+private def mul64Helpers : Array String := #[
+  "  (func $pf_mul64_lo (param $a i64) (param $b i64) (result i64)",
+  "    (local $a0 i64) (local $a1 i64) (local $b0 i64) (local $b1 i64)",
+  "    (local $w0 i64) (local $t i64) (local $w1 i64)",
+  "    (local.set $a0 (i64.and (local.get $a) (i64.const 4294967295)))",
+  "    (local.set $a1 (i64.shr_u (local.get $a) (i64.const 32)))",
+  "    (local.set $b0 (i64.and (local.get $b) (i64.const 4294967295)))",
+  "    (local.set $b1 (i64.shr_u (local.get $b) (i64.const 32)))",
+  "    (local.set $w0 (i64.mul (local.get $a0) (local.get $b0)))",
+  "    (local.set $t (i64.add (i64.mul (local.get $a1) (local.get $b0)) (i64.shr_u (local.get $w0) (i64.const 32))))",
+  "    (local.set $w1 (i64.and (local.get $t) (i64.const 4294967295)))",
+  "    (local.set $w1 (i64.add (local.get $w1) (i64.mul (local.get $a0) (local.get $b1))))",
+  "    (i64.or (i64.shl (local.get $w1) (i64.const 32)) (i64.and (local.get $w0) (i64.const 4294967295))))",
+  "  (func $pf_mul64_hi (param $a i64) (param $b i64) (result i64)",
+  "    (local $a0 i64) (local $a1 i64) (local $b0 i64) (local $b1 i64)",
+  "    (local $w0 i64) (local $t i64) (local $w1 i64) (local $w2 i64)",
+  "    (local.set $a0 (i64.and (local.get $a) (i64.const 4294967295)))",
+  "    (local.set $a1 (i64.shr_u (local.get $a) (i64.const 32)))",
+  "    (local.set $b0 (i64.and (local.get $b) (i64.const 4294967295)))",
+  "    (local.set $b1 (i64.shr_u (local.get $b) (i64.const 32)))",
+  "    (local.set $w0 (i64.mul (local.get $a0) (local.get $b0)))",
+  "    (local.set $t (i64.add (i64.mul (local.get $a1) (local.get $b0)) (i64.shr_u (local.get $w0) (i64.const 32))))",
+  "    (local.set $w1 (i64.and (local.get $t) (i64.const 4294967295)))",
+  "    (local.set $w2 (i64.shr_u (local.get $t) (i64.const 32)))",
+  "    (local.set $w1 (i64.add (local.get $w1) (i64.mul (local.get $a0) (local.get $b1))))",
+  "    (i64.add (i64.add (i64.mul (local.get $a1) (local.get $b1)) (local.get $w2)) (i64.shr_u (local.get $w1) (i64.const 32))))"
+]
+
 def emit (p : IR.Program) : Except String String := do
   IR.validateEntryPolicies p
   let logData ← logDataSection p
@@ -2679,6 +2722,9 @@ def emit (p : IR.Program) : Except String String := do
     lines := lines ++ arenaHelpers p
   if programHasFtEvent p then
     lines := lines ++ ftEventHelpers
+  if #[ValKind.nearTokenMulU64Ok, .nearTokenMulU64W0, .nearTokenMulU64W1].any
+      (programUses · p) then
+    lines := lines ++ mul64Helpers
   if programUsesUtf8Codec p then
     lines := lines ++ utf8Validator
   lines := lines.push ""

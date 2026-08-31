@@ -34,6 +34,7 @@ inductive ValKind where
   /-- Pure checked-u128 predicates and modular limbs; operands are left lo/hi, right lo/hi. -/
   | nearTokenAddOk | nearTokenAddW0 | nearTokenAddW1
   | nearTokenSubOk | nearTokenSubW0 | nearTokenSubW1
+  | nearTokenMulU64Ok | nearTokenMulU64W0 | nearTokenMulU64W1
   /-- Legacy current-account w0 plus the remaining lossless AccountId leaves. -/
   | currentAccountId
   | currentAccountIdLen
@@ -60,6 +61,7 @@ inductive ValKind where
 def ValKind.arity : ValKind → Nat
   | .nearTokenAddOk | .nearTokenAddW0 | .nearTokenAddW1
   | .nearTokenSubOk | .nearTokenSubW0 | .nearTokenSubW1 => 4
+  | .nearTokenMulU64Ok | .nearTokenMulU64W0 | .nearTokenMulU64W1 => 3
   | .transientBuffer64Get _ | .storageResultByte _ | .promiseResultByte _
   | .promiseResultBorshUInt64D _ => 1
   | .reserved => 0

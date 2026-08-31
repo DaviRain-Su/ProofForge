@@ -87,4 +87,58 @@ def subHighOk (_state : State) : UInt64 :=
 def subHighW1 (_state : State) : UInt64 :=
   NearToken.subW1 ⟨0, 0x8000000000000000⟩ ⟨0, 0x7fffffffffffffff⟩
 
+@[pf_entry] def mulFactorZeroOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨7, 9⟩ 0 then 1 else 0
+@[pf_entry] def mulFactorZeroW0 (_state : State) : UInt64 := NearToken.mulUInt64W0 ⟨7, 9⟩ 0
+@[pf_entry] def mulFactorZeroW1 (_state : State) : UInt64 := NearToken.mulUInt64W1 ⟨7, 9⟩ 0
+
+@[pf_entry] def mulTokenZeroOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0, 0⟩ 0xffffffffffffffff then 1 else 0
+@[pf_entry] def mulTokenZeroW0 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W0 ⟨0, 0⟩ 0xffffffffffffffff
+@[pf_entry] def mulTokenZeroW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨0, 0⟩ 0xffffffffffffffff
+
+@[pf_entry] def mulMixedOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨1, 1⟩ 2 then 1 else 0
+@[pf_entry] def mulMixedW0 (_state : State) : UInt64 := NearToken.mulUInt64W0 ⟨1, 1⟩ 2
+@[pf_entry] def mulMixedW1 (_state : State) : UInt64 := NearToken.mulUInt64W1 ⟨1, 1⟩ 2
+
+@[pf_entry] def mulU64SquareOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0xffffffffffffffff, 0⟩ 0xffffffffffffffff then 1 else 0
+@[pf_entry] def mulU64SquareW0 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W0 ⟨0xffffffffffffffff, 0⟩ 0xffffffffffffffff
+@[pf_entry] def mulU64SquareW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨0xffffffffffffffff, 0⟩ 0xffffffffffffffff
+
+@[pf_entry] def mulMaxOneOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0xffffffffffffffff, 0xffffffffffffffff⟩ 1 then 1 else 0
+@[pf_entry] def mulMaxOneW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨0xffffffffffffffff, 0xffffffffffffffff⟩ 1
+@[pf_entry] def mulMaxTwoOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0xffffffffffffffff, 0xffffffffffffffff⟩ 2 then 1 else 0
+
+@[pf_entry] def mulHighFitOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0, 1⟩ 0xffffffffffffffff then 1 else 0
+@[pf_entry] def mulHighFitW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨0, 1⟩ 0xffffffffffffffff
+@[pf_entry] def mulExactMaxOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨1, 1⟩ 0xffffffffffffffff then 1 else 0
+@[pf_entry] def mulExactMaxW0 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W0 ⟨1, 1⟩ 0xffffffffffffffff
+@[pf_entry] def mulExactMaxW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨1, 1⟩ 0xffffffffffffffff
+
+/-- `hi*m` fits one limb, but adding the low product's high limb overflows. -/
+@[pf_entry] def mulCarryOverflowOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0xffffffffffffffff, 1⟩ 0xffffffffffffffff then 1 else 0
+
+/-- Largest successful high result limb through the cross-product addition path. -/
+@[pf_entry] def mulCarryBoundaryOk (_state : State) : UInt64 :=
+  if NearToken.canMulUInt64 ⟨0xffffffffffffffff, 0xffffffff⟩ 0x100000000 then 1 else 0
+@[pf_entry] def mulCarryBoundaryW0 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W0 ⟨0xffffffffffffffff, 0xffffffff⟩ 0x100000000
+@[pf_entry] def mulCarryBoundaryW1 (_state : State) : UInt64 :=
+  NearToken.mulUInt64W1 ⟨0xffffffffffffffff, 0xffffffff⟩ 0x100000000
+
 end Examples.NearTokenArithmetic

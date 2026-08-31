@@ -29,8 +29,9 @@ Borsh UInt64 value；它 immediate-write，逻辑 length 仍由普通 ProofForge
 wsm-near-lookup-001 再加入 default-Identity `DirectLookupMap64` / `DirectLookupSet64`：key 为
 `Prefix4 || Borsh(UInt64)`，map value 为 Borsh UInt64，set value 是 exact empty bytes。
 wsm-near-u128-arithmetic-001 adds target-owned unsigned two-limb `NearToken` add/sub predicates
-and carry/borrow result limbs; result limbs require their matching predicate and do not yet imply
-an FT ledger. `DirectAccountNearTokenMap` now separately provides a closed default-Identity
+and carry/borrow result limbs. wsm-near-u128-mul-001 adds exact checked `NearToken × UInt64` using
+two shared u64×u64 limb helpers; it is the arithmetic prerequisite for measured storage cost but
+does not choose a byte price. `DirectAccountNearTokenMap` separately provides a closed default-Identity
 AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || active bytes` keys and
 16-byte little-endian values. `Near.Sdk.Fungible.Ledger` now interprets an active map snapshot for
 the closed fixture's checked balance/total-supply mint, burn, and transfer policy. It deliberately
@@ -73,7 +74,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Context/Access` | lossless context wrappers including dynamic storage usage、full-AccountId equality/self-call predicate | protocol-config storage byte price、general private/payable/init entry metadata |
-| `Near.Sdk.NearToken` | checked unsigned u128 add/sub predicates and little-endian carry/borrow limbs | balances、supply、public FT methods |
+| `Near.Sdk.NearToken` | checked unsigned u128 add/sub and exact u128×u64 predicates/result limbs | byte-price policy、balances、supply、public FT methods |
 | `Near.Sdk.Transient` | compiler-erased `Buffer64` capacity 与 begin/set/get/finish 表面 | persistent Vector/Map/Queue、任意 raw pointer |
 | `Near.Sdk.Storage` | internal raw key（1..72）、bounded value/result（1..64）、单 active result、status/length/fits/indexed-byte 表面、prefix ownership | 自动 prefix/hash、persistent collection layout、raw pointer |
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、exact Borsh UInt64/NearToken values and strict result decode | AccountId keys、arbitrary `IntoStorageKey`、generic Borsh、ledger policy |
@@ -131,8 +132,8 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   quote/backslash/control、非 ASCII 与 16-byte 专用编译 capacity 边界，同时继续对账 no-memo 输出
   byte-exact 不变。每个效果只发一个 compact log；这不是 generic JSON ABI，也不实现余额、
   供应量、FT 方法或完整 NEP-141 合约。
-  `token_arithmetic.sh` verifies checked two-limb carry/borrow, max overflow, underflow and unsigned
-  high-bit ordering against near-sandbox without any storage mutation.
+  `token_arithmetic.sh` verifies checked two-limb carry/borrow and exact u128×u64, including both
+  overflow paths and exact maximum boundaries, against near-sandbox without storage mutation.
   `token_storage.sh` verifies exact 16-byte Borsh token values, mixed/max/zero limbs, missing and
   malformed-length fallback, stale-result isolation, immediate writes and removal.
   `storage_economics.sh` verifies the real `storage_usage` host leaf around exact raw storage

@@ -142,6 +142,12 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
   .ext (.near .nearTokenSubW0) #[leftLo, leftHi, rightLo, rightHi]
 @[match_pattern] def Val.nearTokenSubW1 (leftLo leftHi rightLo rightHi : Val) : Val :=
   .ext (.near .nearTokenSubW1) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenMulU64Ok (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64Ok) #[valueLo, valueHi, factor]
+@[match_pattern] def Val.nearTokenMulU64W0 (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64W0) #[valueLo, valueHi, factor]
+@[match_pattern] def Val.nearTokenMulU64W1 (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64W1) #[valueLo, valueHi, factor]
 @[match_pattern] def Val.nearCurrentAccountId : Val := nearLeaf .currentAccountId
 @[match_pattern] def Val.nearCurrentAccountIdLen : Val := nearLeaf .currentAccountIdLen
 @[match_pattern] def Val.nearCurrentAccountIdW1 : Val := nearLeaf .currentAccountIdW1

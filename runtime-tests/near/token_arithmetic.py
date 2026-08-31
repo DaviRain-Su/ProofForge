@@ -39,6 +39,30 @@ def main() -> None:
         "subUnderflowW1": 0xFFFFFFFFFFFFFFFF,
         "subHighOk": 1,
         "subHighW1": 1,
+        "mulFactorZeroOk": 1,
+        "mulFactorZeroW0": 0,
+        "mulFactorZeroW1": 0,
+        "mulTokenZeroOk": 1,
+        "mulTokenZeroW0": 0,
+        "mulTokenZeroW1": 0,
+        "mulMixedOk": 1,
+        "mulMixedW0": 2,
+        "mulMixedW1": 2,
+        "mulU64SquareOk": 1,
+        "mulU64SquareW0": 1,
+        "mulU64SquareW1": 0xFFFFFFFFFFFFFFFE,
+        "mulMaxOneOk": 1,
+        "mulMaxOneW1": 0xFFFFFFFFFFFFFFFF,
+        "mulMaxTwoOk": 0,
+        "mulHighFitOk": 1,
+        "mulHighFitW1": 0xFFFFFFFFFFFFFFFF,
+        "mulExactMaxOk": 1,
+        "mulExactMaxW0": 0xFFFFFFFFFFFFFFFF,
+        "mulExactMaxW1": 0xFFFFFFFFFFFFFFFF,
+        "mulCarryOverflowOk": 0,
+        "mulCarryBoundaryOk": 1,
+        "mulCarryBoundaryW0": 0xFFFFFFFF00000000,
+        "mulCarryBoundaryW1": 0xFFFFFFFFFFFFFFFF,
     }
     before = client.view_state_values()
     for method, value in expected.items():
@@ -47,7 +71,7 @@ def main() -> None:
             raise AssertionError(f"{method}: expected {value:#x}, got {actual:#x}")
     if client.view_state_values() != before:
         raise AssertionError("pure arithmetic views changed persistent state")
-    print("near-token-arithmetic: carry, borrow, unsigned high limbs, overflow and underflow ok")
+    print("near-token-arithmetic: add/sub and exact checked u128-by-u64 multiplication ok")
     print("suite NearTokenArithmetic: PASS")
 
 

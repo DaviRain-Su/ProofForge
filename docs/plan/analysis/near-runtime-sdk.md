@@ -156,7 +156,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | Phase | Deliverable | Gate before advancing |
 |---|---|---|
 | N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
-| N1 byte/wide substrate | **UInt128 token context and checked two-limb add/sub done** in wsm-near-u128-001/u128-arithmetic-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001 | resource budget; malformed length/OOB/UTF-8 failures |
+| N1 byte/wide substrate | **UInt128 token context, checked two-limb add/sub, and exact u128×u64 done** in wsm-near-u128-001/u128-arithmetic-001/u128-mul-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001 | resource budget; malformed length/OOB/UTF-8 failures |
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
 | N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
@@ -192,6 +192,9 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
    storage deltas. It intentionally does not guess `storage_amount_per_byte`: current near-sdk-rs
    and nearcore expose no guest `storage_byte_cost`, so registration charging still needs an
    explicit trusted network/config boundary.
+   wsm-near-u128-mul-001 supplies the checked full-width `NearToken × UInt64` operation needed to
+   turn measured bytes into a configured cost. Dynamic predecessor refunds still require a
+   separate full-AccountId Promise transfer slice before registration policy can close the loop.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

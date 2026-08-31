@@ -52,6 +52,18 @@ namespace «NearToken»
 @[pf_inline] def subW1 (left right : NearToken) : UInt64 :=
   Runtime.nearTokenSubW1 left.w0 left.w1 right.w0 right.w1
 
+/-- True exactly when `value * factor` is representable as an unsigned 128-bit value. -/
+@[pf_inline] def canMulUInt64 (value : NearToken) (factor : UInt64) : Bool :=
+  Runtime.nearTokenMulU64Ok value.w0 value.w1 factor != 0
+
+/-- Low exact product limb. Precondition: `canMulUInt64 value factor`. -/
+@[pf_inline] def mulUInt64W0 (value : NearToken) (factor : UInt64) : UInt64 :=
+  Runtime.nearTokenMulU64W0 value.w0 value.w1 factor
+
+/-- High exact product limb. Precondition: `canMulUInt64 value factor`. -/
+@[pf_inline] def mulUInt64W1 (value : NearToken) (factor : UInt64) : UInt64 :=
+  Runtime.nearTokenMulU64W1 value.w0 value.w1 factor
+
 end «NearToken»
 
 namespace «AccountId»

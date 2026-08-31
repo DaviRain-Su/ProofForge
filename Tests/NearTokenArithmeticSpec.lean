@@ -12,10 +12,13 @@ open Lean Elab Command
 #guard ProofForge.Wasm.Near.Ops.ValKind.arity .nearTokenAddW1 == 4
 #guard ProofForge.Wasm.Near.Ops.ValKind.arity .nearTokenSubOk == 4
 #guard ProofForge.Wasm.Near.Ops.ValKind.arity .nearTokenSubW1 == 4
+#guard ProofForge.Wasm.Near.Ops.ValKind.arity .nearTokenMulU64Ok == 3
+#guard ProofForge.Wasm.Near.Ops.ValKind.arity .nearTokenMulU64W1 == 3
 
 private partial def nearTokenValKinds : ProofForge.Extract.IR.Val → Array String
   | .ext (.near kind) operands =>
-      (if operands.size == 4 then #[ProofForge.Wasm.Near.IR.extValCanon kind] else #[]) ++
+      (if operands.size == ProofForge.Wasm.Near.Ops.ValKind.arity kind then
+        #[ProofForge.Wasm.Near.IR.extValCanon kind] else #[]) ++
         operands.flatMap nearTokenValKinds
   | .field base _ | .bitNot base => nearTokenValKinds base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -44,7 +47,8 @@ elab "#pf_guard_near_token_arithmetic" : command => do
     | .error reason => throwError reason
   let kinds := source.methods.foldl (init := #[]) fun acc method => acc ++ nearTokenKinds method.ops
   for expected in #["nu128.add.ok", "nu128.add.w0", "nu128.add.w1",
-      "nu128.sub.ok", "nu128.sub.w0", "nu128.sub.w1"] do
+      "nu128.sub.ok", "nu128.sub.w0", "nu128.sub.w1",
+      "nu128.mul.u64.ok", "nu128.mul.u64.w0", "nu128.mul.u64.w1"] do
     unless kinds.contains expected do
       throwError s!"missing extracted {expected}: {kinds}"
   let program ←
@@ -58,6 +62,8 @@ elab "#pf_guard_near_token_arithmetic" : command => do
   for anchor in #[
       "(func (export \"addCarryOk\")", "(func (export \"addOverflowOk\")",
       "(func (export \"subBorrowOk\")", "(func (export \"subUnderflowOk\")",
+      "(func (export \"mulCarryOverflowOk\")", "(func (export \"mulCarryBoundaryW1\")",
+      "(func $pf_mul64_lo", "(func $pf_mul64_hi", "(call $pf_mul64_lo",
       "i64.add", "i64.sub", "i64.lt_u", "i64.gt_u", "i64.ge_u",
       "i64.extend_i32_u"] do
     unless wat.contains anchor do
@@ -68,4 +74,4 @@ elab "#pf_guard_near_token_arithmetic" : command => do
 #pf_near_build Examples.NearTokenArithmetic
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" ==
-  some "4257ab75e505d1f6"
+  some "f85fa4f3182ec1eb"

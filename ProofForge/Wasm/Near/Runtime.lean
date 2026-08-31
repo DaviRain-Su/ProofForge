@@ -120,6 +120,12 @@ observe the wrap.
     (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
 @[irreducible] def nearTokenSubW1
     (_leftLo _leftHi _rightLo _rightHi : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenMulU64Ok
+    (_valueLo _valueHi _factor : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenMulU64W0
+    (_valueLo _valueHi _factor : UInt64) : UInt64 := 0
+@[irreducible] def nearTokenMulU64W1
+    (_valueLo _valueHi _factor : UInt64) : UInt64 := 0
 
 /--
 Emit one statically known UTF-8 message through `env.log_utf8`. The source return is always zero

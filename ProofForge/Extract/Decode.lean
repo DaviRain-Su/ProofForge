@@ -159,7 +159,22 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     Option Ops.Val :=
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName env n
-  if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk ||
+  if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64Ok ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W1) &&
+      e.getAppArgs.size ≥ 3 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 3]!, asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some valueLo, some valueHi, some factor =>
+        if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64Ok then
+          some (.nearTokenMulU64Ok valueLo valueHi factor)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W0 then
+          some (.nearTokenMulU64W0 valueLo valueHi factor)
+        else
+          some (.nearTokenMulU64W1 valueLo valueHi factor)
+    | _, _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk ||
       isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW0 ||
       isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW1 ||
       isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubOk ||
@@ -7351,6 +7366,7 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .nearAccountBalance | .nearAccountBalanceW0 | .nearAccountBalanceW1
     | .nearTokenAddOk .. | .nearTokenAddW0 .. | .nearTokenAddW1 ..
     | .nearTokenSubOk .. | .nearTokenSubW0 .. | .nearTokenSubW1 ..
+    | .nearTokenMulU64Ok .. | .nearTokenMulU64W0 .. | .nearTokenMulU64W1 ..
     | .nearCurrentAccountId
     | .nearCurrentAccountIdLen
     | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3

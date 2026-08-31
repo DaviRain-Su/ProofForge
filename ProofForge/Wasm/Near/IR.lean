@@ -273,6 +273,8 @@ def extValCanon : Ops.ValKind → String
   | .nearTokenAddW0 => "nu128.add.w0" | .nearTokenAddW1 => "nu128.add.w1"
   | .nearTokenSubOk => "nu128.sub.ok"
   | .nearTokenSubW0 => "nu128.sub.w0" | .nearTokenSubW1 => "nu128.sub.w1"
+  | .nearTokenMulU64Ok => "nu128.mul.u64.ok"
+  | .nearTokenMulU64W0 => "nu128.mul.u64.w0" | .nearTokenMulU64W1 => "nu128.mul.u64.w1"
   | .currentAccountId => "nself"
   | .currentAccountIdLen => "nslen"
   | .currentAccountIdW1 => "ns1" | .currentAccountIdW2 => "ns2"

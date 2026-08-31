@@ -207,6 +207,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-020](tasks/wsm-020.md) | done | NEAR lossless AccountId + full equality/self-call guard |
 | [wsm-near-u128-001](tasks/wsm-near-u128-001.md) | done | NEAR lossless u128 deposit/balance context |
 | [wsm-near-u128-arithmetic-001](tasks/wsm-near-u128-arithmetic-001.md) | done | NEAR checked two-limb NearToken add/sub prerequisite |
+| [wsm-near-u128-mul-001](tasks/wsm-near-u128-mul-001.md) | done | exact checked NearToken × UInt64 cost arithmetic prerequisite |
 | [wsm-near-u128-storage-001](tasks/wsm-near-u128-storage-001.md) | done | exact 16-byte Borsh NearToken storage-value codec |
 | [wsm-near-account-token-map-001](tasks/wsm-near-account-token-map-001.md) | done | specialized Prefix4 Identity AccountId-to-NearToken map |
 | [wsm-near-fungible-ledger-001](tasks/wsm-near-fungible-ledger-001.md) | done | closed checked balance/total-supply mint/burn/transfer policy |
