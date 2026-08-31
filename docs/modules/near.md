@@ -69,6 +69,13 @@ checked two-limb balance rules over the same `BAL2` ledger. It writes source the
 preserves supply and present-zero registration, emits one exact optional-memo NEP-141 event, and
 returns empty bytes. Its argument object remains the bounded canonical subset above, so the exact
 operation/output shape is not claimed as a fully serde-compatible public NEP-141 ABI.
+wsm-near-ft-resolve-transfer-001 adds the exact private, non-payable `ft_resolve_transfer` export.
+It requires one dependency result, clamps strict canonical quoted-u128 unused output, and reconciles
+the same `BAL2` balances only after every read and arithmetic check. A present sender receives a
+refund event and returns `amount - refund`; a deleted sender burns supply with memo `refund` and
+returns the original amount, matching current near-contract-standards. Missing/present-zero receiver
+paths are write-free. Callback arguments and Promise-result JSON remain bounded subsets narrower
+than serde_json, and fixture schedulers are not a standard `ft_transfer_call`.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，
@@ -83,10 +90,10 @@ and carry/borrow result limbs. wsm-near-u128-mul-001 adds exact checked `NearTok
 two shared u64×u64 limb helpers; it is the arithmetic prerequisite for measured storage cost but
 does not choose a byte price. `DirectAccountNearTokenMap` separately provides a closed default-Identity
 AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || active bytes` keys and
-16-byte little-endian values. `Near.Sdk.Fungible.Ledger` now interprets an active map snapshot for
-the closed fixture's checked balance/total-supply mint, burn, and transfer policy. It deliberately
-does not implement public FT methods, JSON ABI, registration, storage management, resolver,
-attached-deposit policy, or automatic event coupling.
+16-byte little-endian values. `Near.Sdk.Fungible.Ledger` interprets exact/missing balance snapshots
+and registration status. Specialized slices compose that foundation into the bounded
+official-shaped views, transfer, and private resolver described above; generic public JSON ABI,
+automatic registration enforcement, and a standard `ft_transfer_call` remain absent.
 wsm-near-storage-economics-001 adds the real invocation-dynamic `env.storage_usage` u64 context
 leaf. It deliberately exposes no `storage_byte_cost`: current near-sdk-rs/nearcore provide no such
 host import, and protocol `storage_amount_per_byte` must come from explicit trusted network config.
@@ -195,6 +202,10 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   frame、64 decoded-byte/426-wire/32-whitespace bounds、mutating use 与 malformed matrix；
   `json_ft_transfer_input.sh` 验证三字段任意排列、required/optional/duplicate presence、完整
   AccountId/u128/memo leaves、exact 786-wire/32-whitespace geometry 与各 value decoder 的组合失败矩阵；
+  `json_ft_resolve_input.sh` 验证 two-AccountId/u128 20-leaf resolver frame 的六种字段排列、
+  exact 1079-wire boundary、late failure/stale clearing 与 mutating parser rollback；`ledger.sh`
+  additionally drives genuine child → private resolver receipts and checks result fallback/clamp,
+  present-sender refund, deleted-sender burn, no-op branches, event/output bytes, and rollback；
   `storage.sh` 验证 binary/empty keys、
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback

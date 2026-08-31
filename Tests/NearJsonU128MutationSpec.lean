@@ -92,8 +92,10 @@ elab "#pf_near_json_u128_mutation_check" : command => do
         throwError "mutating u128 state writes or independent result constants lost before value_return"
   | _ => throwError "mutating u128 body must issue exactly one value_return"
   unless body.contains "(call $pf_arena_alloc (i64.const 41) (i64.const 1))" &&
-      body.contains "(call $pf_u128_decimal (i64.const 2) (i64.const 1)" do
-    throwError "mutating u128 output lost asymmetric limb order or output geometry"
+      body.contains "(call $pf_u128_decimal (i64.const 2) (i64.const 1)" &&
+      (body.splitOn "(call $pf_attached_deposit").length == 2 &&
+      body.contains "(i64.load (i32.const 24))" && body.contains "(i64.load (i32.const 32))" do
+    throwError "mutating u128 output lost non-payable guard, asymmetric limb order, or geometry"
   let promiseSource ← match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
     | .ok source => pure source
     | .error reason => throwError reason

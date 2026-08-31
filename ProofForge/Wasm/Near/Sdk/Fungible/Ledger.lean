@@ -50,4 +50,9 @@ and is exactly the Borsh-u128 width. Nearcore raw storage statuses are closed 0/
 @[pf_inline] def isZero (value : ProofForge.Wasm.Near.Runtime.NearToken) : Bool :=
   value.w0 = 0 && value.w1 = 0
 
+/-- Exact near-contract-standards resolver event memo. -/
+@[pf_inline] def refundMemo : ProofForge.Core.Value.BoundedString 6 :=
+  { length := 6
+    values := #v[0x72, 0x65, 0x66, 0x75, 0x6e, 0x64] }
+
 end ProofForge.Wasm.Near.Sdk.Fungible.Ledger

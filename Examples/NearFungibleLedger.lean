@@ -5,6 +5,7 @@ namespace Examples.NearFungibleLedger
 open ProofForge.Wasm.Near.Sdk
 open ProofForge.Wasm.Near.Sdk.Fungible
 open ProofForge.Wasm.Near.Sdk.Store
+open ProofForge.Core.Value
 
 structure State where
   supplyW0 : UInt64
@@ -17,6 +18,24 @@ inductive Error where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 abbrev balances : DirectAccountNearTokenMap := 0x324c4142
+
+@[pf_inline] private def emptyPromiseArgs : BoundedBytes 1 :=
+  { length := 0, values := #v[0] }
+
+/-- Static short fixture callback frame for sender `aa`, receiver `bb`, amount 10. Its 51 bytes fit
+the existing Promise argument budget; the resolver remains dynamic through its 20 decoded leaves. -/
+@[pf_inline] private def resolverCallbackArgs : BoundedBytes 51 :=
+  { length := 51
+    values := #v[
+      0x7b, 0x22, 0x73, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x22,
+      0x3a, 0x22, 0x61, 0x61, 0x22,
+      0x2c, 0x22, 0x72, 0x65, 0x63, 0x65, 0x69, 0x76, 0x65, 0x72, 0x5f, 0x69,
+      0x64, 0x22, 0x3a, 0x22, 0x62, 0x62, 0x22, 0x2c,
+      0x22, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x3a, 0x22, 0x31, 0x30,
+      0x22, 0x7d] }
+
+@[pf_inline] private def resolverChildGas : UInt64 := 15_000_000_000_000
+@[pf_inline] private def resolverCallbackGas : UInt64 := 30_000_000_000_000
 
 @[pf_entry]
 def init : State := ⟨0, 0, 0⟩
@@ -110,6 +129,145 @@ def ft_transfer (state : State) (args : ProofForge.Wasm.Near.Runtime.FtTransferA
       else .error .overflow
     else .error .overflow
   else .error .overflow
+
+/-- Private near-contract-standards resolver semantics over the same `BAL2` balances and supply.
+The callback argument and Promise-result JSON codecs are bounded canonical subsets of serde_json.
+Failed or invalid child output refunds the full amount; a valid unused amount is clamped to the
+original transfer. A deleted sender burns the refundable receiver balance and reports the original
+amount as used, matching near-contract-standards rather than `amount - burned`. -/
+@[pf_entry, pf_near_private]
+def ft_resolve_transfer (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.FtResolveTransferArgs) :
+    Except Error (State × ProofForge.Core.Value.UInt128) :=
+  if Promises.resultsCount == 1 then
+    let result : Promises.ResultBuffer := 41
+    let _ := result.read 0
+    let decoded := result.quotedU128
+    let requestedW0 := if decoded.valid != 0 then decoded.w0 else args.amount.w0
+    let requestedW1 := if decoded.valid != 0 then decoded.w1 else args.amount.w1
+    let requestedFits := requestedW1 < args.amount.w1 ||
+      (requestedW1 = args.amount.w1 && requestedW0 ≤ args.amount.w0)
+    let unusedW0 := if requestedFits then requestedW0 else args.amount.w0
+    let unusedW1 := if requestedFits then requestedW1 else args.amount.w1
+    let _ := balances.read args.receiverId
+    if Ledger.loadedValid then
+      let receiverW0 := resultNearTokenW0D 0
+      let receiverW1 := resultNearTokenW1D 0
+      let unusedFits := unusedW1 < receiverW1 ||
+        (unusedW1 = receiverW1 && unusedW0 ≤ receiverW0)
+      let refundW0 := if unusedFits then unusedW0 else receiverW0
+      let refundW1 := if unusedFits then unusedW1 else receiverW1
+      if refundW0 = 0 && refundW1 = 0 then
+        let used : NearToken :=
+          ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+              args.amount.w0 args.amount.w1 0 0,
+            ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+              args.amount.w0 args.amount.w1 0 0⟩
+        .ok (⟨state.supplyW0, state.supplyW1, state.marker⟩,
+          used)
+      else if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+          receiverW0 receiverW1 refundW0 refundW1 != 0 then
+        let refund : NearToken := ⟨refundW0, refundW1⟩
+        let nextReceiver : NearToken :=
+          ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+              receiverW0 receiverW1 refundW0 refundW1,
+            ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+              receiverW0 receiverW1 refundW0 refundW1⟩
+        let _ := balances.read args.senderId
+        if Registration.readWasValidPresent then
+          let senderW0 := resultNearTokenW0D 0
+          let senderW1 := resultNearTokenW1D 0
+          if ProofForge.Wasm.Near.Runtime.nearTokenAddOk
+              senderW0 senderW1 refund.w0 refund.w1 != 0 then
+            let nextSenderW0 := ProofForge.Wasm.Near.Runtime.nearTokenAddW0
+              senderW0 senderW1 refund.w0 refund.w1
+            let nextSenderW1 := ProofForge.Wasm.Near.Runtime.nearTokenAddW1
+              senderW0 senderW1 refund.w0 refund.w1
+            let nextSender : NearToken :=
+              ⟨nextSenderW0, nextSenderW1⟩
+            let used : NearToken :=
+              ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                  args.amount.w0 args.amount.w1 refund.w0 refund.w1,
+                ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                  args.amount.w0 args.amount.w1 refund.w0 refund.w1⟩
+            let receiverStatus := balances.put args.receiverId nextReceiver
+            let senderStatus := balances.put args.senderId nextSender
+            let _ := Events.FungibleToken.transferWithMemo
+              args.receiverId args.senderId refund 6 Ledger.refundMemo
+            .ok (⟨state.supplyW0, state.supplyW1, receiverStatus ||| senderStatus⟩, used)
+          else .error .overflow
+        else if Registration.readWasMissing then
+          if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+              state.supplyW0 state.supplyW1 refund.w0 refund.w1 != 0 then
+            let nextSupply : NearToken :=
+              ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                  state.supplyW0 state.supplyW1 refund.w0 refund.w1,
+                ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                  state.supplyW0 state.supplyW1 refund.w0 refund.w1⟩
+            let receiverStatus := balances.put args.receiverId nextReceiver
+            let _ := Events.FungibleToken.burnWithMemo
+              args.receiverId refund 6 Ledger.refundMemo
+            let used : NearToken :=
+              ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                  args.amount.w0 args.amount.w1 0 0,
+                ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                  args.amount.w0 args.amount.w1 0 0⟩
+            .ok (⟨nextSupply.w0, nextSupply.w1, receiverStatus⟩,
+              used)
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
+/-! Resolver-only child and scheduling fixtures. These nonstandard entries let near-sandbox supply
+a genuine Promise result to the private callback; they are not an `ft_transfer_call` export. -/
+
+@[pf_entry] def resolverUnusedZero (_state : State) : ProofForge.Core.Value.UInt128 := ⟨0, 0⟩
+@[pf_entry] def resolverUnusedThree (_state : State) : ProofForge.Core.Value.UInt128 := ⟨3, 0⟩
+@[pf_entry] def resolverUnusedTwenty (_state : State) : ProofForge.Core.Value.UInt128 := ⟨20, 0⟩
+
+@[pf_entry] def resolverUnusedMalformed (_state : State) : BoundedBytes 4 :=
+  { length := 4, values := #v[0x22, 0x30, 0x31, 0x22] }
+
+@[pf_entry] def resolverUnusedOversized (_state : State) : BoundedBytes 42 :=
+  { length := 42
+    values := #v[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
+
+@[pf_inline] private def scheduleResolver
+    (state : State) (childMethod : String) : Except Error (State × UInt64) :=
+  let promise := Promises.callThenReturned
+    "resolver.test.near" childMethod emptyPromiseArgs
+    (⟨0, 0⟩ : NearToken) resolverChildGas
+    "ft_resolve_transfer" resolverCallbackArgs
+    (⟨0, 0⟩ : NearToken) resolverCallbackGas
+  .ok (⟨state.supplyW0, state.supplyW1, state.marker⟩, promise)
+
+@[pf_entry] def resolveUnusedZero (state : State) := scheduleResolver state "resolverUnusedZero"
+@[pf_entry] def resolveUnusedThree (state : State) := scheduleResolver state "resolverUnusedThree"
+@[pf_entry] def resolveUnusedTwenty (state : State) := scheduleResolver state "resolverUnusedTwenty"
+@[pf_entry] def resolveMalformed (state : State) := scheduleResolver state "resolverUnusedMalformed"
+@[pf_entry] def resolveOversized (state : State) := scheduleResolver state "resolverUnusedOversized"
+@[pf_entry] def resolveFailed (state : State) := scheduleResolver state "resolverMissingMethod"
+
+/-- Fixture-only paid callback proves the private resolver retains the default non-payable guard. -/
+@[pf_entry]
+def resolvePaidCallback (state : State) : Except Error (State × UInt64) :=
+  let promise := Promises.callThenReturned
+    "resolver.test.near" "resolverUnusedZero" emptyPromiseArgs
+    (⟨0, 0⟩ : NearToken) resolverChildGas
+    "ft_resolve_transfer" resolverCallbackArgs
+    (⟨1, 0⟩ : NearToken) resolverCallbackGas
+  .ok (⟨state.supplyW0, state.supplyW1, state.marker⟩, promise)
+
+/-- Self-scheduled ordinary call passes the private guard but has zero Promise results. -/
+@[pf_entry]
+def resolveCountZero (state : State) : Except Error (State × UInt64) :=
+  let promise := Promises.callReturned "test.near" "ft_resolve_transfer" resolverCallbackArgs
+    (⟨0, 0⟩ : NearToken) resolverCallbackGas
+  .ok (⟨state.supplyW0, state.supplyW1, state.marker⟩, promise)
 
 @[pf_inline] private def mint (state : State) (owner : ProofForge.Wasm.Near.Runtime.AccountId)
     (amount : NearToken) :
@@ -324,5 +482,107 @@ def fixtureResetSelf (_state : State) : Except Error (State × UInt64) :=
 def fixtureResetCaller (_state : State) : Except Error (State × UInt64) :=
   let status := balances.remove Context.caller
   .ok (⟨0, 0, status⟩, status)
+
+/-! Resolver fixture seeds own only sandbox setup. The production-shaped resolver still uses the
+same `BAL2` map and state supply and has no alternate balance namespace. -/
+
+@[pf_entry]
+def fixtureResetResolver (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.remove sender
+  let receiverStatus := balances.remove receiver
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨0, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverPresent (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put sender ⟨2, 0⟩
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨9, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverMissingSender (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.remove sender
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨7, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverMissingReceiver (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put sender ⟨2, 0⟩
+  let receiverStatus := balances.remove receiver
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨2, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverReceiverZero (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put sender ⟨2, 0⟩
+  let receiverStatus := balances.put receiver ⟨0, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨2, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverSenderMax (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put sender ⟨0xffffffffffffffff, 0xffffffffffffffff⟩
+  let receiverStatus := balances.put receiver ⟨1, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨0xffffffffffffffff, 0xffffffffffffffff, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverSupplyUnderflow (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.remove sender
+  let receiverStatus := balances.put receiver ⟨1, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨0, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResolverMalformedReceiver (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put sender ⟨2, 0⟩
+  let _ := ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed
+    balances receiver 8
+  .ok (⟨2, 0, senderStatus⟩, senderStatus)
+
+@[pf_entry]
+def fixtureResolverMalformedSender (_state : State) : Except Error (State × UInt64) :=
+  let sender : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6262, 0, 0, 0, 0, 0, 0, 0⟩
+  let receiverStatus := balances.put receiver ⟨1, 0⟩
+  let _ := ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed
+    balances sender 20
+  .ok (⟨1, 0, receiverStatus⟩, receiverStatus)
 
 end Examples.NearFungibleLedger

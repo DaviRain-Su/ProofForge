@@ -2071,8 +2071,10 @@ payable capability for source compatibility. `emit` validates the canonical poli
 private def methodPayable (method : Method ValKind OpExt) : Bool :=
   (methodEntryPolicy method).payable || methodUsesAny attachedDepositKinds method
 
+/-- Return tuple geometry is an output-codec concern: a mutating quoted-u128 result is still
+non-payable by default. Only views omit the generated guard. -/
 private def methodNeedsDepositGuard (method : Method ValKind OpExt) : Bool :=
-  method.tupleArity.isNone && !methodPayable method
+  method.kind != .get && !methodPayable method
 
 private def nonPayableMethods (p : Program ValKind OpExt) : Array (Method ValKind OpExt) :=
   (#[p.initializer] ++ p.entries).filter methodNeedsDepositGuard

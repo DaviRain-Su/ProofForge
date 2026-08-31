@@ -290,6 +290,14 @@ asynchronous; dynamic handles and multi-action builders are absent.
    one exact no-memo or Some-memo NEP-141 event. Nearcore transaction rollback covers any
    synchronous post-write trap. The input grammar still rejects serde-compatible forms outside
    ProofForge's bounded canonical subset, so this does not claim full public ABI compliance.
+   **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
+   non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
+   Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A
+   present sender receives the refund with one transfer event and returns `amount - refund`; a
+   deleted sender reduces supply, emits one burn event, and returns the original amount, exactly as
+   current near-contract-standards treats burned refund as used. Missing/present-zero receiver is a
+   write-free no-op. All result, storage-shape, and arithmetic checks precede writes; callback args
+   and result JSON remain bounded subsets, and no standard `ft_transfer_call` is exported yet.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
    **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;

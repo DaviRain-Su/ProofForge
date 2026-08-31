@@ -76,6 +76,16 @@ elab "#pf_near_fungible_ledger_check" : command => do
       transfer.outputSchema == some .unit && transfer.outputPolicy == "near-void-empty-v1" &&
       transfer.paramCount == 15 && transfer.tupleArity.isNone do
     throwError "ft_transfer lost payable bounded-input or empty-output target policy"
+  let some resolver := program.entries.find? (·.ixName == "ft_resolve_transfer")
+    | throwError "missing target ft_resolve_transfer"
+  unless resolver.kind == .increment && resolver.entryPolicy == "near.entry.v1:private" &&
+      resolver.inputSchema == some Codec.ftResolveTransferArgsSchema &&
+      resolver.inputPolicy ==
+        "near-json-ft-resolve-args-bounded-v1(max-wire=1079,ws=32,order=any,keys=raw,unknown=reject)" &&
+      resolver.outputSchema == some (.scalar .uint128) &&
+      resolver.outputPolicy == "near-json-u128-string-v1" && resolver.paramCount == 20 &&
+      resolver.tupleArity == some 2 do
+    throwError "ft_resolve_transfer lost private bounded-input or quoted-u128 output policy"
   for method in program.entries do
     match Emit.emit { program with entries := #[method] } with
     | .ok _ => pure ()
@@ -160,11 +170,58 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !transferBody.contains "(call $pf_storage_remove" &&
       !transferBody.contains "(call $pf_value_return" do
     throwError "ft_transfer lost guard/read/read/write/write/event/empty-return ordering"
+  let resolverBody ← match wat.splitOn "(func (export \"ft_resolve_transfer\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "ft_resolve_transfer must occur exactly once"
+  let afterCurrent ← match resolverBody.splitOn "(call $pf_current_account_id" with
+    | [_before, after] => pure after
+    | _ => throwError "ft_resolve_transfer must read current account exactly once"
+  let afterPredecessor ← match afterCurrent.splitOn "(call $pf_predecessor_account_id" with
+    | [_before, after] => pure after
+    | _ => throwError "ft_resolve_transfer must read predecessor after current account"
+  let afterPrivate ← match afterPredecessor.splitOn
+      "(call $pf_panic_utf8 (i64.const 37)" with
+    | [before, after] =>
+        unless !before.contains "(call $pf_attached_deposit" &&
+            !before.contains "(call $pf_input" do
+          throwError "resolver private guard did not precede deposit and input handling"
+        pure after
+    | _ => throwError "ft_resolve_transfer lost its private guard"
+  let afterDeposit ← match afterPrivate.splitOn "(call $pf_attached_deposit" with
+    | [before, after] =>
+        unless !before.contains "(call $pf_input" &&
+            after.contains "(i64.load (i32.const 24))" &&
+            after.contains "(i64.load (i32.const 32))" do
+          throwError "resolver non-payable guard order or full-u128 check changed"
+        pure after
+    | _ => throwError "ft_resolve_transfer must enforce non-payable exactly once"
+  let afterCount ← match afterDeposit.splitOn "(call $pf_promise_results_count" with
+    | [before, after] =>
+        unless before.contains "(call $pf_input" &&
+            !before.contains "(global.set $pf_storage_result_status (call $pf_storage_write" do
+          throwError "resolver result count did not precede ledger writes"
+        pure after
+    | _ => throwError "resolver must inspect Promise result count exactly once"
+  let afterResult ← match afterCount.splitOn "(call $pf_promise_result (i64.const 0)" with
+    | [before, after] =>
+        unless !before.contains "(global.set $pf_storage_result_status (call $pf_storage_write" do
+          throwError "resolver decoded its Promise result after a ledger write"
+        pure after
+    | _ => throwError "resolver must read Promise result index zero exactly once"
+  unless (afterResult.splitOn
+        "(global.set $pf_storage_result_status (call $pf_storage_read").length == 3 &&
+      (resolverBody.splitOn
+        "(global.set $pf_storage_result_status (call $pf_storage_write").length == 4 &&
+      (resolverBody.splitOn "(call $pf_log_utf8").length == 3 &&
+      (resolverBody.splitOn "(call $pf_value_return").length == 4 &&
+      !resolverBody.contains "(call $pf_storage_remove" &&
+      !resolverBody.contains "(call $pf_value_return (i64.const 8)" do
+    throwError "resolver lost read-before-write, one-event, present-zero, or quoted-output branches"
   logInfo m!"proofforge-near-fungible-ledger: digest = {IR.digestHex program}"
 
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "32ee3f8cecbb17cf"
+  some "19ea46716ce41644"
 
 end Tests.NearFungibleLedgerSpec

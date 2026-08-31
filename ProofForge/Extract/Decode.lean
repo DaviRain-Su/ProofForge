@@ -2981,7 +2981,9 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
   | 0 => none
   | fuel' + 1 =>
     let e := strip e
-    if isConstNamed e ``Unit.unit || isConstNamed e ``PUnit.unit then
+    if let .letE _ _ value body _ := e then
+      scalarResultValues env fuel' (body.instantiate1 value)
+    else if isConstNamed e ``Unit.unit || isConstNamed e ``PUnit.unit then
       some #[]
     else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
       let args := e.getAppArgs
@@ -3188,7 +3190,18 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
                         | _ => false
                       else false
                 | none => false
-              if reconstructedFromOneBinder then
+              let reconstructedUnchanged :=
+                let leaves := flattenLeaves env "" state
+                match userCtorFields env state with
+                | some fields =>
+                  -- A reconstructed multi-field State can be entirely projections of the input.
+                  -- `flattenLeaves` then has no writes; preserve an independent wide result rather
+                  -- than letting the scalar state fallback expose the final State field.
+                  !fields.isEmpty && leaves.isEmpty &&
+                    (scalarResultValues env 16 pairArgs[pairArgs.size - 1]).any
+                      (·.size > 1)
+                | none => false
+              if reconstructedFromOneBinder || reconstructedUnchanged then
                 scalarResultValues env 16 pairArgs[pairArgs.size - 1]
               else none
         else none

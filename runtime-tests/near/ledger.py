@@ -170,6 +170,59 @@ def _ft_transfer_fails(
         raise AssertionError(f"{scene}: rejected transfer changed durable state")
 
 
+def _resolver_event(kind: str, owner: str, amount: int, *, sender: str | None = None) -> str:
+    if kind == "ft_transfer":
+        data = {
+            "old_owner_id": owner,
+            "new_owner_id": sender,
+            "amount": str(amount),
+            "memo": "refund",
+        }
+    else:
+        data = {"owner_id": owner, "amount": str(amount), "memo": "refund"}
+    return "EVENT_JSON:" + json.dumps(
+        {"standard": "nep141", "version": "1.0.0", "event": kind, "data": [data]},
+        separators=(",", ":"),
+    )
+
+
+def _resolve(
+    client: NearClient,
+    method: str,
+    expected: int | None,
+    *,
+    event: str | None = None,
+    expect_success: bool = True,
+    child_failure: bool = False,
+) -> dict:
+    before = client.view_state_values()
+    response = client.call_on(
+        client.account_id,
+        method,
+        b"",
+        gas=100_000_000_000_000,
+        # near_rpc's conservative receipt checker treats a failed child as transaction failure
+        # even when the dependent resolver succeeds. Opt into that expected intermediate failure
+        # while still checking the callback's final SuccessValue below.
+        expect_success=expect_success and not child_failure,
+    )
+    logs = _receipt_logs(response)
+    if expect_success:
+        raw = NearClient.success_value_bytes(response)
+        wanted = f'"{expected}"'.encode()
+        if raw != wanted:
+            raise AssertionError(f"{method}: resolver output {raw!r} != {wanted!r}")
+        wanted_logs = [] if event is None else [event]
+        if logs != wanted_logs:
+            raise AssertionError(f"{method}: resolver logs {logs!r} != {wanted_logs!r}")
+    else:
+        if logs:
+            raise AssertionError(f"{method}: failed resolver emitted logs {logs!r}")
+        if client.view_state_values() != before:
+            raise AssertionError(f"{method}: failed callback changed durable state")
+    return response
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
@@ -177,6 +230,10 @@ def main() -> None:
     client.call("initialize", b"")
     self_id = client.account_id
     self_key = _key(self_id)
+    resolver_contract = f"resolver.{self_id}"
+    client.create_subaccount_with_key(resolver_contract, 10**25)
+    client.deploy_to(resolver_contract, wasm)
+    client.call_on(resolver_contract, "initialize", b"", signer=resolver_contract)
 
     if _view(client, "balanceSelfHas") != 0 or _balance(client.view_state_values(), self_id) is not None:
         raise AssertionError("missing balance must remain distinct from present zero")
@@ -399,6 +456,112 @@ def main() -> None:
     if _balance(state, caller) != 1 or _balance(state, self_id) != MAX_U128 or _supply(client) != 1:
         raise AssertionError("destination-overflow rejection changed a source/destination snapshot")
     print("near-ledger: destination overflow validates both snapshots before either write ok")
+
+    # Genuine child → private callback chains exercise the strict result decoder and the same BAL2
+    # map. Short aa/bb callback identities keep static fixture args within the Promise64 budget.
+    sender_id, receiver_id = "aa", "bb"
+    sender_key, receiver_key = _key(sender_id), _key(receiver_id)
+
+    _call(client, "fixtureResetResolver")
+    _call(client, "fixtureResolverPresent")
+    _resolve(
+        client,
+        "resolveUnusedThree",
+        7,
+        event=_resolver_event("ft_transfer", receiver_id, 3, sender=sender_id),
+    )
+    state = client.view_state_values()
+    if _balance(state, sender_id) != 5 or _balance(state, receiver_id) != 4 or _supply(client) != 9:
+        raise AssertionError(
+            "present-sender resolver violated refund conservation: "
+            f"sender={_balance(state, sender_id)} receiver={_balance(state, receiver_id)} "
+            f"supply={_supply(client)}"
+        )
+
+    _call(client, "fixtureResolverPresent")
+    _resolve(
+        client,
+        "resolveUnusedTwenty",
+        3,
+        event=_resolver_event("ft_transfer", receiver_id, 7, sender=sender_id),
+    )
+    state = client.view_state_values()
+    if _balance(state, sender_id) != 9 or _balance(state, receiver_id) != 0 or receiver_key not in state:
+        raise AssertionError("resolver clamp did not preserve receiver present-zero registration")
+    if _supply(client) != 9:
+        raise AssertionError("present-sender clamp changed supply")
+
+    for method in ("resolveMalformed", "resolveOversized"):
+        _call(client, "fixtureResolverPresent")
+        _resolve(
+            client,
+            method,
+            3,
+            event=_resolver_event("ft_transfer", receiver_id, 7, sender=sender_id),
+        )
+    _call(client, "fixtureResolverPresent")
+    _resolve(
+        client,
+        "resolveFailed",
+        3,
+        event=_resolver_event("ft_transfer", receiver_id, 7, sender=sender_id),
+        child_failure=True,
+    )
+    print("near-ledger: valid clamp and failed/malformed/oversized fallback refunds ok")
+
+    _call(client, "fixtureResolverPresent")
+    before = client.view_state_values()
+    _resolve(client, "resolveUnusedZero", 10)
+    if client.view_state_values() != before:
+        raise AssertionError("zero unused amount performed a ledger write")
+
+    _call(client, "fixtureResolverMissingReceiver")
+    before = client.view_state_values()
+    _resolve(client, "resolveUnusedThree", 10)
+    if client.view_state_values() != before or receiver_key in before:
+        raise AssertionError("missing receiver was created by zero-refund resolution")
+
+    _call(client, "fixtureResolverReceiverZero")
+    before = client.view_state_values()
+    _resolve(client, "resolveUnusedThree", 10)
+    if client.view_state_values() != before or _balance(before, receiver_id) != 0:
+        raise AssertionError("present-zero receiver changed on zero refund")
+
+    _call(client, "fixtureResolverMissingSender")
+    _resolve(
+        client,
+        "resolveUnusedThree",
+        10,
+        event=_resolver_event("ft_burn", receiver_id, 3),
+    )
+    state = client.view_state_values()
+    if sender_key in state or _balance(state, receiver_id) != 4 or _supply(client) != 4:
+        raise AssertionError("deleted-sender burn did not preserve conservation")
+    print("near-ledger: zero/missing receiver and deleted-sender burn return semantics ok")
+
+    for seed, method in (
+        ("fixtureResolverMalformedReceiver", "resolveUnusedThree"),
+        ("fixtureResolverMalformedSender", "resolveUnusedThree"),
+        ("fixtureResolverSenderMax", "resolveUnusedThree"),
+        ("fixtureResolverSupplyUnderflow", "resolveUnusedThree"),
+    ):
+        _call(client, seed)
+        _resolve(client, method, None, expect_success=False)
+
+    _call(client, "fixtureResolverPresent")
+    _resolve(client, "resolveCountZero", None, expect_success=False)
+    _call(client, "fixtureResolverPresent")
+    _resolve(client, "resolvePaidCallback", None, expect_success=False)
+    before = client.view_state_values()
+    client.call_on(
+        client.account_id,
+        "ft_resolve_transfer",
+        b'{"sender_id":"aa","receiver_id":"bb","amount":"10"}',
+        expect_success=False,
+    )
+    if client.view_state_values() != before:
+        raise AssertionError("direct private resolver call changed state")
+    print("near-ledger: private/nonpayable/count/malformed/overflow failures roll back without events ok")
     print("suite NearFungibleLedger: PASS")
 
 
