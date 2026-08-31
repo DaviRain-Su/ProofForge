@@ -111,7 +111,7 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplClaim" == some "4857c33431f624cb"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplPayout" == some "4d769f5622556277"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplDual" == some "d8b9fb0c4ce39299"
-#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplLatch" == some "b4df97f27b0d2f3d"
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplLatch" == some "d65b586272018aed"
 #guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch"]
 
 open Lean Elab Command in

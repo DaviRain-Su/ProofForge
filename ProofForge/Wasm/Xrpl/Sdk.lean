@@ -10,9 +10,10 @@ Op, or storage layout. Ownable and Pausable remain source `if`s on AccountId
 limbs and a UInt64 flag.
 
 wasm v0 rejects `bitAnd` / `bitOr`, so `&&` / `||` / `Bool.and` cannot
-appear in an entry. Boolean gates use nested `if` or `Gate.and2`. Sequential
-`flush*` / `storeOwner` stay nested `if Gate.ok …` — those are effects, not
-AND. Do not flatten them.
+appear in an entry. Prefer else-if guards (`if !cond then .error …`) over a
+then-pyramid. `!` is `Not`, which extracts. Sequential `flush*` /
+`storeOwner` stay as later guards (`else if !Gate.ok …`) so effects keep
+source order. Not Rust `?`, not `do` / `Except.bind`.
 -/
 
 namespace ProofForge.Wasm.Xrpl.Sdk

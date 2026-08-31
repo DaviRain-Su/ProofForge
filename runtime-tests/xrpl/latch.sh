@@ -124,4 +124,4 @@ want "$(call_fn unlatch)" 0 unlatch
 want "$(call_fn unlatch)" 1 unlatch-empty
 
 rm -f "$cfg"
-echo "xrpl-latch: ok contract=$contract Gate.and2 latch/unlatch (not Sdk.Payments)"
+echo "xrpl-latch: ok contract=$contract else-if latch/unlatch (not Sdk.Payments)"
