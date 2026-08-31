@@ -2960,7 +2960,9 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
   | 0 => none
   | fuel' + 1 =>
     let e := strip e
-    if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
+    if isConstNamed e ``Unit.unit || isConstNamed e ``PUnit.unit then
+      some #[]
+    else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
       let args := e.getAppArgs
       let left ← scalarResultValues env fuel' args[args.size - 2]!
       let right ← scalarResultValues env fuel' args[args.size - 1]!
@@ -2977,7 +2979,10 @@ private def effectfulResultOps (env : Environment) (e : Expr) : Option (Array Op
   else if values.size > 1 then
     return values.map fun value => .returnU64 value
   else
-    none
+    -- Core's historical success terminal carries one scalar even when the logical result has no
+    -- leaves. This zero is control-only: target output codecs must use the retained `.unit` schema
+    -- rather than exposing it as a public result.
+    return #[.okState (.lit 0)]
 
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr)
@@ -7331,7 +7336,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     -- the tag width and wire layout; extraction only preserves both source leaves through joins.
     .ok #[.returnU64 tag, .returnU64 payload]
   else if let some values := asOkNoop env e then
-    if stateful && values.size == 1 then
+    if stateful && values.isEmpty then
+      .ok #[.okState (.lit 0)]
+    else if stateful && values.size == 1 then
       .ok #[.okState values[0]!]
     else
       .ok (values.map fun value => .returnU64 value)

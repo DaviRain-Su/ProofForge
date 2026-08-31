@@ -194,6 +194,12 @@ json_ft_transfer_input_anchors = (
     '(func (export "inspectAmountW1")',
     '(func (export "inspectMemoPresent")',
 )
+json_unit_output_anchors = (
+    '(func (export "setMarker")',
+    '(call $pf_arena_alloc (i64.const 4) (i64.const 1))',
+    '(i32.store (local.get $pf_output_ptr) (i32.const 1819047278))',
+    '(call $pf_value_return (i64.const 4)',
+)
 storage_anchors = (
     '(global $pf_storage_result_status (mut i64)',
     '(func $pf_storage_result_byte',
@@ -433,6 +439,8 @@ for wat in wats:
         extra = json_memo_input_anchors
     elif wat.stem == "NearJsonFtTransferInput":
         extra = json_ft_transfer_input_anchors
+    elif wat.stem == "NearJsonUnitOutput":
+        extra = json_unit_output_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

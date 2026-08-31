@@ -740,6 +740,16 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
         retTypes := #[.uint64]
         retSchema := .scalar .uint64
         retCount := 1 }, some { ixName := method.ixName, schema, plan })
+  | .unit =>
+      if method.kind == .init then
+        return (method, none)
+      unless method.kind == .increment do
+        throw s!"near/codec: {method.ixName} JSON null Unit output requires a mutating entry"
+      let schema := method.retSchema
+      let plan ← Codec.targetOutputPlan schema
+      unless method.retCount == plan.sourceValueCount do
+        throw s!"near/codec: {method.ixName} output frame does not match its JSON null Unit plan"
+      return (method, some { ixName := method.ixName, schema, plan })
   | _ => return (method, none)
 
 private def decorateMethod (entries : Array BoundEntry) (inputs : Array BoundInput)
@@ -753,10 +763,14 @@ private def decorateMethod (entries : Array BoundEntry) (inputs : Array BoundInp
       inputPolicy := input.plan.canonical }
   | none => method
   match outputs.find? (·.ixName == method.ixName) with
-  | some output => { method with
-      outputSchema := some output.schema
-      outputPolicy := output.plan.canonical
-      tupleArity := some output.plan.sourceValueCount }
+  | some output =>
+      let tupleArity :=
+        if output.plan == .jsonNullUnit then method.tupleArity
+        else some output.plan.sourceValueCount
+      { method with
+        outputSchema := some output.schema
+        outputPolicy := output.plan.canonical
+        tupleArity }
   | none => method
 
 def fromExtracted (src : Extract.IR.Program) : Except String Program := do

@@ -16,6 +16,7 @@ def entries : Array Entry := #[
   { name := "NearTokenStorage", digest := "92e4c2bf2a7f74a0" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
   { name := "NearOutput", digest := "aef385d73b807e1f" },
+  { name := "NearJsonUnitOutput", digest := "235b602d314f8907" },
   { name := "NearJsonAccountInput", digest := "94c66ff0e540880f" },
   { name := "NearJsonAmountInput", digest := "39187c79765d79a8" },
   { name := "NearJsonMemoInput", digest := "f3fa980c281bf1e6" },

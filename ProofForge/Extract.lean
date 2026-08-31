@@ -849,8 +849,10 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
         let nRet := max nRet (maxReturnCount 32 ops)
         if nRet = 0 then 1 else nRet
     | .increment =>
-      let nRet := maxReturnCount 32 ops
-      if nRet = 0 then 1 else nRet
+      if retSchema == .unit then 0
+      else
+        let nRet := maxReturnCount 32 ops
+        if nRet = 0 then 1 else nRet
     | .init => 1
   let retTypes :=
     match retSchema with

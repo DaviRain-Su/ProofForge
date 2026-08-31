@@ -36,11 +36,15 @@ if ! "$python" -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import
 fi
 
 wasm="${PWD}/build/near/NearOutput.wasm"
-echo "near-local-output: building NearOutput.wasm" >&2
+unit_wasm="${PWD}/build/near/NearJsonUnitOutput.wasm"
+echo "near-local-output: building NearOutput.wasm and NearJsonUnitOutput.wasm" >&2
 lake exe pf -- build --target near --out build/near NearOutput
-[[ -f "$wasm" ]] || die "missing $wasm"
+lake exe pf -- build --target near --out build/near NearJsonUnitOutput
+[[ -f "$wasm" && -f "$unit_wasm" ]] || die "missing output wasm artifact"
 "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$wasm" \
   || die "$wasm is not wasm"
+"$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$unit_wasm" \
+  || die "$unit_wasm is not wasm"
 
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/near-output.XXXXXX")"
 sandbox_pid=""
@@ -113,7 +117,8 @@ done
 export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
+export PF_NEAR_UNIT_WASM="$unit_wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-output: RPC ready; running Borsh and JSON-u128 output scenes" >&2
+echo "near-local-output: RPC ready; running Borsh, JSON-u128, and JSON-null output scenes" >&2
 "$python" runtime-tests/near/output.py
 echo "near-local-output: ok"

@@ -243,6 +243,10 @@ asynchronous; dynamic handles and multi-action builders are absent.
    and reuses the checked value cursors. Exact geometry is 786 wire bytes and 32 aggregate
    structural-whitespace bytes. Unknown keys reject (unlike the broader generated serde wrapper),
    and this parser fixture intentionally has no standard `ft_transfer` export or ledger effect.
+   **NEAR-JSON-UNIT-OUTPUT (wsm-near-json-unit-output-001 done):** an explicit logical Unit result
+   on a mutating entry selects exactly one four-byte JSON `null` return after state persistence.
+   Initializers, raw UInt64 methods, and view outputs retain their previous policies. This pins the
+   near-sdk-rs explicit-`()` result shape without introducing generic JSON serialization.
    **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
    `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
    existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero

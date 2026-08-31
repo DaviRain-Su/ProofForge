@@ -39,6 +39,7 @@ def main() -> None:
     rpc = _require("PF_NEAR_RPC")
     home = Path(_require("PF_NEAR_HOME"))
     wasm = Path(_require("PF_NEAR_WASM"))
+    unit_wasm = Path(_require("PF_NEAR_UNIT_WASM"))
     client = NearClient(rpc, home)
 
     print("=== suite: NearOutput (canonical Borsh + JSON u128) ===")
@@ -107,6 +108,25 @@ def main() -> None:
         "output length above capacity",
     )
     print("near-output: output UTF-8 and capacity guards ok")
+
+    print("=== suite: NearJsonUnitOutput (mutating JSON null) ===")
+    client.deploy(unit_wasm)
+    # NearOutput and this fixture deliberately share the one-slot `marker` state schema, so the
+    # redeployed contract consumes the already initialized zero state instead of reinitializing.
+    success = client.call("setMarker", NearClient.encode_u64_le(37))
+    returned = NearClient.success_value_bytes(success)
+    if returned != b"null":
+        raise AssertionError(f"setMarker SuccessValue expected exact b'null', got {returned!r}")
+    _expect(client, "get", b"", NearClient.encode_u64_le(37))
+    failed = client.call("setMarker", NearClient.encode_u64_le(0), expect_success=False)
+    if NearClient.success_value_bytes(failed) is not None:
+        raise AssertionError("failed Unit mutation unexpectedly returned a SuccessValue")
+    _expect(client, "get", b"", NearClient.encode_u64_le(37))
+    success = client.call("setMarker", NearClient.encode_u64_le(99))
+    if NearClient.success_value_bytes(success) != b"null":
+        raise AssertionError("second Unit mutation did not return exact JSON null")
+    _expect(client, "get", b"", NearClient.encode_u64_le(99))
+    print("near-output: exact null bytes, state persistence, repeated calls, and rollback ok")
     print("suite NearOutput: PASS")
 
 

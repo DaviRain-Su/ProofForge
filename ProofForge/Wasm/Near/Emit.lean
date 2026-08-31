@@ -614,6 +614,13 @@ private def returnU64Instr (expr : String) (level : Nat) : Array String :=
     indent level "(call $pf_value_return (i64.const 8) (i64.const 0))"
   ]
 
+private def returnJsonNullInstr (level : Nat) : Array String := #[
+  indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 4) (i64.const 1)))",
+  -- `0x6c6c756e` stored little-endian is the exact UTF-8 byte sequence `null`.
+  indent level "(i32.store (local.get $pf_output_ptr) (i32.const 1819047278))",
+  indent level "(call $pf_value_return (i64.const 4) (i64.extend_i32_u (local.get $pf_output_ptr)))"
+]
+
 private def outputPlanOf (method : Method ValKind OpExt) :
     Except String (Option Codec.OutputPlan) := do
   match method.outputSchema with
@@ -1450,6 +1457,16 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := lines ++ region.lines, st := region.st, terminal := true }
     | .okState value | .returnState value =>
         if view then throw "extract/unsupported: near v0 view cannot write state"
+        if outputPlan == some .jsonNullUnit then
+          unless tail.all isExitOp do
+            throw "extract/unsupported: near v0 instructions follow terminal operation"
+          let mut lines : Array String := #[]
+          if st.initializer then lines := lines ++ markInitialized p level
+          match st.pendingPromiseReturn with
+          | some _ =>
+              throw "extract/unsupported: JSON null Unit output cannot also return a promise"
+          | none => lines := lines ++ returnJsonNullInstr level
+          return { lines, st, terminal := true }
         if st.lastStored && echo && (fieldOf value).isNone then
           -- A non-field terminal after an explicit state store is the `(State × UInt64)` result
           -- channel. It may be an argument or literal as well as an extractor local; never route
@@ -1755,6 +1772,8 @@ private partial def emitRegion (p : Program ValKind OpExt)
             return { lines := ← returnBorshInstr st plan values level, st, terminal := true }
         | some .jsonU128 =>
             return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
+        | some .jsonNullUnit =>
+            throw "extract/unsupported: JSON null Unit output requires a mutating state terminal"
         | none =>
             unless values.size == 1 do
               throw "extract/unsupported: near v0 view wants exactly one UInt64"

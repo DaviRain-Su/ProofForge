@@ -227,27 +227,31 @@ def outputPlan : Core.Codec.Schema → Except String BorshOutputPlan
       throw "near/codec: bounded output elements must be UInt8, UInt16, UInt32, or UInt64"
   | _ => throw "near/codec: output plan requires bounded bytes, string, or scalar array"
 
-/-- Closed NEAR view-output policies. JSON support starts with the one scalar shape required by
-NEP-141/145 amounts; object, array, nullable, string, and input codecs remain absent. -/
+/-- Closed NEAR output policies. JSON support is limited to quoted u128 views and explicit Unit
+mutation results; generic objects, arrays, nullable values, and strings remain absent. -/
 inductive OutputPlan where
   | borsh (plan : BorshOutputPlan)
   | jsonU128
+  | jsonNullUnit
   deriving Repr, BEq, Inhabited
 
 def OutputPlan.sourceValueCount : OutputPlan → Nat
   | .borsh plan => plan.sourceValueCount
   | .jsonU128 => 2
+  | .jsonNullUnit => 0
 
 def OutputPlan.canonical : OutputPlan → String
   | .borsh plan => plan.canonical
   | .jsonU128 => "near-json-u128-string-v1"
+  | .jsonNullUnit => "near-json-null-unit-v1"
 
-/-- Select only target-owned view outputs already represented by exact fixed extractor frames. -/
+/-- Select only target-owned outputs already represented by exact fixed extractor frames. -/
 def targetOutputPlan : Core.Codec.Schema → Except String OutputPlan
   | .boundedArray capacity element => .borsh <$> outputPlan (.boundedArray capacity element)
   | .boundedBytes capacity => .borsh <$> outputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> outputPlan (.boundedString capacity)
   | .scalar .uint128 => pure .jsonU128
+  | .unit => pure .jsonNullUnit
   | _ => throw "near/codec: unsupported specialized output schema"
 
 end ProofForge.Wasm.Near.Codec
