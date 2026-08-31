@@ -90,6 +90,7 @@
 | grant / takeB / clawB / freeze cashSelf | `XrplRaid` | `raid.sh` |
 | grant / takeB / pause cashSelf | `XrplRamp` | `ramp.sh` |
 | grant / takeB / pause+freeze cashSelf | `XrplRank` | `rank.sh` |
+| grant / takeB / clawB / pause+freeze cashSelf | `XrplRant` | `rant.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。

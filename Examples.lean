@@ -101,6 +101,7 @@ import Examples.XrplRake
 import Examples.XrplRaid
 import Examples.XrplRamp
 import Examples.XrplRank
+import Examples.XrplRant
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

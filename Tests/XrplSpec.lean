@@ -63,6 +63,7 @@ import Examples.XrplRake
 import Examples.XrplRaid
 import Examples.XrplRamp
 import Examples.XrplRank
+import Examples.XrplRant
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -152,7 +153,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRaid" == some "fec942260f477144"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRamp" == some "3eaeb4e07e501d84"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRank" == some "dc7acc658d048610"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke", "XrplReed", "XrplRake", "XrplRaid", "XrplRamp", "XrplRank"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRant" == some "5f79d58819a43529"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke", "XrplReed", "XrplRake", "XrplRaid", "XrplRamp", "XrplRank", "XrplRant"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -300,6 +302,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplRamp
 
 #pf_xrpl_build Examples.XrplRank
+
+#pf_xrpl_build Examples.XrplRant
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -2119,6 +2123,40 @@ elab "#pf_xrpl_rank_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-rank: {source.length} bytes of WAT passed rank anchor check"
 
 #pf_xrpl_rank_emit_check Examples.XrplRank
+
+open Lean Elab Command in
+elab "#pf_xrpl_rant_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"grant\") (result i32)",
+          "(func (export \"takeB\") (result i32)",
+          "(func (export \"clawB\") (result i32)",
+          "(func (export \"cashSelf\") (result i32)",
+          "(func (export \"pause\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\"",
+          "(i32.store8 (i32.const 92) (i32.const 97))",
+          "(i32.store8 (i32.const 80) (i32.const 104))",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing rant anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-rant: {source.length} bytes of WAT passed rant anchor check"
+
+#pf_xrpl_rant_emit_check Examples.XrplRant
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
