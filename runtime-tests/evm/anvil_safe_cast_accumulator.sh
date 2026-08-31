@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Permissionless UInt256→UInt64 accumulation plus UInt256→UInt32/UInt16 replacement: exact
+# Permissionless UInt256→UInt64 accumulation plus UInt256→UInt32/UInt16/UInt8 replacement: exact
 # boundaries, every discarded-limb/low-word class, application errors, and storage atomicity.
 set -euo pipefail
 
@@ -21,19 +21,24 @@ bytecode="$(tr -d '\n\r ' < "$bin")"
 sender="$("$cast" wallet address --private-key "$private_key")"
 addr="$(solana_lean_deploy_ctor_u64 "$bytecode" 0)"
 
-read -r max16 just_over16 max32 just_over32 max64 just_over middle_limb high_limb < <( \
-  "$python" -I -S -c 'print(2**16-1, 2**16, 2**32-1, 2**32, 2**64-1, 2**64, 2**128, 2**192)'
+read -r max8 just_over8 max16 just_over16 max32 just_over32 max64 just_over \
+    middle_limb high_limb < <( \
+  "$python" -I -S -c \
+    'print(2**8-1, 2**8, 2**16-1, 2**16, 2**32-1, 2**32, 2**64-1, 2**64, 2**128, 2**192)'
 )
 
 solana_lean_require_storage "$addr" 0 0 "constructor total"
 solana_lean_require_storage "$addr" 1 1 "constructor checkpoint"
 solana_lean_require_storage "$addr" 2 2 "constructor batch"
+solana_lean_require_storage "$addr" 3 3 "constructor mode"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'totalOf()(uint64)')" 0 \
   "initial total"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'checkpointOf()(uint32)')" 1 "initial checkpoint"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'batchOf()(uint16)')" 2 "initial batch"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'modeOf()(uint8)')" 3 "initial mode"
 
 # Zero is representable and leaves zero state through the successful application branch.
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -149,4 +154,41 @@ done
 solana_lean_require_storage "$addr" 0 "$max64" "batch path preserves UInt64 total"
 solana_lean_require_storage "$addr" 1 "$max32" "batch path preserves UInt32 checkpoint"
 
-echo "evm-anvil-safe-cast-accumulator: ok (UInt64/UInt32/UInt16 boundaries, all discarded bits, application policy, atomicity; engineering only)"
+# UInt8 closes the unsigned fixed-scalar narrowing surface. The first ninth-bit value and every
+# upper UInt256 limb fail before the mode slot can change.
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'setMode(uint256)' 0)" 'modeZero()' "zero mode"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'setMode(uint256)' 0 >/dev/null 2>&1; then
+  echo "FAIL: zero mode unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 3 3 "zero mode is atomic"
+
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'setMode(uint256)(uint8)' "$max8")" "$max8" "exact UInt8 max"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'setMode(uint256)' "$max8" >/dev/null
+solana_lean_require_storage "$addr" 3 "$max8" "exact UInt8 max persists"
+
+for case in \
+  "$just_over8|mode low-word upper-bit overflow" \
+  "$just_over|mode w1 overflow" \
+  "$middle_limb|mode w2 overflow" \
+  "$high_limb|mode w3 overflow"; do
+  value="${case%%|*}"
+  label="${case#*|}"
+  solana_lean_require_named_revert "$addr" "$sender" \
+    "$("$cast" calldata 'setMode(uint256)' "$value")" 'modeTooWide()' "$label"
+  if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+      "$addr" 'setMode(uint256)' "$value" >/dev/null 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  solana_lean_require_storage "$addr" 3 "$max8" "$label is atomic"
+done
+solana_lean_require_storage "$addr" 0 "$max64" "mode path preserves UInt64 total"
+solana_lean_require_storage "$addr" 1 "$max32" "mode path preserves UInt32 checkpoint"
+solana_lean_require_storage "$addr" 2 "$max16" "mode path preserves UInt16 batch"
+
+echo "evm-anvil-safe-cast-accumulator: ok (UInt64/UInt32/UInt16/UInt8 boundaries, all discarded bits, application policy, atomicity; engineering only)"

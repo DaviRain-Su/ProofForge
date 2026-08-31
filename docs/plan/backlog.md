@@ -88,7 +88,8 @@ R5-017 persistent bounded enumerable set 与 mutable-query snapshot sequencing�
 R5-018 persistent bounded UInt64 checkpoints、R5-019 persistent bounded enumerable UInt64 map、
 R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
 R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind、
-R5-022 shared checked UInt128/UInt256→UInt16 SafeCast；
+R5-022 shared checked UInt128/UInt256→UInt16 SafeCast、
+R5-023 shared checked UInt128/UInt256→UInt8 SafeCast；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -862,6 +863,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   路径，分别验证 permissionless 与 owner-first ordering、typed width/zero errors、原 UInt64/
   UInt32 字段保持和 raw-storage rollback。UInt8 与 signed casts 继续 fail closed，等待真实
   consumer。详见 `docs/plan/tasks/r5-022.md`。
+
+- R5-023 checked wide-to-UInt8 SafeCast 已完成集成：`Core.SafeCast` 在 upper limbs 全零后
+  精确要求 low limb `< 2^8`，再执行 explicit UInt8 narrowing，补齐 unsigned fixed-scalar
+  UInt8/16/32/64 target。Accumulator 的 permissionless mode 路径返回 narrow byte；Config 的
+  owner-first level 路径将成功 byte 显式 widen 到 UInt64 result，从而保留完整 `0x1001`
+  authorization sentinel，而不是把它静默截断成 `1`。两个 consumer 均验证 typed width/zero
+  errors、原有 wider fields 保持和 raw-storage rollback；没有新增 width-specific Runtime/Ops/
+  IR/CFG/Component/Emit。Signed/saturating/wide-to-wide casts 继续 fail closed。详见
+  `docs/plan/tasks/r5-023.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

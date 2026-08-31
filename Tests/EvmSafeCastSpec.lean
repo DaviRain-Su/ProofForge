@@ -17,6 +17,8 @@ open ProofForge.Evm.Sdk
 open Lean Elab Command
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
+def u8Limit : UInt64 := UInt64.ofNat UInt8.size
+def u8Max : UInt64 := u8Limit - 1
 def u16Limit : UInt64 := UInt64.ofNat UInt16.size
 def u16Max : UInt64 := u16Limit - 1
 def u32Limit : UInt64 := UInt64.ofNat UInt32.size
@@ -25,6 +27,8 @@ def u32Max : UInt64 := u32Limit - 1
 def max128 : UInt128 := ⟨u64Max, 0⟩
 def justOver128 : UInt128 := ⟨0, 1⟩
 def high128 : UInt128 := ⟨9, u64Max⟩
+def max8In128 : UInt128 := ⟨u8Max, 0⟩
+def justOver8In128 : UInt128 := ⟨u8Limit, 0⟩
 def max16In128 : UInt128 := ⟨u16Max, 0⟩
 def justOver16In128 : UInt128 := ⟨u16Limit, 0⟩
 def max32In128 : UInt128 := ⟨u32Max, 0⟩
@@ -34,6 +38,8 @@ def max256 : UInt256 := ⟨u64Max, 0, 0, 0⟩
 def justOver256 : UInt256 := ⟨0, 1, 0, 0⟩
 def middle256 : UInt256 := ⟨11, 0, 1, 0⟩
 def high256 : UInt256 := ⟨13, 0, 0, 1⟩
+def max8In256 : UInt256 := ⟨u8Max, 0, 0, 0⟩
+def justOver8In256 : UInt256 := ⟨u8Limit, 0, 0, 0⟩
 def max16In256 : UInt256 := ⟨u16Max, 0, 0, 0⟩
 def justOver16In256 : UInt256 := ⟨u16Limit, 0, 0, 0⟩
 def max32In256 : UInt256 := ⟨u32Max, 0, 0, 0⟩
@@ -53,6 +59,16 @@ def justOver32In256 : UInt256 := ⟨u32Limit, 0, 0, 0⟩
 #guard match SafeCast.UInt128.toUInt64 high128 false with
   | .error false => true
   | _ => false
+
+#guard match SafeCast.UInt128.toUInt8 max8In128 false with
+  | .ok value => value.toUInt64 == u8Max
+  | _ => false
+#guard (match SafeCast.UInt128.toUInt8 justOver8In128 false with
+  | .error false => true
+  | _ => false) &&
+  (match SafeCast.UInt128.toUInt8 justOver128 false with
+  | .error false => true
+  | _ => false)
 
 #guard match SafeCast.UInt128.toUInt16 max16In128 false with
   | .ok value => value.toUInt64 == u16Max
@@ -89,6 +105,19 @@ def justOver32In256 : UInt256 := ⟨u32Limit, 0, 0, 0⟩
 #guard match SafeCast.UInt256.toUInt64 high256 false with
   | .error false => true
   | _ => false
+
+#guard match SafeCast.UInt256.toUInt8 max8In256 false with
+  | .ok value => value.toUInt64 == u8Max
+  | _ => false
+#guard (match SafeCast.UInt256.toUInt8 justOver8In256 false with
+  | .error false => true
+  | _ => false) &&
+  (match SafeCast.UInt256.toUInt8 middle256 false with
+  | .error false => true
+  | _ => false) &&
+  (match SafeCast.UInt256.toUInt8 high256 false with
+  | .error false => true
+  | _ => false)
 
 #guard match SafeCast.UInt256.toUInt16 max16In256 false with
   | .ok value => value.toUInt64 == u16Max
@@ -167,6 +196,19 @@ open Examples.EvmSafeCastAccumulator in
   | .error .batchTooWide => true
   | _ => false)
 
+open Examples.EvmSafeCastAccumulator in
+#guard (init 9).mode == 3 &&
+  (match setMode (init 9) max8In256 with
+  | .ok (state, result) => state.total == 9 && state.checkpoint == 1 && state.batch == 2 &&
+      state.mode.toUInt64 == u8Max && result.toUInt64 == u8Max
+  | _ => false) &&
+  (match setMode (init 9) (⟨0, 0, 0, 0⟩ : UInt256) with
+  | .error .modeZero => true
+  | _ => false) &&
+  (match setMode (init 9) justOver8In256 with
+  | .error .modeTooWide => true
+  | _ => false)
+
 /-! ## Owner-gated, nonzero replacement policy -/
 
 def sampleAdmin : Address := ⟨1, 2, 3⟩
@@ -212,6 +254,19 @@ open Examples.EvmSafeCastConfig in
   | _ => false) &&
   (match setThreshold (init sampleAdmin) justOver16In128 with
   | .error .invalidThreshold => true
+  | _ => false)
+
+open Examples.EvmSafeCastConfig in
+#guard (init sampleAdmin).level == 6 &&
+  (match setLevel (init sampleAdmin) max8In128 with
+  | .ok (state, result) => state.limit == 7 && state.window == 3 && state.threshold == 5 &&
+      state.level.toUInt64 == u8Max && result == u8Max
+  | _ => false) &&
+  (match setLevel (init sampleAdmin) (⟨0, 0⟩ : UInt128) with
+  | .error .levelZero => true
+  | _ => false) &&
+  (match setLevel (init sampleAdmin) justOver8In128 with
+  | .error .invalidLevel => true
   | _ => false)
 
 /-! ## Extraction: all discarded limbs guard the low-limb bind -/
@@ -326,41 +381,54 @@ private def expectSafeCastConsumer (module : Name) (expectedSlots : List (String
 
 elab "#pf_guard_evm_safe_cast_accumulator" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
-    [("total", 8), ("checkpoint", 4), ("batch", 2)]
+    [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "add" "uint256" "amountTooWide" ["w1", "w2", "w3"]
     ["amountTooWide", "sumOverflow"] true
 
 elab "#pf_guard_evm_safe_cast_config" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
-      ("threshold", 2)]
+      ("threshold", 2), ("level", 1)]
     "setLimit" "uint128" "invalidLimit" ["w1"] ["invalidLimit", "zero"] false
 
 elab "#pf_guard_evm_safe_cast_checkpoint" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
-    [("total", 8), ("checkpoint", 4), ("batch", 2)]
+    [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "setCheckpoint" "uint256" "checkpointTooWide" ["w1", "w2", "w3"]
     ["checkpointTooWide", "checkpointZero"] true (some u32Limit)
 
 elab "#pf_guard_evm_safe_cast_window" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
-      ("threshold", 2)]
+      ("threshold", 2), ("level", 1)]
     "setWindow" "uint128" "invalidWindow" ["w1"] ["invalidWindow", "windowZero"] false
     (some u32Limit)
 
 elab "#pf_guard_evm_safe_cast_batch" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
-    [("total", 8), ("checkpoint", 4), ("batch", 2)]
+    [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "setBatch" "uint256" "batchTooWide" ["w1", "w2", "w3"]
     ["batchTooWide", "batchZero"] true (some u16Limit)
 
 elab "#pf_guard_evm_safe_cast_threshold" : command =>
   expectSafeCastConsumer `Examples.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
-      ("threshold", 2)]
+      ("threshold", 2), ("level", 1)]
     "setThreshold" "uint128" "invalidThreshold" ["w1"]
     ["invalidThreshold", "thresholdZero"] false (some u16Limit)
+
+elab "#pf_guard_evm_safe_cast_mode" : command =>
+  expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
+    [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
+    "setMode" "uint256" "modeTooWide" ["w1", "w2", "w3"]
+    ["modeTooWide", "modeZero"] true (some u8Limit)
+
+elab "#pf_guard_evm_safe_cast_level" : command =>
+  expectSafeCastConsumer `Examples.EvmSafeCastConfig
+    [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
+      ("threshold", 2), ("level", 1)]
+    "setLevel" "uint128" "invalidLevel" ["w1"] ["invalidLevel", "levelZero"] false
+    (some u8Limit)
 
 #pf_guard_evm_safe_cast_accumulator
 #pf_guard_evm_safe_cast_config
@@ -368,5 +436,7 @@ elab "#pf_guard_evm_safe_cast_threshold" : command =>
 #pf_guard_evm_safe_cast_window
 #pf_guard_evm_safe_cast_batch
 #pf_guard_evm_safe_cast_threshold
+#pf_guard_evm_safe_cast_mode
+#pf_guard_evm_safe_cast_level
 
 end Tests.EvmSafeCastSpec

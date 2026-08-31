@@ -3,8 +3,9 @@ import ProofForge
 /-!
 Permissionless UInt256 consumer of the shared `Core.SafeCast` policy. A representable amount is
 accumulated only when the subsequent UInt64 addition is also checked-valid. A separate checkpoint
-path narrows to UInt32, while a batch path independently narrows to UInt16. Both apply explicit
-nonzero policy, and every failure occurs before its literal state update.
+path narrows to UInt32, while batch and mode paths independently narrow to UInt16 and UInt8. Each
+narrow replacement applies explicit nonzero policy, and every failure occurs before its literal
+state update.
 -/
 
 namespace Examples.EvmSafeCastAccumulator
@@ -16,6 +17,7 @@ structure State where
   total : UInt64
   checkpoint : UInt32
   batch : UInt16
+  mode : UInt8
   deriving Repr, DecidableEq, Inhabited
 
 inductive Error where
@@ -25,13 +27,15 @@ inductive Error where
   | checkpointZero
   | batchTooWide
   | batchZero
+  | modeTooWide
+  | modeZero
   deriving Repr, DecidableEq, Inhabited, BEq
 
 def u64Max : UInt64 := ~~~(0 : UInt64)
 
 @[pf_entry]
 def init (seed : UInt64) : State :=
-  { total := seed, checkpoint := 1, batch := 2 }
+  { total := seed, checkpoint := 1, batch := 2, mode := 3 }
 
 @[pf_entry]
 def totalOf (s : State) : UInt64 :=
@@ -44,6 +48,10 @@ def checkpointOf (s : State) : UInt32 :=
 @[pf_entry]
 def batchOf (s : State) : UInt16 :=
   s.batch
+
+@[pf_entry]
+def modeOf (s : State) : UInt8 :=
+  s.mode
 
 /-- Checked UInt256→UInt64 accumulation. No state is returned on either failure branch. -/
 @[pf_entry]
@@ -72,5 +80,14 @@ def setBatch (s : State) (value : UInt256) : Except Error (State × UInt16) := d
     .error .batchZero
   else
     .ok ({ s with batch }, batch)
+
+/-- Checked UInt256→UInt8 replacement with a separate application-owned nonzero policy. -/
+@[pf_entry]
+def setMode (s : State) (value : UInt256) : Except Error (State × UInt8) := do
+  let mode ← SafeCast.UInt256.toUInt8 value .modeTooWide
+  if mode == 0 then
+    .error .modeZero
+  else
+    .ok ({ s with mode }, mode)
 
 end Examples.EvmSafeCastAccumulator
