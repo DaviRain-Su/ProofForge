@@ -86,6 +86,7 @@ import Examples.XrplFrost
 import Examples.XrplGlaze
 import Examples.XrplHinge
 import Examples.XrplBrace
+import Examples.XrplClamp
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

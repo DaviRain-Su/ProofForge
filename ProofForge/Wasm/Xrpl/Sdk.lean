@@ -387,6 +387,14 @@ Caller must `restoreCaller` afterwards. Not a clock sysvar. -/
   else
     Gate.ok (Context.flushDue (Context.ledgerSqn + delta))
 
+/-- Persist `halt` onto the compile-time minter card. Else-if, not `&&`.
+Hex is 40 lowercase chars. Caller must `restoreCaller` afterwards. -/
+@[pf_inline] def flushHaltLit (hex : String) (v : UInt64) : Bool :=
+  if !Gate.ok (Context.storeOwnerLit hex) then
+    false
+  else
+    Gate.ok (Context.flushHalt v)
+
 end Card
 
 namespace Pay
