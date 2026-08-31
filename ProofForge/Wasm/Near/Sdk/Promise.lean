@@ -68,6 +68,14 @@ success or failure. -/
     (receiver : Runtime.AccountId) (amount : Runtime.NearToken) : UInt64 :=
   Runtime.promiseTransferAccountReturned receiver amount.w0 amount.w1
 
+/-- Schedule and return one specialized dynamic `ft_on_transfer` receipt. The target composes
+`{"sender_id":"...","amount":"...","msg":"..."}`, attaches zero NEAR, and uses the weighted
+function-call host action. This is not a generic dynamic JSON Promise API. -/
+@[pf_inline] def ftOnTransferReturned
+    (receiver sender : Runtime.AccountId) (amount : Runtime.NearToken)
+    (msg : Runtime.BoundedMessage64) : UInt64 :=
+  Runtime.promiseFtOnTransferReturned receiver sender amount msg
+
 /-- Schedule one child call, then one callback on the current contract, and forward the callback's
 eventual result. Both methods are static literals; the two bounded argument frames, deposits, and
 gas budgets are independent. The callback runs after either child success or child failure. -/

@@ -105,6 +105,9 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .promiseTransferAccountReturned receiver amountLo amountHi =>
           .near (.promiseTransferAccountReturned (receiver.map mapValue)
             (mapValue amountLo) (mapValue amountHi))
+      | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          .near (.promiseFtOnTransferReturned (receiver.map mapValue) (sender.map mapValue)
+            (mapValue amountLo) (mapValue amountHi) (message.map mapValue))
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -170,6 +173,8 @@ def OpExt.values : OpExt Val → Array Val
       | .promiseTransferAccountDetached receiver amountLo amountHi
       | .promiseTransferAccountReturned receiver amountLo amountHi =>
           receiver ++ #[amountLo, amountHi]
+      | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          receiver ++ sender ++ #[amountLo, amountHi] ++ message
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments ++ callbackArguments ++
@@ -273,6 +278,11 @@ def OpExt.wellFormed : OpExt Val → Bool
             arguments.all (·.wellFormed ValKind.arity) &&
             depositLo.wellFormed ValKind.arity && depositHi.wellFormed ValKind.arity &&
             gas.wellFormed ValKind.arity
+      | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          receiver.size == 9 && receiver.all (·.wellFormed ValKind.arity) &&
+            sender.size == 9 && sender.all (·.wellFormed ValKind.arity) &&
+            message.size == 9 && message.all (·.wellFormed ValKind.arity) &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
       | .promiseTransferDetached receiver amountLo amountHi
       | .promiseTransferReturned receiver amountLo amountHi =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&

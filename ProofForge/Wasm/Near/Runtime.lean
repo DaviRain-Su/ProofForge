@@ -308,6 +308,17 @@ eventual result. -/
   let _ := amountHi
   0
 
+/-- Schedule the specialized weighted `ft_on_transfer` child call used by the future
+`ft_transfer_call` path. The receiver and sender are complete dynamic AccountIds; the target owns
+the exact JSON payload, fixed zero deposit, method name, and weighted host action. -/
+@[irreducible] def promiseFtOnTransferReturned
+    (receiver sender : AccountId) (amount : NearToken) (msg : BoundedMessage64) : UInt64 :=
+  let _ := receiver
+  let _ := sender
+  let _ := amount
+  let _ := msg
+  0
+
 /-- Schedule one static child call followed by one static callback on the current contract, then
 forward the callback's eventual result. The child result is available to the callback only through
 `promiseResultsCount` / `promiseResultRead`; callback arguments remain an independent input frame. -/

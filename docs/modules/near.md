@@ -8,7 +8,8 @@ WASM 家族的第二条链：**NEAR Protocol**。经 `Core.Target.Registration` 
 `storage_write` / `storage_remove` / `storage_has_key` / `value_return` /
 `storage_usage` /
 `panic_utf8` / `promise_batch_create` / `promise_and` / `promise_batch_then` /
-`promise_batch_action_function_call` / `promise_batch_action_transfer` / `promise_return` /
+`promise_batch_action_function_call` / `promise_batch_action_function_call_weight` /
+`promise_batch_action_transfer` / `promise_return` /
 `promise_results_count` / `promise_result`，按程序条件裁剪），组装器是锁定的
 `wat2wasm 1.0.41`。外来叶子经
 [`Wasm.Family`](wasm.md) fail closed。
@@ -109,6 +110,13 @@ wsm-near-promise-transfer-001 再加入静态 receiver、lossless u128 amount �
 native transfer；两者都用 arena staging exact 16-byte LE amount，后者在 state 持久化后链接
 receipt result。wsm-near-promise-and-001 加入闭合的两个有序静态 child → `promise_and` →
 self callback 图；joint Promise 只作为 callback dependency，最终只返回 callback receipt。
+wsm-near-promise-ft-on-transfer-001 adds one specialized dynamic child-call boundary for the future
+`ft_transfer_call` path. It stages the receiver's exact active AccountId bytes, composes exact
+`{"sender_id":"...","amount":"...","msg":"..."}` bytes from a full nominal sender, two-limb
+amount, and `BoundedMessage64`, then appends `ft_on_transfer` through nearcore's weighted host ABI
+with zero deposit, gas 0, and weight 1. It returns only that child receipt after caller-state
+persistence. It is not a generic dynamic JSON call and adds no callback, resolver, or standard
+`ft_transfer_call` export.
 wsm-near-init/payable/entry-policy/uninitialized-001 再钉入口生命周期：初始化器只成功一次，
 private 先于 non-payable，参数解码后 ordinary state-consuming entry 必须见到 `STATE` marker，
 否则精确 panic `The contract is not initialized`。这是类似 near-sdk-rs `PanicOnDefault` 的
@@ -181,7 +189,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   reclamation、drained head reset 与 malformed metadata fail-closed；`iterable.sh` 验证当前
   near-sdk-rs Identity IterableMap/IterableSet 的 `P||v`/`P||m` exact bytes、index records、
   replacement/duplicate no-op、swap-remove、moved-index repair、reclamation 与 malformed rollback。
-  `promise.sh` 部署 caller/receiver 两个合约，验证 batch function-call 的 UInt64 argument、
+  `promise.sh` 部署 caller/receiver 以及 test-only observer，验证 batch function-call 的 UInt64 argument、
   `2^64+7` deposit 两个 limb、zero deposit、detached remote failure、caller panic 丢弃 receipt，
   余额不足的同步失败与 rollback，以及 returned call 的 exact 8-byte result、远端失败传播和
   caller/receiver receipt state 语义；还验证 detached `2^64+7` 与 returned `11` native transfer
@@ -192,7 +200,10 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   拒绝且不改状态，并验证 private 先于 non-payable；`@[pf_near_payable]` 允许不读取 deposit
   的 donation-only mutator。真实 self callback 继续验证 exact Borsh UInt64 decode、独立
   callback argument、failed/oversized fallback；还验证两个
-  有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路。
+  有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路；
+  weighted dynamic `ft_on_transfer` additionally checks the exact full sender, mixed/high u128
+  decimal, empty/control/Unicode/max-64 message JSON, zero attached deposit, inactive receiver
+  padding isolation, returned result, and asynchronous missing-account failure semantics.
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
   `bytes.sh` 还验证 arena-backed bounded dynamic `log_utf8` 对 empty/partial/full/multibyte
   active prefix 的精确 view logs，以及 malformed UTF-8 在日志效果前被拒绝；同一 gate 还

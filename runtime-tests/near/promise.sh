@@ -53,6 +53,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+wat2wasm="${PROOF_FORGE_WAT2WASM:-$HOME/.local/bin/wat2wasm}"
+if [[ ! -x "$wat2wasm" ]]; then
+  wat2wasm="$(command -v wat2wasm || true)"
+fi
+[[ -x "$wat2wasm" ]] || skip "wat2wasm 1.0.41 not found"
+[[ "$($wat2wasm --version 2>/dev/null)" == "1.0.41" ]] ||
+  die "wat2wasm 1.0.41 required for observer fixture"
+observer_wasm="$workdir/ft-on-transfer-observer.wasm"
+"$wat2wasm" runtime-tests/near/fixture/ft-on-transfer-observer.wat -o "$observer_wasm"
+[[ -f "$observer_wasm" ]] || die "observer fixture assembly produced no wasm"
+
 home="$workdir/home"
 mkdir -p "$home"
 echo "near-local-promise: near-sandbox init --home $home" >&2
@@ -113,6 +124,7 @@ done
 export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
+export PF_NEAR_OBSERVER_WASM="$observer_wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 echo "near-local-promise: RPC ready; running static calls + self-callback scenes" >&2
 "$python" runtime-tests/near/promise.py

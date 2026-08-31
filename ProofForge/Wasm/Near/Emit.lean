@@ -215,6 +215,7 @@ private partial def promiseLiteralsOfOps
       | .ext (.promiseFunctionCallReturned receiver method _ _ _ _ _) => #[receiver, method]
       | .ext (.promiseTransferDetached receiver _ _)
       | .ext (.promiseTransferReturned receiver _ _) => #[receiver]
+      | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => #["ft_on_transfer"]
       | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           _ _ _ _ _ _ _ _ _ _) => #[receiver, childMethod, callbackMethod]
       | .ext (.promiseFunctionCallAndThenReturned
@@ -237,6 +238,7 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
     | .ext (.promiseTransferReturned _ _ _) => true
     | .ext (.promiseTransferAccountReturned _ _ _) => true
+    | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
@@ -259,6 +261,19 @@ private partial def opsCallPromiseFunction (ops : Array (Op ValKind OpExt)) : Bo
 
 private def programCallsPromiseFunction (p : Program ValKind OpExt) : Bool :=
   opsCallPromiseFunction p.initializer.ops || p.entries.any (opsCallPromiseFunction ·.ops)
+
+private partial def opsCallWeightedPromiseFunction (ops : Array (Op ValKind OpExt)) : Bool :=
+  ops.any fun op =>
+    match op with
+    | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
+    | .ite _ _ _ thn els => opsCallWeightedPromiseFunction thn ||
+        opsCallWeightedPromiseFunction els
+    | .forBody _ body => opsCallWeightedPromiseFunction body
+    | _ => false
+
+private def programCallsWeightedPromiseFunction (p : Program ValKind OpExt) : Bool :=
+  opsCallWeightedPromiseFunction p.initializer.ops ||
+    p.entries.any (opsCallWeightedPromiseFunction ·.ops)
 
 private partial def opsTransferPromise (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun op =>
@@ -943,6 +958,10 @@ private def ftBurnPrefix : Array UInt8 :=
 private def ftAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
 private def ftMemoPrefix : Array UInt8 := "\",\"memo\":\"".toUTF8.data
 private def ftEventSuffix : Array UInt8 := "\"}]}".toUTF8.data
+private def ftOnTransferPrefix : Array UInt8 := "{\"sender_id\":\"".toUTF8.data
+private def ftOnTransferAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
+private def ftOnTransferMessagePrefix : Array UInt8 := "\",\"msg\":\"".toUTF8.data
+private def ftOnTransferSuffix : Array UInt8 := "\"}".toUTF8.data
 
 private structure FtEventBuffer where
   lines : Array String
@@ -1046,6 +1065,35 @@ private def appendFtMemo (buffer : FtEventBuffer) (capacity : Nat)
       indent (level + 4) ("(if (i64.gt_u " ++ value ++ " (i64.const 255)) (then unreachable))"),
       indent (level + 4) ("(local.set " ++ buffer.outputLengthLocal ++
         " (call $pf_json_escape_byte " ++ value ++ " (i32.wrap_i64 (local.get " ++
+        buffer.pointerLocal ++ ")) (local.get " ++ buffer.outputLengthLocal ++ ")))") ,
+      indent (level + 2) "))"
+    ]
+  return { buffer with lines, st := st' }
+
+/-- Append active bytes from the compiler-owned packed message carrier. Every byte is masked from
+its little-endian word before the shared JSON escaper; inactive padding is never observed. -/
+private def appendPackedMessage64 (buffer : FtEventBuffer) (message : Array (Val ValKind))
+    (level : Nat) : Except String FtEventBuffer := do
+  unless message.size == 9 do
+    throw "extract/unsupported: near bounded message frame geometry"
+  let sourceLength ← renderVal buffer.st message[0]!
+  let sourceLengthLocal := localOfTemp buffer.st.fresh
+  let st' := { buffer.st with fresh := buffer.st.fresh + 1 }
+  let mut lines := buffer.lines ++ #[
+    indent level ("(local.set " ++ sourceLengthLocal ++ " " ++ sourceLength ++ ")"),
+    indent level ("(if (i64.gt_u (local.get " ++ sourceLengthLocal ++
+      ") (i64.const 64)) (then unreachable))")
+  ]
+  for index in [0:64] do
+    let word ← renderVal buffer.st message[index / 8 + 1]!
+    let byte := "(i64.and (i64.shr_u " ++ word ++ " (i64.const " ++
+      toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        sourceLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(local.set " ++ buffer.outputLengthLocal ++
+        " (call $pf_json_escape_byte " ++ byte ++ " (i32.wrap_i64 (local.get " ++
         buffer.pointerLocal ++ ")) (local.get " ++ buffer.outputLengthLocal ++ ")))") ,
       indent (level + 2) "))"
     ]
@@ -1266,6 +1314,77 @@ private def stagePromiseAccountTransfer (st : EState) (receiver : Array (Val Val
       ") (local.get " ++ receiverPtrLocal ++ ")))"),
     indent level ("(call $pf_promise_batch_action_transfer (local.get " ++ promiseLocal ++
       ") (local.get " ++ amountPtrLocal ++ "))")
+  ]
+  return { lines, promiseLocal, st := st' }
+
+/-- Compose the exact near-contract-standards receiver payload and schedule one weighted dynamic
+`ft_on_transfer` call. The 844-byte payload allocation is the exact target worst case for two
+64-byte escaped frames, 39 decimal digits, and 37 structural bytes. -/
+private def stagePromiseFtOnTransfer (p : Program ValKind OpExt) (st : EState)
+    (receiver sender : Array (Val ValKind)) (amountLo amountHi : Val ValKind)
+    (message : Array (Val ValKind)) (level : Nat) : Except String StagedPromiseCall := do
+  unless receiver.size == 9 && sender.size == 9 && message.size == 9 do
+    throw "extract/unsupported: near ft_on_transfer frame geometry"
+  let (methodOff, methodLen) ← promiseLiteralOf p "ft_on_transfer"
+  let receiverLength ← renderVal st receiver[0]!
+  let receiverLengthLocal := localOfTemp st.fresh
+  let receiverPtrLocal := localOfTemp (st.fresh + 1)
+  let receiverSt := { st with fresh := st.fresh + 2 }
+  let mut receiverLines := #[
+    indent level ("(local.set " ++ receiverLengthLocal ++ " " ++ receiverLength ++ ")"),
+    indent level ("(if (i64.lt_u (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 2)) (then unreachable))"),
+    indent level ("(if (i64.gt_u (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 64)) (then unreachable))"),
+    indent level ("(local.set " ++ receiverPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 1))))")
+  ]
+  for index in [0:64] do
+    let word ← renderVal st receiver[index / 8 + 1]!
+    let byte := "(i64.and (i64.shr_u " ++ word ++ " (i64.const " ++
+      toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+    receiverLines := receiverLines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        receiverLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++
+        receiverPtrLocal ++ ")) (i32.const " ++ toString index ++ ")) " ++ byte ++ ")"),
+      indent (level + 2) "))"
+    ]
+  let senderLength ← renderVal receiverSt sender[0]!
+  receiverLines := receiverLines ++ #[
+    indent level ("(if (i64.lt_u " ++ senderLength ++ " (i64.const 2)) (then unreachable))"),
+    indent level ("(if (i64.gt_u " ++ senderLength ++ " (i64.const 64)) (then unreachable))")
+  ]
+  let buffer := startFtEvent receiverSt ftOnTransferPrefix
+    (ftOnTransferPrefix.size + 64 * 6 + ftOnTransferAmountPrefix.size + 39 +
+      ftOnTransferMessagePrefix.size + 64 * 6 + ftOnTransferSuffix.size) level
+  let buffer ← appendFtAccount buffer sender level
+  let buffer := appendFtLiteral buffer ftOnTransferAmountPrefix level
+  let buffer ← appendFtAmount buffer amountLo amountHi level
+  let buffer := appendFtLiteral buffer ftOnTransferMessagePrefix level
+  let buffer ← appendPackedMessage64 buffer message level
+  let payload := finishFtEvent (appendFtLiteral buffer ftOnTransferSuffix level)
+  let depositPtrLocal := localOfTemp payload.st.fresh
+  let promiseLocal := localOfTemp (payload.st.fresh + 1)
+  let st' := { payload.st with fresh := payload.st.fresh + 2 }
+  let lines := receiverLines ++ payload.lines ++ #[
+    indent level ("(if (i32.eqz (call $pf_utf8_valid (i32.wrap_i64 " ++ payload.pointer ++
+      ") (i32.wrap_i64 " ++ payload.length ++ "))) (then unreachable))"),
+    indent level ("(local.set " ++ depositPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i64.const 0))"),
+    indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i32.const 8)) (i64.const 0))"),
+    indent level ("(local.set " ++ promiseLocal ++
+      " (call $pf_promise_batch_create (local.get " ++ receiverLengthLocal ++
+      ") (local.get " ++ receiverPtrLocal ++ ")))"),
+    indent level ("(call $pf_promise_batch_action_function_call_weight (local.get " ++
+      promiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
+      toString methodOff ++ ") " ++ payload.length ++ " " ++ payload.pointer ++
+      " (local.get " ++ depositPtrLocal ++ ") (i64.const 0) (i64.const 1))")
   ]
   return { lines, promiseLocal, st := st' }
 
@@ -1666,6 +1785,17 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := staged.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFtOnTransferReturned receiver sender amountLo amountHi message) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let staged ← stagePromiseFtOnTransfer p st receiver sender amountLo amountHi message level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { staged.st with pendingPromiseReturn := some staged.promiseLocal }
+        return {
+          lines := staged.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
         childArgsCapacity callbackArgsCapacity childArguments callbackArguments
         childDepositLo childDepositHi childGas
@@ -1842,6 +1972,9 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       | .promiseTransferAccountDetached receiver amountLo amountHi
       | .promiseTransferAccountReturned receiver amountLo amountHi =>
           receiver.any valHas || valHas amountLo || valHas amountHi
+      | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          receiver.any valHas || sender.any valHas || valHas amountLo || valHas amountHi ||
+            message.any valHas
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments.any valHas || callbackArguments.any valHas ||
@@ -2089,6 +2222,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.nep141FtMintMemo _ _ _ _ _) => true
   | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => true
   | .ext (.nep141FtBurnMemo _ _ _ _ _) => true
+  | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
@@ -3685,12 +3819,16 @@ def emit (p : IR.Program) : Except String String := do
     lines := lines.push
       "  (import \"env\" \"log_utf8\" (func $pf_log_utf8 (param i64 i64)))"
   -- Dynamic AccountId transfers have no static Promise literal but still create a batch.
-  if !(promiseLiterals p).isEmpty || programCallsPromiseFunction p || programTransfersPromise p then
+  if !(promiseLiterals p).isEmpty || programCallsPromiseFunction p ||
+      programCallsWeightedPromiseFunction p || programTransfersPromise p then
     lines := lines.push
       "  (import \"env\" \"promise_batch_create\" (func $pf_promise_batch_create (param i64 i64) (result i64)))"
   if programCallsPromiseFunction p then
     lines := lines.push
       "  (import \"env\" \"promise_batch_action_function_call\" (func $pf_promise_batch_action_function_call (param i64 i64 i64 i64 i64 i64 i64)))"
+  if programCallsWeightedPromiseFunction p then
+    lines := lines.push
+      "  (import \"env\" \"promise_batch_action_function_call_weight\" (func $pf_promise_batch_action_function_call_weight (param i64 i64 i64 i64 i64 i64 i64 i64)))"
   if programTransfersPromise p then
     lines := lines.push
       "  (import \"env\" \"promise_batch_action_transfer\" (func $pf_promise_batch_action_transfer (param i64 i64)))"
@@ -3737,14 +3875,14 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines ++ lifecycleData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
-  if programHasFtEvent p then
+  if programHasFtEvent p || programCallsWeightedPromiseFunction p then
     lines := lines ++ ftEventHelpers
   else if programUsesJsonU128Output p then
     lines := lines ++ u128DecimalHelper
   if #[ValKind.nearTokenMulU64Ok, .nearTokenMulU64W0, .nearTokenMulU64W1].any
       (programUses · p) then
     lines := lines ++ mul64Helpers
-  if programUsesUtf8Codec p then
+  if programUsesUtf8Codec p || programCallsWeightedPromiseFunction p then
     lines := lines ++ utf8Validator
   if programUsesJsonAccountInput p then
     lines := lines ++ jsonAccountInputHelpers

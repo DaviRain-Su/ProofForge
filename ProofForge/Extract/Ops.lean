@@ -248,6 +248,10 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     (receiver : Array Val) (amountLo amountHi : Val) : Op :=
   .ext (.near (.promiseTransferAccountReturned receiver amountLo amountHi))
 
+@[match_pattern] def Op.nearPromiseFtOnTransferReturned
+    (receiver sender : Array Val) (amountLo amountHi : Val) (message : Array Val) : Op :=
+  .ext (.near (.promiseFtOnTransferReturned receiver sender amountLo amountHi message))
+
 @[match_pattern] def Op.nearPromiseFunctionCallThenReturned
     (receiver childMethod callbackMethod : String)
     (childArgsCapacity callbackArgsCapacity : Nat)
@@ -611,6 +615,7 @@ def hasNearEffect (ops : Array Op) : Bool :=
     | .ext (.near (.nep141FtBurnMemo _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
+    | .ext (.near (.promiseFtOnTransferReturned _ _ _ _ _))
     | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))
     | .ext (.near (.transientBuffer64Begin _))
     | .ext (.near (.transientBuffer64Set _ _ _))

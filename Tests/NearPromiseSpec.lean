@@ -37,6 +37,8 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
           #[s!"transfer.account.detached.{receiver.size}"]
       | .ext (.near (.promiseTransferAccountReturned receiver _ _)) =>
           #[s!"transfer.account.returned.{receiver.size}"]
+      | .ext (.near (.promiseFtOnTransferReturned receiver sender _ _ message)) =>
+          #[s!"ft-on-transfer.returned.{receiver.size}.{sender.size}.{message.size}"]
       | .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childCapacity callbackCapacity childArguments callbackArguments _ _ _ _ _ _)) =>
           #[s!"then.{receiver}.{childMethod}.{callbackMethod}." ++
@@ -157,6 +159,36 @@ def transferLong (_state : State) (value : UInt64) : Except Error (State × UInt
 
 end InvalidAccountLength
 
+namespace InvalidFtAccountLength
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | rejected
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (value : UInt64) : State := { value }
+
+@[pf_entry]
+def callShort (state : State) (msg : Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : Runtime.AccountId := ⟨1, 0x61, 0, 0, 0, 0, 0, 0, 0⟩
+  let _ := Sdk.Promises.ftOnTransferReturned receiver receiver
+    ({ w0 := 1, w1 := 0 } : Runtime.NearToken) msg
+  .ok (state, state.value)
+
+@[pf_entry]
+def callLong (state : State) (msg : Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : Runtime.AccountId :=
+    ⟨65, 0x6161616161616161, 0, 0, 0, 0, 0, 0, 0⟩
+  let _ := Sdk.Promises.ftOnTransferReturned receiver receiver
+    ({ w0 := 1, w1 := 0 } : Runtime.NearToken) msg
+  .ok (state, state.value)
+
+end InvalidFtAccountLength
+
 elab "#pf_near_promise_check" : command => do
   let env ← getEnv
   match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.InvalidAccountLength with
@@ -164,6 +196,11 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "unsupported" do
         throwError s!"wrong dynamic AccountId length rejection: {reason}"
   | .ok _ => throwError "dynamic Promise transfer accepted AccountId length 1/65"
+  match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.InvalidFtAccountLength with
+  | .error reason =>
+      unless reason.contains "unsupported" do
+        throwError s!"wrong weighted dynamic AccountId length rejection: {reason}"
+  | .ok _ => throwError "weighted dynamic Promise call accepted AccountId length 1/65"
   let privateViewSource ←
     match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.PrivateView with
     | .ok program => pure program
@@ -231,7 +268,8 @@ elab "#pf_near_promise_check" : command => do
   let transferReturned := "transfer.returned.receiver.test.near"
   let transferAccountDetached := "transfer.account.detached.9"
   let transferAccountReturned := "transfer.account.returned.9"
-  unless steps.size == 22 && (steps.filter (· == detachedRecord)).size == 4 &&
+  let ftOnTransferReturned := "ft-on-transfer.returned.9.9.9"
+  unless steps.size == 24 && (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
       (steps.filter (· == returnedRecord)).size == 1 &&
       (steps.filter (· == returnedMissing)).size == 1 &&
@@ -244,7 +282,8 @@ elab "#pf_near_promise_check" : command => do
       (steps.filter (· == transferDetached)).size == 2 &&
       (steps.filter (· == transferReturned)).size == 1 &&
       (steps.filter (· == transferAccountDetached)).size == 4 &&
-      (steps.filter (· == transferAccountReturned)).size == 2 do
+      (steps.filter (· == transferAccountReturned)).size == 2 &&
+      (steps.filter (· == ftOnTransferReturned)).size == 2 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
@@ -422,6 +461,62 @@ elab "#pf_near_promise_check" : command => do
       "(call $pf_promise_return (local.get $pf_r3))" ] do
     unless transferMaxWat.contains anchor do
       throwError s!"max dynamic transfer WAT missing {anchor}\n{transferMaxWat}"
+  let inspectFtOnTransfer ← match program.entries.find? (·.ixName == "inspectFtOnTransfer") with
+    | some method => pure method
+    | none => throwError "missing inspectFtOnTransfer entry"
+  unless inspectFtOnTransfer.inputPolicy ==
+      "near-json-message64-object-canonical-v1(max-wire=426,ws=32,decoded-bytes=0..64,unknown=reject)" do
+    throwError "weighted FT child call lost the compiler-owned Message64 input policy"
+  let ftOnTransferWat ← match Emit.emit { program with entries := #[inspectFtOnTransfer] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(import \"env\" \"promise_batch_action_function_call_weight\" " ++
+        "(func $pf_promise_batch_action_function_call_weight " ++
+        "(param i64 i64 i64 i64 i64 i64 i64 i64)))",
+      "(data (i32.const 8192) \"\\66\\74\\5f\\6f\\6e\\5f\\74\\72\\61\\6e\\73\\66\\65\\72\")",
+      "(call $pf_predecessor_account_id (i64.const 0))",
+      "(local.set $pf_r0 (i64.const 18))",
+      "(if (i64.lt_u (i64.const 18) (local.get $pf_r0))",
+      "(i64.const 11936128518282637921)",
+      "(call $pf_arena_alloc (i64.const 844) (i64.const 1))",
+      "(i64.and (i64.shr_u (local.get $pf_p8) (i64.const 56)) (i64.const 255))",
+      "(call $pf_u128_decimal",
+      "(call $pf_utf8_valid",
+      "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
+      "(i64.store (i32.wrap_i64 (local.get $pf_r8)) (i64.const 0))",
+      "(i64.store (i32.add (i32.wrap_i64 (local.get $pf_r8)) (i32.const 8)) (i64.const 0))",
+      "(call $pf_promise_batch_create (local.get $pf_r0) (local.get $pf_r1))",
+      "(call $pf_promise_batch_action_function_call_weight (local.get $pf_r9) " ++
+        "(i64.const 14) (i64.const 8192) (local.get $pf_r3) (local.get $pf_r2) " ++
+        "(local.get $pf_r8) (i64.const 0) (i64.const 1))" ] do
+    unless ftOnTransferWat.contains anchor do
+      throwError s!"weighted FT child WAT missing {anchor}\n{ftOnTransferWat}"
+  let ftOnTransferBody ← match ftOnTransferWat.splitOn
+      "(func (export \"inspectFtOnTransfer\")" with
+    | [_preamble, body] => pure body
+    | _ => throwError "weighted FT child WAT must contain exactly one exported body"
+  if ftOnTransferBody.contains "(call $pf_promise_batch_action_function_call " ||
+      ftOnTransferBody.contains "(call $pf_value_return" then
+    throwError "weighted FT child retained an unweighted action or overwrote promise_return"
+  unless (ftOnTransferBody.splitOn "(call $pf_promise_batch_create").length == 2 &&
+      (ftOnTransferBody.splitOn
+        "(call $pf_promise_batch_action_function_call_weight").length == 2 do
+    throwError "weighted FT child must create one batch and append one weighted action"
+  match ftOnTransferBody.splitOn "(call $pf_promise_batch_create" with
+  | [beforeCreate, afterCreate] =>
+      unless beforeCreate.contains "(i64.const 125)" &&
+          beforeCreate.contains "(call $pf_utf8_valid" do
+        throwError "weighted FT payload was not fully composed and validated before Promise creation"
+      match afterCreate.splitOn "(call $pf_promise_batch_action_function_call_weight" with
+      | [_beforeAction, afterAction] =>
+          match afterAction.splitOn "(call $pf_promise_return" with
+          | [beforeReturn, _afterReturn] =>
+              unless beforeReturn.contains "(call $pf_storage_write" do
+                throwError "weighted FT child was returned before caller-state persistence"
+          | _ => throwError "weighted FT child must call promise_return exactly once"
+      | _ => throwError "weighted FT action must follow Promise creation exactly once"
+  | _ => throwError "weighted FT child must call promise_batch_create exactly once"
   let sendThenSuccess ← match program.entries.find? (·.ixName == "sendThenSuccess") with
     | some method => pure method
     | none => throwError "missing sendThenSuccess entry"
@@ -656,13 +751,13 @@ elab "#pf_near_promise_check" : command => do
     "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
     "(i64.store (i32.wrap_i64",
     "(i32.const 8))",
-    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8192))",
+    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8206))",
     "(call $pf_promise_batch_action_function_call",
     "(call $pf_promise_batch_then",
     "(call $pf_promise_return",
-    "(i64.const 6) (i64.const 8210)",
-    "(i64.const 7) (i64.const 8216)",
-    "(i64.const 11) (i64.const 8241)",
+    "(i64.const 6) (i64.const 8224)",
+    "(i64.const 7) (i64.const 8230)",
+    "(i64.const 11) (i64.const 8255)",
     "(i64.const 20000000000000)"
   ]
   for anchor in anchors do
@@ -703,6 +798,13 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "view cannot create a promise" do
         throwError s!"wrong dynamic-transfer view rejection: {reason}"
   | .ok _ => throwError "dynamic AccountId transfer was accepted in a view"
+  let viewFtOnTransfer := { source with methods := source.methods.map fun method =>
+    if method.ixName == "inspectFtOnTransfer" then { method with kind := .get } else method }
+  match IR.fromExtracted viewFtOnTransfer >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "view cannot create a promise" do
+        throwError s!"wrong weighted FT child view rejection: {reason}"
+  | .ok _ => throwError "weighted FT child call was accepted in a view"
   let viewThen := { source with methods := source.methods.map fun method =>
     if method.ixName == "sendThenSuccess" then { method with kind := .get } else method }
   match IR.fromExtracted viewThen >>= Emit.emit with

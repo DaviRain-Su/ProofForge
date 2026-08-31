@@ -95,6 +95,8 @@ inductive OpExt (V : Type) where
   | promiseTransferReturned (receiver : String) (amountLo amountHi : V)
   | promiseTransferAccountDetached (receiver : Array V) (amountLo amountHi : V)
   | promiseTransferAccountReturned (receiver : Array V) (amountLo amountHi : V)
+  | promiseFtOnTransferReturned (receiver sender : Array V) (amountLo amountHi : V)
+      (message : Array V)
   | promiseFunctionCallThenReturned (receiver childMethod callbackMethod : String)
       (childArgsCapacity callbackArgsCapacity : Nat)
       (childArguments callbackArguments : Array V)
@@ -131,6 +133,9 @@ private def storageKeyFrameWellFormed (capacity : Nat) (values : Array Val) : Bo
     values.all (·.wellFormed ValKind.arity)
 
 private def accountIdFrameWellFormed (values : Array Val) : Bool :=
+  values.size == 9 && values.all (·.wellFormed ValKind.arity)
+
+private def packedBytes64FrameWellFormed (values : Array Val) : Bool :=
   values.size == 9 && values.all (·.wellFormed ValKind.arity)
 
 def OpExt.wellFormed : OpExt Val → Bool
@@ -178,6 +183,10 @@ def OpExt.wellFormed : OpExt Val → Bool
   | .promiseTransferAccountDetached receiver amountLo amountHi
   | .promiseTransferAccountReturned receiver amountLo amountHi =>
       accountIdFrameWellFormed receiver && amountLo.wellFormed ValKind.arity &&
+        amountHi.wellFormed ValKind.arity
+  | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      accountIdFrameWellFormed receiver && accountIdFrameWellFormed sender &&
+        packedBytes64FrameWellFormed message && amountLo.wellFormed ValKind.arity &&
         amountHi.wellFormed ValKind.arity
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
@@ -261,6 +270,9 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseTransferAccountReturned receiver amountLo amountHi =>
       .promiseTransferAccountReturned (receiver.map mapValue)
         (mapValue amountLo) (mapValue amountHi)
+  | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      .promiseFtOnTransferReturned (receiver.map mapValue) (sender.map mapValue)
+        (mapValue amountLo) (mapValue amountHi) (message.map mapValue)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -319,6 +331,8 @@ private def cfgPayloadValues : OpExt Val → Array Val
   | .promiseTransferAccountDetached receiver amountLo amountHi
   | .promiseTransferAccountReturned receiver amountLo amountHi =>
       receiver ++ #[amountLo, amountHi]
+  | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      receiver ++ sender ++ #[amountLo, amountHi] ++ message
   | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
       childArguments ++ callbackArguments ++

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from near_rpc import NearClient, NearRpcError
 
 
 RECEIVER = "receiver.test.near"
+FT_OBSERVER = "observer.test.near"
 
 
 def _require(name: str) -> str:
@@ -32,6 +34,7 @@ def main() -> None:
     rpc = _require("PF_NEAR_RPC")
     home = Path(_require("PF_NEAR_HOME"))
     wasm = Path(_require("PF_NEAR_WASM"))
+    observer_wasm = Path(_require("PF_NEAR_OBSERVER_WASM"))
     client = NearClient(rpc, home)
 
     print("=== suite: NearPromise (static calls + self callback) ===")
@@ -46,6 +49,8 @@ def main() -> None:
         NearClient.encode_u64_le(0),
         signer=RECEIVER,
     )
+    client.create_subaccount_with_key(FT_OBSERVER, 10**27)
+    client.deploy_to(FT_OBSERVER, observer_wasm)
     if client.view_u64("get") != 0 or client.view_u64_on(RECEIVER, "get") != 0:
         raise AssertionError("caller and receiver must begin with marker zero")
 
@@ -146,6 +151,60 @@ def main() -> None:
     if client.view_u64("get") != 505:
         raise AssertionError("dynamic predecessor returned transfer did not commit caller state")
     print("near-promise: complete dynamic predecessor receiver produced a returned transfer receipt")
+
+    amount_lo = 0xFEDCBA9876543210
+    amount_hi = 0x123456789ABCDEF0
+    _call_u64(client, "setFtAmountLo", amount_lo)
+    _call_u64(client, "setFtAmountHi", amount_hi)
+
+    def inspect_ft_message(message: str) -> None:
+        parent_input = json.dumps(
+            {"msg": message}, ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8")
+        outcome = client.call("inspectFtOnTransfer", parent_input)
+        observed = NearClient.success_value_bytes(outcome)
+        expected_payload = json.dumps(
+            {
+                "sender_id": client.account_id,
+                "amount": str((amount_hi << 64) | amount_lo),
+                "msg": message,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if observed[:16] != bytes(16):
+            raise AssertionError(
+                f"weighted ft_on_transfer child observed nonzero attached deposit {observed[:16]!r}"
+            )
+        if observed[16:] != expected_payload:
+            raise AssertionError(
+                "weighted ft_on_transfer payload mismatch: "
+                f"expected {expected_payload!r}, got {observed[16:]!r}"
+            )
+        if client.view_u64("get") != len(message.encode("utf-8")):
+            raise AssertionError("returned weighted child did not persist the decoded message length")
+
+    inspect_ft_message("")
+    inspect_ft_message("nul:\x00 line:\n quote:\" slash:\\ emoji:😀")
+    inspect_ft_message("a" * 64)
+    print(
+        "near-promise: weighted dynamic child received exact sender/u128/message JSON, "
+        "zero deposit, and active receiver/message bytes"
+    )
+
+    missing_child = client.call(
+        "inspectFtOnTransferMissing",
+        b'{"msg":"async"}',
+        expect_success=False,
+    )
+    missing_text = repr(missing_child.get("status", {})) + repr(
+        missing_child.get("receipts_outcome", [])
+    )
+    if "missing.test.near" not in missing_text:
+        raise AssertionError(f"missing weighted child failure was not observable: {missing_text}")
+    if client.view_u64("get") != 5:
+        raise AssertionError("asynchronous missing-account child rolled back caller state")
+    print("near-promise: missing dynamic receiver failed asynchronously after caller commit")
 
     _call_u64(client, "send", 77)
     if client.view_u64("get") != 77:

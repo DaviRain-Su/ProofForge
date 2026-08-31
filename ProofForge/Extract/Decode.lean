@@ -5716,6 +5716,18 @@ private def nearAccountIdFrame? (env : Environment) (e : Expr) : Option (Array O
   let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w7) e)
   return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
 
+private def nearBoundedMessage64Frame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.length) e)
+  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w0) e)
+  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w1) e)
+  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w2) e)
+  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w3) e)
+  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w4) e)
+  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w5) e)
+  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w6) e)
+  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w7) e)
+  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
+
 private partial def staticAccountTokenTag? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
   staticNatVal? env e <|>
     match fuel, strip e with
@@ -5784,6 +5796,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurnMemo ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAndThenReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
@@ -5807,6 +5820,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callAndThenReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
@@ -6004,6 +6018,36 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 .nearPromiseTransferAccountDetached receiver amountLo amountHi)
             else none
         | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferReturned &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount),
+            nearBoundedMessage64Frame? env args[args.size - 1]! with
+        | some receiver, some sender, some amountLo, some amountHi, some message =>
+            if accountTokenLengthAdmissible receiver && accountTokenLengthAdmissible sender then
+              some (.nearPromiseFtOnTransferReturned receiver sender amountLo amountHi
+                message)
+            else none
+        | _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferReturned &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount),
+            nearBoundedMessage64Frame? env args[args.size - 1]! with
+        | some receiver, some sender, some amountLo, some amountHi, some message =>
+            if accountTokenLengthAdmissible receiver && accountTokenLengthAdmissible sender then
+              some (.nearPromiseFtOnTransferReturned receiver sender amountLo amountHi
+                message)
+            else none
+        | _, _, _, _, _ => none
       else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned &&
           e.getAppArgs.size ≥ 11 then
         let args := e.getAppArgs

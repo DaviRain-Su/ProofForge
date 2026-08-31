@@ -200,6 +200,10 @@ private def projectOpExt
       | .promiseTransferAccountReturned receiver amountLo amountHi =>
           return .promiseTransferAccountReturned (← receiver.mapM _projectVal)
             (← _projectVal amountLo) (← _projectVal amountHi)
+      | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          return .promiseFtOnTransferReturned (← receiver.mapM _projectVal)
+            (← sender.mapM _projectVal) (← _projectVal amountLo) (← _projectVal amountHi)
+            (← message.mapM _projectVal)
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -362,6 +366,10 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
       s!"npromise.transfer.account.returned({canonValues receiver};" ++
         s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
         s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      s!"npromise.ft_on_transfer.returned({canonValues receiver};{canonValues sender};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo},{Wasm.IR.valCanon extValCanon amountHi};" ++
+        s!"{canonValues message})"
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -475,6 +483,10 @@ private def rewritePayload
   | .promiseTransferAccountReturned receiver amountLo amountHi =>
       return .promiseTransferAccountReturned (← receiver.mapM rewriteValue)
         (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      return .promiseFtOnTransferReturned (← receiver.mapM rewriteValue)
+        (← sender.mapM rewriteValue) (← rewriteValue amountLo) (← rewriteValue amountHi)
+        (← message.mapM rewriteValue)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>

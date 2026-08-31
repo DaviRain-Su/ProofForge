@@ -38,6 +38,43 @@ def receivedDepositLo (state : State) : UInt64 :=
 def receivedDepositHi (state : State) : UInt64 :=
   state.depositHi
 
+/-- Fixture-only setters let the sandbox exercise arbitrary two-limb FT amounts without baking
+one amount into the specialized Promise operation. -/
+@[pf_entry]
+def setFtAmountLo (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  .ok ({ state with depositLo := value }, value)
+
+@[pf_entry]
+def setFtAmountHi (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  .ok ({ state with depositHi := value }, value)
+
+/-- Return one weighted `ft_on_transfer` receipt to the padded dynamic receiver. The exact child
+JSON is target-owned; this nonstandard fixture is not an `ft_transfer_call` implementation. -/
+@[pf_entry]
+def inspectFtOnTransfer (state : State) (msg : BoundedMessage64) : Except Error (State × UInt64) :=
+  -- Inactive carrier padding is intentionally nonzero. Only the first 18 bytes encode
+  -- `observer.test.near` and may reach `promise_batch_create`.
+  let target : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨18, 0x726576726573626f, 0x656e2e747365742e, 0xa5a5a5a5a5a57261,
+      0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555⟩
+  let _ := Promises.ftOnTransferReturned target Context.caller
+    ({ w0 := state.depositLo, w1 := state.depositHi } : NearToken)
+    msg
+  .ok ({ state with marker := msg.length }, msg.length)
+
+/-- Return a child call to an absent dynamic account. Promise creation is synchronous and succeeds;
+the returned child receipt fails asynchronously after this caller receipt has persisted state. -/
+@[pf_entry]
+def inspectFtOnTransferMissing
+    (state : State) (msg : BoundedMessage64) : Except Error (State × UInt64) :=
+  let target : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨17, 0x2e676e697373696d, 0x61656e2e74736574, 0x72, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferReturned target Context.caller
+    ({ w0 := state.depositLo, w1 := state.depositHi } : NearToken)
+    msg
+  .ok ({ state with marker := msg.length }, msg.length)
+
 /-- Receiver entry used by the sandbox to pin exact UInt64 argument and u128 deposit staging. -/
 @[pf_entry]
 def record (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
