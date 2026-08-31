@@ -750,6 +750,44 @@ theorem mQueuePop_empty_noop (mem : AccountWords) (q : BoundedQueue)
   · rw [if_pos (Or.inl hc)]
   · rw [if_pos (Or.inr hr)]
 
+
+/-- wf 队列容量数值事实：toNat 保真 + 容量 ≥ 1。 -/
+theorem mQueueCapacityFacts (q : BoundedQueue) (hwf : q.wellFormed = true) :
+    (BoundedQueue.capacity q).toNat = q.slots.region.capacity ∧
+      (1 : Nat) ≤ q.slots.region.capacity := by
+  have hcap3 : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hcap1 : (0 : Nat) < q.slots.region.capacity := by
+    have hh1 := (queue_wf_parts q hwf).1
+    unfold Field.mutableOneBasedWord Field.wellFormed Region.wellFormed at hh1
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hh1
+    exact hh1.1.1.1.1.1.1.1.1.1.1.2
+  refine ⟨?_, hcap1⟩
+  show (UInt64.ofNat q.slots.region.capacity).toNat = _
+  have h2 : (UInt64.ofNat q.slots.region.capacity).toNat
+      = q.slots.region.capacity % 2 ^ 64 := UInt64.toNat_ofNat
+  rw [h2, show (2:Nat)^64 = 4294967296*4294967296 from by decide]
+  exact Nat.mod_eq_of_lt (by omega)
+
+/-- **空推链接**：head = 0 且 size = 0 时，`mQueuePush` 整体恰为
+`mQueuePushAt` 的三写组合（tail = 1、head 写 1）。 -/
+theorem mQueuePush_empty_links (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : mReadField mem q.count 0 = 0)
+    (hhead : mReadField mem q.head 0 = 0) :
+    mQueuePush mem q value =
+      (mQueuePushAt mem q 1 value 1 0, 1) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hguard : ¬ (BoundedQueue.capacity q ≤ (0:UInt64)) := by
+    intro hh
+    have h1 := (UInt64.le_iff_toNat_le).mp hh
+    rw [hcapnat] at h1
+    have hz : UInt64.toNat 0 = 0 := rfl
+    omega
+  unfold mQueuePush
+  simp only [hsize, hhead, if_neg hguard]
+  simp
+
 end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
