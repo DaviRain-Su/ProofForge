@@ -788,6 +788,40 @@ theorem mQueuePush_empty_links (mem : AccountWords) (q : BoundedQueue) (value : 
   simp only [hsize, hhead, if_neg hguard]
   simp
 
+
+/-- **空推读回**：push（head = 0, size = 0）的三写完整读回 ——
+count 读 1、head 读 1、payload 槽 1 读回 value。 -/
+theorem mQueuePush_empty_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : mReadField mem q.count 0 = 0)
+    (hhead : mReadField mem q.head 0 = 0) :
+    mReadField (mQueuePush mem q value).1 q.count 0 = 1 ∧
+    mReadField (mQueuePush mem q value).1 q.head 0 = 1 ∧
+    mReadField (mQueuePush mem q value).1 q.slots 1 = value := by
+  rw [mQueuePush_empty_links mem q value hwf hsize hhead]
+  have hcap3 : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hs0 : (mReadField mem q.count 0).toNat = 0 := by
+    rw [hsize]
+    rfl
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  refine ⟨?_, ?_, ?_⟩
+  have h1n : UInt64.toNat 1 = 1 := rfl
+  · -- count 读 1（size + 1 且 size = 0）
+    have h2 := mQueuePushAt_twoWrites mem q 1 value 1 hwf
+      (by decide) (by omega)
+    rw [hsize] at h2
+    show mReadField (mQueuePushAt mem q 1 value 1 0) q.count 0 = (1:UInt64)
+    rw [h2.1]
+    rfl
+  · -- head 读 1（写 same）
+    exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
+  · -- slots 1 读回 value
+    have h2 := mQueuePushAt_twoWrites mem q 1 value 1 hwf
+      (by decide) (by exact hcap1)
+    rw [hsize] at h2
+    exact h2.2
+
 end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
