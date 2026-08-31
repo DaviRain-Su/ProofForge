@@ -76,6 +76,23 @@ def inspectFtOnTransferMissing
     msg
   .ok ({ state with marker := msg.length }, msg.length)
 
+/-- Nonstandard fixture for the fixed receiver→resolver DAG; no FT ledger mutation is implied. -/
+@[pf_entry]
+def inspectFtOnTransferThenResolve
+    (state : State) (msg : BoundedMessage64) : Except Error (State × UInt64) :=
+  let target : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨18, 0x726576726573626f, 0x656e2e747365742e, 0x7261, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferThenResolveReturned target Context.caller
+    ({ w0 := state.depositLo, w1 := state.depositHi } : NearToken) msg
+  .ok ({ state with marker := msg.length }, msg.length)
+
+/-- Private diagnostic callback matching the specialized operation's fixed method and JSON schema. -/
+@[pf_entry, pf_near_private]
+def ft_resolve_transfer (state : State) (args : FtResolveTransferArgs) :
+    Except Error (State × UInt128) :=
+  .ok ({ state with marker := args.receiverId.length },
+    ({ w0 := state.depositLo, w1 := state.depositHi } : UInt128))
+
 /-- Receiver entry used by the sandbox to pin exact UInt64 argument and u128 deposit staging. -/
 @[pf_entry]
 def record (_state : State) (value : UInt64) : Except Error (State × UInt64) :=

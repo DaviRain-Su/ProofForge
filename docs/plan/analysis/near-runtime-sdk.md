@@ -333,12 +333,18 @@ asynchronous; dynamic handles and multi-action builders are absent.
     **NEAR-PROMISE-JSON-U128-RESULT (wsm-near-promise-json-u128-result-001 done):** a dedicated
     four-leaf status/valid/low/high frame decodes only exact canonical quoted decimal u128 bytes
     from an immediately active capacity-41 descriptor. Invalid status, oversize, malformed bytes,
-    noncanonical spellings, and overflow produce invalid zero limbs without trapping. The future
+    noncanonical spellings, and overflow produce invalid zero limbs without trapping. The private
     resolver owns `results_count == 1` and index zero. This is narrower than near-sdk-rs serde
     `U128`, which also admits plus, leading zeros, escapes, and bounded surrounding whitespace.
     **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** a separate exact
     sender/receiver/amount object parser now provides the 20-leaf callback argument prerequisite;
     Promise-result validation and balance reconciliation remain intentionally uncomposed.
+    **NEAR-PROMISE-FT-RESOLVE-CHAIN (wsm-near-promise-ft-resolve-chain-001 done):** the specialized
+    dynamic weighted child now composes a fixed private resolver callback with independent exact
+    JSON arenas, two zero deposits, child gas/weight 0/1, callback gas/weight 5 Tgas/0, and returns
+    only the callback after state persistence. Genuine partial/full/malformed/failed child receipts
+    reconcile the integrated BAL2 sender-present refund and sender-missing burn paths. No initial
+    transfer or standard `ft_transfer_call` export is included.
 16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and

@@ -136,9 +136,15 @@ wsm-near-promise-json-u128-result-001 adds a compiler-owned callback result fram
 nearcore status and decodes only exact canonical quoted decimals (`"0"` or a nonzero decimal with
 no leading zero) into valid plus two lossless limbs. Failed, oversized, malformed, noncanonical,
 and overflowing results return invalid with zero limbs rather than trapping or exposing stale
-register bytes. The future resolver owns the exact one-result/index-zero guard. This subset is
-deliberately narrower than near-sdk-rs serde `U128`, so it does not yet add a resolver or standard
-`ft_transfer_call` export.
+register bytes. The private resolver owns the exact one-result/index-zero guard. This subset is
+deliberately narrower than near-sdk-rs serde `U128`; the composed chain therefore remains narrower
+than serde and still does not add a standard `ft_transfer_call` export.
+wsm-near-promise-ft-resolve-chain-001 composes the dynamic weighted child with the fixed private
+resolver: zero-deposit/gas weight-one `ft_on_transfer`, then a full-current-AccountId callback with
+zero deposit, 5 Tgas, and weight zero. Independent checked arenas carry exact child and resolver
+JSON, and only the callback receipt is returned after caller-state persistence. Real BAL2 sandbox
+scenes cover partial/full/malformed/failed results and present/missing sender reconciliation. The
+operation still performs no initial transfer and does not export `ft_transfer_call`.
 wsm-near-init/payable/entry-policy/uninitialized-001 再钉入口生命周期：初始化器只成功一次，
 private 先于 non-payable，参数解码后 ordinary state-consuming entry 必须见到 `STATE` marker，
 否则精确 panic `The contract is not initialized`。这是类似 near-sdk-rs `PanicOnDefault` 的

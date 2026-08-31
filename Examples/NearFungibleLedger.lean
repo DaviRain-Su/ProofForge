@@ -252,6 +252,68 @@ a genuine Promise result to the private callback; they are not an `ft_transfer_c
 @[pf_entry] def resolveOversized (state : State) := scheduleResolver state "resolverUnusedOversized"
 @[pf_entry] def resolveFailed (state : State) := scheduleResolver state "resolverMissingMethod"
 
+/-! Fixture-only specialized chains below use deployed receiver contracts and the production
+`ft_resolve_transfer` callback over this contract's BAL2 map. They schedule no initial transfer and
+intentionally do not expose `ft_transfer_call`. -/
+
+@[pf_entry] def chainPartial (state : State)
+    (msg : ProofForge.Wasm.Near.Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨17, 0x2e6c616974726170, 0x61656e2e74736574, 0x72, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferThenResolveReturned receiver Context.caller
+    (⟨10, 0⟩ : NearToken) msg
+  .ok (⟨state.supplyW0, state.supplyW1, 77⟩, 77)
+@[pf_entry] def chainFull (state : State)
+    (msg : ProofForge.Wasm.Near.Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨14, 0x7365742e6c6c7566, 0x7261656e2e74, 0, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferThenResolveReturned receiver Context.caller
+    (⟨10, 0⟩ : NearToken) msg
+  .ok (⟨state.supplyW0, state.supplyW1, 77⟩, 77)
+@[pf_entry] def chainMalformed (state : State)
+    (msg : ProofForge.Wasm.Near.Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨19, 0x656d726f666c616d, 0x6e2e747365742e64, 0x726165, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferThenResolveReturned receiver Context.caller
+    (⟨10, 0⟩ : NearToken) msg
+  .ok (⟨state.supplyW0, state.supplyW1, 77⟩, 77)
+@[pf_entry] def chainFailed (state : State)
+    (msg : ProofForge.Wasm.Near.Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨16, 0x742e64656c696166, 0x7261656e2e747365, 0, 0, 0, 0, 0, 0⟩
+  let _ := Promises.ftOnTransferThenResolveReturned receiver Context.caller
+    (⟨10, 0⟩ : NearToken) msg
+  .ok (⟨state.supplyW0, state.supplyW1, 77⟩, 77)
+
+@[pf_entry] def fixtureChainPartialPresent (_state : State) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨17, 0x2e6c616974726170, 0x61656e2e74736574, 0x72, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put Context.caller ⟨2, 0⟩
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨9, 0, status⟩, status)
+@[pf_entry] def fixtureChainFullMissing (_state : State) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨14, 0x7365742e6c6c7566, 0x7261656e2e74, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.remove Context.caller
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨7, 0, status⟩, status)
+@[pf_entry] def fixtureChainMalformedPresent (_state : State) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨19, 0x656d726f666c616d, 0x6e2e747365742e64, 0x726165, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put Context.caller ⟨2, 0⟩
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨9, 0, status⟩, status)
+@[pf_entry] def fixtureChainFailedPresent (_state : State) : Except Error (State × UInt64) :=
+  let receiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨16, 0x742e64656c696166, 0x7261656e2e747365, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put Context.caller ⟨2, 0⟩
+  let receiverStatus := balances.put receiver ⟨7, 0⟩
+  let status := senderStatus ||| receiverStatus
+  .ok (⟨9, 0, status⟩, status)
+
 /-- Fixture-only paid callback proves the private resolver retains the default non-payable guard. -/
 @[pf_entry]
 def resolvePaidCallback (state : State) : Except Error (State × UInt64) :=

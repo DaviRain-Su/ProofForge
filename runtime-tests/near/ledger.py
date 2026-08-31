@@ -194,12 +194,13 @@ def _resolve(
     event: str | None = None,
     expect_success: bool = True,
     child_failure: bool = False,
+    wire: bytes = b"",
 ) -> dict:
     before = client.view_state_values()
     response = client.call_on(
         client.account_id,
         method,
-        b"",
+        wire,
         gas=100_000_000_000_000,
         # near_rpc's conservative receipt checker treats a failed child as transaction failure
         # even when the dependent resolver succeeds. Opt into that expected intermediate failure
@@ -234,6 +235,11 @@ def main() -> None:
     client.create_subaccount_with_key(resolver_contract, 10**25)
     client.deploy_to(resolver_contract, wasm)
     client.call_on(resolver_contract, "initialize", b"", signer=resolver_contract)
+    fixture_dir = Path(_require("PF_NEAR_FIXTURE_DIR"))
+    for outcome in ("partial", "full", "malformed", "failed"):
+        account = f"{outcome}.{self_id}"
+        client.create_subaccount_with_key(account, 10**25)
+        client.deploy_to(account, fixture_dir / f"ft-on-transfer-{outcome}.wasm")
 
     if _view(client, "balanceSelfHas") != 0 or _balance(client.view_state_values(), self_id) is not None:
         raise AssertionError("missing balance must remain distinct from present zero")
@@ -456,6 +462,33 @@ def main() -> None:
     if _balance(state, caller) != 1 or _balance(state, self_id) != MAX_U128 or _supply(client) != 1:
         raise AssertionError("destination-overflow rejection changed a source/destination snapshot")
     print("near-ledger: destination overflow validates both snapshots before either write ok")
+
+    # Specialized ft_on_transfer → real private resolver chains. The fixture account IDs exactly
+    # match the BAL2 seed keys and the transaction predecessor is the callback sender_id.
+    chain_scenes = (
+        ("fixtureChainPartialPresent", "chainPartial", "partial.test.near", 7, 5, 4, 9,
+         _resolver_event("ft_transfer", "partial.test.near", 3, sender=self_id), False),
+        ("fixtureChainFullMissing", "chainFull", "full.test.near", 10, None, 0, 0,
+         _resolver_event("ft_burn", "full.test.near", 7), False),
+        ("fixtureChainMalformedPresent", "chainMalformed", "malformed.test.near", 3, 9, 0, 9,
+         _resolver_event("ft_transfer", "malformed.test.near", 7, sender=self_id), False),
+        ("fixtureChainFailedPresent", "chainFailed", "failed.test.near", 3, 9, 0, 9,
+         _resolver_event("ft_transfer", "failed.test.near", 7, sender=self_id), True),
+    )
+    for seed, method, receiver, used, sender_balance, receiver_balance, supply, event, child_failed in chain_scenes:
+        _call(client, seed)
+        response = _resolve(client, method, used, event=event, child_failure=child_failed,
+                            wire=b'{"msg":"chain"}')
+        if NearClient.success_value_bytes(response) != f'"{used}"'.encode():
+            raise AssertionError(f"{method}: outer receipt did not forward exact quoted callback bytes")
+        state = client.view_state_values()
+        if _balance(state, self_id) != sender_balance or _balance(state, receiver) != receiver_balance:
+            raise AssertionError(f"{method}: BAL2 reconciliation mismatch")
+        if receiver_balance == 0 and _key(receiver) not in state:
+            raise AssertionError(f"{method}: receiver present-zero registration was removed")
+        if _supply(client) != supply:
+            raise AssertionError(f"{method}: supply conservation/burn mismatch")
+    print("near-ledger: specialized partial/full/malformed/failed chains reconcile real BAL2 state ok")
 
     # Genuine child → private callback chains exercise the strict result decoder and the same BAL2
     # map. Short aa/bb callback identities keep static fixture args within the Promise64 budget.

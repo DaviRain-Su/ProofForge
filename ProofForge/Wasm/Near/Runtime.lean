@@ -337,6 +337,17 @@ the exact JSON payload, fixed zero deposit, method name, and weighted host actio
   let _ := msg
   0
 
+/-- Schedule the specialized weighted `ft_on_transfer` child and the fixed private resolver
+callback, then forward only the callback receipt. Both deposits and both weights are target-owned;
+the callback receives 5 Tgas and exact sender/receiver/amount JSON. -/
+@[irreducible] def promiseFtOnTransferThenResolveReturned
+    (receiver sender : AccountId) (amount : NearToken) (msg : BoundedMessage64) : UInt64 :=
+  let _ := receiver
+  let _ := sender
+  let _ := amount
+  let _ := msg
+  0
+
 /-- Schedule one static child call followed by one static callback on the current contract, then
 forward the callback's eventual result. The child result is available to the callback only through
 `promiseResultsCount` / `promiseResultRead`; callback arguments remain an independent input frame. -/

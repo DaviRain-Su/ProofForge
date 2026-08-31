@@ -25,7 +25,7 @@ open ProofForge
   #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtResolveInput", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "f85fa4f3182ec1eb"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "19ea46716ce41644"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "9a4d88d130820c6b"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenStorage" == some "92e4c2bf2a7f74a0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
@@ -45,7 +45,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearLookup" == some "d14778ca02c69012"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "a8bf10c3476ef45f"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearIterable" == some "98d132f8e2c7cd5c"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "333864334385dd8d"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearPromise" == some "e51b20dad70b3a29"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearPromiseResult" == some "7f65ba128b01a035"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMigration" == some "19a760409263b854"
 

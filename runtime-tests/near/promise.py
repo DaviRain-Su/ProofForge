@@ -196,6 +196,20 @@ def main() -> None:
         "zero deposit, and active receiver/message bytes"
     )
 
+    resolved = client.call(
+        "inspectFtOnTransferThenResolve", b'{"msg":"resolve"}'
+    )
+    expected_amount = str((amount_hi << 64) | amount_lo).encode("ascii")
+    if NearClient.success_value_bytes(resolved) != b'"' + expected_amount + b'"':
+        raise AssertionError("specialized FT DAG did not forward the private callback result")
+    if client.view_u64("get") != 18:
+        raise AssertionError("private diagnostic resolver did not commit after caller state")
+    print(
+        "near-promise: diagnostic DAG/payload wiring forwarded its callback receipt "
+        "(this fixture callback intentionally ignores the child result; fallback semantics are "
+        "covered by near-ledger)"
+    )
+
     missing_child = client.call(
         "inspectFtOnTransferMissing",
         b'{"msg":"async"}',

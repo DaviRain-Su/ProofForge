@@ -76,6 +76,13 @@ function-call host action. This is not a generic dynamic JSON Promise API. -/
     (msg : Runtime.BoundedMessage64) : UInt64 :=
   Runtime.promiseFtOnTransferReturned receiver sender amount msg
 
+/-- Return the fixed weighted `ft_on_transfer` → private `ft_resolve_transfer` DAG. This specialized
+operation composes both JSON payloads and exposes no arbitrary method, gas, deposit, or weight. -/
+@[pf_inline] def ftOnTransferThenResolveReturned
+    (receiver sender : Runtime.AccountId) (amount : Runtime.NearToken)
+    (msg : Runtime.BoundedMessage64) : UInt64 :=
+  Runtime.promiseFtOnTransferThenResolveReturned receiver sender amount msg
+
 /-- Schedule one child call, then one callback on the current contract, and forward the callback's
 eventual result. Both methods are static literals; the two bounded argument frames, deposits, and
 gas budgets are independent. The callback runs after either child success or child failure. -/

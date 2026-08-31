@@ -39,6 +39,8 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
           #[s!"transfer.account.returned.{receiver.size}"]
       | .ext (.near (.promiseFtOnTransferReturned receiver sender _ _ message)) =>
           #[s!"ft-on-transfer.returned.{receiver.size}.{sender.size}.{message.size}"]
+      | .ext (.near (.promiseFtOnTransferThenResolveReturned receiver sender _ _ message)) =>
+          #[s!"ft-on-transfer.resolve.returned.{receiver.size}.{sender.size}.{message.size}"]
       | .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childCapacity callbackCapacity childArguments callbackArguments _ _ _ _ _ _)) =>
           #[s!"then.{receiver}.{childMethod}.{callbackMethod}." ++
@@ -208,7 +210,7 @@ def init (value : UInt64) : State := { value }
 @[pf_entry]
 def callShort (state : State) (msg : Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
   let receiver : Runtime.AccountId := ⟨1, 0x61, 0, 0, 0, 0, 0, 0, 0⟩
-  let _ := Sdk.Promises.ftOnTransferReturned receiver receiver
+  let _ := Sdk.Promises.ftOnTransferThenResolveReturned receiver receiver
     ({ w0 := 1, w1 := 0 } : Runtime.NearToken) msg
   .ok (state, state.value)
 
@@ -216,7 +218,7 @@ def callShort (state : State) (msg : Runtime.BoundedMessage64) : Except Error (S
 def callLong (state : State) (msg : Runtime.BoundedMessage64) : Except Error (State × UInt64) :=
   let receiver : Runtime.AccountId :=
     ⟨65, 0x6161616161616161, 0, 0, 0, 0, 0, 0, 0⟩
-  let _ := Sdk.Promises.ftOnTransferReturned receiver receiver
+  let _ := Sdk.Promises.ftOnTransferThenResolveReturned receiver receiver
     ({ w0 := 1, w1 := 0 } : Runtime.NearToken) msg
   .ok (state, state.value)
 
@@ -233,7 +235,7 @@ elab "#pf_near_promise_check" : command => do
   | .error reason =>
       unless reason.contains "unsupported" do
         throwError s!"wrong weighted dynamic AccountId length rejection: {reason}"
-  | .ok _ => throwError "weighted dynamic Promise call accepted AccountId length 1/65"
+  | .ok _ => throwError "specialized chained Promise call accepted AccountId length 1/65"
   let privateViewSource ←
     match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.PrivateView with
     | .ok program => pure program
@@ -303,9 +305,10 @@ elab "#pf_near_promise_check" : command => do
   let transferAccountDetached := "transfer.account.detached.9"
   let transferAccountReturned := "transfer.account.returned.9"
   let ftOnTransferReturned := "ft-on-transfer.returned.9.9.9"
+  let ftResolveReturned := "ft-on-transfer.resolve.returned.9.9.9"
   let quotedCallbacks := steps.filter (·.startsWith
     "then.json-result.test.near.json")
-  unless steps.size == 38 && quotedCallbacks.size == 14 &&
+  unless steps.size == 39 && quotedCallbacks.size == 14 &&
       quotedCallbacks.all (·.contains ".callbackQuotedU128.8.8.9.9") &&
       (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
@@ -321,7 +324,8 @@ elab "#pf_near_promise_check" : command => do
       (steps.filter (· == transferReturned)).size == 1 &&
       (steps.filter (· == transferAccountDetached)).size == 4 &&
       (steps.filter (· == transferAccountReturned)).size == 2 &&
-      (steps.filter (· == ftOnTransferReturned)).size == 2 do
+      (steps.filter (· == ftOnTransferReturned)).size == 2 &&
+      (steps.filter (· == ftResolveReturned)).size == 1 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
@@ -591,6 +595,42 @@ elab "#pf_near_promise_check" : command => do
           | _ => throwError "weighted FT child must call promise_return exactly once"
       | _ => throwError "weighted FT action must follow Promise creation exactly once"
   | _ => throwError "weighted FT child must call promise_batch_create exactly once"
+  let resolveMethod ← match program.entries.find?
+      (·.ixName == "inspectFtOnTransferThenResolve") with
+    | some method => pure method
+    | none => throwError "missing specialized FT resolver DAG entry"
+  let resolveWat ← match Emit.emit { program with entries := #[resolveMethod] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "\\66\\74\\5f\\6f\\6e\\5f\\74\\72\\61\\6e\\73\\66\\65\\72",
+      "\\66\\74\\5f\\72\\65\\73\\6f\\6c\\76\\65\\5f\\74\\72\\61\\6e\\73\\66\\65\\72",
+      "(call $pf_arena_alloc (i64.const 844) (i64.const 1))",
+      "(call $pf_arena_alloc (i64.const 852) (i64.const 1))",
+      "(call $pf_promise_batch_then",
+      "(i64.const 5000000000000) (i64.const 0))" ] do
+    unless resolveWat.contains anchor do
+      throwError s!"specialized FT resolver DAG missing {anchor}"
+  let resolveBody := (resolveWat.splitOn
+    "(func (export \"inspectFtOnTransferThenResolve\")").getLast!
+  unless (resolveBody.splitOn "(call $pf_promise_batch_action_function_call_weight").length == 3 &&
+      (resolveBody.splitOn "(call $pf_arena_alloc (i64.const 16) (i64.const 8))").length == 3 do
+    throwError "specialized FT resolver DAG lost its two weighted actions or zero deposits"
+  unless resolveBody.contains
+      "(if (i64.lt_u (local.get $pf_r0) (i64.const 2)) (then unreachable))" &&
+      (resolveBody.splitOn "(i64.const 64)) (then unreachable))").length ≥ 5 do
+    throwError "specialized FT resolver DAG no longer rejects malformed 1/65 AccountId geometry"
+  match resolveBody.splitOn "(call $pf_promise_batch_then" with
+  | [child, callback] =>
+      unless child.contains "(i64.const 0) (i64.const 1))" &&
+          callback.contains "(i64.const 5000000000000) (i64.const 0))" do
+        throwError "specialized FT resolver DAG lost child/callback gas and weights"
+      match callback.splitOn "(call $pf_promise_return" with
+      | [beforeReturn, _] =>
+          unless beforeReturn.contains "(call $pf_storage_write" do
+            throwError "specialized callback returned before caller-state persistence"
+      | _ => throwError "specialized FT resolver DAG must return callback index exactly once"
+  | _ => throwError "specialized FT resolver DAG must contain exactly one dependency edge"
   let sendThenSuccess ← match program.entries.find? (·.ixName == "sendThenSuccess") with
     | some method => pure method
     | none => throwError "missing sendThenSuccess entry"
@@ -825,13 +865,13 @@ elab "#pf_near_promise_check" : command => do
     "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
     "(i64.store (i32.wrap_i64",
     "(i32.const 8))",
-    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8400))",
+    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8419))",
     "(call $pf_promise_batch_action_function_call",
     "(call $pf_promise_batch_then",
     "(call $pf_promise_return",
-    "(i64.const 6) (i64.const 8418)",
-    "(i64.const 7) (i64.const 8424)",
-    "(i64.const 11) (i64.const 8449)",
+    "(i64.const 6) (i64.const 8437)",
+    "(i64.const 7) (i64.const 8443)",
+    "(i64.const 11) (i64.const 8468)",
     "(i64.const 20000000000000)"
   ]
   for anchor in anchors do

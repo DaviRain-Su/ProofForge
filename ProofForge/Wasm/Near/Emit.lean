@@ -216,6 +216,8 @@ private partial def promiseLiteralsOfOps
       | .ext (.promiseTransferDetached receiver _ _)
       | .ext (.promiseTransferReturned receiver _ _) => #[receiver]
       | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => #["ft_on_transfer"]
+      | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) =>
+          #["ft_on_transfer", "ft_resolve_transfer"]
       | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           _ _ _ _ _ _ _ _ _ _) => #[receiver, childMethod, callbackMethod]
       | .ext (.promiseFunctionCallAndThenReturned
@@ -239,6 +241,7 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseTransferReturned _ _ _) => true
     | .ext (.promiseTransferAccountReturned _ _ _) => true
     | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
+    | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
@@ -266,6 +269,7 @@ private partial def opsCallWeightedPromiseFunction (ops : Array (Op ValKind OpEx
   ops.any fun op =>
     match op with
     | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
+    | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsCallWeightedPromiseFunction thn ||
         opsCallWeightedPromiseFunction els
     | .forBody _ body => opsCallWeightedPromiseFunction body
@@ -292,6 +296,7 @@ private def programTransfersPromise (p : Program ValKind OpExt) : Bool :=
 private partial def opsChainPromise (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun op =>
     match op with
+    | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsChainPromise thn || opsChainPromise els
@@ -974,6 +979,10 @@ private def ftOnTransferPrefix : Array UInt8 := "{\"sender_id\":\"".toUTF8.data
 private def ftOnTransferAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
 private def ftOnTransferMessagePrefix : Array UInt8 := "\",\"msg\":\"".toUTF8.data
 private def ftOnTransferSuffix : Array UInt8 := "\"}".toUTF8.data
+private def ftResolveTransferPrefix : Array UInt8 := "{\"sender_id\":\"".toUTF8.data
+private def ftResolveTransferReceiverPrefix : Array UInt8 := "\",\"receiver_id\":\"".toUTF8.data
+private def ftResolveTransferAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
+private def ftResolveTransferSuffix : Array UInt8 := "\"}".toUTF8.data
 
 private structure FtEventBuffer where
   lines : Array String
@@ -1432,6 +1441,44 @@ private def stagePromiseThen (p : Program ValKind OpExt) (st : EState)
   ]
   return { lines, promiseLocal := callbackPromiseLocal, st := st' }
 
+/-- Append the fixed resolver callback through the escaping helper. Its independent 852-byte arena
+is the conservative exact target allocation: 45 structural + 2 * 64 * 6 escaped ID bytes + 39
+decimal amount bytes. -/
+private def stagePromiseFtResolveThen (p : Program ValKind OpExt) (st : EState)
+    (childPromiseLocal : String) (receiver sender : Array (Val ValKind))
+    (amountLo amountHi : Val ValKind) (level : Nat) : Except String StagedPromiseCall := do
+  unless receiver.size == 9 && sender.size == 9 do
+    throw "extract/unsupported: near ft_resolve_transfer frame geometry"
+  let (methodOff, methodLen) ← promiseLiteralOf p "ft_resolve_transfer"
+  let buffer := startFtEvent st ftResolveTransferPrefix 852 level
+  let buffer ← appendFtAccount buffer sender level
+  let buffer := appendFtLiteral buffer ftResolveTransferReceiverPrefix level
+  let buffer ← appendFtAccount buffer receiver level
+  let buffer := appendFtLiteral buffer ftResolveTransferAmountPrefix level
+  let buffer ← appendFtAmount buffer amountLo amountHi level
+  let payload := finishFtEvent (appendFtLiteral buffer ftResolveTransferSuffix level)
+  let depositPtrLocal := localOfTemp payload.st.fresh
+  let callbackPromiseLocal := localOfTemp (payload.st.fresh + 1)
+  let st' := { payload.st with fresh := payload.st.fresh + 2 }
+  let lines := payload.lines ++ #[
+    indent level ("(if (i32.eqz (call $pf_utf8_valid (i32.wrap_i64 " ++ payload.pointer ++
+      ") (i32.wrap_i64 " ++ payload.length ++ "))) (then unreachable))"),
+    indent level ("(local.set " ++ depositPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i64.const 0))"),
+    indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ depositPtrLocal ++
+      ")) (i32.const 8)) (i64.const 0))"),
+    indent level ("(local.set " ++ callbackPromiseLocal ++
+      " (call $pf_promise_batch_then (local.get " ++ childPromiseLocal ++
+      ") (local.get $pf_self_len) (i64.const " ++ toString currentAccountOff ++ ")))"),
+    indent level ("(call $pf_promise_batch_action_function_call_weight (local.get " ++
+      callbackPromiseLocal ++ ") (i64.const " ++ toString methodLen ++ ") (i64.const " ++
+      toString methodOff ++ ") " ++ payload.length ++ " " ++ payload.pointer ++
+      " (local.get " ++ depositPtrLocal ++ ") (i64.const 5000000000000) (i64.const 0))")
+  ]
+  return { lines, promiseLocal := callbackPromiseLocal, st := st' }
+
 private def resetStorageResult (capacity level : Nat) : Array String := #[
   indent level "(global.set $pf_storage_result_active (i32.const 1))",
   indent level ("(global.set $pf_storage_result_capacity (i64.const " ++
@@ -1808,6 +1855,19 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := staged.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let child ← stagePromiseFtOnTransfer p st receiver sender amountLo amountHi message level
+        let callback ← stagePromiseFtResolveThen p child.st child.promiseLocal receiver sender
+          amountLo amountHi level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { callback.st with pendingPromiseReturn := some callback.promiseLocal }
+        return {
+          lines := child.lines ++ callback.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
         childArgsCapacity callbackArgsCapacity childArguments callbackArguments
         childDepositLo childDepositHi childGas
@@ -1987,6 +2047,9 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       | .promiseTransferAccountReturned receiver amountLo amountHi =>
           receiver.any valHas || valHas amountLo || valHas amountHi
       | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+          receiver.any valHas || sender.any valHas || valHas amountLo || valHas amountHi ||
+            message.any valHas
+      | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
           receiver.any valHas || sender.any valHas || valHas amountLo || valHas amountHi ||
             message.any valHas
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
@@ -2242,6 +2305,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.nep141FtTransferMemo _ _ _ _ _ _) => true
   | .ext (.nep141FtBurnMemo _ _ _ _ _) => true
   | .ext (.promiseFtOnTransferReturned _ _ _ _ _) => true
+  | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
   | .ext (.logUtf8 _) | .ext .reserved => false
   | .letLocal _ value | .setLocal _ value | .forAccum _ value _
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>

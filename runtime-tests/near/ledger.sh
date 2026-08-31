@@ -43,6 +43,17 @@ lake exe pf -- build --target near --out build/near NearFungibleLedger
   || die "$wasm is not wasm"
 
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/near-ledger.XXXXXX")"
+wat2wasm="${PROOF_FORGE_WAT2WASM:-$HOME/.local/bin/wat2wasm}"
+if [[ ! -x "$wat2wasm" ]]; then
+  wat2wasm="$(command -v wat2wasm || true)"
+fi
+[[ -x "$wat2wasm" ]] || skip "wat2wasm 1.0.41 not found"
+[[ "$($wat2wasm --version 2>/dev/null)" == "1.0.41" ]] ||
+  die "wat2wasm 1.0.41 required for ft_on_transfer fixtures"
+for outcome in partial full malformed failed; do
+  "$wat2wasm" "runtime-tests/near/fixture/ft-on-transfer-${outcome}.wat" \
+    -o "$workdir/ft-on-transfer-${outcome}.wasm"
+done
 sandbox_pid=""
 cleanup() {
   if [[ -n "${sandbox_pid:-}" ]] && kill -0 "$sandbox_pid" 2>/dev/null; then
@@ -105,6 +116,7 @@ done
 export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
+export PF_NEAR_FIXTURE_DIR="$workdir"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 "$python" runtime-tests/near/ledger.py
 echo "near-local-ledger: ok"

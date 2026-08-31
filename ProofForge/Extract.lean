@@ -625,6 +625,10 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                 .promiseFtOnTransferReturned (receiver.map (flipVal fuel'))
                   (sender.map (flipVal fuel')) (flipVal fuel' amountLo)
                   (flipVal fuel' amountHi) (message.map (flipVal fuel'))
+            | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
+                .promiseFtOnTransferThenResolveReturned (receiver.map (flipVal fuel'))
+                  (sender.map (flipVal fuel')) (flipVal fuel' amountLo)
+                  (flipVal fuel' amountHi) (message.map (flipVal fuel'))
             | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
                 childArgsCapacity callbackArgsCapacity childArguments callbackArguments
                 childDepositLo childDepositHi childGas

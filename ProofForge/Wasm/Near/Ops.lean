@@ -100,6 +100,8 @@ inductive OpExt (V : Type) where
   | promiseTransferAccountReturned (receiver : Array V) (amountLo amountHi : V)
   | promiseFtOnTransferReturned (receiver sender : Array V) (amountLo amountHi : V)
       (message : Array V)
+  | promiseFtOnTransferThenResolveReturned (receiver sender : Array V) (amountLo amountHi : V)
+      (message : Array V)
   | promiseFunctionCallThenReturned (receiver childMethod callbackMethod : String)
       (childArgsCapacity callbackArgsCapacity : Nat)
       (childArguments callbackArguments : Array V)
@@ -191,6 +193,10 @@ def OpExt.wellFormed : OpExt Val → Bool
       accountIdFrameWellFormed receiver && accountIdFrameWellFormed sender &&
         packedBytes64FrameWellFormed message && amountLo.wellFormed ValKind.arity &&
         amountHi.wellFormed ValKind.arity
+  | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
+      accountIdFrameWellFormed receiver && accountIdFrameWellFormed sender &&
+        packedBytes64FrameWellFormed message && amountLo.wellFormed ValKind.arity &&
+        amountHi.wellFormed ValKind.arity
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -276,6 +282,9 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
       .promiseFtOnTransferReturned (receiver.map mapValue) (sender.map mapValue)
         (mapValue amountLo) (mapValue amountHi) (message.map mapValue)
+  | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
+      .promiseFtOnTransferThenResolveReturned (receiver.map mapValue) (sender.map mapValue)
+        (mapValue amountLo) (mapValue amountHi) (message.map mapValue)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -335,6 +344,8 @@ private def cfgPayloadValues : OpExt Val → Array Val
   | .promiseTransferAccountReturned receiver amountLo amountHi =>
       receiver ++ #[amountLo, amountHi]
   | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+      receiver ++ sender ++ #[amountLo, amountHi] ++ message
+  | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
       receiver ++ sender ++ #[amountLo, amountHi] ++ message
   | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>

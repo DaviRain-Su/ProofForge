@@ -245,6 +245,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-promise-json-u128-result-001](tasks/wsm-near-promise-json-u128-result-001.md) | done | strict canonical quoted-u128 Promise-result decoder |
 | [wsm-near-json-ft-resolve-input-001](tasks/wsm-near-json-ft-resolve-input-001.md) | done | bounded two-AccountId/private-resolver argument parser |
 | [wsm-near-ft-resolve-transfer-001](tasks/wsm-near-ft-resolve-transfer-001.md) | done | private integrated NEP-141 refund/burn resolver |
+| [wsm-near-promise-ft-resolve-chain-001](tasks/wsm-near-promise-ft-resolve-chain-001.md) | done | weighted dynamic FT child to private resolver returned chain |
 | [wsm-near-promise-and-001](tasks/wsm-near-promise-and-001.md) | done | NEAR ordered two-child Promise join + self callback |
 | [wsm-near-init-001](tasks/wsm-near-init-001.md) | done | NEAR one-time explicit initialization marker |
 | [wsm-near-payable-001](tasks/wsm-near-payable-001.md) | done | NEAR non-payable-by-default entry guards |
