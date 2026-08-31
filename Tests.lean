@@ -121,6 +121,7 @@ import Tests.SvmAccountResizeSpec
 import Tests.SvmTransientVectorSpec
 import Tests.SvmTransientBytesSpec
 import Tests.SvmTransientRecordSpec
+import Tests.SvmWideReturnSpec
 import Tests.SvmTelemetrySpec
 import Tests.LamportTransferSpec
 import Tests.SvmSdkPubkeySpec

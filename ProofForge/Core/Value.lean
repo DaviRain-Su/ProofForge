@@ -1,3 +1,5 @@
+import ProofForge.Attr
+
 namespace ProofForge.Core.Value
 
 /-!
@@ -10,13 +12,13 @@ No host collection or native pointer may be persisted in a target artifact.
 -/
 
 /-- A 128-bit unsigned value, least-significant limb first. -/
-structure UInt128 where
+@[pf_boundary] structure UInt128 where
   w0 : UInt64
   w1 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /-- A 256-bit unsigned value, least-significant limb first. -/
-structure UInt256 where
+@[pf_boundary] structure UInt256 where
   w0 : UInt64
   w1 : UInt64
   w2 : UInt64

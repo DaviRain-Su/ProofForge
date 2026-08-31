@@ -145,7 +145,7 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R5-015](tasks/r5-015.md)、[R5-016](tasks/r5-016.md)、[R5-017](tasks/r5-017.md)、
 [R5-018](tasks/r5-018.md)、[R5-019](tasks/r5-019.md)、[R5-020](tasks/r5-020.md)、[R3-026](tasks/r3-026.md)、
 [R3-027](tasks/r3-027.md)、[R3-028](tasks/r3-028.md)、
-[R3-009](tasks/r3-009.md) 和 [R3-011](tasks/r3-011.md)。
+[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md) 和 [R1-023](tasks/r1-023.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -260,6 +260,11 @@ R1-022 已完成 EVM Tagged Tuple v1 output binding：`OutputPlan` sum 统一 bo
 adapter boundary，独立 tagged plan 从 fixed source frame 发布固定 ABI tuple，并在 publication
 boundary 重查 tag、scalar range 与 inactive-zero lanes；不复用 calldata plan/locals，不增加
 Runtime/Ops/IR/Component/main CFG Emit recipe。详见 [R1-022](tasks/r1-022.md)。
+
+R1-023 已完成 shared static wide result frame：Core `UInt128`/`UInt256` 正式使用既有
+`@[pf_boundary]` generic constructor projection，effect prefix 后仍产出完整 2/4-limb frame；
+SVM CFG 入口按 `retCount` 校验所有 successful non-init exits，缺叶或残留 `returnState`
+直接 fail closed，不从可复用 local 推断结果。详见 [R1-023](tasks/r1-023.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

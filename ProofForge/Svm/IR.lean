@@ -403,6 +403,28 @@ def Method.rawArgLocalBase (method : Method) : Nat :=
   method.ops.map Op.toSource |>.flatMap opLocalIds |>.foldl (init := 0) fun next index =>
     Nat.max next (index + 1)
 
+/-- Fail closed when extraction metadata and a non-initializer's successful CFG exits disagree.
+Backends serialize the explicit exit frame; they must never infer omitted leaves from nearby
+locals, whose indexes may be reused across component-effect regions. -/
+private def Method.validateResultFrames (method : Method) (graph : CFG) : Except String Unit := do
+  if method.kind == .init then return
+  for block in graph.blocks do
+    match block.terminator with
+    | .exit (.returnU64 _) =>
+        unless method.retCount == 1 do
+          throw s!"extract/unsupported: SVM method {method.ixName} returns 1 of {method.retCount} result leaves"
+    | .exit (.returnU64s values) =>
+        unless values.size == method.retCount do
+          throw s!"extract/unsupported: SVM method {method.ixName} returns {values.size} of {method.retCount} result leaves"
+    | .exit (.okState _) =>
+        unless method.kind == .increment && method.retCount == 1 do
+          throw s!"extract/unsupported: SVM method {method.ixName} has an invalid state/result exit"
+    | .exit (.returnState _) =>
+        throw s!"extract/unsupported: SVM method {method.ixName} lost its explicit result frame"
+    | .exit (.initialize _) =>
+        throw s!"extract/unsupported: SVM method {method.ixName} has an initializer exit"
+    | _ => pure ()
+
 /-- Lower a target-owned SVM method to the shared basic-block representation consumed by
 code generation. This deliberately happens after target projection, so no combined EVM/SVM
 extension can cross the backend boundary. -/
@@ -416,7 +438,9 @@ def Method.toCFG (method : Method) : Except String CFG := do
   let graph ←
     if method.kind == .init then Core.CFG.lowerInit cfgDialect source
     else Core.CFG.lower cfgDialect source
-  Core.CFG.optimize cfgDialect graph
+  let graph ← Core.CFG.optimize cfgDialect graph
+  method.validateResultFrames graph
+  pure graph
 
 /-- A statically addressed SVM account-data cell. Offsets include the eight-byte layout marker. -/
 structure Slot where

@@ -371,6 +371,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `ded60bb1bab650c8`、deployment bytecode 1,249 B，solc 0.8.34 与 Anvil 5 组 round trip 通过。
   详见 `docs/plan/tasks/r1-022.md`。
 
+- R1-023 shared static wide result frame 已完成：Core `UInt128`/`UInt256` 通过既有
+  representation-free `@[pf_boundary]` 复用 generic constructor projection；SVM component
+  effect 之后构造的宽值也显式保留 2/4 个 scalar returns。`Svm.IR.Method.toCFG` 同时按
+  `retCount` fail closed 校验每个 successful non-init exit，禁止从可复用 local 猜测缺失叶；
+  未新增 Runtime/Ops/IR constructor/Component/Emit recipe。focused Lean 176 jobs、全量 Tests
+  407 jobs 通过。详见 `docs/plan/tasks/r1-023.md`。
+
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
   独立 storage account 上复用，持久状态不含 pointer、heap Map/Array 或 invocation scratch。

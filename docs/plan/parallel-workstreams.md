@@ -149,6 +149,7 @@ target-local；需要顶层 schema 接线时，把最小 hook 和预期 IR 写�
 | **EVM-SDK-12 persistent StorageCheckpoints（已集成）** | EVM-SDK-2/5、fixed-vector extraction | adjacent static UInt64 keys/values vectors + live count；capacity 1..4、strict persisted order、monotonic append、same-latest overwrite、latest/first-≥ lower-bound；Book/Trace 两 consumer + Anvil corruption；不新增 Runtime/Ops/IR/Component/Emit/allocator；见 R5-018 |
 | **EVM-SDK-13 persistent StorageEnumerableMap（已集成）** | EVM-SDK-11、typed hashed maps、generic effect sequencing | fixed UInt64 keys/count/position+1 index + disjoint key→value namespace；O(1) insert/update/lookup/index/swap-remove，key/value zero、dual-map clear 与 moved-key position repair；ConfigMap/ScoreMap 两 consumer + Anvil corruption；不新增 Runtime/Ops/IR/Component/Emit/allocator/scan；见 R5-019 |
 | **Shared/EVM-SDK SafeCast（已集成）** | Core wide values、ordinary inline control | shared UInt128/UInt256→UInt64 checked narrowing，caller-owned typed error；Accumulator/Config 两 consumer 区分 arithmetic/authorization/zero/write policy；不新增 target Runtime/Ops/IR/Component/Emit/allocation；见 R5-020 |
+| **Shared static wide result frames（已集成）** | `@[pf_boundary]`、Core Value、SVM CFG | UInt128/UInt256 constructor 复用 generic fixed frame；component effect 后保留 2/4 leaves，SVM successful exit 与 `retCount` 不一致时 fail closed；不新增 wide-specific Runtime/Ops/IR/Component/Emit；见 R1-023 |
 
 ## 4. Worker 统一交付合同
 
