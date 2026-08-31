@@ -56,6 +56,9 @@ inductive ValKind where
   | promiseResultFits (capacity : Nat)
   | promiseResultByte (capacity : Nat)
   | promiseResultBorshUInt64D (capacity : Nat)
+  | promiseResultQuotedU128Valid (capacity : Nat)
+  | promiseResultQuotedU128W0 (capacity : Nat)
+  | promiseResultQuotedU128W1 (capacity : Nat)
   /-- Placeholder; never produced by the v0 lowering and rejected by `wellFormed`. -/
   | reserved
   deriving BEq, Repr, Inhabited

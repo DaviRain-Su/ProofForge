@@ -13,6 +13,7 @@ from near_rpc import NearClient, NearRpcError
 
 RECEIVER = "receiver.test.near"
 FT_OBSERVER = "observer.test.near"
+JSON_RESULT = "json-result.test.near"
 
 
 def _require(name: str) -> str:
@@ -35,6 +36,7 @@ def main() -> None:
     home = Path(_require("PF_NEAR_HOME"))
     wasm = Path(_require("PF_NEAR_WASM"))
     observer_wasm = Path(_require("PF_NEAR_OBSERVER_WASM"))
+    quoted_result_wasm = Path(_require("PF_NEAR_QUOTED_RESULT_WASM"))
     client = NearClient(rpc, home)
 
     print("=== suite: NearPromise (static calls + self callback) ===")
@@ -51,6 +53,8 @@ def main() -> None:
     )
     client.create_subaccount_with_key(FT_OBSERVER, 10**27)
     client.deploy_to(FT_OBSERVER, observer_wasm)
+    client.create_subaccount_with_key(JSON_RESULT, 10**27)
+    client.deploy_to(JSON_RESULT, quoted_result_wasm)
     if client.view_u64("get") != 0 or client.view_u64_on(RECEIVER, "get") != 0:
         raise AssertionError("caller and receiver must begin with marker zero")
 
@@ -284,6 +288,53 @@ def main() -> None:
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("oversized-result child did not execute with value 456")
     print("near-promise: bounded callback kept length 8/fits false without truncation")
+
+    def check_quoted_result(
+        method: str,
+        expected_status: int,
+        expected_valid: int,
+        expected_lo: int,
+        expected_hi: int,
+        *,
+        expect_success: bool = True,
+    ) -> None:
+        outcome = _call_u64(client, method, 700, expect_success=expect_success)
+        actual_status = NearClient.success_value_bytes(outcome)
+        if actual_status != NearClient.encode_u64_le(expected_status):
+            raise AssertionError(
+                f"{method} callback status expected {expected_status}, got {actual_status!r}"
+            )
+        actual = (
+            client.view_u64("get"),
+            client.view_u64("receivedDepositLo"),
+            client.view_u64("receivedDepositHi"),
+        )
+        expected = (expected_valid, expected_lo, expected_hi)
+        if actual != expected:
+            raise AssertionError(f"{method} decoded {actual}, expected {expected}")
+
+    mask = (1 << 64) - 1
+    check_quoted_result("decodeJsonZero", 1, 1, 0, 0)
+    check_quoted_result("decodeJsonHigh", 1, 1, 0, 1)
+    check_quoted_result("decodeJsonMixed", 1, 1, 1, 1)
+    check_quoted_result("decodeJsonMax", 1, 1, mask, mask)
+    for method in (
+        "decodeJsonLeadingZero",
+        "decodeJsonPlus",
+        "decodeJsonWhitespace",
+        "decodeJsonUnquoted",
+        "decodeJsonOverflow",
+        "decodeJsonWrongType",
+        "decodeJsonEmpty",
+        "decodeJsonMalformedUtf8",
+        "decodeJsonOversized",
+    ):
+        check_quoted_result(method, 1, 0, 0, 0)
+    check_quoted_result("decodeJsonFailed", 2, 0, 0, 0, expect_success=False)
+    check_quoted_result("decodeJsonMixed", 1, 1, 1, 1)
+    print(
+        "near-promise: strict quoted-u128 callback decoded full limbs and isolated stale results"
+    )
 
     joined_success = _call_u64(client, "sendAndSuccess", 604)
     if NearClient.success_value_bytes(joined_success) != NearClient.encode_u64_le(456):

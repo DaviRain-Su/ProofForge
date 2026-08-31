@@ -52,6 +52,16 @@ packed little-endian; bytes at/above `length` are zero. -/
   w7 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Result of the closed canonical quoted-u128 callback decoder. `status` preserves nearcore's
+0/1/2 result class; `valid = 1` means a successful result was exactly one canonical quoted decimal
+u128. Invalid or unavailable results have zero limbs, so no stale register bytes can escape. -/
+@[pf_boundary] structure QuotedU128Result where
+  status : UInt64
+  valid : UInt64
+  w0 : UInt64
+  w1 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned exact frame for the bounded canonical `ft_transfer`-shaped JSON parser.
 This is an input carrier only: it does not implement or claim the public NEP-141 method. -/
 @[pf_boundary] structure FtTransferArgs where
@@ -419,6 +429,21 @@ must not inspect it for the other statuses. An out-of-range result index aborts 
     (capacity : Nat) (fallback : UInt64) : UInt64 :=
   let _ := capacity
   let _ := fallback
+  0
+
+/-- Canonical standalone JSON u128 decode over the active result descriptor. The target requires
+status 1, `fits`, and exact bytes `"0"` or `"[1-9][0-9]{0,38}"`; all other inputs return valid=0
+and zero limbs without trapping. -/
+@[irreducible] def promiseResultQuotedU128Valid (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def promiseResultQuotedU128W0 (capacity : Nat) : UInt64 :=
+  let _ := capacity
+  0
+
+@[irreducible] def promiseResultQuotedU128W1 (capacity : Nat) : UInt64 :=
+  let _ := capacity
   0
 
 /-!

@@ -560,6 +560,18 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
       return "(call $pf_promise_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
   | .ext (.promiseResultBorshUInt64D capacity) #[fallback] => do
       return promiseResultBorshUInt64D capacity (← renderVal st fallback)
+  | .ext (.promiseResultQuotedU128Valid capacity) #[] => do
+      unless capacity == 41 do
+        throw "extract/unsupported: quoted-u128 Promise result requires capacity 41"
+      return "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 0))"
+  | .ext (.promiseResultQuotedU128W0 capacity) #[] => do
+      unless capacity == 41 do
+        throw "extract/unsupported: quoted-u128 Promise result requires capacity 41"
+      return "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 1))"
+  | .ext (.promiseResultQuotedU128W1 capacity) #[] => do
+      unless capacity == 41 do
+        throw "extract/unsupported: quoted-u128 Promise result requires capacity 41"
+      return "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 2))"
   | .local index => .ok ("(local.get " ++ localOfSource index ++ ")")
   | .ext kind operands =>
       .error s!"extract/unsupported: near v0 value extension {repr kind}/{operands.size}"
@@ -2185,7 +2197,10 @@ private partial def valUsesArena : Val ValKind → Bool
   | .ext (.promiseResultLength _) _
   | .ext (.promiseResultFits _) _
   | .ext (.promiseResultByte _) _
-  | .ext (.promiseResultBorshUInt64D _) _ => true
+  | .ext (.promiseResultBorshUInt64D _) _
+  | .ext (.promiseResultQuotedU128Valid _) _
+  | .ext (.promiseResultQuotedU128W0 _) _
+  | .ext (.promiseResultQuotedU128W1 _) _ => true
   | .ext _ operands => operands.any valUsesArena
   | .field base _ | .bitNot base => valUsesArena base
   | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
@@ -2936,6 +2951,65 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "      (else (i64.const 0))))",
     ""
   ]
+
+/-- Strict canonical standalone quoted-decimal u128 decoder over the active Promise-result frame.
+Every selector reparses from freshly copied bytes, so invalid calls cannot observe prior limbs. -/
+private def promiseResultQuotedU128Helper : Array String := #[
+  "  (func $pf_promise_result_quoted_u128 (param $capacity i64) (param $selector i64) (result i64)",
+  "    (local $len i64) (local $i i64) (local $end i64) (local $c i64) (local $digit i64)",
+  "    (local $lo i64) (local $hi i64) (local $lo2 i64) (local $lo8 i64)",
+  "    (local $next_lo i64) (local $carry i64)",
+  "    (call $pf_promise_result_check (local.get $capacity))",
+  "    (block $invalid",
+  "      (br_if $invalid (i64.ne (global.get $pf_promise_result_status) (i64.const 1)))",
+  "      (br_if $invalid (i64.eqz (global.get $pf_promise_result_fits)))",
+  "      (local.set $len (global.get $pf_promise_result_length))",
+  "      (br_if $invalid (i64.lt_u (local.get $len) (i64.const 3)))",
+  "      (br_if $invalid (i64.gt_u (local.get $len) (i64.const 41)))",
+  "      (br_if $invalid (i32.ne (i32.load8_u (global.get $pf_promise_result_ptr)) (i32.const 34)))",
+  "      (br_if $invalid (i32.ne (i32.load8_u (i32.add (global.get $pf_promise_result_ptr)",
+  "        (i32.wrap_i64 (i64.sub (local.get $len) (i64.const 1))))) (i32.const 34)))",
+  "      (local.set $end (i64.sub (local.get $len) (i64.const 1)))",
+  "      (if (i64.gt_u (local.get $end) (i64.const 2))",
+  "        (then (br_if $invalid (i32.eq (i32.load8_u (i32.add (global.get $pf_promise_result_ptr)",
+  "          (i32.const 1))) (i32.const 48)))))",
+  "      (local.set $i (i64.const 1))",
+  "      (block $done",
+  "        (loop $digits",
+  "          (br_if $done (i64.ge_u (local.get $i) (local.get $end)))",
+  "          (local.set $c (i64.load8_u (i32.add (global.get $pf_promise_result_ptr)",
+  "            (i32.wrap_i64 (local.get $i)))))",
+  "          (br_if $invalid (i64.lt_u (local.get $c) (i64.const 48)))",
+  "          (br_if $invalid (i64.gt_u (local.get $c) (i64.const 57)))",
+  "          (local.set $digit (i64.sub (local.get $c) (i64.const 48)))",
+  "          (br_if $invalid (i64.gt_u (local.get $hi) (i64.const 1844674407370955161)))",
+  "          (if (i64.eq (local.get $hi) (i64.const 1844674407370955161))",
+  "            (then",
+  "              (br_if $invalid (i64.gt_u (local.get $lo) (i64.const 11068046444225730969)))",
+  "              (br_if $invalid (i32.and",
+  "                (i64.eq (local.get $lo) (i64.const 11068046444225730969))",
+  "                (i64.gt_u (local.get $digit) (i64.const 5))))))",
+  "          (local.set $lo2 (i64.shl (local.get $lo) (i64.const 1)))",
+  "          (local.set $lo8 (i64.shl (local.get $lo) (i64.const 3)))",
+  "          (local.set $next_lo (i64.add (local.get $lo2) (local.get $lo8)))",
+  "          (local.set $carry (i64.add",
+  "            (i64.add (i64.shr_u (local.get $lo) (i64.const 63))",
+  "                     (i64.shr_u (local.get $lo) (i64.const 61)))",
+  "            (i64.extend_i32_u (i64.lt_u (local.get $next_lo) (local.get $lo2)))))",
+  "          (local.set $hi (i64.add (i64.add (i64.shl (local.get $hi) (i64.const 1))",
+  "                                               (i64.shl (local.get $hi) (i64.const 3)))",
+  "                                      (local.get $carry)))",
+  "          (local.set $lo (i64.add (local.get $next_lo) (local.get $digit)))",
+  "          (if (i64.lt_u (local.get $lo) (local.get $next_lo))",
+  "            (then (local.set $hi (i64.add (local.get $hi) (i64.const 1)))))",
+  "          (local.set $i (i64.add (local.get $i) (i64.const 1)))",
+  "          (br $digits)))",
+  "      (if (i64.eqz (local.get $selector)) (then (return (i64.const 1))))",
+  "      (if (i64.eq (local.get $selector) (i64.const 1)) (then (return (local.get $lo))))",
+  "      (if (i64.eq (local.get $selector) (i64.const 2)) (then (return (local.get $hi)))))",
+  "    (i64.const 0))",
+  ""
+]
 
 /-- Closed JSON byte escaper used by NEP-141 event effects. -/
 private def jsonEscapeHelper : Array String := #[
@@ -3875,6 +3949,9 @@ def emit (p : IR.Program) : Except String String := do
   lines := lines ++ lifecycleData
   if programUsesArena p then
     lines := lines ++ arenaHelpers p
+  if #[ValKind.promiseResultQuotedU128Valid 41, .promiseResultQuotedU128W0 41,
+      .promiseResultQuotedU128W1 41].any (programUses · p) then
+    lines := lines ++ promiseResultQuotedU128Helper
   if programHasFtEvent p || programCallsWeightedPromiseFunction p then
     lines := lines ++ ftEventHelpers
   else if programUsesJsonU128Output p then

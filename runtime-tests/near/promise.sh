@@ -63,6 +63,9 @@ fi
 observer_wasm="$workdir/ft-on-transfer-observer.wasm"
 "$wat2wasm" runtime-tests/near/fixture/ft-on-transfer-observer.wat -o "$observer_wasm"
 [[ -f "$observer_wasm" ]] || die "observer fixture assembly produced no wasm"
+quoted_result_wasm="$workdir/quoted-u128-results.wasm"
+"$wat2wasm" runtime-tests/near/fixture/quoted-u128-results.wat -o "$quoted_result_wasm"
+[[ -f "$quoted_result_wasm" ]] || die "quoted-u128 result fixture assembly produced no wasm"
 
 home="$workdir/home"
 mkdir -p "$home"
@@ -125,6 +128,7 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PF_NEAR_OBSERVER_WASM="$observer_wasm"
+export PF_NEAR_QUOTED_RESULT_WASM="$quoted_result_wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 echo "near-local-promise: RPC ready; running static calls + self-callback scenes" >&2
 "$python" runtime-tests/near/promise.py

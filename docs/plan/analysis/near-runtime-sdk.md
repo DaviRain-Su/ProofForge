@@ -310,6 +310,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
 15. **NEAR-PROMISE-CODEC/PRIVATE-1 (wsm-near-promise-codec/private-001 done):** strict Borsh UInt64
     decoding requires successful exact eight-byte results, and callback bodies authenticate full
     predecessor/current AccountId equality before any dependency read or state write.
+    **NEAR-PROMISE-JSON-U128-RESULT (wsm-near-promise-json-u128-result-001 done):** a dedicated
+    four-leaf status/valid/low/high frame decodes only exact canonical quoted decimal u128 bytes
+    from an immediately active capacity-41 descriptor. Invalid status, oversize, malformed bytes,
+    noncanonical spellings, and overflow produce invalid zero limbs without trapping. The future
+    resolver owns `results_count == 1` and index zero. This is narrower than near-sdk-rs serde
+    `U128`, which also admits plus, leading zeros, escapes, and bounded surrounding whitespace.
 16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and

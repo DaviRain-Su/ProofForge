@@ -304,6 +304,9 @@ def extValCanon : Ops.ValKind → String
   | .promiseResultFits capacity => s!"npromise.result.fits.{capacity}"
   | .promiseResultByte capacity => s!"npromise.result.byte.{capacity}"
   | .promiseResultBorshUInt64D capacity => s!"npromise.result.borsh.u64d.{capacity}"
+  | .promiseResultQuotedU128Valid capacity => s!"npromise.result.json.u128.valid.{capacity}"
+  | .promiseResultQuotedU128W0 capacity => s!"npromise.result.json.u128.w0.{capacity}"
+  | .promiseResultQuotedU128W1 capacity => s!"npromise.result.json.u128.w1.{capacity}"
   | .reserved => "wext"
 
 private def canonValues (values : Array (Wasm.IR.Val Ops.ValKind)) : String :=

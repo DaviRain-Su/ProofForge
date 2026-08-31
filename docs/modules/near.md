@@ -117,6 +117,13 @@ amount, and `BoundedMessage64`, then appends `ft_on_transfer` through nearcore's
 with zero deposit, gas 0, and weight 1. It returns only that child receipt after caller-state
 persistence. It is not a generic dynamic JSON call and adds no callback, resolver, or standard
 `ft_transfer_call` export.
+wsm-near-promise-json-u128-result-001 adds a compiler-owned callback result frame that preserves
+nearcore status and decodes only exact canonical quoted decimals (`"0"` or a nonzero decimal with
+no leading zero) into valid plus two lossless limbs. Failed, oversized, malformed, noncanonical,
+and overflowing results return invalid with zero limbs rather than trapping or exposing stale
+register bytes. The future resolver owns the exact one-result/index-zero guard. This subset is
+deliberately narrower than near-sdk-rs serde `U128`, so it does not yet add a resolver or standard
+`ft_transfer_call` export.
 wsm-near-init/payable/entry-policy/uninitialized-001 再钉入口生命周期：初始化器只成功一次，
 private 先于 non-payable，参数解码后 ordinary state-consuming entry 必须见到 `STATE` marker，
 否则精确 panic `The contract is not initialized`。这是类似 near-sdk-rs `PanicOnDefault` 的
@@ -203,7 +210,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   有序 child join 的双成功以及左/右任一失败都仍执行 callback，且另一侧读取不被短路；
   weighted dynamic `ft_on_transfer` additionally checks the exact full sender, mixed/high u128
   decimal, empty/control/Unicode/max-64 message JSON, zero attached deposit, inactive receiver
-  padding isolation, returned result, and asynchronous missing-account failure semantics.
+  padding isolation, returned result, and asynchronous missing-account failure semantics. Genuine
+  child → private callback scenes also check canonical quoted-u128 zero/high/mixed/max decoding,
+  malformed/noncanonical/oversized/failed invalid fallback, and repeated-call stale isolation.
   `promise-result.sh` 另钉 ordinary call 的 result count 0 与越界 `promise_result` abort。
   `bytes.sh` 还验证 arena-backed bounded dynamic `log_utf8` 对 empty/partial/full/multibyte
   active prefix 的精确 view logs，以及 malformed UTF-8 在日志效果前被拒绝；同一 gate 还

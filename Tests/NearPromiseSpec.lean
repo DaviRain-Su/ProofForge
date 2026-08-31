@@ -83,6 +83,39 @@ private partial def resultDecodes : Array ProofForge.Extract.IR.Op → Array Nat
       | .forBody _ body => resultDecodes body
       | _ => #[]
 
+private partial def quotedResultLeavesVal : ProofForge.Extract.IR.Val → Array String
+  | .ext (.near (.promiseResultQuotedU128Valid capacity)) operands =>
+      #[s!"valid.{capacity}"] ++ operands.flatMap quotedResultLeavesVal
+  | .ext (.near (.promiseResultQuotedU128W0 capacity)) operands =>
+      #[s!"w0.{capacity}"] ++ operands.flatMap quotedResultLeavesVal
+  | .ext (.near (.promiseResultQuotedU128W1 capacity)) operands =>
+      #[s!"w1.{capacity}"] ++ operands.flatMap quotedResultLeavesVal
+  | .ext _ operands => operands.flatMap quotedResultLeavesVal
+  | .field base _ | .bitNot base => quotedResultLeavesVal base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      quotedResultLeavesVal lhs ++ quotedResultLeavesVal rhs
+  | .indexGet base _ index _ _ => quotedResultLeavesVal base ++ quotedResultLeavesVal index
+  | .select _ lhs rhs thn els =>
+      quotedResultLeavesVal lhs ++ quotedResultLeavesVal rhs ++
+        quotedResultLeavesVal thn ++ quotedResultLeavesVal els
+  | _ => #[]
+
+private partial def quotedResultLeaves : Array ProofForge.Extract.IR.Op → Array String
+  | ops => ops.foldl (init := #[]) fun leaves op =>
+      leaves ++ match op with
+      | .letLocal _ value | .setLocal _ value | .storeField _ value | .okState value
+      | .returnU64 value | .returnState value => quotedResultLeavesVal value
+      | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
+      | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
+          quotedResultLeavesVal lhs ++ quotedResultLeavesVal rhs
+      | .ite _ lhs rhs thn els =>
+          quotedResultLeavesVal lhs ++ quotedResultLeavesVal rhs ++
+            quotedResultLeaves thn ++ quotedResultLeaves els
+      | .forBody _ body => quotedResultLeaves body
+      | _ => #[]
+
 namespace PrivateView
 
 structure State where
@@ -244,7 +277,8 @@ elab "#pf_near_promise_check" : command => do
     | none => throwError "missing extracted recordValue method"
   unless sourceRecordValue.annotations == #["near.payable.v1"] do
     throwError "extractor lost NEAR payable metadata"
-  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined"] do
+  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined",
+      "callbackQuotedU128"] do
     let callback ← match source.methods.find? (·.ixName == name) with
       | some method => pure method
       | none => throwError s!"missing extracted {name} callback"
@@ -269,7 +303,11 @@ elab "#pf_near_promise_check" : command => do
   let transferAccountDetached := "transfer.account.detached.9"
   let transferAccountReturned := "transfer.account.returned.9"
   let ftOnTransferReturned := "ft-on-transfer.returned.9.9.9"
-  unless steps.size == 24 && (steps.filter (· == detachedRecord)).size == 4 &&
+  let quotedCallbacks := steps.filter (·.startsWith
+    "then.json-result.test.near.json")
+  unless steps.size == 38 && quotedCallbacks.size == 14 &&
+      quotedCallbacks.all (·.contains ".callbackQuotedU128.8.8.9.9") &&
+      (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
       (steps.filter (· == returnedRecord)).size == 1 &&
       (steps.filter (· == returnedMissing)).size == 1 &&
@@ -290,6 +328,11 @@ elab "#pf_near_promise_check" : command => do
   unless decodes.size == 5 && (decodes.filter (· == 8)).size == 4 &&
       (decodes.filter (· == 4)).size == 1 do
     throwError s!"extractor lost strict callback UInt64 decoders: {repr decodes}"
+  let quotedLeaves := source.methods.foldl (init := #[]) fun acc method =>
+    acc ++ quotedResultLeaves method.ops
+  unless quotedLeaves.size == 3 && quotedLeaves.contains "valid.41" &&
+      quotedLeaves.contains "w0.41" && quotedLeaves.contains "w1.41" do
+    throwError s!"extractor lost strict quoted-u128 callback leaves: {repr quotedLeaves}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -299,7 +342,8 @@ elab "#pf_near_promise_check" : command => do
     | none => throwError "missing lowered recordValue method"
   unless recordValue.entryPolicy == "near.entry.v1:payable" do
     throwError "NEAR IR lost canonical payable entry policy"
-  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined"] do
+  for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined",
+      "callbackQuotedU128"] do
     let callback ← match program.entries.find? (·.ixName == name) with
       | some method => pure method
       | none => throwError s!"missing lowered {name} callback"
@@ -313,6 +357,36 @@ elab "#pf_near_promise_check" : command => do
     | _ => throwError "recordValue WAT must contain exactly one exported body"
   unless !recordValueBody.contains "(call $pf_attached_deposit" do
     throwError "donation-only payable recordValue retained a non-payable guard"
+  let quotedCallback ← match program.entries.find? (·.ixName == "callbackQuotedU128") with
+    | some method => pure method
+    | none => throwError "missing lowered callbackQuotedU128 entry"
+  let quotedWat ← match Emit.emit { program with entries := #[quotedCallback] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  let quotedBody ← match quotedWat.splitOn "(func (export \"callbackQuotedU128\")" with
+    | [_preamble, body] => pure body
+    | _ => throwError "callbackQuotedU128 WAT must contain exactly one exported body"
+  unless (quotedBody.splitOn "(call $pf_promise_results_count)").length == 2 &&
+      (quotedBody.splitOn
+        "(call $pf_promise_result (i64.const 0) (i64.const 4))").length == 2 &&
+      quotedBody.contains "(i64.gt_u (global.get $pf_promise_result_length) (i64.const 41))" &&
+      quotedBody.contains
+        "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 0))" &&
+      quotedBody.contains
+        "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 1))" &&
+      quotedBody.contains
+        "(call $pf_promise_result_quoted_u128 (i64.const 41) (i64.const 2))" do
+    throwError "quoted-u128 callback lost exact count/index/bound/selectors"
+  for anchor in #[
+      "(i64.lt_u (local.get $len) (i64.const 3))",
+      "(i64.gt_u (local.get $len) (i64.const 41))",
+      "(i32.const 34)",
+      "(i32.const 48)",
+      "(i64.const 1844674407370955161)",
+      "(i64.const 11068046444225730969)",
+      "(i64.gt_u (local.get $digit) (i64.const 5))" ] do
+    unless quotedWat.contains anchor do
+      throwError s!"quoted-u128 decoder helper lost canonical/overflow anchor {anchor}"
   match Emit.emit { program with initializer :=
       { program.initializer with entryPolicy := "near.entry.v9:unknown" } } with
   | .error reason =>
@@ -751,13 +825,13 @@ elab "#pf_near_promise_check" : command => do
     "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
     "(i64.store (i32.wrap_i64",
     "(i32.const 8))",
-    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8206))",
+    "(call $pf_promise_batch_create (i64.const 18) (i64.const 8400))",
     "(call $pf_promise_batch_action_function_call",
     "(call $pf_promise_batch_then",
     "(call $pf_promise_return",
-    "(i64.const 6) (i64.const 8224)",
-    "(i64.const 7) (i64.const 8230)",
-    "(i64.const 11) (i64.const 8255)",
+    "(i64.const 6) (i64.const 8418)",
+    "(i64.const 7) (i64.const 8424)",
+    "(i64.const 11) (i64.const 8449)",
     "(i64.const 20000000000000)"
   ]
   for anchor in anchors do

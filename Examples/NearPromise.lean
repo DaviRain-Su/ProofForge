@@ -18,6 +18,7 @@ inductive Error where
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_inline] private def receiver : String := "receiver.test.near"
+@[pf_inline] private def jsonResultReceiver : String := "json-result.test.near"
 @[pf_inline] private def callGas : UInt64 := 20_000_000_000_000
 @[pf_inline] private def callbackGas : UInt64 := 20_000_000_000_000
 @[pf_inline] private def joinedChildGas : UInt64 := 8_000_000_000_000
@@ -129,6 +130,27 @@ def callbackJoined (state : State) (callbackValue : UInt64) : Except Error (Stat
     .ok ({ state with marker := callbackValue, depositLo := left, depositHi := right }, right)
   else
     .error .overflow
+
+/-- Diagnostic callback for the strict standalone quoted-u128 result codec. This callback owns the
+exact one-result guard and index zero read. Status is returned while validity and both limbs are persisted
+for sandbox observation; this is not the FT resolver. -/
+@[pf_entry, pf_near_private]
+def callbackQuotedU128 (state : State) (_callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 1 then
+    let buffer : Promises.ResultBuffer := 41
+    let _ := buffer.read 0
+    let result := buffer.quotedU128
+    .ok ({ state with marker := result.valid, depositLo := result.w0, depositHi := result.w1 },
+      result.status)
+  else
+    .ok ({ state with marker := 0, depositLo := 0, depositHi := 0 }, 0)
+
+@[pf_inline] private def callQuotedResult
+    (childMethod : String) (callbackValue : UInt64) : UInt64 :=
+  Promises.callThenReturned jsonResultReceiver childMethod (borshUInt64 0)
+    ({ w0 := 0, w1 := 0 } : NearToken) callGas
+    "callbackQuotedU128" (borshUInt64 callbackValue)
+    ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
 
 /-- Schedule a detached native transfer carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]
@@ -247,6 +269,63 @@ def sendThenOversized (state : State) (value : UInt64) : Except Error (State × 
   let _ := Promises.callThenReturned receiver "recordValue" (borshUInt64 456)
     ({ w0 := 0, w1 := 0 } : NearToken) callGas
     "callbackOversized" (borshUInt64 79) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Fixture-only child result scenes for the closed quoted-u128 decoder. -/
+@[pf_entry] def decodeJsonZero (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonZero" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonHigh (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonHigh" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonMixed (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonMixed" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonMax (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonMax" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonLeadingZero (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonLeadingZero" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonPlus (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonPlus" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonWhitespace (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonWhitespace" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonUnquoted (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonUnquoted" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonOverflow (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonOverflow" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonWrongType (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonWrongType" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonEmpty (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonEmpty" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonMalformedUtf8 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonMalformedUtf8" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonOversized (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonOversized" value
+  .ok ({ state with marker := value }, value)
+
+@[pf_entry] def decodeJsonFailed (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := callQuotedResult "jsonFailed" value
   .ok ({ state with marker := value }, value)
 
 /-- Join two successful ordered child calls, then return the self callback receipt. -/

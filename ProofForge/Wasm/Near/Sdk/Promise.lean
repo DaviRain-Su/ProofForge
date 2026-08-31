@@ -149,4 +149,15 @@ returns `fallback`. Call `read` immediately before decoding this descriptor. -/
     (buffer : ResultBuffer) (fallback : UInt64) : UInt64 :=
   Runtime.promiseResultBorshUInt64D buffer fallback
 
+/-- Decode the strict canonical standalone JSON u128 subset from the active 41-byte descriptor.
+The resolver boundary owns the exact `resultsCount == 1` guard and index-zero read immediately
+before this call. Failed, oversized, and malformed results preserve their status but return
+`valid = 0` and zero limbs. -/
+@[pf_inline] def ResultBuffer.quotedU128
+    (buffer : ResultBuffer) : Runtime.QuotedU128Result :=
+  { status := buffer.status
+    valid := Runtime.promiseResultQuotedU128Valid buffer
+    w0 := Runtime.promiseResultQuotedU128W0 buffer
+    w1 := Runtime.promiseResultQuotedU128W1 buffer }
+
 end ProofForge.Wasm.Near.Sdk.Promises

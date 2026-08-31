@@ -187,6 +187,12 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Val.nearPromiseResultBorshUInt64D
     (capacity : Nat) (fallback : Val) : Val :=
   .ext (.near (.promiseResultBorshUInt64D capacity)) #[fallback]
+@[match_pattern] def Val.nearPromiseResultQuotedU128Valid (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128Valid capacity)
+@[match_pattern] def Val.nearPromiseResultQuotedU128W0 (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128W0 capacity)
+@[match_pattern] def Val.nearPromiseResultQuotedU128W1 (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128W1 capacity)
 
 @[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
   .ext (.near (.logUtf8 message))
