@@ -36,6 +36,9 @@ elab "#pf_near_storage_registration_check" : command => do
   let forceUnregister ← match source.methods.find? (·.ixName == "forceUnregisterCaller") with
     | some method => pure method
     | none => throwError "missing forceUnregisterCaller"
+  let balanceOf ← match source.methods.find? (·.ixName == "storage_balance_of") with
+    | some method => pure method
+    | none => throwError "missing storage_balance_of"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
@@ -45,10 +48,24 @@ elab "#pf_near_storage_registration_check" : command => do
   let forceSteps := registrationSteps forceUnregister.ops
   unless forceSteps == #["read", "usage", "remove", "usage", "refund"] do
     throwError s!"force unregister effect order changed: {forceSteps}"
+  unless registrationSteps balanceOf.ops == #["read"] &&
+      balanceOf.paramSchemas == #[Codec.accountIdSchema] &&
+      balanceOf.retSchema == Codec.storageBalanceResultSchema && balanceOf.retCount == 5 do
+    throwError "storage_balance_of lost its one-read AccountId/StorageBalance source contract"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
+  let targetBalanceOf ← match program.entries.find? (·.ixName == "storage_balance_of") with
+    | some method => pure method
+    | none => throwError "missing target storage_balance_of"
+  unless targetBalanceOf.inputSchema == some Codec.accountIdSchema &&
+      targetBalanceOf.inputPolicy ==
+        "near-json-account-id-object-bounded-v1(max-wire=433,ws=32,keys=canonical,unknown=reject)" &&
+      targetBalanceOf.outputSchema == some Codec.storageBalanceResultSchema &&
+      targetBalanceOf.outputPolicy == "near-json-storage-balance-option-v1" &&
+      targetBalanceOf.tupleArity == some 5 do
+    throwError "storage_balance_of did not combine its exact input/output target policies"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat
@@ -57,6 +74,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(func (export \"registerCaller\")", "(func (export \"probeCaller\")",
       "(func (export \"unregisterCaller\")", "(func (export \"seedCallerZero\")",
       "(func (export \"forceUnregisterCaller\")",
+      "(func (export \"storage_balance_of\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
       "(func (export \"fixtureSeedCallerMixedSupply\")",
       "(func (export \"fixtureSeedCallerMaxSupply\")",
@@ -67,11 +85,23 @@ elab "#pf_near_storage_registration_check" : command => do
       "(call $pf_mul64_lo", "(call $pf_mul64_hi", "i64.ge_u", "i64.lt_u",
       "i64.add", "i64.sub",
       "(call $pf_arena_alloc (i64.const 72) (i64.const 1))",
-      "(call $pf_arena_alloc (i64.const 16) (i64.const 8))"] do
+      "(call $pf_arena_alloc (i64.const 16) (i64.const 8))",
+      "(call $pf_arena_alloc (i64.const 105) (i64.const 1))",
+      "(func $pf_json_account_id", "(func $pf_u128_decimal"] do
     unless wat.contains anchor do
       throwError s!"NEAR storage registration WAT missing {anchor}\n{wat}"
   if wat.contains "storage_byte_cost" then
     throwError "registration fabricated a nonexistent storage_byte_cost host import"
+  let balanceParts := wat.splitOn "(func (export \"storage_balance_of\")"
+  unless balanceParts.length == 2 do
+    throwError "missing unique storage_balance_of export body"
+  let balanceBody := (balanceParts[1]!).splitOn "(func (export \"" |>.head!
+  unless balanceBody.contains "(call $pf_storage_read" &&
+      !balanceBody.contains "(call $pf_storage_write" &&
+      !balanceBody.contains "(call $pf_storage_remove" &&
+      !balanceBody.contains "(call $pf_log_utf8" &&
+      !balanceBody.contains "(call $pf_promise_" do
+    throwError "storage_balance_of must read state/map and have no write/log/Promise effects"
   logInfo m!"proofforge-near-storage-registration: digest = {IR.digestHex program}"
 
 #pf_near_storage_registration_check
@@ -82,6 +112,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 1⟩
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "92f4f04bdcaeff81"
+  some "d15fa3f4bcdbdfe"
 
 end Tests.NearStorageRegistrationSpec

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import struct
 import sys
@@ -21,6 +22,41 @@ def _require(name: str) -> str:
 def _key(account: str) -> bytes:
     raw = account.encode()
     return b"BAL2" + struct.pack("<I", len(raw)) + raw
+
+
+def _balance_args(account: str) -> bytes:
+    return json.dumps({"account_id": account}, separators=(",", ":")).encode()
+
+
+def _expect_storage_balance(
+    client: NearClient, contract: str, account: str, total: int | None
+) -> None:
+    before = client.view_state_values(contract)
+    got = client.view_on(contract, "storage_balance_of", _balance_args(account))
+    expected = (
+        b"null"
+        if total is None
+        else f'{{"total":"{total}","available":"0"}}'.encode("ascii")
+    )
+    if got != expected:
+        raise AssertionError(
+            f"storage_balance_of({account}): expected {expected!r}, got {got!r}"
+        )
+    if client.view_state_values(contract) != before:
+        raise AssertionError("storage_balance_of changed contract state")
+
+
+def _expect_storage_balance_failure(
+    client: NearClient, contract: str, account: str, scene: str
+) -> None:
+    before = client.view_state_values(contract)
+    try:
+        client.view_on(contract, "storage_balance_of", _balance_args(account))
+    except NearRpcError:
+        if client.view_state_values(contract) != before:
+            raise AssertionError(f"{scene}: failed view changed contract state")
+        return
+    raise AssertionError(f"{scene}: expected storage_balance_of failure")
 
 
 def _result_u64(outcome: dict) -> int:
@@ -146,6 +182,7 @@ def main() -> None:
     client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
 
     baseline_state = client.view_state_values(contract)
+    _expect_storage_balance(client, contract, short, None)
     _register(client, contract, short, 0, success=False)
     if client.view_state_values(contract) != baseline_state:
         raise AssertionError("insufficient deposit left speculative key or state residue")
@@ -174,6 +211,18 @@ def main() -> None:
     state = client.view_state_values(contract)
     if state.get(_key(short)) != b"\0" * 16:
         raise AssertionError("registration did not store a present exact-zero NearToken")
+    _expect_storage_balance(client, contract, short, short_cost)
+    escaped_before = client.view_state_values(contract)
+    escaped = client.view_on(
+        contract, "storage_balance_of", b'{"account_id":"\\u0061.test.near"}'
+    )
+    escaped_expected = f'{{"total":"{short_cost}","available":"0"}}'.encode("ascii")
+    if escaped != escaped_expected:
+        raise AssertionError(
+            f"escaped AccountId query: expected {escaped_expected!r}, got {escaped!r}"
+        )
+    if client.view_state_values(contract) != escaped_before:
+        raise AssertionError("escaped AccountId storage-balance query changed state")
 
     before = client.view_account_balance(contract)
     duplicate_deposit = 10**22
@@ -199,6 +248,7 @@ def main() -> None:
         )
     if client.view_state_values(contract).get(_key(long)) != b"\0" * 16:
         raise AssertionError("max-length caller key was not exact active AccountId bytes")
+    _expect_storage_balance(client, contract, long, long_cost)
 
     # The strict guard runs before lookup/removal. Both rejected deposits leave the complete
     # contract state untouched, including the present-zero key and diagnostic envelope.
@@ -213,6 +263,7 @@ def main() -> None:
     # variable-length registration geometry, without assuming a fixed AccountId storage charge.
     _assert_exact_reclaim(client, contract, long, long_delta, per_byte)
     _assert_exact_reclaim(client, contract, short, short_delta, per_byte)
+    _expect_storage_balance(client, contract, short, None)
     missing_before = client.view_state_values(contract)
     if _result_u64(_unregister(client, contract, short, 1)) != 0:
         raise AssertionError("missing unregister did not return false")
@@ -274,6 +325,9 @@ def main() -> None:
 
     client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
     malformed_before = client.view_state_values(contract)
+    _expect_storage_balance_failure(
+        client, contract, malformed, "malformed registration query"
+    )
     _force_unregister(client, contract, malformed, 1, success=False)
     if client.view_state_values(contract) != malformed_before:
         raise AssertionError("malformed unregister rejection changed storage/state")
@@ -291,6 +345,9 @@ def main() -> None:
     client.call_on(overflow, "fixtureSetCostMax", b"", signer=overflow)
     client.call_on(overflow, "seedCallerZero", b"", signer=short)
     overflow_before = client.view_state_values(overflow)
+    _expect_storage_balance_failure(
+        client, overflow, short, "registration-cost multiply overflow query"
+    )
     _force_unregister(client, overflow, short, 1, success=False)
     if client.view_state_values(overflow) != overflow_before or _key(short) not in overflow_before:
         raise AssertionError("reclaim-cost overflow did not roll back speculative removal")

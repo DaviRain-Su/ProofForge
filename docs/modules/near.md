@@ -30,6 +30,13 @@ wsm-near-storage-balance-output-001 separately binds only the exact compiler-own
 Absent frames require zero inactive limbs; the exact maximum object is 105 bytes. This is an
 output-only prerequisite: it exports no NEP-145 method and deliberately does not choose between
 ProofForge's variable AccountId-key economics and near-sdk's configured fixed registration cost.
+wsm-near-storage-balance-of-001 composes that output with the bounded AccountId input and one
+strict read of the same `BAL2` registration map. Missing returns `null`; present exact-16 returns
+the account's checked actual `(AccountId.length + 64) × trustedPerByteCost` total and zero available.
+The 64-byte fixed part is current nearcore Prefix4/Borsh/value/record overhead, not a fixed charge
+for every account. Current near-contract-standards instead reports one configured maximum-account
+measurement to all registered accounts. The exact export therefore remains a closed, bounded-subset
+view rather than a complete NEP-145 ABI/economic-policy claim.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
@@ -129,6 +136,9 @@ lossless total supply: nonzero removal requires explicit force and prechecked su
 zero, mixed-limb, and max-u128 balances share the measured reclaim/refund path. Current
 near-contract-standards directly reduces supply here without emitting `ft_burn`, so this closed
 policy also emits no event and does not claim complete NEP-141/145 compliance.
+wsm-near-storage-balance-of-001 exposes the corresponding write-free status/cost view over that
+same map. It does not add a withdraw path: registration immediately refunds all excess, so the
+reported available balance is necessarily zero.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

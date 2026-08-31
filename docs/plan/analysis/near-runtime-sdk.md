@@ -218,6 +218,14 @@ asynchronous; dynamic handles and multi-action builders are absent.
    declaration-order object with independent quoted-u128 `total` and `available`. It remains an
    output-only prerequisite and does not select a fixed minimum, reuse one short-account
    measurement for all callers, or expose a public NEP-145 method.
+   **NEAR-STORAGE-BALANCE-OF (wsm-near-storage-balance-of-001 done):** the official-shaped export
+   composes that serializer with the bounded AccountId object parser and one canonical `BAL2` read.
+   A present exact-16 entry reports checked `(AccountId.length + 64) × trustedPerByteCost` and zero
+   available; 64 is current nearcore Prefix4/Borsh/value/record overhead, while active AccountId
+   bytes remain variable. Missing returns `null`, malformed storage and arithmetic/config failures
+   trap without writes. This deliberately differs from near-contract-standards' constructor-time
+   maximum-account measurement and retains ProofForge's narrower JSON input subset, so exact method
+   naming/output does not imply complete NEP-145 compatibility.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

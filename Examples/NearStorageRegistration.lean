@@ -42,6 +42,32 @@ def init (costProfile : UInt64) : State :=
 @[pf_entry] def totalSupplyW0 (state : State) : UInt64 := state.totalSupplyW0
 @[pf_entry] def totalSupplyW1 (state : State) : UInt64 := state.totalSupplyW1
 
+/-- Official-shaped closed registration query over the same `BAL2` key. The `total` amount is the
+exact live registration charge used by this contract's variable-account policy:
+`(Prefix4 + Borsh length + active AccountId + 16-byte value + 40-byte nearcore record overhead) ×
+trusted per-byte cost`, i.e. `(account.length + 64) × price`. `available` is always zero because
+registration refunds all excess immediately. The JSON input remains ProofForge's bounded canonical
+subset rather than full near-sdk serde behavior. -/
+@[pf_entry]
+def storage_balance_of (state : State)
+    (account : ProofForge.Wasm.Near.Runtime.AccountId) :
+    ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+  let _ := registrations.read account
+  if Registration.readWasMissing then
+    { registered := 0, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+  else if Registration.readWasValidPresent then
+    let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+    let bytes := Registration.variableAccountEntryBytes account
+    if Registration.trustedCostValid perByteCost && NearToken.canMulUInt64 perByteCost bytes then
+      { registered := 1,
+        total := ⟨NearToken.mulUInt64W0 perByteCost bytes,
+          NearToken.mulUInt64W1 perByteCost bytes⟩,
+        available := ⟨0, 0⟩ }
+    else
+      { registered := 2, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+  else
+    { registered := 2, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+
 @[pf_entry]
 def probeCaller (state : State) : Except Error (State × UInt64) :=
   let status := registrations.has Context.caller

@@ -16,6 +16,14 @@ namespace ProofForge.Wasm.Near.Sdk.Fungible.Registration
 open ProofForge.Wasm.Near.Sdk.Storage
 open ProofForge.Wasm.Near.Sdk.Store
 
+/-- Exact current nearcore storage usage for one new `DirectAccountNearTokenMap` entry:
+`Prefix4(4) + Borsh AccountId length(4) + active AccountId bytes + NearToken(16) +
+num_extra_bytes_record(40)`. This is deliberately variable by AccountId length; it is not
+near-contract-standards' constructor-time maximum-account measurement. -/
+@[pf_inline] def variableAccountEntryBytes
+    (account : ProofForge.Wasm.Near.Runtime.AccountId) : UInt64 :=
+  account.length + 64
+
 /-- The active exact-value storage read observed no entry. -/
 @[pf_inline] def readWasMissing : Bool :=
   let result : ResultBuffer := 16
