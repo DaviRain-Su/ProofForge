@@ -98,7 +98,9 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
   38 programs 且 Anvil 38/38。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
   并保留汇总 `test` gate；完整 402-job `lake build Tests` 只在 Lean lane 执行一次，不再被
-  SVM/EVM 重复编译。任一 lane 失败不会跳过或延迟另两条 lane 的反馈。详见
+  SVM/EVM 重复编译。两个 target lane 在 runtime fixtures 前核对实际 clean build manifest；
+  Surfpool 同时等待 health/version RPC，并在退出时 bounded cleanup。任一 lane 失败不会跳过
+  或延迟另两条 lane 的反馈。详见
   `docs/plan/tasks/ci-001.md`。
   solc 0.8.34 的 Token Yul `StackTooDeepError` 已由 shared pre-state snapshot lowering 修复，
   当前 Token deployment bytecode 为 21,714 B；Surfpool 1.5.0 部署门见 P5 最新记录。

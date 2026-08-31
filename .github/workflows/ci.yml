@@ -95,6 +95,9 @@ jobs:
       - name: Build all SVM programs
         run: lake exe pf -- build --target svm --out build/sbpf
 
+      - name: Check SVM artifact manifest
+        run: python3 scripts/check_artifact_manifest.py --target svm --out build/sbpf
+
       - name: Run Mollusk integration suite
         run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1
 
@@ -143,6 +146,9 @@ jobs:
 
       - name: Build all EVM programs
         run: lake exe pf -- build --target evm --out build/evm
+
+      - name: Check EVM artifact manifest
+        run: python3 scripts/check_artifact_manifest.py --target evm --out build/evm
 
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh

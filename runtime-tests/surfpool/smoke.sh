@@ -104,13 +104,22 @@ surfpool_pid=$!
 cleanup() {
   local status=$?
   kill "$surfpool_pid" 2>/dev/null || true
+  for _ in {1..50}; do
+    if ! kill -0 "$surfpool_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  if kill -0 "$surfpool_pid" 2>/dev/null; then
+    kill -KILL "$surfpool_pid" 2>/dev/null || true
+  fi
   wait "$surfpool_pid" 2>/dev/null || true
   rm -f "$out_dir/payer.json" "$out_dir/Program-keypair.json" "$out_dir/deployment.log"
   return "$status"
 }
 trap cleanup EXIT
 
-healthy=false
+ready=false
 for _ in $(seq 1 150); do
   if ! kill -0 "$surfpool_pid" 2>/dev/null; then
     echo "surfpool-smoke: Surfpool exited during startup" >&2
@@ -118,14 +127,16 @@ for _ in $(seq 1 150); do
     exit 1
   fi
   health="$(rpc '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' 2>/dev/null || true)"
-  if jq -e '.result == "ok"' >/dev/null 2>&1 <<<"$health"; then
-    healthy=true
+  version="$(rpc '{"jsonrpc":"2.0","id":2,"method":"getVersion"}' 2>/dev/null || true)"
+  if jq -e '.result == "ok"' >/dev/null 2>&1 <<<"$health" &&
+      jq -e '.result."solana-core" | type == "string"' >/dev/null 2>&1 <<<"$version"; then
+    ready=true
     break
   fi
   sleep 0.2
 done
-if [[ "$healthy" != true ]]; then
-  echo "surfpool-smoke: Surfpool did not become healthy" >&2
+if [[ "$ready" != true ]]; then
+  echo "surfpool-smoke: Surfpool RPC did not become ready" >&2
   tail -100 "$out_dir/surfpool.log" >&2
   exit 1
 fi
