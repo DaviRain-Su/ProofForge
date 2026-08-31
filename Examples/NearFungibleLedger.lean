@@ -130,6 +130,62 @@ def ft_transfer (state : State) (args : ProofForge.Wasm.Near.Runtime.FtTransferA
     else .error .overflow
   else .error .overflow
 
+/-- Promise-backed transfer-call over the same integrated `BAL2` ledger. Operation and returned
+resolver semantics follow near-contract-standards; the generated argument wrapper remains the
+bounded ProofForge subset rather than general serde_json. -/
+@[pf_entry, pf_near_payable]
+def ft_transfer_call (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.FtTransferCallArgs) :
+    Except Error (State × UInt64) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit then
+    let sender := Context.caller
+    if !AccountId.eq sender args.receiverId then
+      if !Ledger.isZero args.amount then
+        let _ := balances.read sender
+        if Registration.readWasValidPresent then
+          let senderW0 := resultNearTokenW0D 0
+          let senderW1 := resultNearTokenW1D 0
+          if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+              senderW0 senderW1 args.amount.w0 args.amount.w1 != 0 then
+            let _ := balances.read args.receiverId
+            if Registration.readWasValidPresent then
+              let receiverW0 := resultNearTokenW0D 0
+              let receiverW1 := resultNearTokenW1D 0
+              if ProofForge.Wasm.Near.Runtime.nearTokenAddOk
+                  receiverW0 receiverW1 args.amount.w0 args.amount.w1 != 0 then
+                let nextSender : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                      senderW0 senderW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                      senderW0 senderW1 args.amount.w0 args.amount.w1⟩
+                let nextReceiver : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenAddW0
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenAddW1
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1⟩
+                let senderStatus := balances.put sender nextSender
+                let receiverStatus := balances.put args.receiverId nextReceiver
+                let status := senderStatus ||| receiverStatus
+                if args.memo.present = 0 then
+                  let _ := Events.FungibleToken.transfer sender args.receiverId args.amount
+                  let _ := Promises.ftOnTransferThenResolveReturned args.receiverId sender
+                    args.amount args.msg
+                  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+                else
+                  let _ := Events.FungibleToken.transferWithMemo sender args.receiverId args.amount
+                    16 (Ledger.memoString args.memo)
+                  let _ := Promises.ftOnTransferThenResolveReturned args.receiverId sender
+                    args.amount args.msg
+                  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-- Private near-contract-standards resolver semantics over the same `BAL2` balances and supply.
 The callback argument and Promise-result JSON codecs are bounded canonical subsets of serde_json.
 Failed or invalid child output refunds the full amount; a valid unused amount is clamped to the
@@ -313,6 +369,25 @@ intentionally do not expose `ft_transfer_call`. -/
   let receiverStatus := balances.put receiver ⟨7, 0⟩
   let status := senderStatus ||| receiverStatus
   .ok (⟨9, 0, status⟩, status)
+
+/-- Seed one conserved ledger shared by the four deployed `ft_on_transfer` integration fixtures.
+Each call overwrites every participating key so one asynchronous scene cannot leak into the next. -/
+@[pf_entry] def fixtureTransferCall (_state : State) : Except Error (State × UInt64) :=
+  let partialAccount : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨17, 0x2e6c616974726170, 0x61656e2e74736574, 0x72, 0, 0, 0, 0, 0⟩
+  let full : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨14, 0x7365742e6c6c7566, 0x7261656e2e74, 0, 0, 0, 0, 0, 0⟩
+  let malformed : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨19, 0x656d726f666c616d, 0x6e2e747365742e64, 0x726165, 0, 0, 0, 0, 0⟩
+  let failed : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨16, 0x742e64656c696166, 0x7261656e2e747365, 0, 0, 0, 0, 0, 0⟩
+  let senderStatus := balances.put Context.caller ⟨1, 1⟩
+  let partialStatus := balances.put partialAccount ⟨0, 0⟩
+  let fullStatus := balances.put full ⟨0, 0⟩
+  let malformedStatus := balances.put malformed ⟨0, 0⟩
+  let failedStatus := balances.put failed ⟨0, 0⟩
+  let status := senderStatus ||| partialStatus ||| fullStatus ||| malformedStatus ||| failedStatus
+  .ok (⟨1, 1, status⟩, status)
 
 /-- Fixture-only paid callback proves the private resolver retains the default non-payable guard. -/
 @[pf_entry]

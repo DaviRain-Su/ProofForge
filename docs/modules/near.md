@@ -79,7 +79,15 @@ the same `BAL2` balances only after every read and arithmetic check. A present s
 refund event and returns `amount - refund`; a deleted sender burns supply with memo `refund` and
 returns the original amount, matching current near-contract-standards. Missing/present-zero receiver
 paths are write-free. Callback arguments and Promise-result JSON remain bounded subsets narrower
-than serde_json, and fixture schedulers are not a standard `ft_transfer_call`.
+than serde_json; the resolver itself remains a separately testable private callback.
+wsm-near-ft-transfer-call-001 composes the exact payable `ft_transfer_call` export over the same
+`BAL2` map: strict one-yocto/positive/non-alias/registered checks, two reads and all arithmetic
+before source/receiver writes, one initial optional-memo transfer event, then the specialized
+weighted child/private-resolver DAG. It returns the callback Promise after state persistence, so
+the outer bytes are the resolver's exact quoted used amount. Real partial/full/malformed/failed
+receipts pin reconciliation, event order, present-zero retention, supply conservation, and
+rollback. Its 1179-byte bounded canonical argument subset remains narrower than serde_json, so the
+exact operation and export do not imply complete public NEP-141 ABI compatibility.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，
@@ -96,8 +104,8 @@ does not choose a byte price. `DirectAccountNearTokenMap` separately provides a 
 AccountId-to-NearToken foundation with exact `prefix4 || u32_le(length) || active bytes` keys and
 16-byte little-endian values. `Near.Sdk.Fungible.Ledger` interprets exact/missing balance snapshots
 and registration status. Specialized slices compose that foundation into the bounded
-official-shaped views, transfer, and private resolver described above; generic public JSON ABI,
-automatic registration enforcement, and a standard `ft_transfer_call` remain absent.
+official-shaped views, transfer, transfer-call, and private resolver described above; generic
+public JSON ABI and automatic registration enforcement remain absent.
 wsm-near-storage-economics-001 adds the real invocation-dynamic `env.storage_usage` u64 context
 leaf. It deliberately exposes no `storage_byte_cost`: current near-sdk-rs/nearcore provide no such
 host import, and protocol `storage_amount_per_byte` must come from explicit trusted network config.
@@ -176,7 +184,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Sdk.Store.Codec` | shared fixed `Prefix4`、UInt32/UInt64 suffix、exact Borsh UInt64/NearToken values and strict result decode | AccountId keys、arbitrary `IntoStorageKey`、generic Borsh、ledger policy |
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
-| `Near.Sdk.Fungible.Ledger/Registration` | exact/missing balance snapshots, checked ledger composition, measured caller register/unregister, and supply-integrated forced removal | public NEP-141/145 ABI、arbitrary-account lifecycle、resolver、automatic event coupling |
+| `Near.Sdk.Fungible.Ledger/Registration` | exact/missing balance snapshots, checked ledger/transfer/resolver composition, measured caller register/unregister, and supply-integrated forced removal | generic public NEP-141/145 JSON ABI、arbitrary-account lifecycle、automatic registration enforcement |
 | `Near.Sdk.Promises` | static detached/returned function call、static/full-AccountId native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame 与 private/payable/migration policy binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
@@ -215,7 +223,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `json_ft_resolve_input.sh` 验证 two-AccountId/u128 20-leaf resolver frame 的六种字段排列、
   exact 1079-wire boundary、late failure/stale clearing 与 mutating parser rollback；`ledger.sh`
   additionally drives genuine child → private resolver receipts and checks result fallback/clamp,
-  present-sender refund, deleted-sender burn, no-op branches, event/output bytes, and rollback；
+  present-sender refund, deleted-sender burn, no-op branches, event/output bytes, and rollback，
+  并对 exact `ft_transfer_call` 执行 initial transfer → weighted child → private resolver 的
+  partial/full/malformed/failed returned chains、双 event 顺序、quoted output 与 supply conservation；
   `storage.sh` 验证 binary/empty keys、
   insert/replace/eviction、stale-register isolation、present-empty、oversized no-copy、remove/has；
   `vector.sh` 验证 exact current element keys/Borsh values、get/set/push/pop、capacity rollback

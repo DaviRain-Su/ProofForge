@@ -107,6 +107,22 @@ def _ft_args(receiver: str, amount: int, memo: object = _MISSING) -> bytes:
     return json.dumps(fields, separators=(",", ":"), ensure_ascii=False).encode()
 
 
+def _transfer_event(sender: str, receiver: str, amount: int, memo: object = _MISSING) -> str:
+    data = {"old_owner_id": sender, "new_owner_id": receiver, "amount": str(amount)}
+    if memo is not _MISSING and memo is not None:
+        data["memo"] = memo
+    return "EVENT_JSON:" + json.dumps(
+        {
+            "standard": "nep141",
+            "version": "1.0.0",
+            "event": "ft_transfer",
+            "data": [data],
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
 def _ft_transfer(
     client: NearClient,
     receiver: str,
@@ -126,19 +142,7 @@ def _ft_transfer(
     )
     if NearClient.success_value_bytes(response) != b"":
         raise AssertionError("ft_transfer success did not return exact empty bytes")
-    data = {"old_owner_id": sender, "new_owner_id": receiver, "amount": str(amount)}
-    if memo is not _MISSING and memo is not None:
-        data["memo"] = memo
-    expected = "EVENT_JSON:" + json.dumps(
-        {
-            "standard": "nep141",
-            "version": "1.0.0",
-            "event": "ft_transfer",
-            "data": [data],
-        },
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    expected = _transfer_event(sender, receiver, amount, memo)
     logs = _receipt_logs(response)
     if logs != [expected]:
         raise AssertionError(f"ft_transfer exact event mismatch: {logs!r} != {[expected]!r}")
@@ -168,6 +172,84 @@ def _ft_transfer_fails(
         raise AssertionError(f"{scene}: rejected transfer emitted a log")
     if client.view_state_values() != before:
         raise AssertionError(f"{scene}: rejected transfer changed durable state")
+
+
+def _ft_transfer_call_args(
+    receiver: str, amount: int, msg: str, memo: object = _MISSING
+) -> bytes:
+    fields: dict[str, object] = {
+        "receiver_id": receiver,
+        "amount": str(amount),
+        "msg": msg,
+    }
+    if memo is not _MISSING:
+        fields["memo"] = memo
+    return json.dumps(fields, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _ft_transfer_call(
+    client: NearClient,
+    receiver: str,
+    amount: int,
+    msg: str,
+    expected_used: int,
+    refund: int,
+    *,
+    signer: str | None = None,
+    memo: object = _MISSING,
+    child_failure: bool = False,
+) -> dict:
+    sender = signer or client.account_id
+    response = client.call_on(
+        client.account_id,
+        "ft_transfer_call",
+        _ft_transfer_call_args(receiver, amount, msg, memo),
+        signer=signer,
+        deposit=1,
+        gas=200_000_000_000_000,
+        # A failed child is expected to be recovered by the dependent resolver. near_rpc's
+        # conservative checker still reports the intermediate failed receipt.
+        expect_success=not child_failure,
+    )
+    raw = NearClient.success_value_bytes(response)
+    wanted = f'"{expected_used}"'.encode()
+    if raw != wanted:
+        raise AssertionError(f"ft_transfer_call output {raw!r} != {wanted!r}")
+    expected_logs = [_transfer_event(sender, receiver, amount, memo)]
+    if refund:
+        expected_logs.append(_resolver_event("ft_transfer", receiver, refund, sender=sender))
+    logs = _receipt_logs(response)
+    if logs != expected_logs:
+        raise AssertionError(
+            f"ft_transfer_call exact event sequence {logs!r} != {expected_logs!r}"
+        )
+    return response
+
+
+def _ft_transfer_call_fails(
+    client: NearClient,
+    receiver: str,
+    amount: int,
+    scene: str,
+    *,
+    signer: str | None = None,
+    deposit: int = 1,
+    msg: str = "",
+) -> None:
+    before = client.view_state_values()
+    response = client.call_on(
+        client.account_id,
+        "ft_transfer_call",
+        _ft_transfer_call_args(receiver, amount, msg),
+        signer=signer,
+        deposit=deposit,
+        gas=200_000_000_000_000,
+        expect_success=False,
+    )
+    if _receipt_logs(response):
+        raise AssertionError(f"{scene}: rejected transfer-call emitted an event")
+    if client.view_state_values() != before:
+        raise AssertionError(f"{scene}: rejected transfer-call changed durable state")
 
 
 def _resolver_event(kind: str, owner: str, amount: int, *, sender: str | None = None) -> str:
@@ -462,6 +544,86 @@ def main() -> None:
     if _balance(state, caller) != 1 or _balance(state, self_id) != MAX_U128 or _supply(client) != 1:
         raise AssertionError("destination-overflow rejection changed a source/destination snapshot")
     print("near-ledger: destination overflow validates both snapshots before either write ok")
+
+    # Exact public-shaped ft_transfer_call composes the bounded four-field parser, initial BAL2
+    # transfer/event, dynamic weighted child call, private resolver, and returned callback Promise.
+    _call(client, "fixtureTransferCall")
+    _ft_transfer_call_fails(client, self_id, 1, "transfer-call sender equals receiver")
+    _ft_transfer_call_fails(client, "partial.test.near", 0, "transfer-call zero amount")
+    _ft_transfer_call_fails(
+        client, "partial.test.near", 1, "transfer-call zero deposit", deposit=0
+    )
+    _ft_transfer_call_fails(
+        client, "partial.test.near", 1, "transfer-call two-yocto deposit", deposit=2
+    )
+    _ft_transfer_call_fails(
+        client, "absent-ledger.test.near", 1, "transfer-call unregistered destination"
+    )
+    _ft_transfer_call_fails(
+        client, "partial.test.near", MAX_U128, "transfer-call insufficient source"
+    )
+    _ft_transfer_call_fails(
+        client,
+        "partial.test.near",
+        1,
+        "transfer-call unregistered source",
+        signer=unregistered,
+    )
+
+    _call(client, "fixtureTransferCall")
+    _call(client, "seedSelfMalformed8")
+    _ft_transfer_call_fails(
+        client, "partial.test.near", 1, "transfer-call malformed source"
+    )
+    _call(client, "fixtureTransferCall")
+    _call(client, "mintCallerOne", signer=caller)
+    _call(client, "seedSelfMalformed20")
+    _ft_transfer_call_fails(
+        client, self_id, 1, "transfer-call malformed destination", signer=caller
+    )
+    _call(client, "fixtureTransferCall")
+    _call(client, "mintCallerOne", signer=caller)
+    _call(client, "fixturePutSelfMaxNoSupply")
+    _ft_transfer_call_fails(
+        client, self_id, 1, "transfer-call destination overflow", signer=caller
+    )
+    print("near-ledger: ft_transfer_call guards/read checks fail before effects or Promise creation ok")
+
+    transfer_call_supply = (1 << 64) + 1
+    transfer_call_scenes = (
+        ("partial.test.near", 10, 7, 3, transfer_call_supply - 7, 7,
+         _MISSING, "雪😀\x00", False),
+        ("partial.test.near", 1 << 64, (1 << 64) - 3, 3, 4, (1 << 64) - 3,
+         _MISSING, "high-limb", False),
+        ("full.test.near", 10, 0, 10, transfer_call_supply, 0,
+         None, "m" * 64, False),
+        ("malformed.test.near", 10, 0, 10, transfer_call_supply, 0,
+         "", "bad-result", False),
+        ("failed.test.near", 10, 0, 10, transfer_call_supply, 0,
+         "雪\n", "failed", True),
+    )
+    for (
+        receiver, amount, used, refund, sender_after, receiver_after, memo, msg, child_failed
+    ) in transfer_call_scenes:
+        _call(client, "fixtureTransferCall")
+        _ft_transfer_call(
+            client,
+            receiver,
+            amount,
+            msg,
+            used,
+            refund,
+            memo=memo,
+            child_failure=child_failed,
+        )
+        state = client.view_state_values()
+        if _balance(state, self_id) != sender_after or _balance(state, receiver) != receiver_after:
+            raise AssertionError(f"{receiver}: transfer-call BAL2 reconciliation mismatch")
+        if _key(receiver) not in state:
+            raise AssertionError(f"{receiver}: transfer-call removed receiver registration")
+        if _supply(client) != transfer_call_supply:
+            raise AssertionError(f"{receiver}: transfer-call changed conserved supply")
+    print("near-ledger: exact ft_transfer_call partial/full/malformed/failed returned chains ok")
 
     # Specialized ft_on_transfer → real private resolver chains. The fixture account IDs exactly
     # match the BAL2 seed keys and the transaction predecessor is the callback sender_id.

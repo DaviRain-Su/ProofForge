@@ -33,6 +33,8 @@ elab "#pf_near_fungible_ledger_check" : command => do
       methodSteps "ft_total_supply" == #[] &&
       methodSteps "ft_transfer" ==
         #["read.16.72", "read.16.72", "write.16.72.16", "write.16.72.16"] &&
+      methodSteps "ft_transfer_call" ==
+        #["read.16.72", "read.16.72", "write.16.72.16", "write.16.72.16"] &&
       methodSteps "burnSelfOne" ==
         #["read.16.72", "remove.16.72", "write.16.72.16"] &&
       methodSteps "transferCallerToSelfOne" ==
@@ -44,6 +46,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       s!"mint={methodSteps "mintSelfOne"}, burn={methodSteps "burnSelfOne"}, " ++
       s!"balance={methodSteps "ft_balance_of"}, " ++
       s!"ft_transfer={methodSteps "ft_transfer"}, " ++
+      s!"ft_transfer_call={methodSteps "ft_transfer_call"}, " ++
       s!"transfer={methodSteps "transferCallerToSelfOne"}, " ++
       s!"malformed8={methodSteps "seedSelfMalformed8"}, " ++
       s!"malformed20={methodSteps "seedSelfMalformed20"}"
@@ -76,6 +79,18 @@ elab "#pf_near_fungible_ledger_check" : command => do
       transfer.outputSchema == some .unit && transfer.outputPolicy == "near-void-empty-v1" &&
       transfer.paramCount == 15 && transfer.tupleArity.isNone do
     throwError "ft_transfer lost payable bounded-input or empty-output target policy"
+  let some transferCall := program.entries.find? (·.ixName == "ft_transfer_call")
+    | throwError "missing target ft_transfer_call"
+  unless transferCall.kind == .increment &&
+      transferCall.entryPolicy == "near.entry.v1:payable" &&
+      transferCall.inputSchema == some Codec.ftTransferCallArgsSchema &&
+      transferCall.inputPolicy ==
+        "near-json-ft-transfer-call-args-bounded-v1(max-wire=1179,ws=32,order=any,keys=raw,unknown=reject)" &&
+      transferCall.outputSchema.isNone && transferCall.outputPolicy.isEmpty &&
+      transferCall.paramCount == 24 do
+    throwError s!"ft_transfer_call metadata: kind={repr transferCall.kind}, entry={transferCall.entryPolicy}, " ++
+      s!"input={repr transferCall.inputSchema}/{transferCall.inputPolicy}, " ++
+      s!"output={repr transferCall.outputSchema}/{transferCall.outputPolicy}, params={transferCall.paramCount}"
   let some resolver := program.entries.find? (·.ixName == "ft_resolve_transfer")
     | throwError "missing target ft_resolve_transfer"
   unless resolver.kind == .increment && resolver.entryPolicy == "near.entry.v1:private" &&
@@ -102,6 +117,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"ft_balance_of\")",
       "(func (export \"ft_total_supply\")",
       "(func (export \"ft_transfer\")",
+      "(func (export \"ft_transfer_call\")",
       "(func (export \"seedSelfMalformed8\")",
       "(func (export \"fixtureSetSupplyMax\")",
       "(call $pf_storage_read", "(call $pf_storage_write", "(call $pf_storage_remove",
@@ -170,6 +186,56 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !transferBody.contains "(call $pf_storage_remove" &&
       !transferBody.contains "(call $pf_value_return" do
     throwError "ft_transfer lost guard/read/read/write/write/event/empty-return ordering"
+  let transferCallBody ← match wat.splitOn "(func (export \"ft_transfer_call\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "ft_transfer_call must occur exactly once"
+  let transferCallDeposit := transferCallBody.splitOn "(call $pf_attached_deposit"
+  let transferCallReads := transferCallBody.splitOn
+    "(global.set $pf_storage_result_status (call $pf_storage_read"
+  let transferCallWrites := transferCallBody.splitOn
+    "(global.set $pf_storage_result_status (call $pf_storage_write"
+  let transferCallLogs := transferCallBody.splitOn "(call $pf_log_utf8"
+  unless (transferCallBody.splitOn "(call $pf_input").length == 2 &&
+      transferCallDeposit.length == 2 &&
+      !transferCallDeposit[0]!.contains "(global.set $pf_storage_result_status" &&
+      transferCallReads.length == 3 && transferCallWrites.length == 3 &&
+      !transferCallWrites[1]!.contains "(call $pf_log_utf8" &&
+      transferCallWrites[2]!.contains "(call $pf_log_utf8" &&
+      transferCallLogs.length == 3 &&
+      (transferCallBody.splitOn "(call $pf_promise_batch_create").length == 3 &&
+      (transferCallBody.splitOn "(call $pf_promise_batch_then").length == 3 &&
+      (transferCallBody.splitOn
+        "(call $pf_promise_batch_action_function_call_weight").length == 5 &&
+      (transferCallBody.splitOn "(call $pf_promise_return").length == 3 &&
+      !transferCallBody.contains "(call $pf_value_return" &&
+      !transferCallBody.contains "(call $pf_storage_remove" &&
+      !transferCallBody.contains
+        "(call $pf_storage_write (i64.const 8) (i64.const 1024)" &&
+      !transferCallBody.contains
+        "(call $pf_storage_write (i64.const 8) (i64.const 1032)" do
+    throwError "ft_transfer_call lost guard/read/write/event/DAG/returned-Promise ordering"
+  for branch in #[transferCallLogs[1]!, transferCallLogs[2]!] do
+    let afterCreate ← match branch.splitOn "(call $pf_promise_batch_create" with
+      | [_before, after] => pure after
+      | _ => throwError "ft_transfer_call event branch must create one child Promise"
+    let weighted := afterCreate.splitOn "(call $pf_promise_batch_action_function_call_weight"
+    unless weighted.length == 3 &&
+        weighted[1]!.contains "(i64.const 14) (i64.const 8192)" &&
+        weighted[1]!.contains "(i64.const 0) (i64.const 1))" &&
+        weighted[1]!.contains "(call $pf_promise_batch_then" &&
+        weighted[2]!.contains "(i64.const 19) (i64.const 8206)" &&
+        weighted[2]!.contains "(i64.const 5000000000000) (i64.const 0))" do
+      throwError s!"ft_transfer_call weighted order changed: count={weighted.length}, " ++
+        s!"childMethod={weighted[1]?.map (·.contains "(i64.const 14) (i64.const 8192)")}, " ++
+        s!"childWeight={weighted[1]?.map (·.contains "(i64.const 0) (i64.const 1))")}, " ++
+        s!"then={weighted[1]?.map (·.contains "(call $pf_promise_batch_then")}, " ++
+        s!"callbackMethod={weighted[2]?.map (·.contains "(i64.const 19) (i64.const 8206)")}, " ++
+        s!"callbackGas={weighted[2]?.map (·.contains "(i64.const 5000000000000) (i64.const 0))")}"
+    let afterCallback := weighted[2]!
+    let persisted := afterCallback.splitOn
+      "(drop (call $pf_storage_write (i64.const 6) (i64.const 1040)"
+    unless persisted.length == 2 && persisted[1]!.contains "(call $pf_promise_return" do
+      throwError "ft_transfer_call must persist state before returning its callback Promise"
   let resolverBody ← match wat.splitOn "(func (export \"ft_resolve_transfer\")" with
     | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
     | _ => throwError "ft_resolve_transfer must occur exactly once"
@@ -222,6 +288,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "9a4d88d130820c6b"
+  some "f45af507fc51f527"
 
 end Tests.NearFungibleLedgerSpec

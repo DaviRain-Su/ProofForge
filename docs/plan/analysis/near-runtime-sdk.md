@@ -294,6 +294,14 @@ asynchronous; dynamic handles and multi-action builders are absent.
    one exact no-memo or Some-memo NEP-141 event. Nearcore transaction rollback covers any
    synchronous post-write trap. The input grammar still rejects serde-compatible forms outside
    ProofForge's bounded canonical subset, so this does not claim full public ABI compliance.
+   **NEAR-FT-TRANSFER-CALL (wsm-near-ft-transfer-call-001 done):** exact `ft_transfer_call`
+   composes the 24-leaf bounded argument frame with the same one-yocto, positive/non-alias,
+   exact-registration, read-before-write, source-then-receiver, and initial transfer-event rules.
+   It then schedules the dynamic weighted `ft_on_transfer` child and private resolver callback,
+   persists state, and returns only the callback Promise, exposing the resolver's quoted used
+   amount. Partial/full/malformed/failed nearcore receipts pin event order, rollback, present-zero,
+   and supply conservation. The 1179-byte canonical input subset remains narrower than serde_json,
+   so this is exact operation/receipt semantics rather than a full public ABI compatibility claim.
    **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
    non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
    Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A
@@ -347,8 +355,9 @@ asynchronous; dynamic handles and multi-action builders are absent.
     dynamic weighted child now composes a fixed private resolver callback with independent exact
     JSON arenas, two zero deposits, child gas/weight 0/1, callback gas/weight 5 Tgas/0, and returns
     only the callback after state persistence. Genuine partial/full/malformed/failed child receipts
-    reconcile the integrated BAL2 sender-present refund and sender-missing burn paths. No initial
-    transfer or standard `ft_transfer_call` export is included.
+    reconcile the integrated BAL2 sender-present refund and sender-missing burn paths. This
+    specialized prerequisite itself has no initial transfer; wsm-near-ft-transfer-call-001 now
+    composes it behind the standard-shaped export.
 16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
     transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
     concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and

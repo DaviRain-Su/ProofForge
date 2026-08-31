@@ -34,7 +34,7 @@ malformed, and failing children and drives the real private resolver over BAL2, 
 sender refunds, deleted-sender burn, present-zero retention, exact events/supply, and quoted outer
 results. Existing static and dynamic Promise scenes remain green.
 
-## Next
+## Composition
 
-The next independent slice may compose bounded `ft_transfer_call` input, exact one-yocto and initial
-ledger transfer/event with this chain. This prerequisite alone is not a public NEP-141 method.
+wsm-near-ft-transfer-call-001 composes bounded `ft_transfer_call` input, exact one-yocto, and the
+initial ledger transfer/event with this chain. This prerequisite alone remains a specialized API.
