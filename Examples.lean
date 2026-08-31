@@ -90,6 +90,7 @@ import Examples.XrplClamp
 import Examples.XrplClasp
 import Examples.XrplCleft
 import Examples.XrplClip
+import Examples.XrplClot
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

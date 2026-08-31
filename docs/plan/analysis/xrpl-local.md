@@ -71,6 +71,7 @@
 | operator pause A cancel / B cashB | `XrplClasp` | `clasp.sh` |
 | mint cap A cancel / B cashB | `XrplCleft` | `cleft.sh` |
 | sendToB / clawB freeze A cancel / B cashB | `XrplClip` | `clip.sh` |
+| burn + clawB freeze A cancel / B cashB | `XrplClot` | `clot.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。
