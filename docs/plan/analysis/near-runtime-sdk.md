@@ -226,6 +226,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    trap without writes. This deliberately differs from near-contract-standards' constructor-time
    maximum-account measurement and retains ProofForge's narrower JSON input subset, so exact method
    naming/output does not imply complete NEP-145 compatibility.
+   **NEAR-STORAGE-BOUNDS-OUTPUT (wsm-near-storage-balance-bounds-output-001 done):** the distinct
+   exact nominal five-leaf frame emits declaration-order quoted-u128 `min` and nullable
+   quoted-u128 `max`. Presence and inactive limbs are checked, and the maximum bounded wire is 97
+   bytes with one shared decimal helper. This remains output-only: the standard API exposes global
+   bounds, whereas ProofForge's current economics vary by 2..64-byte AccountId length, so a later
+   policy must choose truthful global extrema rather than claim the stock fixed-cost FT behavior.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

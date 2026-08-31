@@ -105,6 +105,16 @@ JSON encoder and does not choose registration economics. -/
   available : ProofForge.Core.Value.UInt128
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned output carrier for the NEP-145 `StorageBalanceBounds` wire prerequisite.
+`hasMax = 0` requires zero inactive maximum limbs and serializes `max` as `null`; `hasMax = 1`
+serializes exact quoted-decimal `min` and `max` fields. It is not a generic record/Option codec and
+does not choose a contract's registration economics. -/
+@[pf_boundary] structure StorageBalanceBoundsResult where
+  min : ProofForge.Core.Value.UInt128
+  hasMax : UInt64
+  max : ProofForge.Core.Value.UInt128
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Current block height. Extractor matches this name and the NEAR emitter
 imports `env.block_index` (u64, view-safe). Not Solana `Clock.slot`, not

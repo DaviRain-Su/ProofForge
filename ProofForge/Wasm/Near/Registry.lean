@@ -17,6 +17,7 @@ def entries : Array Entry := #[
   { name := "NearMemory", digest := "830255873ad66d7c" },
   { name := "NearOutput", digest := "aef385d73b807e1f" },
   { name := "NearStorageBalanceOutput", digest := "b2d60a785206c3ea" },
+  { name := "NearStorageBalanceBoundsOutput", digest := "90c5a63e12bc6219" },
   { name := "NearJsonUnitOutput", digest := "8c2a34289ce004b8" },
   { name := "NearJsonU128Mutation", digest := "4a2276146b03644d" },
   { name := "NearJsonAccountInput", digest := "94c66ff0e540880f" },

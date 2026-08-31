@@ -73,6 +73,7 @@ import Tests.NearTokenStorageSpec
 import Tests.NearMemorySpec
 import Tests.NearOutputSpec
 import Tests.NearStorageBalanceOutputSpec
+import Tests.NearStorageBalanceBoundsOutputSpec
 import Tests.NearJsonUnitOutputSpec
 import Tests.NearJsonU128MutationSpec
 import Tests.NearJsonAccountInputSpec

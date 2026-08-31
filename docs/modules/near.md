@@ -37,6 +37,11 @@ The 64-byte fixed part is current nearcore Prefix4/Borsh/value/record overhead, 
 for every account. Current near-contract-standards instead reports one configured maximum-account
 measurement to all registered accounts. The exact export therefore remains a closed, bounded-subset
 view rather than a complete NEP-145 ABI/economic-policy claim.
+wsm-near-storage-balance-bounds-output-001 adds the distinct exact five-leaf
+`StorageBalanceBoundsResult` view policy: quoted-u128 `min` and nullable quoted-u128 `max`, with
+zero inactive maximum limbs and a 97-byte exact maximum arena. It deliberately exports no
+`storage_balance_bounds`: standard bounds are global, so a later policy must truthfully map
+ProofForge's variable 2..64-byte AccountId costs rather than reuse one fixed-account measurement.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
@@ -224,7 +229,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   「artifact 已被证明」；`output.sh` 验证 exact bytes/String/UInt16-array Borsh、input/output
   round-trip、capacity 和 output UTF-8 failures；`storage_balance_output.sh` 验证 exact
   `null`/object bytes、独立 full-u128 total/available limbs、105-byte max wire、malformed
-  presence/inactive traps 与 stale isolation；`json_account_input.sh` 验证 bounded
+  presence/inactive traps 与 stale isolation；`storage_balance_bounds_output.sh` 独立验证 exact
+  min/max-null-or-quoted bytes、full-u128 limb order、97-byte max wire、presence/inactive traps、
+  write-free views 与 stale isolation；`json_account_input.sh` 验证 bounded
   `{"account_id":"..."}` view input 的 raw/escaped 2..64-byte decoding、九叶 carrier、exact
   433-byte wire/32-whitespace bounds 与 malformed object/string/account fail-closed matrix；
   `json_amount_input.sh` 验证 canonical `{"amount":"digits"}` 的完整两 limb decimal
@@ -305,5 +312,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearStorageBalanceOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearStorageBalanceOutput`、`NearStorageBalanceBoundsOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。
