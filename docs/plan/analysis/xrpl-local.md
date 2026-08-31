@@ -55,6 +55,7 @@
 | + clawB / burn / cashSelf | `XrplTreasury` | `treasury.sh` |
 | + pause / freeze 合成 11 export | `XrplToken` | `token.sh` |
 | mintToB / cashToB + `Card.persistCaller` | `XrplShare` | `share.sh` |
+| grant `allw` / B `takeB` | `XrplTake` | `take.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。

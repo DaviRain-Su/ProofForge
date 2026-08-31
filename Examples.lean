@@ -74,6 +74,7 @@ import Examples.XrplFund
 import Examples.XrplTreasury
 import Examples.XrplToken
 import Examples.XrplShare
+import Examples.XrplTake
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

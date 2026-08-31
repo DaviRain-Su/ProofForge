@@ -261,6 +261,15 @@ Local 2.6.1 funded Create writes this card (pokeSelf 0). Public AlphaNet
 @[pf_inline] def peekSelfSupp : UInt64 :=
   Context.peekSuppLimbs Context.selfW0 Context.selfW1 Context.selfW2
 
+/-- Load `allw` from the caller card. Rewrites persist Owner. -/
+@[pf_inline] def peekCallerAllw : UInt64 :=
+  Context.peekAllwLimbs Context.callerW0 Context.callerW1 Context.callerW2
+
+/-- Persist `v` as `allw` on the current Owner card. Call `restoreCaller`
+first so this is the caller card. -/
+@[pf_inline] def flushCallerAllw (v : UInt64) : UInt64 :=
+  Context.flushAllw v
+
 end Card
 
 namespace Pay
