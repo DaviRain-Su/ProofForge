@@ -229,6 +229,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-088](tasks/wsm-088.md) | done | SDK cap+operator 双向锁（XrplCrimp）；公开仍 -22/-196 |
 | [wsm-089](tasks/wsm-089.md) | done | 本地 384-drop 兑付（XrplRate）；公开仍 -22/-196 |
 | [wsm-090](tasks/wsm-090.md) | done | 本地 allowance 进托管（XrplCrate）；公开仍 -22/-196 |
+| [wsm-091](tasks/wsm-091.md) | done | 本地 burnFrom 双向锁（XrplCinder）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)

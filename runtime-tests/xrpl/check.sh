@@ -323,6 +323,20 @@ need_exports_treasury = (
     '(i32.const 524313)',
     '(import "host_lib" "emit_built_txn"',
 )
+need_exports_cinder = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "grant") (result i32)',
+    '(func (export "burnFrom") (result i32)',
+    '(func (export "lockIn") (result i32)',
+    '(func (export "cancel") (result i32)',
+    '(func (export "cashB") (result i32)',
+    '(i32.const 524313)',
+    '(import "host_lib" "emit_built_txn"',
+    '(i32.store8 (i32.const 92) (i32.const 97))',
+    '(i32.store8 (i32.const 76) (i32.const 100))',
+    '(i32.store8 (i32.const 100) (i32.const 101))',
+)
 need_exports_crate = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -725,6 +739,8 @@ for wat in wats:
         exports = need_exports_rate
     elif wat.stem == "XrplCrate":
         exports = need_exports_crate
+    elif wat.stem == "XrplCinder":
+        exports = need_exports_cinder
     else:
         exports = need_exports_counter
     for needle in exports:
