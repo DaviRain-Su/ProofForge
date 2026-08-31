@@ -395,6 +395,19 @@ Hex is 40 lowercase chars. Caller must `restoreCaller` afterwards. -/
   else
     Gate.ok (Context.flushHalt v)
 
+/-- Persist `allw` onto the compile-time minter card. Else-if, not `&&`.
+Hex is 40 lowercase chars. Caller must `restoreCaller` afterwards.
+Not a Map. -/
+@[pf_inline] def flushAllwLit (hex : String) (v : UInt64) : Bool :=
+  if !Gate.ok (Context.storeOwnerLit hex) then
+    false
+  else
+    Gate.ok (Context.flushAllw v)
+
+/-- True when compile-time minter `allw = 1`. Rewrites persist Owner. -/
+@[pf_inline] def allwLitIsOne (hex : String) : Bool :=
+  Context.peekAllwLit hex = (1 : UInt64)
+
 end Card
 
 namespace Pay
