@@ -117,7 +117,8 @@ runtime-code observation policy、R5-012 safe closed-call result policy、R5-013
 ERC-721 core、R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与
 R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet、
 R5-018 persistent StorageCheckpoints、R5-019 persistent StorageEnumerableMap、R5-020 shared SafeCast、R3-026 persistent
-SVM BitSet、R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header，以及 R2-010 checked
+SVM BitSet、R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
+transient wide vectors，以及 R2-010 checked
 fixed-account data resize 均已集成；独立
 contract 分别复用这些 SDK contracts。
 SVM-RT-2a 已把 CPI
@@ -145,7 +146,8 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R5-015](tasks/r5-015.md)、[R5-016](tasks/r5-016.md)、[R5-017](tasks/r5-017.md)、
 [R5-018](tasks/r5-018.md)、[R5-019](tasks/r5-019.md)、[R5-020](tasks/r5-020.md)、[R3-026](tasks/r3-026.md)、
 [R3-027](tasks/r3-027.md)、[R3-028](tasks/r3-028.md)、
-[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md) 和 [R1-023](tasks/r1-023.md)。
+[R3-029](tasks/r3-029.md)、[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md) 和
+[R1-023](tasks/r1-023.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -492,7 +494,13 @@ VersionedMigrator 选择 strict 与 explicit migration policy；Mollusk 覆盖 s
 no-write rejection，Surfpool 1.5.0 通过正常 Loader-v3 transaction 部署 exact
 VersionedLedger ELF。没有 Runtime/Ops/IR/Component/Emit、allocator、pointer 或 runtime
 geometry。详见 [R3-028](tasks/r3-028.md)。
-R3 尚未完成；wider/typed POD transient shapes、更多 manifest-bounded handle、resize rent top-up/owner reassignment、
+R3-029 再把既有 `Record64` 的 fixed 2-/4-word geometry 收口为 typed transient
+`Vector128`/`Vector256`：应用只接触 whole values，push/set 在首个 write 前完成 record/index
+preflight，drop/truncate 保持 element alignment；full/OOB/stale/OOM 与两个 compile-time slots
+继续复用现有 Vector64 lifecycle。两个独立 consumer 的 Mollusk 8/8 同时钉住完整 16-/32-byte
+result frame；没有 Runtime/Ops/IR/Component/Emit、allocator 或 pointer 新增。详见
+[R3-029](tasks/r3-029.md)。
+R3 尚未完成；generic POD transient shapes、更多 manifest-bounded handle、resize rent top-up/owner reassignment、
 runtime-selected ATA/Memo geometry、UTF-8 Memo、richer persistent key/value/payload migration shapes 与
 Token-2022 extension semantics 仍待完成。
 

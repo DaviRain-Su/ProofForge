@@ -97,5 +97,7 @@ import Examples.MemoryOps
 import Examples.TransientPair
 import Examples.TransientLedger
 import Examples.TransientOrderTape
+import Examples.TransientWide128
+import Examples.TransientWide256
 import Examples.LamportTransfer
 import Examples.PubkeyGate

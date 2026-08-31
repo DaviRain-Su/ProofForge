@@ -16,6 +16,7 @@ import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.Sdk.TransientRecord64
+import ProofForge.Svm.Sdk.TransientWideVec
 import ProofForge.Svm.Sdk.TransientBytes
 import ProofForge.Svm.Sdk.Memory
 import ProofForge.Svm.Sdk.Telemetry
@@ -47,6 +48,10 @@ instruction-word recipes; the existing Runtime/IR verifier still owns their targ
 
 `Sdk.Sysvar` similarly gives contracts stable Clock, EpochSchedule, and compile-time Rent names
 without exposing raw Runtime stubs or introducing a second syscall implementation.
+
+`Sdk.Transient.Vector128` / `Vector256` bind typed whole-value operations to the existing
+two-slot `Record64` / `Vector64` lifecycle. They preserve fixed two- and four-word alignment and the
+shared bounded bump allocator rather than adding a generic host collection or another emitter.
 
 Target-neutral allocation-free helpers such as `Core.SafeCast` are re-exported through this facade
 without inventing an SVM syscall or emitter recipe; applications still own typed error and state

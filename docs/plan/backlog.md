@@ -75,6 +75,7 @@ R3-025 fixed-account close/refund composition、
 R3-026 persistent bounded SVM bit set、
 R3-027 persistent bounded SVM enumerable set、
 R3-028 fixed-account version header / explicit migration edge、
+R3-029 typed transient UInt128/UInt256 vectors、
 R5-001 EVM Access foundation、R5-002 EVM static storage foundation、
 R5-003 bounded static roles、R5-004 Pausable policy、R5-005 bounded payment facade adoption 与
 R5-006 fungible debit ledger foundation、R5-007 checked credit/alias-safe transfer、
@@ -655,6 +656,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   通过 15 个正常 Loader-v3 writes 部署并逐字节核对；未使用 Test Validator。没有新
   Runtime/Ops/IR/Component/Emit、allocator、pointer、map 或 runtime geometry。详见
   `docs/plan/tasks/r3-028.md`。
+
+- R3-029 SVM typed transient wide vectors 已完成：`Svm.Sdk.Transient.Vector128` / `Vector256`
+  在既有 `Record64` / `Vector64` 上组合 fixed 2-/4-word elements，提供 whole-value
+  push/get/set/last 与 aligned drop/truncate/clear/finish；push 在首个 word write 前 preflight
+  完整 record room，set 在首个 mutation 前验证 record index。两个独立 consumer 的 digests
+  为 `be610f5f69db20a6` / `a0985f87fb42010c`，ELF 为 220,032 / 228,712 B；focused Mollusk
+  8/8 覆盖 exact/full、partial-write rejection、two-slot isolation、stale/OOM 以及完整
+  16-/32-byte typed return。没有新 Runtime/Ops/IR/Component/Emit、allocator、pointer 或
+  application-specific lowering。详见 `docs/plan/tasks/r3-029.md`。
 
 - R5-001 EVM Access foundation 已完成：`Evm.Sdk.Access` 组合 existing Address/Context/Revert
   提供 owner/running gates 和 fixed single-pending two-step ownership。TwoStepCounter/Credits

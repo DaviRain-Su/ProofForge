@@ -72,6 +72,8 @@ def entries : Array Entry := #[
   { name := "TransientPair", digest := "899815d9f910e597" },
   { name := "TransientLedger", digest := "a91e5e115c1f83b" },
   { name := "TransientOrderTape", digest := "e203afd44ef6eea9" },
+  { name := "TransientWide128", digest := "be610f5f69db20a6" },
+  { name := "TransientWide256", digest := "a0985f87fb42010c" },
   { name := "LamportTransfer", digest := "795d11e30ee48fb5" },
   { name := "PubkeyGate", digest := "8374e353a1923c12" }
 ]
