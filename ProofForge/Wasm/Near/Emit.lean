@@ -529,6 +529,10 @@ private partial def renderVal (st : EState) (v : Val ValKind) : Except String St
   | .ext (.storageResultByte capacity) #[index] => do
       let i ← renderVal st index
       return "(call $pf_storage_result_byte (i64.const " ++ toString capacity ++ ") " ++ i ++ ")"
+  | .ext .storageResultNearTokenW0Strict #[] =>
+      .ok "(call $pf_storage_result_near_token_strict (i64.const 0))"
+  | .ext .storageResultNearTokenW1Strict #[] =>
+      .ok "(call $pf_storage_result_near_token_strict (i64.const 1))"
   | .ext .promiseResultsCount #[] => .ok "(call $pf_promise_results_count)"
   | .ext (.promiseResultStatus capacity) #[] =>
       .ok ("(call $pf_promise_result_status (i64.const " ++ toString capacity ++ "))")
@@ -2009,6 +2013,8 @@ private partial def valUsesArena : Val ValKind → Bool
   | .ext (.storageResultLength _) _
   | .ext (.storageResultFits _) _
   | .ext (.storageResultByte _) _
+  | .ext .storageResultNearTokenW0Strict _
+  | .ext .storageResultNearTokenW1Strict _
   | .ext (.promiseResultStatus _) _
   | .ext (.promiseResultLength _) _
   | .ext (.promiseResultFits _) _
@@ -2566,6 +2572,19 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     "      (then (i64.load8_u (i32.add (global.get $pf_storage_result_ptr)",
     "        (i32.wrap_i64 (local.get $index)))))",
     "      (else (i64.const 0))))",
+    "  (func $pf_storage_result_near_token_strict (param $word i64) (result i64)",
+    "    (call $pf_storage_result_check (i64.const 16))",
+    "    (if (result i64) (i64.eq (global.get $pf_storage_result_status) (i64.const 0))",
+    "      (then (i64.const 0))",
+    "      (else",
+    "        (if (i32.or",
+    "              (i64.ne (global.get $pf_storage_result_status) (i64.const 1))",
+    "              (i32.or",
+    "                (i64.eqz (global.get $pf_storage_result_fits))",
+    "                (i64.ne (global.get $pf_storage_result_length) (i64.const 16))))",
+    "          (then unreachable))",
+    "        (i64.load (i32.add (global.get $pf_storage_result_ptr)",
+    "          (i32.wrap_i64 (i64.shl (local.get $word) (i64.const 3))))))))",
     "  (func $pf_promise_result_check (param $capacity i64)",
     "    (if (i32.eqz (global.get $pf_promise_result_active)) (then unreachable))",
     "    (if (i64.ne (local.get $capacity) (global.get $pf_promise_result_capacity))",

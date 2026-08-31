@@ -24,6 +24,10 @@ limb unsigned array view 输出同样的 canonical active prefix；raw `UInt64` 
 reusing the event decimal routine. wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
+wsm-near-ft-balance-of-001 composes those two exact policies into an exact `ft_balance_of` export
+over the existing `BAL2` balance map. Missing and present-zero balances both return `"0"`, while
+malformed present values trap; the bounded input grammar remains narrower than serde_json, so the
+official-shaped view is not claimed as complete NEP-141 compliance.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，

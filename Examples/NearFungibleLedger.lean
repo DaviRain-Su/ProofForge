@@ -46,6 +46,15 @@ def balanceSelfW1 (_state : State) : UInt64 :=
 @[pf_entry]
 def balanceSelfHas (_state : State) : UInt64 := balances.has Context.self
 
+/-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
+bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
+@[pf_entry]
+def ft_balance_of (_state : State)
+    (account : ProofForge.Wasm.Near.Runtime.AccountId) : ProofForge.Core.Value.UInt128 :=
+  let _ := balances.read account
+  ⟨ProofForge.Wasm.Near.Runtime.storageResultNearTokenW0Strict,
+    ProofForge.Wasm.Near.Runtime.storageResultNearTokenW1Strict⟩
+
 @[pf_inline] private def mint (state : State) (owner : ProofForge.Wasm.Near.Runtime.AccountId)
     (amount : NearToken) :
     Except Error (State × UInt64) :=
@@ -206,6 +215,44 @@ def fixturePutSelfMaxNoSupply (state : State) : Except Error (State × UInt64) :
 @[pf_entry]
 def fixturePutSelfOneNoSupply (state : State) : Except Error (State × UInt64) :=
   let status := balances.put Context.self ⟨1, 0⟩
+  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+
+@[pf_entry]
+def fixturePutSelfZeroNoSupply (state : State) : Except Error (State × UInt64) :=
+  let status := balances.put Context.self ⟨0, 0⟩
+  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+
+@[pf_entry]
+def fixturePutShortNoSupply (state : State) : Except Error (State × UInt64) :=
+  let account : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := 2, w0 := 0x6161, w1 := 0xdeadbeef, w2 := 0, w3 := 0,
+      w4 := 0, w5 := 0, w6 := 0, w7 := 0xffffffffffffffff }
+  let status := balances.put account ⟨3, 1⟩
+  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+
+@[pf_entry]
+def fixturePutMaxAccountNoSupply (state : State) : Except Error (State × UInt64) :=
+  let account : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := 64, w0 := 0x6867666564636261, w1 := 0x3736353433323130,
+      w2 := 0x706f6e6d6c6b6a69, w3 := 0x6665646362613938,
+      w4 := 0x7877767574737271, w5 := 0x3031323334353637,
+      w6 := 0x6665646362617a79, w7 := 0x3736353433323130 }
+  let status := balances.put account ⟨0xffffffffffffffff, 0xffffffffffffffff⟩
+  .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
+
+@[pf_entry]
+def fixtureRemoveViewAccounts (state : State) : Except Error (State × UInt64) :=
+  let short : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := 2, w0 := 0x6161, w1 := 0, w2 := 0, w3 := 0,
+      w4 := 0, w5 := 0, w6 := 0, w7 := 0 }
+  let maximum : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := 64, w0 := 0x6867666564636261, w1 := 0x3736353433323130,
+      w2 := 0x706f6e6d6c6b6a69, w3 := 0x6665646362613938,
+      w4 := 0x7877767574737271, w5 := 0x3031323334353637,
+      w6 := 0x6665646362617a79, w7 := 0x3736353433323130 }
+  let shortStatus := balances.remove short
+  let maximumStatus := balances.remove maximum
+  let status := shortStatus ||| maximumStatus
   .ok (⟨state.supplyW0, state.supplyW1, status⟩, status)
 
 @[pf_entry]

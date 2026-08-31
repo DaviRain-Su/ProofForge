@@ -292,6 +292,8 @@ def extValCanon : Ops.ValKind → String
   | .storageResultLength capacity => s!"nstore.length.{capacity}"
   | .storageResultFits capacity => s!"nstore.fits.{capacity}"
   | .storageResultByte capacity => s!"nstore.byte.{capacity}"
+  | .storageResultNearTokenW0Strict => "nstore.u128.strict.w0"
+  | .storageResultNearTokenW1Strict => "nstore.u128.strict.w1"
   | .promiseResultsCount => "npromise.results.count"
   | .promiseResultStatus capacity => s!"npromise.result.status.{capacity}"
   | .promiseResultLength capacity => s!"npromise.result.length.{capacity}"

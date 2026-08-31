@@ -169,6 +169,10 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
   nearLeaf (.storageResultFits capacity)
 @[match_pattern] def Val.nearStorageResultByte (capacity : Nat) (index : Val) : Val :=
   .ext (.near (.storageResultByte capacity)) #[index]
+@[match_pattern] def Val.nearStorageResultNearTokenW0Strict : Val :=
+  nearLeaf .storageResultNearTokenW0Strict
+@[match_pattern] def Val.nearStorageResultNearTokenW1Strict : Val :=
+  nearLeaf .storageResultNearTokenW1Strict
 
 @[match_pattern] def Val.nearPromiseResultsCount : Val :=
   nearLeaf .promiseResultsCount

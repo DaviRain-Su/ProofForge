@@ -263,6 +263,7 @@ lookup_anchors = (
     'i64.or',
 )
 ledger_anchors = (
+    '(func (export "ft_balance_of")',
     '(func (export "mintSelfOne")',
     '(func (export "mintSelfTwo64")',
     '(func (export "mintSelfMax")',
@@ -273,7 +274,12 @@ ledger_anchors = (
     '(func (export "seedSelfMalformed8")',
     '(func (export "seedSelfMalformed20")',
     '(func (export "fixtureSetSupplyMax")',
+    '(func $pf_json_account_id',
+    '(func $pf_storage_result_near_token_strict',
+    '(func $pf_u128_decimal',
     '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
+    '(call $pf_input',
+    '(call $pf_value_return',
     '(call $pf_storage_read',
     '(call $pf_storage_write',
     '(call $pf_storage_remove',

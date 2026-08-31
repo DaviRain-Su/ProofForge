@@ -47,6 +47,8 @@ inductive ValKind where
   | storageResultLength (capacity : Nat)
   | storageResultFits (capacity : Nat)
   | storageResultByte (capacity : Nat)
+  | storageResultNearTokenW0Strict
+  | storageResultNearTokenW1Strict
   /-- Callback-result count plus metadata and byte access for the latest bounded read. -/
   | promiseResultsCount
   | promiseResultStatus (capacity : Nat)

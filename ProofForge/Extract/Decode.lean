@@ -237,6 +237,10 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           some (.nearStorageResultByte capacity index)
         else none
     | _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultNearTokenW0Strict then
+    some .nearStorageResultNearTokenW0Strict
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultNearTokenW1Strict then
+    some .nearStorageResultNearTokenW1Strict
   else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultStatus ||
       isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultLength ||
       isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultFits) &&

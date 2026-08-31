@@ -55,6 +55,23 @@ def _supply(client: NearClient) -> int:
     return _view(client, "supplyW0") | (_view(client, "supplyW1") << 64)
 
 
+def _json_balance(client: NearClient, account: bytes) -> int:
+    wire = b'{"account_id":"' + account + b'"}'
+    raw = client.view("ft_balance_of", wire)
+    if len(raw) < 3 or raw[:1] != b'"' or raw[-1:] != b'"':
+        raise AssertionError(f"ft_balance_of returned non-quoted-u128 bytes: {raw!r}")
+    return int(raw[1:-1])
+
+
+def _json_balance_fails(client: NearClient, account: bytes, scene: str) -> None:
+    wire = b'{"account_id":"' + account + b'"}'
+    try:
+        client.view("ft_balance_of", wire)
+    except NearRpcError:
+        return
+    raise AssertionError(f"{scene}: malformed stored value did not fail the view")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
@@ -65,6 +82,8 @@ def main() -> None:
 
     if _view(client, "balanceSelfHas") != 0 or _balance(client.view_state_values(), self_id) is not None:
         raise AssertionError("missing balance must remain distinct from present zero")
+    if _json_balance(client, b"missing.test.near") != 0:
+        raise AssertionError("ft_balance_of missing account did not return quoted zero")
     _fail_unchanged(client, "burnSelfOne", "missing-balance underflow")
     before = client.view_state_values()
     _call(client, "mintSelfZero")
@@ -76,10 +95,35 @@ def main() -> None:
         )
     print("near-ledger: missing/zero policy and zero no-ledger-mutation ok")
 
+    _call(client, "fixturePutSelfZeroNoSupply")
+    present_zero = client.view_state_values()
+    if self_key not in present_zero or len(present_zero[self_key]) != 16:
+        raise AssertionError("fixture present-zero balance was not stored exactly")
+    if _view(client, "balanceSelfHas") != 1 or _json_balance(client, self_id.encode()) != 0:
+        raise AssertionError("present zero was not distinguishable from missing in storage")
+    _call(client, "fixtureResetSelf")
+
+    short_id = "aa"
+    max_id = "abcdefgh01234567ijklmnop89abcdefqrstuvwx76543210yzabcdef01234567"
+    _call(client, "fixturePutShortNoSupply")
+    if _json_balance(client, short_id.encode()) != (1 << 64) + 3:
+        raise AssertionError("short AccountId lookup included inactive carrier padding")
+    _call(client, "fixturePutMaxAccountNoSupply")
+    if _json_balance(client, max_id.encode()) != MAX_U128:
+        raise AssertionError("maximum asymmetric AccountId/u128 lookup mismatch")
+    if _json_balance(client, max_id.replace("a", "\\u0061", 1).encode()) != MAX_U128:
+        raise AssertionError("escaped maximum AccountId lookup mismatch")
+    _call(client, "fixtureRemoveViewAccounts")
+    state = client.view_state_values()
+    if _key(short_id) in state or _key(max_id) in state:
+        raise AssertionError("view fixture accounts were not reclaimed")
+    print("near-ledger: present zero plus short/max canonical AccountId views ok")
+
     _call(client, "seedSelfMalformed8")
     malformed8 = client.view_state_values()
     if len(malformed8[self_key]) != 8:
         raise AssertionError("malformed-short seed geometry mismatch")
+    _json_balance_fails(client, self_id.encode(), "malformed-short balance")
     _fail_unchanged(client, "mintSelfOne", "malformed-short balance")
     if client.view_state_values() != malformed8:
         raise AssertionError("malformed-short rejection lost exact snapshot")
@@ -89,10 +133,13 @@ def main() -> None:
     malformed20 = client.view_state_values()
     if len(malformed20[self_key]) != 20:
         raise AssertionError("malformed-long seed geometry mismatch")
+    _json_balance_fails(client, self_id.encode(), "malformed-long balance")
     _fail_unchanged(client, "burnSelfZero", "malformed-long zero burn")
     if client.view_state_values() != malformed20:
         raise AssertionError("malformed-long rejection exposed partial/stale data")
     _call(client, "fixtureResetSelf")
+    if _json_balance(client, self_id.encode()) != 0:
+        raise AssertionError("normal read after malformed views observed stale register data")
     print("near-ledger: present malformed 8/20-byte balances fail closed before writes ok")
 
     _call(client, "fixturePutSelfMaxNoSupply")
@@ -112,6 +159,9 @@ def main() -> None:
     state = client.view_state_values()
     if _balance(state, self_id) != mixed or _supply(client) != mixed:
         raise AssertionError("mixed low/high mint did not preserve both limbs")
+    if _json_balance(client, self_id.encode()) != mixed or \
+        _json_balance(client, self_id.replace(".", "\\u002e").encode()) != mixed:
+        raise AssertionError("ft_balance_of raw/escaped self query lost mixed limbs")
     _call(client, "burnSelfZero")
     after_zero = client.view_state_values()
     if _balance(after_zero, self_id) != mixed or _supply(client) != mixed:
@@ -127,6 +177,8 @@ def main() -> None:
     caller_key = _key(caller)
     _call(client, "mintCallerTwo64", signer=caller)
     _call(client, "mintCallerOne", signer=caller)
+    if _json_balance(client, caller.encode()) != (1 << 64) + 1:
+        raise AssertionError("ft_balance_of caller query lost complete AccountId/u128")
     before_supply = _supply(client)
     _call(client, "transferCallerToSelfOne", signer=caller)
     if _supply(client) != before_supply:
@@ -147,6 +199,8 @@ def main() -> None:
     _call(client, "mintSelfMax")
     if _balance(client.view_state_values(), self_id) != MAX_U128 or _supply(client) != MAX_U128:
         raise AssertionError("maximum u128 mint mismatch")
+    if _json_balance(client, self_id.encode()) != MAX_U128:
+        raise AssertionError("ft_balance_of maximum quoted u128 mismatch")
     _call(client, "burnSelfMax")
     if self_key in client.view_state_values() or _supply(client) != 0:
         raise AssertionError("maximum burn did not reclaim balance and zero supply")

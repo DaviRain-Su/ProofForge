@@ -29,6 +29,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
   let methodSteps (name : String) :=
     (source.methods.find? (·.ixName == name)).map (storageSteps ·.ops) |>.getD #[]
   unless methodSteps "mintSelfOne" == #["read.16.72", "write.16.72.16"] &&
+      methodSteps "ft_balance_of" == #["read.16.72"] &&
       methodSteps "burnSelfOne" ==
         #["read.16.72", "remove.16.72", "write.16.72.16"] &&
       methodSteps "transferCallerToSelfOne" ==
@@ -38,6 +39,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       methodSteps "seedSelfMalformed20" == #["write.16.72.20"] do
     throwError s!"fungible ledger effects lost prerequisite reads or write-last branches: " ++
       s!"mint={methodSteps "mintSelfOne"}, burn={methodSteps "burnSelfOne"}, " ++
+      s!"balance={methodSteps "ft_balance_of"}, " ++
       s!"transfer={methodSteps "transferCallerToSelfOne"}, " ++
       s!"malformed8={methodSteps "seedSelfMalformed8"}, " ++
       s!"malformed20={methodSteps "seedSelfMalformed20"}"
@@ -45,6 +47,15 @@ elab "#pf_near_fungible_ledger_check" : command => do
     match IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
+  let some balance := program.entries.find? (·.ixName == "ft_balance_of")
+    | throwError "missing target ft_balance_of"
+  unless balance.inputSchema == some Codec.accountIdSchema &&
+      balance.inputPolicy ==
+        "near-json-account-id-object-bounded-v1(max-wire=433,ws=32,keys=canonical,unknown=reject)" &&
+      balance.outputSchema == some (.scalar .uint128) &&
+      balance.outputPolicy == "near-json-u128-string-v1" && balance.paramCount == 9 &&
+      balance.tupleArity == some 2 do
+    throwError "ft_balance_of lost its specialized AccountId-input/u128-output composition"
   for method in program.entries do
     match Emit.emit { program with entries := #[method] } with
     | .ok _ => pure ()
@@ -58,10 +69,12 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"mintSelfMax\")", "(func (export \"burnSelfOne\")",
       "(func (export \"transferCallerToSelfOne\")",
       "(func (export \"transferCallerToSelfZero\")",
+      "(func (export \"ft_balance_of\")",
       "(func (export \"seedSelfMalformed8\")",
       "(func (export \"fixtureSetSupplyMax\")",
       "(call $pf_storage_read", "(call $pf_storage_write", "(call $pf_storage_remove",
       "(call $pf_arena_alloc (i64.const 72) (i64.const 1))",
+      "(func $pf_json_account_id", "(func $pf_u128_decimal",
       "i64.add", "i64.sub", "i64.lt_u", "i64.ge_u", "i64.and", "i64.or"] do
     unless wat.contains anchor do
       throwError s!"NEAR fungible ledger WAT missing {anchor}\n{wat}"
@@ -78,11 +91,24 @@ elab "#pf_near_fungible_ledger_check" : command => do
       (fixtureBody.splitOn
         "(call $pf_storage_write (i64.const 6) (i64.const 1040)").length == 2 do
     throwError "fixtureSetSupplyMax did not persist each supply/marker field exactly once"
+  let balanceBody ← match wat.splitOn "(func (export \"ft_balance_of\")" with
+    | [_before, tail] =>
+        match tail.splitOn "\n  )\n" with
+        | body :: _ => pure body
+        | [] => throwError "ft_balance_of body terminator is missing"
+    | _ => throwError "ft_balance_of must occur exactly once"
+  unless (balanceBody.splitOn "(call $pf_input").length == 2 &&
+      (balanceBody.splitOn "(call $pf_value_return").length == 2 &&
+      !balanceBody.contains "(call $pf_storage_write" &&
+      !balanceBody.contains "(call $pf_storage_remove" &&
+      !balanceBody.contains "(call $pf_log_utf8" &&
+      !balanceBody.contains "(call $pf_promise" do
+    throwError "ft_balance_of must read/value_return once without writes, logs, or promises"
   logInfo m!"proofforge-near-fungible-ledger: digest = {IR.digestHex program}"
 
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "b91759b7d8a8fac7"
+  some "bf1e9ebe7cb41b40"
 
 end Tests.NearFungibleLedgerSpec

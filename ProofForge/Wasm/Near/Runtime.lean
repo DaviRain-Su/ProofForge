@@ -495,6 +495,11 @@ avoids treating inactive AccountId carrier lanes as identity bytes.
   let _ := index
   0
 
+/-- Strict typed-map view decode of the active 16-byte storage result. Missing returns zero;
+present malformed/oversized values trap in the target instead of exposing partial/stale data. -/
+@[irreducible] def storageResultNearTokenW0Strict : UInt64 := 0
+@[irreducible] def storageResultNearTokenW1Strict : UInt64 := 0
+
 /--
 `current_account_id` as the first 8 bytes of the UTF-8 account id,
 little-endian. View-safe — unlike `predecessor`. Not a 20-byte address,

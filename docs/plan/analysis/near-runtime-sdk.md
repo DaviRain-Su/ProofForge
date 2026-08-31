@@ -168,7 +168,7 @@ asynchronous; dynamic handles and multi-action builders are absent.
 | N7 promises | **detached/returned static batch calls, static/full-AccountId native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/account-transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
-| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy complete; no public token method contract | standard-specific integration suites |
+| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy and specialized bounded `ft_balance_of` view complete; no fully serde-compatible token contract | standard-specific integration suites |
 | N11 storage economics | real invocation-dynamic `storage_usage`, caller-only measured registration, exact-zero unregister, and supply-integrated force unregister complete; byte price remains explicit trusted config | variable AccountId-key cost/reclaim, speculative rollback, exact refunds; no public NEP-145 ABI |
 
 ## 6. Near-term task cuts
@@ -225,6 +225,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    32, and decoded canonical ASCII AccountId length is 2..64. The parser accepts standard value
    escapes that decode to valid AccountId bytes but deliberately requires the raw canonical key,
    rejects unknown fields, and does not claim serde_json or public NEP method compatibility.
+   **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
+   `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
+   existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero
+   balances both return `"0"`; malformed present 8/20-byte values fail the view instead of
+   exposing partial or stale limbs. The input subset is still narrower than near-sdk serde, so
+   this official-shaped method is not claimed as complete NEP-141 ABI compliance.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
    **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;
