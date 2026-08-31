@@ -428,6 +428,35 @@ via `peekSelfSupp`. Not a Map. -/
   else
     peekSelfSupp ≤ Context.peekCapLit hex - need
 
+/-- Load `bal` from a compile-time AccountID card. Rewrites persist Owner. -/
+@[pf_inline] def peekBalLit (hex : String) : UInt64 :=
+  Context.peekOwnerLimbs
+    (Runtime.xrplAccountLitW0 hex)
+    (Runtime.xrplAccountLitW1 hex)
+    (Runtime.xrplAccountLitW2 hex)
+
+/-- Select a compile-time AccountID card, then subtract `delta` from `bal`.
+Else-if, not `&&`. `flushBal` overwrites `$bal`; caller must
+`persistCaller` afterwards. Not a Map. -/
+@[pf_inline] def subBalLit (hex : String) (delta : UInt64) : Bool :=
+  if !Gate.ok (Context.storeOwnerLit hex) then
+    false
+  else if !(delta ≤ peekBalLit hex) then
+    false
+  else
+    Gate.ok (Context.flushBal (peekBalLit hex - delta))
+
+/-- Select a compile-time AccountID card, then add `delta` to `bal`.
+Else-if, not `&&`. `flushBal` overwrites `$bal`; caller must
+`persistCaller` afterwards. Not a Map. -/
+@[pf_inline] def addBalLit (hex : String) (delta : UInt64) : Bool :=
+  if !Gate.ok (Context.storeOwnerLit hex) then
+    false
+  else if !(peekBalLit hex ≤ Gate.u64Max - delta) then
+    false
+  else
+    Gate.ok (Context.flushBal (peekBalLit hex + delta))
+
 end Card
 
 namespace Pay

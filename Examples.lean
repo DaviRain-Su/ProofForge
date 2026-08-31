@@ -89,6 +89,7 @@ import Examples.XrplBrace
 import Examples.XrplClamp
 import Examples.XrplClasp
 import Examples.XrplCleft
+import Examples.XrplClip
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole

@@ -224,6 +224,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-083](tasks/wsm-083.md) | done | SDK Card.flushHaltLit；暂停+冻结双向锁（XrplClamp）；公开仍 -22/-196 |
 | [wsm-084](tasks/wsm-084.md) | done | SDK Card.flushAllwLit；operator pause 双向锁（XrplClasp）；公开仍 -22/-196 |
 | [wsm-085](tasks/wsm-085.md) | done | SDK Card.flushCapLit；mint cap 双向锁（XrplCleft）；公开仍 -22/-196 |
+| [wsm-086](tasks/wsm-086.md) | done | SDK Card.addBalLit/subBalLit；clawB 双向锁（XrplClip）；公开仍 -22/-196 |
 
 
 积压：[backlog.md](backlog.md)
