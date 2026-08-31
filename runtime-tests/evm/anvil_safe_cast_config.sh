@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Owner-gated UInt128→UInt64 checked replacement: zero policy, exact boundary, just/high-limb
-# overflow, authorization ordering, and storage atomicity across all rejected transactions.
+# Owner-gated UInt128→UInt64/UInt32 checked replacement: independent zero policies, exact
+# boundaries, low-word/upper-limb overflow, authorization ordering, and storage atomicity.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,12 +20,15 @@ bytecode="$(tr -d '\n\r ' < "$bin")"
 sender="$("$cast" wallet address --private-key "$private_key")"
 addr="$(solana_lean_deploy_ctor_address "$bytecode" "$sender")"
 
-read -r max64 just_over high_limb < <("$python" -I -S -c \
-  'print(2**64-1, 2**64, 2**127)')
+read -r max32 just_over32 max64 just_over high_limb < <("$python" -I -S -c \
+  'print(2**32-1, 2**32, 2**64-1, 2**64, 2**127)')
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'limitOf()(uint64)')" 7 \
   "constructor limit"
 solana_lean_require_storage "$addr" 3 7 "constructor limit slot"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'windowOf()(uint32)')" 3 \
+  "constructor window"
+solana_lean_require_storage "$addr" 4 3 "constructor window slot"
 
 # Zero is representable, but this application's independent nonzero policy rejects it.
 solana_lean_require_named_revert "$addr" "$sender" \
@@ -76,4 +79,50 @@ solana_lean_require_storage "$addr" 3 "$max64" "unauthorized updates are atomic"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'limitOf()(uint64)')" \
   "$max64" "all rejected transactions preserve the exact max"
 
-echo "evm-anvil-safe-cast-config: ok (owner + zero policy + exact max + just/high-limb rejection + atomicity; engineering only)"
+# The same owner policy independently consumes UInt128→UInt32. The 32-bit boundary checks both
+# high bits inside w0 and the complete w1 limb before the `window` slot can change.
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'setWindow(uint128)' 0)" 'windowZero()' "zero window"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'setWindow(uint128)' 0 >/dev/null 2>&1; then
+  echo "FAIL: zero window unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 4 3 "zero window is atomic"
+
+solana_lean_require_uint "$("$cast" call --from "$sender" --rpc-url "$rpc" "$addr" \
+  'setWindow(uint128)(uint32)' "$max32")" "$max32" "exact UInt32 max window"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'setWindow(uint128)' "$max32" >/dev/null
+solana_lean_require_storage "$addr" 4 "$max32" "exact UInt32 max window persists"
+
+for case in \
+  "$just_over32|window low-word upper-bit overflow" \
+  "$just_over|window w1 overflow" \
+  "$high_limb|window distant high-bit overflow"; do
+  value="${case%%|*}"
+  label="${case#*|}"
+  solana_lean_require_named_revert "$addr" "$sender" \
+    "$("$cast" calldata 'setWindow(uint128)' "$value")" 'invalidWindow()' "$label"
+  if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+      "$addr" 'setWindow(uint128)' "$value" >/dev/null 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  solana_lean_require_storage "$addr" 4 "$max32" "$label is atomic"
+done
+
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'setWindow(uint128)' 11)" "$other" "non-admin representable window"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'setWindow(uint128)' 11 >/dev/null 2>&1; then
+  echo "FAIL: non-admin window update unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'setWindow(uint128)' "$just_over32")" "$other" \
+  "non-admin UInt32 overflow reaches authorization first"
+solana_lean_require_storage "$addr" 4 "$max32" "unauthorized window updates are atomic"
+solana_lean_require_storage "$addr" 3 "$max64" "window path preserves UInt64 limit"
+
+echo "evm-anvil-safe-cast-config: ok (owner + UInt64/UInt32 boundaries + application policy + atomicity; engineering only)"

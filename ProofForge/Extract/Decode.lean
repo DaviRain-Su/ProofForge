@@ -6467,7 +6467,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       let continuation := args[args.size - 1]!
       match strip continuation with
       | .lam _ ty body _ =>
-        if ty.consumeMData.getAppFn.constName? == some ``UInt64 then
+        if isScalarResult env ty then
           match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
               (localDepth := localDepth + 1) (stateType? := stateType?)
               (deepScalars := deepScalars) with

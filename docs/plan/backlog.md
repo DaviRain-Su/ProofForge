@@ -86,7 +86,8 @@ R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap、
 R5-016 persistent bounded storage ring queue 与 explicit effect-result sequencing、
 R5-017 persistent bounded enumerable set 与 mutable-query snapshot sequencing、
 R5-018 persistent bounded UInt64 checkpoints、R5-019 persistent bounded enumerable UInt64 map、
-R5-020 shared checked UInt128/UInt256→UInt64 SafeCast；
+R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
+R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -843,6 +844,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   overflow、owner、zero 和 literal state write policy。两侧 SDK umbrella 可复用同一纯值组件，
   但 target ABI/storage 仍各自所有；没有 Runtime/Ops/IR/Component/Emit、allocation、pointer
   或 unchecked truncation。详见 `docs/plan/tasks/r5-020.md`。
+
+- R5-021 checked wide-to-UInt32 SafeCast 已完成集成：`Core.SafeCast` 在所有 upper limbs 为零后
+  继续要求 low limb `< 2^32`，才执行显式 UInt32 narrowing；width sentinel 只在 shared policy
+  中命名一次。Extract 的 `Except` do-bind 从 UInt64 特判改为既有 `isScalarResult`，让固定
+  UInt8/16/32/64、Bool 与 registered scalar/newtype 走同一 generic monadic path；普通 let/
+  state/effect normalization 不变，避免扰动现有 SVM canonical IR。该切片不增加 width-specific
+  Ops/IR/CFG/Component/Runtime/Emit case。Accumulator/Config 的新 checkpoint/window 路径分别
+  验证 permissionless 与 owner-first policy、typed width/zero errors 和失败原子性；原 UInt64
+  路径保留。详见 `docs/plan/tasks/r5-021.md`。
 
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Permissionless UInt256→UInt64 checked accumulation: exact boundary, every discarded-limb class,
-# zero, subsequent UInt64 overflow, and storage atomicity across failed transactions.
+# Permissionless UInt256→UInt64 accumulation plus UInt256→UInt32 checkpoint replacement: exact
+# boundaries, every discarded-limb/low-word class, application errors, and storage atomicity.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,12 +21,15 @@ bytecode="$(tr -d '\n\r ' < "$bin")"
 sender="$("$cast" wallet address --private-key "$private_key")"
 addr="$(solana_lean_deploy_ctor_u64 "$bytecode" 0)"
 
-read -r max64 just_over middle_limb high_limb < <("$python" -I -S -c \
-  'print(2**64-1, 2**64, 2**128, 2**192)')
+read -r max32 just_over32 max64 just_over middle_limb high_limb < <("$python" -I -S -c \
+  'print(2**32-1, 2**32, 2**64-1, 2**64, 2**128, 2**192)')
 
 solana_lean_require_storage "$addr" 0 0 "constructor total"
+solana_lean_require_storage "$addr" 1 1 "constructor checkpoint"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'totalOf()(uint64)')" 0 \
   "initial total"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'checkpointOf()(uint32)')" 1 "initial checkpoint"
 
 # Zero is representable and leaves zero state through the successful application branch.
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
@@ -71,4 +74,39 @@ done
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'totalOf()(uint64)')" \
   "$max64" "all failed transactions preserve the exact max"
 
-echo "evm-anvil-safe-cast-accumulator: ok (zero + exact max + checked-add overflow + w1/w2/w3 rejection + atomicity; engineering only)"
+# UInt32 has a second discarded-bit boundary inside w0. Zero reaches the application policy;
+# exact max is persisted, while 2^32 and every upper-limb class fail before the checkpoint write.
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'setCheckpoint(uint256)' 0)" 'checkpointZero()' "zero checkpoint"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'setCheckpoint(uint256)' 0 >/dev/null 2>&1; then
+  echo "FAIL: zero checkpoint unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 1 1 "zero checkpoint is atomic"
+
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'setCheckpoint(uint256)(uint32)' "$max32")" "$max32" "exact UInt32 max"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'setCheckpoint(uint256)' "$max32" >/dev/null
+solana_lean_require_storage "$addr" 1 "$max32" "exact UInt32 max persists"
+
+for case in \
+  "$just_over32|low-word upper-bit overflow" \
+  "$just_over|checkpoint w1 overflow" \
+  "$middle_limb|checkpoint w2 overflow" \
+  "$high_limb|checkpoint w3 overflow"; do
+  value="${case%%|*}"
+  label="${case#*|}"
+  solana_lean_require_named_revert "$addr" "$sender" \
+    "$("$cast" calldata 'setCheckpoint(uint256)' "$value")" 'checkpointTooWide()' "$label"
+  if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+      "$addr" 'setCheckpoint(uint256)' "$value" >/dev/null 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  solana_lean_require_storage "$addr" 1 "$max32" "$label is atomic"
+done
+solana_lean_require_storage "$addr" 0 "$max64" "checkpoint path preserves UInt64 total"
+
+echo "evm-anvil-safe-cast-accumulator: ok (UInt64 + UInt32 exact boundaries, all discarded bits, application policy, atomicity; engineering only)"
