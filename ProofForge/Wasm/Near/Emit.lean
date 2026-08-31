@@ -611,14 +611,14 @@ private def returnU64Instr (expr : String) (level : Nat) : Array String :=
   ]
 
 private def outputPlanOf (method : Method ValKind OpExt) :
-    Except String (Option Codec.BorshOutputPlan) := do
+    Except String (Option Codec.OutputPlan) := do
   match method.outputSchema with
   | none =>
       unless method.outputPolicy.isEmpty do
         throw s!"near/codec: {method.ixName} output policy has no schema"
       pure none
   | some schema =>
-      let plan ← Codec.outputPlan schema
+      let plan ← Codec.targetOutputPlan schema
       unless method.outputPolicy == plan.canonical do
         throw s!"near/codec: {method.ixName} output policy does not match its schema"
       pure (some plan)
@@ -683,6 +683,24 @@ private def returnBorshInstr (st : EState) (plan : Codec.BorshOutputPlan)
       "(i64.const " ++ toString plan.elementWidth ++ "))) " ++
       "(i64.extend_i32_u (local.get $pf_output_ptr)))"))
   return lines
+
+/-- Serialize one lossless two-limb unsigned value as the exact JSON string representation used by
+NEP-141/145 quantities. This is a scalar view codec, not a generic JSON serializer. -/
+private def returnJsonU128Instr (st : EState) (values : Array (Val ValKind))
+    (level : Nat) : Except String (Array String) := do
+  unless values.size == 2 do
+    throw "near/codec: JSON u128 output plan does not match result leaves"
+  let lo ← renderVal st values[0]!
+  let hi ← renderVal st values[1]!
+  return #[
+    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 41) (i64.const 1)))",
+    indent level "(i64.store8 (local.get $pf_output_ptr) (i64.const 34))",
+    indent level "(local.set $pf_output_digits_ptr (call $pf_arena_alloc (i64.const 39) (i64.const 1)))",
+    indent level ("(local.set $pf_output_length (call $pf_u128_decimal " ++ lo ++ " " ++ hi ++
+      " (local.get $pf_output_digits_ptr) (i32.add (local.get $pf_output_ptr) (i32.const 1))))"),
+    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.wrap_i64 (i64.add (local.get $pf_output_length) (i64.const 1)))) (i64.const 34))",
+    indent level "(call $pf_value_return (i64.add (local.get $pf_output_length) (i64.const 2)) (i64.extend_i32_u (local.get $pf_output_ptr)))"
+  ]
 
 private def emitChecked (st : EState) (kind : String) (lhs rhs : String) (level : Nat) :
     Except String (Array String × EState) := do
@@ -1354,7 +1372,7 @@ private structure Region where
   terminal : Bool := false
 
 private partial def emitRegion (p : Program ValKind OpExt)
-    (outputPlan : Option Codec.BorshOutputPlan) (view : Bool) (echo : Bool)
+    (outputPlan : Option Codec.OutputPlan) (view : Bool) (echo : Bool)
     (level : Nat) (defaultSlot : String)
     (ops : List (Op ValKind OpExt)) (st : EState) : Except String Region := do
   match ops with
@@ -1729,8 +1747,10 @@ private partial def emitRegion (p : Program ValKind OpExt)
         unless skipped.all isExitOp do
           throw "extract/unsupported: near v0 instructions follow terminal operation"
         match outputPlan with
-        | some plan =>
+        | some (.borsh plan) =>
             return { lines := ← returnBorshInstr st plan values level, st, terminal := true }
+        | some .jsonU128 =>
+            return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
         | none =>
             unless values.size == 1 do
               throw "extract/unsupported: near v0 view wants exactly one UInt64"
@@ -2290,6 +2310,8 @@ private def renderFn (p : Program ValKind OpExt)
   if outputPlan.isSome then
     lines := lines.push "    (local $pf_output_ptr i32)"
     lines := lines.push "    (local $pf_output_length i64)"
+  if outputPlan == some .jsonU128 then
+    lines := lines.push "    (local $pf_output_digits_ptr i32)"
   if isPrivate || methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"
     for i in List.range 8 do
@@ -2525,10 +2547,8 @@ private def arenaHelpers (p : Program ValKind OpExt) : Array String :=
     ""
   ]
 
-/-- Closed helpers used only by the NEP-141 event effect. The decimal routine keeps 39
-little-endian base-10 digits, consumes source bits 127 down to 0, feeds each bit into digit zero,
-updates digits 0 through 38, then emits digits 38 down to 0 (including one zero digit). -/
-private def ftEventHelpers : Array String := #[
+/-- Closed JSON byte escaper used by NEP-141 event effects. -/
+private def jsonEscapeHelper : Array String := #[
   "  (func $pf_json_escape_byte (param $byte i64) (param $ptr i32) (param $len i64) (result i64)",
   "    (local $nibble i64)",
   "    (if (i32.or (i64.eq (local.get $byte) (i64.const 34)) (i64.eq (local.get $byte) (i64.const 92)))",
@@ -2574,7 +2594,13 @@ private def ftEventHelpers : Array String := #[
   "            (else (i64.add (local.get $nibble) (i64.const 87)))))",
   "        (return (i64.add (local.get $len) (i64.const 6)))))",
   "    (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $len))) (local.get $byte))",
-  "    (i64.add (local.get $len) (i64.const 1)))",
+  "    (i64.add (local.get $len) (i64.const 1)))"
+]
+
+/-- Shared NEP-141 event and quoted-u128 output routine. It keeps 39 little-endian base-10 digits,
+consumes source bits 127 down to 0, feeds each bit into digit zero, updates digits 0 through 38,
+then emits digits 38 down to 0 (including one zero digit). -/
+private def u128DecimalHelper : Array String := #[
   "  (func $pf_u128_decimal (param $lo i64) (param $hi i64) (param $digits i32) (param $out i32) (result i64)",
   "    (local $bit i64) (local $i i64) (local $carry i64) (local $value i64)",
   "    (local $digit i64) (local $length i64) (local $started i32)",
@@ -2616,6 +2642,8 @@ private def ftEventHelpers : Array String := #[
   ""
 ]
 
+private def ftEventHelpers : Array String := jsonEscapeHelper ++ u128DecimalHelper
+
 private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
   (match method.inputSchema with
     | some (.boundedString _) => true
@@ -2626,6 +2654,12 @@ private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
 
 private def programUsesUtf8Codec (p : Program ValKind OpExt) : Bool :=
   methodUsesUtf8Codec p.initializer || p.entries.any methodUsesUtf8Codec
+
+private def methodUsesJsonU128Output (method : Method ValKind OpExt) : Bool :=
+  method.outputSchema == some (.scalar .uint128)
+
+private def programUsesJsonU128Output (p : Program ValKind OpExt) : Bool :=
+  methodUsesJsonU128Output p.initializer || p.entries.any methodUsesJsonU128Output
 
 /-- Strict Unicode-scalar UTF-8 validation over one already bounded memory span. Explicit Borsh
 lengths are always used; no NUL-terminated nearcore sentinel semantics enter this helper. -/
@@ -2806,6 +2840,8 @@ def emit (p : IR.Program) : Except String String := do
     lines := lines ++ arenaHelpers p
   if programHasFtEvent p then
     lines := lines ++ ftEventHelpers
+  else if programUsesJsonU128Output p then
+    lines := lines ++ u128DecimalHelper
   if #[ValKind.nearTokenMulU64Ok, .nearTokenMulU64W0, .nearTokenMulU64W1].any
       (programUses · p) then
     lines := lines ++ mul64Helpers

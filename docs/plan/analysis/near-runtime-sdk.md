@@ -51,7 +51,7 @@ Authoritative source anchors:
 | full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
 | u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance, checked add/sub, and exact Borsh storage values complete** in wsm-near-u128-001/u128-arithmetic-001/u128-storage-001; explicit gas and lossless Promise deposit complete | shared wide value + Near ABI binding |
 | arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
-| Borsh/JSON method ABI | generated SDK wrapper | canonical bounded bytes/String input in wsm-near-bytes-001 and allocator-backed bounded bytes/String/unsigned-array view output in wsm-near-output-001; nested/tagged/JSON absent | Near entry adapter/codec |
+| Borsh/JSON method ABI | generated SDK wrapper | canonical bounded Borsh input/output plus output-only quoted-u128 JSON scalar in wsm-near-json-u128-output-001; JSON input/objects/null/bool/general strings absent | Near entry adapter/codec |
 | contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed entries, versioned schema envelope, and authenticated split-key migration complete** in wsm-near-init/uninitialized/state-envelope/migration-001 | broader state codecs/version chains explicit |
 | `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
 | LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
@@ -161,7 +161,7 @@ asynchronous; dynamic handles and multi-action builders are absent.
 | N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
 | N1 byte/wide substrate | **UInt128 token context, checked two-limb add/sub, and exact u128×u64 done** in wsm-near-u128-001/u128-arithmetic-001/u128-mul-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001 | resource budget; malformed length/OOB/UTF-8 failures |
 | N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
-| N3 entry ABI | canonical bounded Borsh input done in wsm-near-bytes-001; allocator-backed bounded bytes/String/unsigned-array view output done in wsm-near-output-001; nested/tagged values, mutating output, and JSON remain | golden bytes against Rust; exact cursor/padding |
+| N3 entry ABI | canonical bounded Borsh input/output done; exact output-only quoted-u128 JSON scalar done in wsm-near-json-u128-output-001; JSON input/objects and nested/tagged values remain | golden bytes against Rust; exact cursor/padding |
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static and bounded dynamic `log_utf8` plus exact bounded NEP-297 string-data envelope done in wsm-near-log-001/log-dynamic-001/event-001 | exact standard-specific event bytes and host log limits |
@@ -214,7 +214,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    near-contract-standards removes first, directly subtracts supply, and emits no `ft_burn` event;
    this slice likewise leaves event compliance explicit rather than inventing a log.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
-   output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
+   output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
+   remain later.
+   **NEAR-JSON-U128-OUTPUT (wsm-near-json-u128-output-001 done):** exact `.scalar .uint128`
+   two-limb views emit one canonical quoted decimal JSON string through a pinned target policy and
+   the shared 39-digit routine. This is output-only and does not imply JSON input or object support.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
    **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;

@@ -567,7 +567,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
 private structure BoundOutput where
   ixName : String
   schema : Core.Codec.Schema
-  plan : Codec.BorshOutputPlan
+  plan : Codec.OutputPlan
 
 private structure BoundEntry where
   ixName : String
@@ -620,9 +620,21 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       unless method.kind == .get do
         throw s!"near/codec: {method.ixName} bounded output currently requires a view"
       let schema := method.retSchema
-      let plan ← Codec.outputPlan schema
+      let plan ← Codec.targetOutputPlan schema
       unless method.retCount == plan.sourceValueCount do
         throw s!"near/codec: {method.ixName} output frame does not match its Borsh plan"
+      return ({ method with
+        retWidths := #[8]
+        retTypes := #[.uint64]
+        retSchema := .scalar .uint64
+        retCount := 1 }, some { ixName := method.ixName, schema, plan })
+  | .scalar .uint128 =>
+      unless method.kind == .get do
+        throw s!"near/codec: {method.ixName} JSON u128 output currently requires a view"
+      let schema := method.retSchema
+      let plan ← Codec.targetOutputPlan schema
+      unless method.retCount == plan.sourceValueCount do
+        throw s!"near/codec: {method.ixName} output frame does not match its JSON u128 plan"
       return ({ method with
         retWidths := #[8]
         retTypes := #[.uint64]

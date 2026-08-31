@@ -18,8 +18,11 @@ ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。标量 method 的 `en
 恰好为 `8 * paramCount` bytes little-endian。wsm-near-bytes-001 另为单个 `BoundedBytes` /
 `BoundedString` 参数绑定 canonical Borsh `u32_le(length) || active bytes`（capacity 1..64；
 String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded bytes/String 及单
-limb unsigned array view 输出同样的 canonical active prefix；scalar view 仍恰好返回
-8-byte little-endian。wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
+limb unsigned array view 输出同样的 canonical active prefix；raw `UInt64` scalar view 仍恰好返回
+8-byte little-endian。wsm-near-json-u128-output-001 additionally binds only the exact two-leaf
+`UInt128` view schema to one canonical quoted-decimal JSON string (`near-json-u128-string-v1`),
+reusing the event decimal routine. It adds no JSON input, object, nullable, or generic JSON codec.
+wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，
 容纳 `Prefix4 || u32_le(64) || AccountId bytes`；value/result/public Borsh 仍限 64。
@@ -86,7 +89,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 |---|---|---|
 | `Near.Ops` | NEAR context 值叶、static log、Promise/callback/result value/effect 与方言检查 | 其它链的方言、collection recipe |
 | `Near.Host` | import 模块 `env`、digest 域 `near-raw-u64\|`、header | XRPL `host_lib`、Data blob sfield |
-| `Near.Codec` | bounded bytes/String 输入与 bounded view 输出的 canonical Borsh 计划/资源上限 | collection layout、JSON、mutating bounded output |
+| `Near.Codec` | bounded bytes/String canonical Borsh input/view output and specialized quoted-u128 JSON view output | JSON input/objects/null/bool/general strings、collection layout、mutating bounded output |
 | `Near.Memory` | invocation-local checked arena model、8-byte alignment、`memory.grow`/OOM 边界 | durable state、source-visible pointer、通用 malloc/free ABI |
 | `Near.Sdk.Context/Access` | lossless context wrappers including dynamic storage usage、full-AccountId equality/self-call predicate | protocol-config storage byte price、general private/payable/init entry metadata |
 | `Near.Sdk.NearToken` | checked unsigned u128 add/sub and exact u128×u64 predicates/result limbs | byte-price policy、balances、supply、public FT methods |

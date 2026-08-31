@@ -2353,6 +2353,21 @@ private def asBoundedCtorFields (env : Environment) (e : Expr) : Option (Array O
   let values ← asVectorLits env args[args.size - 1]!
   return #[length] ++ values
 
+/-- Compiler-owned fixed-width scalar constructors are boundary values, not persistent State.
+Expose their ordered limbs directly so target codecs see the same frame as projected wide values. -/
+private def asWideCtorFields (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let e := substLets 32 (strip e)
+  let ctor ← e.getAppFn.constName?
+  let .ctorInfo info ← env.find? ctor | none
+  unless info.induct == addr20Name || info.induct == uint128Name ||
+      info.induct == uint256Name || info.induct == fixedBytesName do none
+  let args := e.getAppArgs
+  unless info.numFields ≤ args.size do none
+  let fields := args.extract (args.size - info.numFields) args.size
+  let values ← fields.mapM (val env)
+  unless values.size == info.numFields do none
+  return values
+
 /-- A reusable compiler-owned `@[pf_boundary]` value is source data, not persistent State.
 Unfold only explicitly bounded helpers to its constructor and expose every scalar field through
 the ordinary fixed return frame. Schema validation and target codecs still decide whether that
@@ -7324,6 +7339,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.okState v]
   else if let some vs := asBoundedCtorFields env e then
     .ok (returnStatesOf vs)
+  else if let some vs := asWideCtorFields env e then
+    .ok (vs.map fun value => .returnU64 value)
   else if let some vs := asRegisteredBoundaryCtorFields env e then
     .ok (vs.map fun value => .returnU64 value)
   else if let some vs := asStateFields env e then

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Canonical allocator-backed Borsh output scenes against local near-sandbox."""
+"""Canonical Borsh and specialized JSON-u128 output scenes against local near-sandbox."""
 
 from __future__ import annotations
 
@@ -41,16 +41,31 @@ def main() -> None:
     wasm = Path(_require("PF_NEAR_WASM"))
     client = NearClient(rpc, home)
 
-    print("=== suite: NearOutput (allocator-backed canonical Borsh) ===")
+    print("=== suite: NearOutput (canonical Borsh + JSON u128) ===")
     client.deploy(wasm)
     client.call("initialize", NearClient.encode_u64_le(0))
 
+    _expect(client, "get", b"", NearClient.encode_u64_le(0))
     _expect(client, "emptyBytes", b"", NearClient.borsh_bytes(b""))
     _expect(client, "staticBytes", b"", NearClient.borsh_bytes(b"\x00\x01\xff"))
     _expect(client, "staticString", b"", NearClient.borsh_bytes("😀".encode()))
     expected_values = struct.pack("<IHHH", 3, 1, 513, 65535)
     _expect(client, "staticValues", b"", expected_values)
     print("near-output: empty/bytes/String/UInt16[] exact Borsh bytes ok")
+
+    json_u128 = {
+        "jsonU128Zero": 0,
+        "jsonU128Two64": 1 << 64,
+        "jsonU128Two64PlusOne": (1 << 64) + 1,
+        "jsonU128Asymmetric": (1 << 64) + 2,
+        "jsonU128Max": (1 << 128) - 1,
+    }
+    for method, value in json_u128.items():
+        expected = f'"{value}"'.encode("ascii")
+        _expect(client, method, b"", expected)
+        if not (3 <= len(expected) <= 41):
+            raise AssertionError(f"{method}: JSON u128 output length escaped 3..41")
+    print("near-output: zero/high/mixed/max u128 exact quoted decimal bytes ok")
 
     for raw in (b"", b"x", bytes(range(8))):
         wire = NearClient.borsh_bytes(raw)

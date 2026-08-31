@@ -24,6 +24,14 @@ def get (state : State) : UInt64 :=
 def touch (_state : State) : Except Error (State × UInt64) :=
   if (0 : UInt64) != 1 then .ok ({ marker := 1 }, 1) else .error .overflow
 
+/-- Output-only specialized JSON scalar fixtures. These are not object methods or generic JSON. -/
+@[pf_entry] def jsonU128Zero (_state : State) : UInt128 := ⟨0, 0⟩
+@[pf_entry] def jsonU128Two64 (_state : State) : UInt128 := ⟨0, 1⟩
+@[pf_entry] def jsonU128Two64PlusOne (_state : State) : UInt128 := ⟨1, 1⟩
+@[pf_entry] def jsonU128Asymmetric (_state : State) : UInt128 := ⟨2, 1⟩
+@[pf_entry] def jsonU128Max (_state : State) : UInt128 :=
+  ⟨0xffffffffffffffff, 0xffffffffffffffff⟩
+
 @[pf_entry]
 def emptyBytes (_state : State) : BoundedBytes 8 :=
   { length := 0, values := #v[0, 0, 0, 0, 0, 0, 0, 0] }

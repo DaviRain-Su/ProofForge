@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Engineering local-node gate for allocator-backed canonical Borsh output.
+# Engineering local-node gate for canonical Borsh and specialized JSON-u128 output.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -114,6 +114,6 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
-echo "near-local-output: RPC ready; running Borsh output scenes" >&2
+echo "near-local-output: RPC ready; running Borsh and JSON-u128 output scenes" >&2
 "$python" runtime-tests/near/output.py
 echo "near-local-output: ok"
