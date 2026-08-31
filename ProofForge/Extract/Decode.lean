@@ -300,6 +300,21 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
         asVal env fuel args[args.size - 1]! with
     | some w0, some w1, some w2 => some (.xrplPeekLock w0 w1 w2)
     | _, _, _ => none
+  else if (endsWith e ".xrplFlushEsc" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplFlushEsc) &&
+      e.getAppArgs.size ≥ 1 then
+    match asVal env fuel e.getAppArgs[e.getAppArgs.size - 1]! with
+    | some v => some (.xrplFlushEsc v)
+    | none => none
+  else if (endsWith e ".xrplPeekEsc" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplPeekEsc) &&
+      e.getAppArgs.size ≥ 3 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 3]!,
+        asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some w0, some w1, some w2 => some (.xrplPeekEsc w0 w1 w2)
+    | _, _, _ => none
   else if endsWith e ".xrplEmitPay" ||
       isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplEmitPay then
     some .xrplEmitPay

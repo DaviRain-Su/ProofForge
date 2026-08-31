@@ -192,6 +192,15 @@ Per-user freeze. Not global `halt`, not a Map. -/
 @[pf_inline] def peekLockLimbs (w0 w1 w2 : UInt64) : UInt64 :=
   Runtime.xrplPeekLock w0 w1 w2
 
+/-- Persist `v` onto the current Owner card under JSON key `esc`.
+Escrow lives on the contract card, not per-user `bal`. -/
+@[pf_inline] def flushEsc (v : UInt64) : UInt64 :=
+  Runtime.xrplFlushEsc v
+
+/-- Load `esc` from `(w0,w1,w2)`'s card (missing → 0). Rewrites persist Owner. -/
+@[pf_inline] def peekEscLimbs (w0 w1 w2 : UInt64) : UInt64 :=
+  Runtime.xrplPeekEsc w0 w1 w2
+
 end Context
 
 namespace Pausable
@@ -269,6 +278,10 @@ Local 2.6.1 funded Create writes this card (pokeSelf 0). Public AlphaNet
 first so this is the caller card. -/
 @[pf_inline] def flushCallerAllw (v : UInt64) : UInt64 :=
   Context.flushAllw v
+
+/-- Load `esc` from the contract AccountID card. Rewrites persist Owner. -/
+@[pf_inline] def peekSelfEsc : UInt64 :=
+  Context.peekEscLimbs Context.selfW0 Context.selfW1 Context.selfW2
 
 end Card
 
