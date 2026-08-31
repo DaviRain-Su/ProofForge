@@ -58,6 +58,7 @@ import Examples.XrplRate
 import Examples.XrplCrate
 import Examples.XrplCinder
 import Examples.XrplRevoke
+import Examples.XrplReed
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -142,7 +143,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCrate" == some "65b2ce389bb8434"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplCinder" == some "e1e45412ebb2dcdd"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRevoke" == some "67d5b2529f86c2c7"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplReed" == some "852be7802d80e57a"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke", "XrplReed"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -280,6 +282,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplCinder
 
 #pf_xrpl_build Examples.XrplRevoke
+
+#pf_xrpl_build Examples.XrplReed
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -1942,6 +1946,36 @@ elab "#pf_xrpl_revoke_emit_check " n:ident : command => do
         logInfo m!"proofforge-xrpl-revoke: {source.length} bytes of WAT passed revoke anchor check"
 
 #pf_xrpl_revoke_emit_check Examples.XrplRevoke
+
+open Lean Elab Command in
+elab "#pf_xrpl_reed_emit_check " n:ident : command => do
+  let env ← getEnv
+  match Extract.extractModuleIR env n.getId none >>= ProofForge.Wasm.Xrpl.IR.fromExtracted with
+  | .error reason => throwError reason
+  | .ok program =>
+    match ProofForge.Wasm.Xrpl.Emit.emit program with
+    | .error reason => throwError reason
+    | .ok source => do
+        let anchors : Array String := #[
+          "(func (export \"credit\") (result i32)",
+          "(func (export \"sendToB\") (result i32)",
+          "(func (export \"clawB\") (result i32)",
+          "(func (export \"cashSelf\") (result i32)",
+          "(func (export \"freeze\") (result i32)",
+          "(i32.const 524313)",
+          "(import \"host_lib\" \"emit_built_txn\"",
+          "(i32.store8 (i32.const 96) (i32.const 108))"
+        ]
+        for anchor in anchors do
+          unless source.contains anchor do
+            throwError s!"wasm emit is missing reed anchor: {anchor}\n{source}"
+        unless !source.contains "Sdk.Payments" do
+          throwError "wasm emit must not mention Sdk.Payments"
+        unless !source.contains "Sdk.Map" do
+          throwError "wasm emit must not mention Sdk.Map"
+        logInfo m!"proofforge-xrpl-reed: {source.length} bytes of WAT passed reed anchor check"
+
+#pf_xrpl_reed_emit_check Examples.XrplReed
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
