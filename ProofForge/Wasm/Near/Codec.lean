@@ -245,8 +245,8 @@ def outputPlan : Core.Codec.Schema → Except String BorshOutputPlan
       throw "near/codec: bounded output elements must be UInt8, UInt16, UInt32, or UInt64"
   | _ => throw "near/codec: output plan requires bounded bytes, string, or scalar array"
 
-/-- Closed NEAR output policies. JSON support is limited to quoted u128 views and explicit Unit
-mutation results; generic objects, arrays, nullable values, and strings remain absent. -/
+/-- Closed NEAR output policies. JSON support is limited to quoted u128 scalar results and explicit
+Unit mutation results; generic objects, arrays, nullable values, and strings remain absent. -/
 inductive OutputPlan where
   | borsh (plan : BorshOutputPlan)
   | jsonU128

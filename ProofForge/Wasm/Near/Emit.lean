@@ -1916,7 +1916,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .returnU64 value =>
-        unless view do
+        unless view || outputPlan == some .jsonU128 do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
         let (values, skipped) := collectReturnU64s value tail
         unless skipped.all isExitOp do
@@ -1925,6 +1925,8 @@ private partial def emitRegion (p : Program ValKind OpExt)
         | some (.borsh plan) =>
             return { lines := ← returnBorshInstr st plan values level, st, terminal := true }
         | some .jsonU128 =>
+            if st.pendingPromiseReturn.isSome then
+              throw "extract/unsupported: JSON u128 output cannot also return a promise"
             return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
         | some .jsonNullUnit =>
             throw "extract/unsupported: JSON null Unit output requires a mutating state terminal"
@@ -2665,7 +2667,7 @@ private def renderFn (p : Program ValKind OpExt)
   if initializer then
     unless supportsInitializerTerminal method.ops do
       throw "extract/unsupported: near initializer must return state"
-  let view := method.tupleArity.isSome
+  let view := method.kind == .get
   let echo := method.echoDropped
   let isPrivate := methodPrivate method
   let migrateFrom := methodMigrationFrom method

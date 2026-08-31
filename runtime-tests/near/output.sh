@@ -37,14 +37,18 @@ fi
 
 wasm="${PWD}/build/near/NearOutput.wasm"
 unit_wasm="${PWD}/build/near/NearJsonUnitOutput.wasm"
-echo "near-local-output: building NearOutput.wasm and NearJsonUnitOutput.wasm" >&2
+mutation_wasm="${PWD}/build/near/NearJsonU128Mutation.wasm"
+echo "near-local-output: building output fixtures" >&2
 lake exe pf -- build --target near --out build/near NearOutput
 lake exe pf -- build --target near --out build/near NearJsonUnitOutput
-[[ -f "$wasm" && -f "$unit_wasm" ]] || die "missing output wasm artifact"
+lake exe pf -- build --target near --out build/near NearJsonU128Mutation
+[[ -f "$wasm" && -f "$unit_wasm" && -f "$mutation_wasm" ]] || die "missing output wasm artifact"
 "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$wasm" \
   || die "$wasm is not wasm"
 "$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$unit_wasm" \
   || die "$unit_wasm is not wasm"
+"$python" -I -S -c 'import sys; raise SystemExit(0 if open(sys.argv[1], "rb").read(4) == b"\x00asm" else 1)' "$mutation_wasm" \
+  || die "$mutation_wasm is not wasm"
 
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/near-output.XXXXXX")"
 sandbox_pid=""
@@ -118,6 +122,7 @@ export PF_NEAR_RPC="$rpc"
 export PF_NEAR_HOME="$home"
 export PF_NEAR_WASM="$wasm"
 export PF_NEAR_UNIT_WASM="$unit_wasm"
+export PF_NEAR_MUTATION_WASM="$mutation_wasm"
 export PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 echo "near-local-output: RPC ready; running Borsh, JSON-u128, and JSON-null output scenes" >&2
 "$python" runtime-tests/near/output.py

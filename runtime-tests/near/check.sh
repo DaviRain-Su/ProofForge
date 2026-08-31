@@ -211,6 +211,14 @@ json_unit_output_anchors = (
     '(i32.store (local.get $pf_output_ptr) (i32.const 1819047278))',
     '(call $pf_value_return (i64.const 4)',
 )
+json_u128_mutation_anchors = (
+    '(func (export "commitAsymmetric")',
+    '(func (export "right")',
+    '(func $pf_u128_decimal',
+    '(call $pf_arena_alloc (i64.const 41) (i64.const 1))',
+    '(call $pf_value_return',
+    '(call $pf_storage_write',
+)
 storage_anchors = (
     '(global $pf_storage_result_status (mut i64)',
     '(func $pf_storage_result_byte',
@@ -464,6 +472,8 @@ for wat in wats:
         extra = json_ft_transfer_input_anchors
     elif wat.stem == "NearJsonUnitOutput":
         extra = json_unit_output_anchors
+    elif wat.stem == "NearJsonU128Mutation":
+        extra = json_u128_mutation_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

@@ -102,7 +102,7 @@ private partial def opUsesSourceState (paramCount : Nat) : Wasm.IR.Op Ops.ValKin
 
 def entryPolicyOf (method : Method) : Except String EntryPolicy := do
   let policy ← EntryPolicy.ofCanonical method.entryPolicy
-  if method.tupleArity.isSome && policy.payable then
+  if method.kind == .get && policy.payable then
     throw s!"extract/unsupported: {method.ixName} view cannot be payable"
   if policy.migrateFrom.isSome then
     unless method.kind == .increment do
@@ -771,8 +771,8 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
         retSchema := .scalar .uint64
         retCount := 1 }, some { ixName := method.ixName, schema, plan })
   | .scalar .uint128 =>
-      unless method.kind == .get do
-        throw s!"near/codec: {method.ixName} JSON u128 output currently requires a view"
+      unless method.kind == .get || method.kind == .increment do
+        throw s!"near/codec: {method.ixName} JSON u128 output requires a view or mutating entry"
       let schema := method.retSchema
       let plan ← Codec.targetOutputPlan schema
       unless method.retCount == plan.sourceValueCount do

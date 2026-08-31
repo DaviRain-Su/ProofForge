@@ -20,9 +20,12 @@ ABI，也**不是** XRPL 的 C 参数 `i32`/`i64` export。标量 method 的 `en
 `BoundedString` 参数绑定 canonical Borsh `u32_le(length) || active bytes`（capacity 1..64；
 String strict UTF-8）。wsm-near-output-001 使用 guest arena 为 bounded bytes/String 及单
 limb unsigned array view 输出同样的 canonical active prefix；raw `UInt64` scalar view 仍恰好返回
-8-byte little-endian。wsm-near-json-u128-output-001 additionally binds only the exact two-leaf
-`UInt128` view schema to one canonical quoted-decimal JSON string (`near-json-u128-string-v1`),
-reusing the event decimal routine. wsm-near-json-account-input-001 separately binds only the exact
+8-byte little-endian。wsm-near-json-u128-output-001 binds only the exact two-leaf `UInt128` view
+schema to one canonical quoted-decimal JSON string (`near-json-u128-string-v1`), reusing the event
+decimal routine. wsm-near-json-u128-mutation-output-001 extends that same exact wire policy only to
+an `Except Error (State × UInt128)` mutation: all state fields persist before one return, while a
+failed branch traps and rolls back. Other two-field records and Promise-return combinations reject.
+wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
 wsm-near-json-u128-input-001 separately binds one exact `UInt128` parameter on view or mutating
@@ -238,5 +241,5 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 
 CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes`、
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
-`NearOutput`、`NearJsonUnitOutput`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
+`NearOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。

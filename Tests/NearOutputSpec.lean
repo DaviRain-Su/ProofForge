@@ -103,13 +103,6 @@ elab "#pf_near_output_check" : command => do
       unless reason.contains "bounded output currently requires a view" do
         throwError s!"wrong mutating bounded-output rejection: {reason}"
   | .ok _ => throwError "mutating bounded output was accepted"
-  let mutatingJson := { source with methods := source.methods.map fun method =>
-    if method.ixName == "jsonU128Asymmetric" then { method with kind := .increment } else method }
-  match IR.fromExtracted mutatingJson with
-  | .error reason =>
-      unless reason.contains "JSON u128 output currently requires a view" do
-        throwError s!"wrong mutating JSON u128 rejection: {reason}"
-  | .ok _ => throwError "mutating JSON u128 output was accepted"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat

@@ -40,6 +40,7 @@ def main() -> None:
     home = Path(_require("PF_NEAR_HOME"))
     wasm = Path(_require("PF_NEAR_WASM"))
     unit_wasm = Path(_require("PF_NEAR_UNIT_WASM"))
+    mutation_wasm = Path(_require("PF_NEAR_MUTATION_WASM"))
     client = NearClient(rpc, home)
 
     print("=== suite: NearOutput (canonical Borsh + JSON u128) ===")
@@ -108,6 +109,44 @@ def main() -> None:
         "output length above capacity",
     )
     print("near-output: output UTF-8 and capacity guards ok")
+
+    mutation_account = "u128-mutation.test.near"
+    client.create_subaccount_with_key(mutation_account, 10**27)
+    client.deploy_to(mutation_account, mutation_wasm)
+    client.call_on(mutation_account, "initialize", b"", signer=mutation_account)
+    first = client.call_on(
+        mutation_account,
+        "commitAsymmetric",
+        NearClient.encode_u64_le(37),
+        signer=mutation_account,
+    )
+    expected_result = f'"{(1 << 64) + 2}"'.encode("ascii")
+    if NearClient.success_value_bytes(first) != expected_result:
+        raise AssertionError("mutating u128 result lost independent asymmetric limbs")
+    if client.view_u64_on(mutation_account, "get") != 37 or client.view_u64_on(
+        mutation_account, "right"
+    ) != 0x8877665544332211:
+        raise AssertionError("mutating u128 result did not persist both state fields first")
+    client.call_on(
+        mutation_account,
+        "commitAsymmetric",
+        NearClient.encode_u64_le(0),
+        signer=mutation_account,
+        expect_success=False,
+    )
+    if client.view_u64_on(mutation_account, "get") != 37:
+        raise AssertionError("failed mutating u128 result changed state")
+    repeated = client.call_on(
+        mutation_account,
+        "commitAsymmetric",
+        NearClient.encode_u64_le(44),
+        signer=mutation_account,
+    )
+    if NearClient.success_value_bytes(repeated) != expected_result or client.view_u64_on(
+        mutation_account, "get"
+    ) != 44:
+        raise AssertionError("repeated mutating u128 result aliased state and result destinations")
+    print("near-output: mutating quoted u128 persisted two fields, returned once, and rolled back")
 
     print("=== suite: NearJsonUnitOutput (mutating JSON null) ===")
     client.deploy(unit_wasm)

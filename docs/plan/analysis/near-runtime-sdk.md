@@ -219,6 +219,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    **NEAR-JSON-U128-OUTPUT (wsm-near-json-u128-output-001 done):** exact `.scalar .uint128`
    two-limb views emit one canonical quoted decimal JSON string through a pinned target policy and
    the shared 39-digit routine. This is output-only and does not imply JSON input or object support.
+   **NEAR-JSON-U128-MUTATION-OUTPUT (wsm-near-json-u128-mutation-output-001 done):** the exact
+   `Except Error (State × UInt128)` mutation shape reuses that wire policy. The wrapper persists
+   every state leaf before one quoted result return; asymmetric result limbs remain independent of
+   terminal state destinations, and source errors trap for nearcore rollback. Ordinary records,
+   explicit Unit, omitted-return, and Promise-return shapes do not select this policy.
    **NEAR-JSON-ACCOUNT-INPUT (wsm-near-json-account-input-001 done):** only the exact compiler-owned
    nine-leaf `AccountId` schema on a one-parameter view selects bounded
    `{"account_id":"..."}` parsing. Wire length is at most 433, aggregate JSON whitespace at most
