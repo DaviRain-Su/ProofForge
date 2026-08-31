@@ -46,6 +46,14 @@ def _unregister(client: NearClient, contract: str, caller: str, deposit: int,
     )
 
 
+def _force_unregister(client: NearClient, contract: str, caller: str, force: int,
+                      *, deposit: int = 1, success: bool = True) -> dict:
+    return client.call_on(
+        contract, "forceUnregisterCaller", NearClient.encode_u64_le(force),
+        signer=caller, deposit=deposit, expect_success=success,
+    )
+
+
 def _assert_transfer_receipt(
     client: NearClient, outcome: dict, receiver: str, amount: int
 ) -> None:
@@ -100,6 +108,22 @@ def _assert_exact_reclaim(
         raise AssertionError(f"{caller} canonical registration key survived unregister")
 
 
+def _assert_force_reclaim(
+    client: NearClient, contract: str, caller: str, expected_delta: int, per_byte: int
+) -> None:
+    balance_before = client.view_account_balance(caller)
+    outcome = _force_unregister(client, contract, caller, 1)
+    balance_after = client.view_account_balance(caller)
+    if _result_u64(outcome) != 1:
+        raise AssertionError("force unregister did not return true")
+    reclaimed = client.view_u64_on(contract, "lastDelta")
+    if reclaimed != expected_delta:
+        raise AssertionError(f"force reclaim {reclaimed} != insertion {expected_delta}")
+    _assert_transfer_receipt(client, outcome, caller, reclaimed * per_byte + 1)
+    if balance_after <= balance_before or _key(caller) in client.view_state_values(contract):
+        raise AssertionError("force unregister did not deliver refund and remove balance key")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
@@ -108,12 +132,13 @@ def main() -> None:
     long = "x" * (64 - len(".test.near")) + ".test.near"
     malformed = "bad.test.near"
     nonzero = "one.test.near"
+    forced = "force.test.near"
     overflow = "overflow.test.near"
     add_overflow = "y" * 11 + ".test.near"
     zero_cost = "zero.test.near"
 
     for account in (
-        contract, short, long, malformed, nonzero, overflow, add_overflow, zero_cost
+        contract, short, long, malformed, nonzero, forced, overflow, add_overflow, zero_cost
     ):
         client.create_subaccount_with_key(account, 10**27)
     client.deploy_to(contract, wasm)
@@ -153,8 +178,11 @@ def main() -> None:
     before = client.view_account_balance(contract)
     duplicate_deposit = 10**22
     duplicate = _register(client, contract, short, duplicate_deposit)
-    if _result_u64(duplicate) != short_delta:
-        raise AssertionError("duplicate registration changed its state result")
+    duplicate_result = _result_u64(duplicate)
+    if duplicate_result != short_delta:
+        raise AssertionError(
+            f"duplicate registration changed its state result: {duplicate_result} != {short_delta}"
+        )
     if client.view_account_balance(contract) - before >= duplicate_deposit:
         raise AssertionError("duplicate registration retained its attached deposit")
     _register(client, contract, short, 0)
@@ -195,9 +223,58 @@ def main() -> None:
     if set(client.view_state_values(contract)) != set(missing_before):
         raise AssertionError("missing unregister changed the storage key set")
 
+    # The force path uses the same BAL2 registration/balance key and lossless supply state. A
+    # non-force request rejects a positive balance before removal; force burns mixed and max u128.
+    force_guard_before = client.view_state_values(contract)
+    for deposit in (0, 2):
+        _force_unregister(client, contract, forced, 1, deposit=deposit, success=False)
+        if client.view_state_values(contract) != force_guard_before:
+            raise AssertionError("force unregister one-yocto guard changed state")
+    _force_unregister(client, contract, forced, 2, success=False)
+    if client.view_state_values(contract) != force_guard_before:
+        raise AssertionError("force unregister accepted a non-Boolean force flag")
+
+    forced_delta = _result_u64(_register(client, contract, forced, generous))
+    client.call_on(contract, "fixtureSeedCallerMixedSupply", b"", signer=forced)
+    positive_before = client.view_state_values(contract)
+    _force_unregister(client, contract, forced, 0, success=False)
+    if client.view_state_values(contract) != positive_before:
+        raise AssertionError("non-force positive balance rejection changed map/supply")
+    _assert_force_reclaim(client, contract, forced, forced_delta, per_byte)
+    if client.view_u64_on(contract, "totalSupplyW0") != 0 or client.view_u64_on(
+        contract, "totalSupplyW1"
+    ) != 0:
+        raise AssertionError("mixed force burn did not reduce both supply limbs to zero")
+
+    max_delta = _result_u64(_register(client, contract, forced, generous))
+    client.call_on(contract, "fixtureSeedCallerMaxSupply", b"", signer=forced)
+    _assert_force_reclaim(client, contract, forced, max_delta, per_byte)
+    if client.view_u64_on(contract, "totalSupplyW0") != 0 or client.view_u64_on(
+        contract, "totalSupplyW1"
+    ) != 0:
+        raise AssertionError("maximum force burn did not preserve conservation")
+
+    zero_force_delta = _result_u64(_register(client, contract, forced, generous))
+    _assert_force_reclaim(client, contract, forced, zero_force_delta, per_byte)
+    if client.view_u64_on(contract, "totalSupplyW0") != 0 or client.view_u64_on(
+        contract, "totalSupplyW1"
+    ) != 0:
+        raise AssertionError("zero-balance force changed total supply")
+    force_missing_before = client.view_state_values(contract)
+    if _result_u64(_force_unregister(client, contract, forced, 1)) != 0:
+        raise AssertionError("missing force unregister did not return false")
+    if set(client.view_state_values(contract)) != set(force_missing_before):
+        raise AssertionError("missing force unregister changed the storage key set")
+
+    client.call_on(contract, "seedCallerOne", b"", signer=forced)
+    underflow_before = client.view_state_values(contract)
+    _force_unregister(client, contract, forced, 1, success=False)
+    if client.view_state_values(contract) != underflow_before:
+        raise AssertionError("supply underflow was not rejected before removal")
+
     client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
     malformed_before = client.view_state_values(contract)
-    _unregister(client, contract, malformed, 1, success=False)
+    _force_unregister(client, contract, malformed, 1, success=False)
     if client.view_state_values(contract) != malformed_before:
         raise AssertionError("malformed unregister rejection changed storage/state")
 
@@ -214,7 +291,7 @@ def main() -> None:
     client.call_on(overflow, "fixtureSetCostMax", b"", signer=overflow)
     client.call_on(overflow, "seedCallerZero", b"", signer=short)
     overflow_before = client.view_state_values(overflow)
-    _unregister(client, overflow, short, 1, success=False)
+    _force_unregister(client, overflow, short, 1, success=False)
     if client.view_state_values(overflow) != overflow_before or _key(short) not in overflow_before:
         raise AssertionError("reclaim-cost overflow did not roll back speculative removal")
 
@@ -227,7 +304,7 @@ def main() -> None:
     )
     client.call_on(add_overflow, "seedCallerZero", b"", signer=add_overflow)
     add_overflow_before = client.view_state_values(add_overflow)
-    _unregister(client, add_overflow, add_overflow, 1, success=False)
+    _force_unregister(client, add_overflow, add_overflow, 1, success=False)
     if client.view_state_values(add_overflow) != add_overflow_before:
         raise AssertionError("refund addition overflow did not roll back speculative removal")
 

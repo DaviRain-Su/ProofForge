@@ -214,6 +214,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-storage-economics-001](tasks/wsm-near-storage-economics-001.md) | done | real dynamic `storage_usage`; storage byte price remains explicit network config |
 | [wsm-near-storage-registration-001](tasks/wsm-near-storage-registration-001.md) | done | closed caller-only measured registration and excess refund policy |
 | [wsm-near-storage-unregister-001](tasks/wsm-near-storage-unregister-001.md) | done | closed caller-only exact-zero unregister and live reclaim refund |
+| [wsm-near-storage-force-unregister-001](tasks/wsm-near-storage-force-unregister-001.md) | done | caller-only force unregister with exact balance/supply burn |
 | [wsm-near-storage-key-001](tasks/wsm-near-storage-key-001.md) | done | exact 72-byte internal raw-storage key budget prerequisite |
 | [wsm-near-log-001](tasks/wsm-near-log-001.md) | done | NEAR static UTF-8 logging effect |
 | [wsm-near-log-dynamic-001](tasks/wsm-near-log-dynamic-001.md) | done | NEAR bounded dynamic UTF-8 logging through guest arena |

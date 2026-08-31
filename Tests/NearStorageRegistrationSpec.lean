@@ -33,12 +33,18 @@ elab "#pf_near_storage_registration_check" : command => do
   let unregister ← match source.methods.find? (·.ixName == "unregisterCaller") with
     | some method => pure method
     | none => throwError "missing unregisterCaller"
+  let forceUnregister ← match source.methods.find? (·.ixName == "forceUnregisterCaller") with
+    | some method => pure method
+    | none => throwError "missing forceUnregisterCaller"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
   let unregisterSteps := registrationSteps unregister.ops
   unless unregisterSteps == #["read", "usage", "remove", "usage", "refund"] do
     throwError s!"unregister effect order changed: {unregisterSteps}"
+  let forceSteps := registrationSteps forceUnregister.ops
+  unless forceSteps == #["read", "usage", "remove", "usage", "refund"] do
+    throwError s!"force unregister effect order changed: {forceSteps}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -50,7 +56,11 @@ elab "#pf_near_storage_registration_check" : command => do
   for anchor in #[
       "(func (export \"registerCaller\")", "(func (export \"probeCaller\")",
       "(func (export \"unregisterCaller\")", "(func (export \"seedCallerZero\")",
+      "(func (export \"forceUnregisterCaller\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
+      "(func (export \"fixtureSeedCallerMixedSupply\")",
+      "(func (export \"fixtureSeedCallerMaxSupply\")",
+      "(func (export \"totalSupplyW0\")", "(func (export \"totalSupplyW1\")",
       "(func (export \"fixtureSetCostAddOverflow\")", "(call $pf_storage_read",
       "(call $pf_storage_write", "(call $pf_storage_remove", "(call $pf_storage_usage)",
       "(call $pf_promise_batch_create", "(call $pf_promise_batch_action_transfer",
@@ -72,6 +82,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard !ProofForge.Wasm.Near.Sdk.Fungible.Registration.attachedIsOne ⟨1, 1⟩
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "aae9b34aaac4900a"
+  some "92f4f04bdcaeff81"
 
 end Tests.NearStorageRegistrationSpec

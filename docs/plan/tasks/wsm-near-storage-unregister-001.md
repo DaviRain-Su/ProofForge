@@ -42,6 +42,7 @@ rewrite ProofForge's fixed diagnostic state envelope, but it never writes or rem
 
 ## Not included
 
-Force-unregister, nonzero-balance supply burn, arbitrary-account registration, storage withdrawal,
+Arbitrary-account registration, storage withdrawal,
 public NEP-145/JSON ABI, registration enforcement in ledger methods, protocol-price discovery, or
-synchronous guarantee of detached receipt delivery.
+synchronous guarantee of detached receipt delivery. The separate
+wsm-near-storage-force-unregister-001 slice now adds only caller nonzero-balance removal/supply burn.
