@@ -337,6 +337,56 @@ Rewrites persist Owner to the contract card. Not a clock sysvar. -/
 @[pf_inline] def selfDueReached : Bool :=
   Context.peekDueLimbs Context.selfW0 Context.selfW1 Context.selfW2 ≤ Context.ledgerSqn
 
+/-- Select the contract card, then add `delta` to `esc`. Else-if, not `&&`.
+Caller must `restoreCaller` afterwards. Not a Map. -/
+@[pf_inline] def addSelfEsc (delta : UInt64) : Bool :=
+  if !Gate.ok storeSelf then
+    false
+  else if !(peekSelfEsc ≤ Gate.u64Max - delta) then
+    false
+  else
+    Gate.ok (Context.flushEsc (peekSelfEsc + delta))
+
+/-- Select the contract card, then subtract `delta` from `esc`. Else-if, not `&&`.
+Caller must `restoreCaller` afterwards. Not a Map. -/
+@[pf_inline] def subSelfEsc (delta : UInt64) : Bool :=
+  if !Gate.ok storeSelf then
+    false
+  else if !(delta ≤ peekSelfEsc) then
+    false
+  else
+    Gate.ok (Context.flushEsc (peekSelfEsc - delta))
+
+/-- Select the contract card, then add `delta` to `supp`. Else-if, not `&&`.
+Caller must `restoreCaller` afterwards. Not a Map. -/
+@[pf_inline] def addSelfSupp (delta : UInt64) : Bool :=
+  if !Gate.ok storeSelf then
+    false
+  else if !(peekSelfSupp ≤ Gate.u64Max - delta) then
+    false
+  else
+    Gate.ok (Context.flushSupp (peekSelfSupp + delta))
+
+/-- Select the contract card, then subtract `delta` from `supp`. Else-if, not `&&`.
+Caller must `restoreCaller` afterwards. Not a Map. -/
+@[pf_inline] def subSelfSupp (delta : UInt64) : Bool :=
+  if !Gate.ok storeSelf then
+    false
+  else if !(delta ≤ peekSelfSupp) then
+    false
+  else
+    Gate.ok (Context.flushSupp (peekSelfSupp - delta))
+
+/-- Select the contract card, then set `due = ledgerSqn + delta`. Else-if, not `&&`.
+Caller must `restoreCaller` afterwards. Not a clock sysvar. -/
+@[pf_inline] def setSelfDueAhead (delta : UInt64) : Bool :=
+  if !Gate.ok storeSelf then
+    false
+  else if !(Context.ledgerSqn ≤ Gate.u64Max - delta) then
+    false
+  else
+    Gate.ok (Context.flushDue (Context.ledgerSqn + delta))
+
 end Card
 
 namespace Pay

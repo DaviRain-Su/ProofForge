@@ -84,6 +84,7 @@ import Examples.XrplLatch
 import Examples.XrplEscape
 import Examples.XrplFrost
 import Examples.XrplGlaze
+import Examples.XrplHinge
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
