@@ -307,6 +307,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    amount. Partial/full/malformed/failed nearcore receipts pin event order, rollback, present-zero,
    and supply conservation. The 1179-byte canonical input subset remains narrower than serde_json,
    so this is exact operation/receipt semantics rather than a full public ABI compatibility claim.
+   **NEAR-FT-RECEIVER-VALUE (wsm-near-ft-receiver-value-001 done):** exact `ft_on_transfer`
+   composes the 20-leaf bounded receiver input with state-persisting quoted-u128 output. The closed
+   fixture returns the entire amount, matching an immediate `PromiseOrValue::Value(amount)` and
+   therefore rejecting all tokens; a real weighted child receipt observes those exact bytes.
+   Full serde input and a dual immediate/Promise source return remain explicitly out of scope.
    **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
    non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
    Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A

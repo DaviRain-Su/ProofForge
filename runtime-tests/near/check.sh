@@ -227,6 +227,15 @@ json_ft_on_transfer_input_anchors = (
     '(func (export "messageW7")',
     '(func (export "commitAmountHigh")',
 )
+ft_receiver_value_anchors = (
+    '(func (export "ft_on_transfer")',
+    '(func $pf_json_ft_on_transfer_args',
+    '(func $pf_u128_decimal',
+    '(i64.const 1071)',
+    '(call $pf_attached_deposit',
+    '(call $pf_storage_write',
+    '(call $pf_value_return',
+)
 json_unit_output_anchors = (
     '(func (export "setMarker")',
     '(func (export "setMarkerVoid")',
@@ -508,6 +517,8 @@ for wat in wats:
         extra = json_ft_transfer_call_input_anchors
     elif wat.stem == "NearJsonFtOnTransferInput":
         extra = json_ft_on_transfer_input_anchors
+    elif wat.stem == "NearFtReceiverValue":
+        extra = ft_receiver_value_anchors
     elif wat.stem == "NearJsonUnitOutput":
         extra = json_unit_output_anchors
     elif wat.stem == "NearJsonU128Mutation":
