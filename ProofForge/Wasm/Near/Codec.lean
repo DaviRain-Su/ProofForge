@@ -302,6 +302,7 @@ Unit mutation results; generic objects, arrays, nullable values, and strings rem
 inductive OutputPlan where
   | borsh (plan : BorshOutputPlan)
   | jsonU128
+  | promiseOrJsonU128
   | jsonNullUnit
   | voidEmpty
   deriving Repr, BEq, Inhabited
@@ -309,12 +310,14 @@ inductive OutputPlan where
 def OutputPlan.sourceValueCount : OutputPlan → Nat
   | .borsh plan => plan.sourceValueCount
   | .jsonU128 => 2
+  | .promiseOrJsonU128 => 2
   | .jsonNullUnit => 0
   | .voidEmpty => 0
 
 def OutputPlan.canonical : OutputPlan → String
   | .borsh plan => plan.canonical
   | .jsonU128 => "near-json-u128-string-v1"
+  | .promiseOrJsonU128 => "near-promise-or-json-u128-v1"
   | .jsonNullUnit => "near-json-null-unit-v1"
   | .voidEmpty => "near-void-empty-v1"
 

@@ -666,6 +666,10 @@ private def outputPlanOf (method : Method ValKind OpExt) :
           unless schema == .unit do
             throw s!"near/codec: {method.ixName} empty output policy requires Unit schema"
           pure Codec.OutputPlan.voidEmpty
+        else if method.outputPolicy == Codec.OutputPlan.promiseOrJsonU128.canonical then
+          unless schema == .scalar .uint128 do
+            throw s!"near/codec: {method.ixName} Promise-or-u128 policy requires U128 schema"
+          pure Codec.OutputPlan.promiseOrJsonU128
         else Codec.targetOutputPlan schema
       unless method.outputPolicy == plan.canonical do
         throw s!"near/codec: {method.ixName} output policy does not match its schema"
@@ -1976,7 +1980,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .returnU64 value =>
-        unless view || outputPlan == some .jsonU128 do
+        unless view || outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
         let (values, skipped) := collectReturnU64s value tail
         unless skipped.all isExitOp do
@@ -1988,6 +1992,16 @@ private partial def emitRegion (p : Program ValKind OpExt)
             if st.pendingPromiseReturn.isSome then
               throw "extract/unsupported: JSON u128 output cannot also return a promise"
             return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
+        | some .promiseOrJsonU128 =>
+            match st.pendingPromiseReturn with
+            | some promiseLocal =>
+                unless values.size == 2 do
+                  throw "near/codec: Promise-or-u128 output plan does not match result leaves"
+                let lines := #[indent level
+                  ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))")]
+                return { lines, st, terminal := true }
+            | none =>
+                return { lines := ← returnJsonU128Instr st values level, st, terminal := true }
         | some .jsonNullUnit =>
             throw "extract/unsupported: JSON null Unit output requires a mutating state terminal"
         | some .voidEmpty =>
@@ -2900,7 +2914,7 @@ private def renderFn (p : Program ValKind OpExt)
   if outputPlan.isSome then
     lines := lines.push "    (local $pf_output_ptr i32)"
     lines := lines.push "    (local $pf_output_length i64)"
-  if outputPlan == some .jsonU128 then
+  if outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 then
     lines := lines.push "    (local $pf_output_digits_ptr i32)"
   if isPrivate || methodUsesAny predecessorKinds method then
     lines := lines.push "    (local $pf_pred_len i64)"

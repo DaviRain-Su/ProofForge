@@ -119,6 +119,17 @@ initialize pfNearVoidAttr : TagAttribute ←
       | some (.defnInfo _) => pure ()
       | _ => throwError "extract/unsupported: pf_near_void is not a definition"
 
+/-- Mark an exact mutating U128 result as a dual terminal: immediate quoted JSON when no returned
+Promise was staged on the branch, otherwise `promise_return` of that one Promise. -/
+initialize pfNearPromiseOrValueAttr : TagAttribute ←
+  registerTagAttribute `pf_near_promise_or_value
+    "declare a NEAR mutator returning either quoted U128 or one Promise"
+    fun decl => do
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure ()
+      | _ => throwError "extract/unsupported: pf_near_promise_or_value is not a definition"
+
 /-- Mark one NEAR mutator as an explicit migration from one exact prior schema digest. Target
 binding additionally requires an explicit private attribute and rejects payable migration. -/
 initialize pfNearMigrateAttr : ParametricAttribute Nat ←
@@ -327,6 +338,9 @@ def isNearPayable (env : Environment) (decl : Name) : Bool :=
 def isNearVoid (env : Environment) (decl : Name) : Bool :=
   pfNearVoidAttr.hasTag env decl
 
+def isNearPromiseOrValue (env : Environment) (decl : Name) : Bool :=
+  pfNearPromiseOrValueAttr.hasTag env decl
+
 def nearMigrationDigest? (env : Environment) (decl : Name) : Option Nat :=
   pfNearMigrateAttr.getParam? env decl
 
@@ -339,6 +353,8 @@ def nearEntryAnnotations (env : Environment) (decl : Name) : Array String := Id.
     annotations := annotations.push "near.payable.v1"
   if isNearVoid env decl then
     annotations := annotations.push "near.void.v1"
+  if isNearPromiseOrValue env decl then
+    annotations := annotations.push "near.promise-or-value-u128.v1"
   if let some digest := nearMigrationDigest? env decl then
     annotations := annotations.push s!"near.migrate.v1:{digest}"
   return annotations

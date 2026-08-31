@@ -266,6 +266,9 @@ jobs:
       - name: Run NEAR sandbox immediate-value FT receiver gate
         run: runtime-tests/near/ft_receiver_value.sh
 
+      - name: Run NEAR sandbox Promise-or-U128 terminal gate
+        run: runtime-tests/near/promise_or_value.sh
+
       - name: Run NEAR sandbox bounded FT resolver argument gate
         run: runtime-tests/near/json_ft_resolve_input.sh
 

@@ -311,7 +311,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    composes the 20-leaf bounded receiver input with state-persisting quoted-u128 output. The closed
    fixture returns the entire amount, matching an immediate `PromiseOrValue::Value(amount)` and
    therefore rejecting all tokens; a real weighted child receipt observes those exact bytes.
-   Full serde input and a dual immediate/Promise source return remain explicitly out of scope.
+   Full serde input and applying the dual terminal to receiver business logic remain out of scope.
+   **NEAR-PROMISE-OR-VALUE-U128 (wsm-near-promise-or-value-u128-001 done):** the explicit
+   `pf_near_promise_or_value` boundary now grants one exact mutating U128 method a branch-local
+   immediate quoted result or returned Promise terminal. State persists first in either branch;
+   ordinary U128/Unit/view/Promise methods remain unchanged and fail closed on mixed use.
    **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
    non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
    Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A

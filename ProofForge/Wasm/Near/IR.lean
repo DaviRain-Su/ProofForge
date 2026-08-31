@@ -832,8 +832,11 @@ private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry :=
   let privateAnnotations := method.annotations.filter (· == "near.private.v1")
   let payableAnnotations := method.annotations.filter (· == "near.payable.v1")
   let voidAnnotations := method.annotations.filter (· == "near.void.v1")
+  let promiseOrValueAnnotations := method.annotations.filter
+    (· == "near.promise-or-value-u128.v1")
   let migrationAnnotations := method.annotations.filter (·.startsWith "near.migrate.v1:")
   unless privateAnnotations.size + payableAnnotations.size + voidAnnotations.size +
+      promiseOrValueAnnotations.size +
       migrationAnnotations.size ==
       method.annotations.size do
     throw s!"extract/unsupported: near cannot consume foreign target annotations on {method.ixName}"
@@ -843,6 +846,8 @@ private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry :=
     throw s!"extract/unsupported: {method.ixName} has duplicate near payable annotations"
   unless voidAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near void annotations"
+  unless promiseOrValueAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate Promise-or-value annotations"
   unless migrationAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near migration annotations"
   let migrateFrom ← match migrationAnnotations[0]? with
@@ -875,6 +880,10 @@ private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry :=
 private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundOutput) := do
   let voidAnnotations := method.annotations.filter (· == "near.void.v1")
+  let promiseOrValueAnnotations := method.annotations.filter
+    (· == "near.promise-or-value-u128.v1")
+  unless voidAnnotations.isEmpty || promiseOrValueAnnotations.isEmpty do
+    throw s!"near/codec: {method.ixName} cannot combine empty and Promise-or-u128 output"
   if !voidAnnotations.isEmpty then
     unless method.kind == .increment do
       throw s!"near/codec: {method.ixName} empty return requires a mutating entry"
@@ -882,6 +891,18 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       throw s!"near/codec: {method.ixName} empty return requires an exact zero-leaf Unit result"
     let plan := Codec.OutputPlan.voidEmpty
     return (method, some { ixName := method.ixName, schema := .unit, plan })
+  if !promiseOrValueAnnotations.isEmpty then
+    unless method.kind == .increment do
+      throw s!"near/codec: {method.ixName} Promise-or-u128 output requires a mutating entry"
+    unless method.retSchema == .scalar .uint128 && method.retCount == 2 do
+      throw s!"near/codec: {method.ixName} Promise-or-u128 output requires an exact U128 result"
+    let plan := Codec.OutputPlan.promiseOrJsonU128
+    return ({ method with
+      retWidths := #[8]
+      retTypes := #[.uint64]
+      retSchema := .scalar .uint64
+      retCount := 1 }, some {
+        ixName := method.ixName, schema := .scalar .uint128, plan })
   match method.retSchema with
   | .boundedArray .. | .boundedBytes _ | .boundedString _ =>
       unless method.kind == .get do
