@@ -148,8 +148,11 @@ release the callback and retain their ordered status-2 result slots.
 Native transfer now uses `promise_batch_create(receiver)` plus
 `promise_batch_action_transfer(index, amountPtr)`. Its exact 16-byte LE u128 amount frame is staged
 through the guest arena. The SDK exposes explicit detached and returned variants, and the latter
-links the transfer receipt only after caller state persistence. It depends on a static validated
-AccountId and remains asynchronous; dynamic receivers, joins, and multi-action builders are absent.
+links the transfer receipt only after caller state persistence. Static variants retain their
+compile-time validated receiver bytes. wsm-near-promise-account-transfer-001 adds closed dynamic
+variants for a complete nominal `AccountId`: exactly `length` active raw bytes (2..64) are staged,
+with no Borsh length, JSON transform, truncation, or inactive carrier padding. Both forms remain
+asynchronous; dynamic handles and multi-action builders are absent.
 
 ## 5. Dependency-ordered implementation
 
@@ -162,7 +165,7 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
 | N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
 | N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
 | N6 observability | static and bounded dynamic `log_utf8` plus exact bounded NEP-297 string-data envelope done in wsm-near-log-001/log-dynamic-001/event-001 | exact standard-specific event bytes and host log limits |
-| N7 promises | **detached/returned static batch calls, native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
+| N7 promises | **detached/returned static batch calls, static/full-AccountId native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/account-transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
 | N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked balance/total-supply ledger policy complete; no public token method contract | standard-specific integration suites |
@@ -193,8 +196,9 @@ AccountId and remains asynchronous; dynamic receivers, joins, and multi-action b
    and nearcore expose no guest `storage_byte_cost`, so registration charging still needs an
    explicit trusted network/config boundary.
    wsm-near-u128-mul-001 supplies the checked full-width `NearToken × UInt64` operation needed to
-   turn measured bytes into a configured cost. Dynamic predecessor refunds still require a
-   separate full-AccountId Promise transfer slice before registration policy can close the loop.
+   turn measured bytes into a configured cost. wsm-near-promise-account-transfer-001 now supplies
+   detached/returned native transfer to a complete dynamic AccountId; closed registration policy
+   can compose this refund edge without pretending the public NEP-145 ABI already exists.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged/JSON remain later.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact

@@ -56,6 +56,18 @@ literals accepted by the NEAR target. -/
     (receiver : String) (amount : Runtime.NearToken) : UInt64 :=
   Runtime.promiseTransferReturned receiver amount.w0 amount.w1
 
+/-- Schedule one detached native transfer to a complete dynamic AccountId. Context-sourced
+AccountIds are nominally valid; this closed API enforces only the protocol's 2..64 byte geometry. -/
+@[pf_inline] def transferAccountDetached
+    (receiver : Runtime.AccountId) (amount : Runtime.NearToken) : UInt64 :=
+  Runtime.promiseTransferAccountDetached receiver amount.w0 amount.w1
+
+/-- Schedule one native transfer to a complete dynamic AccountId and forward its eventual receipt
+success or failure. -/
+@[pf_inline] def transferAccountReturned
+    (receiver : Runtime.AccountId) (amount : Runtime.NearToken) : UInt64 :=
+  Runtime.promiseTransferAccountReturned receiver amount.w0 amount.w1
+
 /-- Schedule one child call, then one callback on the current contract, and forward the callback's
 eventual result. Both methods are static literals; the two bounded argument frames, deposits, and
 gas budgets are independent. The callback runs after either child success or child failure. -/

@@ -81,7 +81,7 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
 | `Near.Sdk.Store.Vector` | bounded `DirectVector64`、fixed `Prefix4`、官方 current Vector element key/value recipe | Rust `IndexMap` cache/Drop、`STATE` metadata、generic T、iterator/full `store::Vector` claim |
 | `Near.Sdk.Store.Lookup` | direct Identity UInt64 map/set key/value recipe、get/has/put/remove raw status | Map cache/flush/old-value API、custom hashers、generic K/V、iteration/cardinality |
 | `Near.Sdk.Fungible.Ledger` | exact/missing active balance snapshot validity and closed checked ledger composition boundary | public NEP-141 ABI、registration/storage management、resolver、deposit checks、events |
-| `Near.Sdk.Promises` | static detached/returned function call/native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
+| `Near.Sdk.Promises` | static detached/returned function call、static/full-AccountId native transfer、child→self callback、两个有序 child join、bounded result descriptor、strict Borsh UInt64 fallback decode | dynamic handles、arbitrary-N/nested joins、generic Borsh |
 | `Near.IR` | registration、方言标签、target-owned bounded input/output frame 与 private/payable/migration policy binding | 程序形状、v0 子集、canonical 拼写（在 `Wasm.IR`） |
 | `Near.Emit` | `env` import、KV 8-byte LE + bounded raw storage、Borsh input/output、strict UTF-8、checked arena lowering | XRPL Data-blob 发射器、Vector/Map host opcode |
 | `Near.Assemble` | 写 `{name}.wat`，调锁定 `wat2wasm 1.0.41` 出 `{name}.wasm` | rustc / cargo / near-sandbox |
@@ -116,7 +116,9 @@ non-payable、零参数且每个程序最多一个。wrapper 只接受 exact old
   `2^64+7` deposit 两个 limb、zero deposit、detached remote failure、caller panic 丢弃 receipt，
   余额不足的同步失败与 rollback，以及 returned call 的 exact 8-byte result、远端失败传播和
   caller/receiver receipt state 语义；还验证 detached `2^64+7` 与 returned `11` native transfer
-  的 exact receiver balance delta，以及 max-u128 余额不足时 balance/state rollback；并验证外部
+  的 exact receiver balance delta，以及 max-u128 余额不足时 balance/state rollback；dynamic
+  AccountId transfer 另验证完整 predecessor receipt、2..64-byte geometry、只写 active bytes、
+  inactive padding isolation 与 returned receipt propagation；并验证外部
   predecessor 在读取 result 前被 `@[pf_near_private]` 完整 AccountId wrapper 以精确 panic
   拒绝且不改状态，并验证 private 先于 non-payable；`@[pf_near_payable]` 允许不读取 deposit
   的 donation-only mutator。真实 self callback 继续验证 exact Borsh UInt64 decode、独立

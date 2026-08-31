@@ -99,6 +99,12 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
           .near (.promiseTransferDetached receiver (mapValue amountLo) (mapValue amountHi))
       | .promiseTransferReturned receiver amountLo amountHi =>
           .near (.promiseTransferReturned receiver (mapValue amountLo) (mapValue amountHi))
+      | .promiseTransferAccountDetached receiver amountLo amountHi =>
+          .near (.promiseTransferAccountDetached (receiver.map mapValue)
+            (mapValue amountLo) (mapValue amountHi))
+      | .promiseTransferAccountReturned receiver amountLo amountHi =>
+          .near (.promiseTransferAccountReturned (receiver.map mapValue)
+            (mapValue amountLo) (mapValue amountHi))
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -161,6 +167,9 @@ def OpExt.values : OpExt Val → Array Val
           arguments ++ #[depositLo, depositHi, gas]
       | .promiseTransferDetached _ amountLo amountHi
       | .promiseTransferReturned _ amountLo amountHi => #[amountLo, amountHi]
+      | .promiseTransferAccountDetached receiver amountLo amountHi
+      | .promiseTransferAccountReturned receiver amountLo amountHi =>
+          receiver ++ #[amountLo, amountHi]
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments ++ callbackArguments ++
@@ -267,6 +276,10 @@ def OpExt.wellFormed : OpExt Val → Bool
       | .promiseTransferDetached receiver amountLo amountHi
       | .promiseTransferReturned receiver amountLo amountHi =>
           Wasm.Near.Codec.accountIdLiteralValid receiver &&
+            amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
+      | .promiseTransferAccountDetached receiver amountLo amountHi
+      | .promiseTransferAccountReturned receiver amountLo amountHi =>
+          receiver.size == 9 && receiver.all (·.wellFormed ValKind.arity) &&
             amountLo.wellFormed ValKind.arity && amountHi.wellFormed ValKind.arity
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments

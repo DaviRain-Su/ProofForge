@@ -5787,6 +5787,10 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callAndThenReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
         name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
@@ -5940,6 +5944,40 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 .nearPromiseTransferReturned receiver amountLo amountHi
               else
                 .nearPromiseTransferDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 1]!
+        let returned := isConstNamed e
+          ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned
+        match nearAccountIdFrame? env args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some receiver, some amountLo, some amountHi =>
+            if accountTokenLengthAdmissible receiver then
+              some (if returned then
+                .nearPromiseTransferAccountReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferAccountDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e
+          ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned
+        match nearAccountIdFrame? env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some receiver, some amountLo, some amountHi =>
+            if accountTokenLengthAdmissible receiver then
+              some (if returned then
+                .nearPromiseTransferAccountReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferAccountDetached receiver amountLo amountHi)
             else none
         | _, _, _ => none
       else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned &&

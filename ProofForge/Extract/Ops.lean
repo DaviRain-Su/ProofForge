@@ -236,6 +236,14 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     (receiver : String) (amountLo amountHi : Val) : Op :=
   .ext (.near (.promiseTransferReturned receiver amountLo amountHi))
 
+@[match_pattern] def Op.nearPromiseTransferAccountDetached
+    (receiver : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferAccountDetached receiver amountLo amountHi))
+
+@[match_pattern] def Op.nearPromiseTransferAccountReturned
+    (receiver : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferAccountReturned receiver amountLo amountHi))
+
 @[match_pattern] def Op.nearPromiseFunctionCallThenReturned
     (receiver childMethod callbackMethod : String)
     (childArgsCapacity callbackArgsCapacity : Nat)

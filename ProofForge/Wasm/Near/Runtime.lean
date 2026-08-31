@@ -257,6 +257,24 @@ outcome. -/
   let _ := amountHi
   0
 
+/-- Schedule one native NEAR transfer to a complete dynamic AccountId without linking its receipt
+to the current method result. The target stages only the active `length` bytes. -/
+@[irreducible] def promiseTransferAccountDetached
+    (receiver : AccountId) (amountLo amountHi : UInt64) : UInt64 :=
+  let _ := receiver
+  let _ := amountLo
+  let _ := amountHi
+  0
+
+/-- Schedule one native NEAR transfer to a complete dynamic AccountId and forward that receipt's
+eventual result. -/
+@[irreducible] def promiseTransferAccountReturned
+    (receiver : AccountId) (amountLo amountHi : UInt64) : UInt64 :=
+  let _ := receiver
+  let _ := amountLo
+  let _ := amountHi
+  0
+
 /-- Schedule one static child call followed by one static callback on the current contract, then
 forward the callback's eventual result. The child result is available to the callback only through
 `promiseResultsCount` / `promiseResultRead`; callback arguments remain an independent input frame. -/

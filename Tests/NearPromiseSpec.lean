@@ -33,6 +33,10 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
           #[s!"transfer.detached.{receiver}"]
       | .ext (.near (.promiseTransferReturned receiver _ _)) =>
           #[s!"transfer.returned.{receiver}"]
+      | .ext (.near (.promiseTransferAccountDetached receiver _ _)) =>
+          #[s!"transfer.account.detached.{receiver.size}"]
+      | .ext (.near (.promiseTransferAccountReturned receiver _ _)) =>
+          #[s!"transfer.account.returned.{receiver.size}"]
       | .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childCapacity callbackCapacity childArguments callbackArguments _ _ _ _ _ _)) =>
           #[s!"then.{receiver}.{childMethod}.{callbackMethod}." ++
@@ -121,8 +125,45 @@ def invalid (state : State) : UInt64 := state.value
 
 end PayableView
 
+namespace InvalidAccountLength
+
+structure State where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | rejected
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_entry]
+def init (value : UInt64) : State := { value }
+
+@[pf_entry]
+def get (state : State) : UInt64 := state.value
+
+@[pf_entry]
+def transferShort (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let receiver : Runtime.AccountId :=
+    ⟨1, 0x61, 0, 0, 0, 0, 0, 0, 0⟩
+  let _ := Sdk.Promises.transferAccountDetached receiver ({ w0 := 1, w1 := 0 } : Runtime.NearToken)
+  .ok ({ value }, value)
+
+@[pf_entry]
+def transferLong (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let receiver : Runtime.AccountId :=
+    ⟨65, 0x6161616161616161, 0, 0, 0, 0, 0, 0, 0⟩
+  let _ := Sdk.Promises.transferAccountReturned receiver ({ w0 := 1, w1 := 0 } : Runtime.NearToken)
+  .ok ({ value }, value)
+
+end InvalidAccountLength
+
 elab "#pf_near_promise_check" : command => do
   let env ← getEnv
+  match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.InvalidAccountLength with
+  | .error reason =>
+      unless reason.contains "unsupported" do
+        throwError s!"wrong dynamic AccountId length rejection: {reason}"
+  | .ok _ => throwError "dynamic Promise transfer accepted AccountId length 1/65"
   let privateViewSource ←
     match ProofForge.Extract.extractModuleIR env `Tests.NearPromiseSpec.PrivateView with
     | .ok program => pure program
@@ -188,7 +229,9 @@ elab "#pf_near_promise_check" : command => do
     "and.receiver.test.near.missing.receiver.test.near.echo.callbackJoined.8.8.8.9.9.9"
   let transferDetached := "transfer.detached.receiver.test.near"
   let transferReturned := "transfer.returned.receiver.test.near"
-  unless steps.size == 16 && (steps.filter (· == detachedRecord)).size == 4 &&
+  let transferAccountDetached := "transfer.account.detached.9"
+  let transferAccountReturned := "transfer.account.returned.9"
+  unless steps.size == 22 && (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
       (steps.filter (· == returnedRecord)).size == 1 &&
       (steps.filter (· == returnedMissing)).size == 1 &&
@@ -199,7 +242,9 @@ elab "#pf_near_promise_check" : command => do
       (steps.filter (· == andRightMissing)).size == 1 &&
       (steps.filter (· == andLeftMissing)).size == 1 &&
       (steps.filter (· == transferDetached)).size == 2 &&
-      (steps.filter (· == transferReturned)).size == 1 do
+      (steps.filter (· == transferReturned)).size == 1 &&
+      (steps.filter (· == transferAccountDetached)).size == 4 &&
+      (steps.filter (· == transferAccountReturned)).size == 2 do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
@@ -316,6 +361,67 @@ elab "#pf_near_promise_check" : command => do
   if transferReturnedWat.contains "promise_batch_action_function_call" ||
       transferReturnedWat.contains "(call $pf_value_return" then
     throwError "returned transfer retained a function-call action or overwrote promise_return"
+  let transferCallerDetached ← match program.entries.find? (·.ixName == "transferCallerDetached") with
+    | some method => pure method
+    | none => throwError "missing transferCallerDetached entry"
+  let transferCallerWat ← match Emit.emit { program with entries := #[transferCallerDetached] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(call $pf_predecessor_account_id (i64.const 0))",
+      "(local.set $pf_r0 (local.get $pf_pred_len))",
+      "(call $pf_arena_alloc (local.get $pf_r0) (i64.const 1))",
+      "(if (i64.lt_u (i64.const 63) (local.get $pf_r0))",
+      "(call $pf_promise_batch_create (local.get $pf_r0) (local.get $pf_r1))",
+      "(i64.store (i32.wrap_i64 (local.get $pf_r2)) (i64.const 13))",
+      "(call $pf_promise_batch_action_transfer (local.get $pf_r3) (local.get $pf_r2))" ] do
+    unless transferCallerWat.contains anchor do
+      throwError s!"dynamic caller transfer WAT missing {anchor}\n{transferCallerWat}"
+  if transferCallerWat.contains "promise_return" then
+    throwError "detached dynamic transfer unexpectedly returned its receipt"
+  let transferSelf ← match program.entries.find? (·.ixName == "transferSelfDetached") with
+    | some method => pure method
+    | none => throwError "missing transferSelfDetached entry"
+  let transferSelfWat ← match Emit.emit { program with entries := #[transferSelf] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless transferSelfWat.contains "(call $pf_current_account_id (i64.const 3))" &&
+      transferSelfWat.contains "(local.set $pf_r0 (local.get $pf_self_len))" do
+    throwError "dynamic self transfer lost its complete current AccountId frame"
+  let transferShort ← match program.entries.find? (·.ixName == "transferShortDetached") with
+    | some method => pure method
+    | none => throwError "missing transferShortDetached entry"
+  let transferShortWat ← match Emit.emit { program with entries := #[transferShort] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless transferShortWat.contains "(local.set $pf_r0 (i64.const 2))" &&
+      transferShortWat.contains "(i64.const 24929)" do
+    throwError "minimum dynamic receiver geometry was not staged exactly"
+  let transferPadded ← match program.entries.find? (·.ixName == "transferPaddedDetached") with
+    | some method => pure method
+    | none => throwError "missing transferPaddedDetached entry"
+  let transferPaddedWat ← match Emit.emit { program with entries := #[transferPadded] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless transferPaddedWat.contains "(local.set $pf_r0 (i64.const 18))" &&
+      transferPaddedWat.contains "(if (i64.lt_u (i64.const 18) (local.get $pf_r0))" &&
+      transferPaddedWat.contains "(i64.const 16045690984503079521)" do
+    throwError "padded dynamic receiver did not gate inactive bytes by exact length"
+  let transferMax ← match program.entries.find? (·.ixName == "transferMaxAccountReturned") with
+    | some method => pure method
+    | none => throwError "missing transferMaxAccountReturned entry"
+  let transferMaxWat ← match Emit.emit { program with entries := #[transferMax] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(local.set $pf_r0 (i64.const 64))",
+      "(call $pf_arena_alloc (local.get $pf_r0) (i64.const 1))",
+      "(i64.store (i32.wrap_i64 (local.get $pf_r2)) (i64.const 18446744073709551615))",
+      "(i64.store (i32.add (i32.wrap_i64 (local.get $pf_r2)) (i32.const 8)) " ++
+        "(i64.const 18446744073709551615))",
+      "(call $pf_promise_return (local.get $pf_r3))" ] do
+    unless transferMaxWat.contains anchor do
+      throwError s!"max dynamic transfer WAT missing {anchor}\n{transferMaxWat}"
   let sendThenSuccess ← match program.entries.find? (·.ixName == "sendThenSuccess") with
     | some method => pure method
     | none => throwError "missing sendThenSuccess entry"
@@ -590,6 +696,13 @@ elab "#pf_near_promise_check" : command => do
       unless reason.contains "view cannot create a promise" do
         throwError s!"wrong returned-transfer view rejection: {reason}"
   | .ok _ => throwError "returned transfer was accepted in a view"
+  let viewAccountTransfer := { source with methods := source.methods.map fun method =>
+    if method.ixName == "transferCallerDetached" then { method with kind := .get } else method }
+  match IR.fromExtracted viewAccountTransfer >>= Emit.emit with
+  | .error reason =>
+      unless reason.contains "view cannot create a promise" do
+        throwError s!"wrong dynamic-transfer view rejection: {reason}"
+  | .ok _ => throwError "dynamic AccountId transfer was accepted in a view"
   let viewThen := { source with methods := source.methods.map fun method =>
     if method.ixName == "sendThenSuccess" then { method with kind := .get } else method }
   match IR.fromExtracted viewThen >>= Emit.emit with

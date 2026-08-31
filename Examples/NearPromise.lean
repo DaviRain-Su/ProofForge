@@ -112,6 +112,55 @@ def transferTooMuch (state : State) (value : UInt64) : Except Error (State × UI
     ({ w0 := 0xffffffffffffffff, w1 := 0xffffffffffffffff } : NearToken)
   .ok ({ state with marker := value }, value)
 
+/-- Transfer to the complete dynamic predecessor AccountId without returning the child receipt. -/
+@[pf_entry]
+def transferCallerDetached (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferAccountDetached Context.caller ({ w0 := 13, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Transfer to the complete dynamic predecessor AccountId and return the exact created receipt. -/
+@[pf_entry]
+def transferCallerReturned (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferAccountReturned Context.caller ({ w0 := 17, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Exercise the complete dynamic current-account carrier without creating a distinct identity. -/
+@[pf_entry]
+def transferSelfDetached (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.transferAccountDetached Context.self ({ w0 := 0, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Structural minimum-geometry fixture. The synthetic receiver need not exist in the sandbox. -/
+@[pf_entry]
+def transferShortDetached (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let shortReceiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨2, 0x6161, 0, 0, 0, 0, 0, 0, 0⟩
+  let _ := Promises.transferAccountDetached shortReceiver ({ w0 := 0, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Fixture-only receiver with nonzero bytes above length, including within its last active limb.
+Only the first 18 bytes encode `receiver.test.near`; inactive carrier padding is not identity. -/
+@[pf_entry]
+def transferPaddedDetached (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let dynamicReceiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨18, 0x7265766965636572, 0x656e2e747365742e, 0xdeadbeefcafe7261,
+      0x1111111111111111, 0x2222222222222222, 0x3333333333333333,
+      0x4444444444444444, 0x5555555555555555⟩
+  let _ := Promises.transferAccountDetached dynamicReceiver ({ w0 := 19, w1 := 0 } : NearToken)
+  .ok ({ state with marker := value }, value)
+
+/-- Structural maximum-geometry/high-limb fixture. Sandbox does not execute the unaffordable
+amount or require the synthetic 64-byte account to exist. -/
+@[pf_entry]
+def transferMaxAccountReturned (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let maxReceiver : ProofForge.Wasm.Near.Runtime.AccountId :=
+    ⟨64, 0x6161616161616161, 0x6161616161616161, 0x6161616161616161,
+      0x6161616161616161, 0x6161616161616161, 0x6161616161616161,
+      0x6161616161616161, 0x6161616161616161⟩
+  let _ := Promises.transferAccountReturned maxReceiver
+    ({ w0 := 0xffffffffffffffff, w1 := 0xffffffffffffffff } : NearToken)
+  .ok ({ state with marker := value }, value)
+
 /-- Schedule a detached call carrying `2^64 + 7` yoctoNEAR. -/
 @[pf_entry]
 def send (state : State) (value : UInt64) : Except Error (State × UInt64) :=

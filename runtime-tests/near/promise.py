@@ -118,6 +118,35 @@ def main() -> None:
         raise AssertionError("insufficient native transfer did not roll back caller state")
     print("near-promise: insufficient native transfer failed synchronously and rolled back")
 
+    padded_balance = client.view_account_balance(RECEIVER)
+    _call_u64(client, "transferPaddedDetached", 504)
+    padded_next_balance = client.view_account_balance(RECEIVER)
+    if padded_next_balance - padded_balance != 19:
+        raise AssertionError(
+            "dynamic padded receiver did not use only its exact active AccountId bytes: "
+            f"expected 19, got {padded_next_balance - padded_balance}"
+        )
+    if client.view_u64("get") != 504:
+        raise AssertionError("dynamic padded detached transfer did not commit caller state")
+    print("near-promise: inactive AccountId padding was excluded from the dynamic receiver")
+
+    _call_u64(client, "transferSelfDetached", 506)
+    if client.view_u64("get") != 506:
+        raise AssertionError("zero-amount dynamic self transfer did not commit caller state")
+    print("near-promise: complete dynamic current-account receiver created a detached receipt")
+
+    dynamic_returned = client.call_on(
+        client.account_id,
+        "transferCallerReturned",
+        NearClient.encode_u64_le(505),
+        signer=RECEIVER,
+    )
+    if NearClient.success_value_bytes(dynamic_returned) != b"":
+        raise AssertionError("dynamic predecessor transfer did not forward its empty receipt result")
+    if client.view_u64("get") != 505:
+        raise AssertionError("dynamic predecessor returned transfer did not commit caller state")
+    print("near-promise: complete dynamic predecessor receiver produced a returned transfer receipt")
+
     _call_u64(client, "send", 77)
     if client.view_u64("get") != 77:
         raise AssertionError("detached sender did not commit its own state")

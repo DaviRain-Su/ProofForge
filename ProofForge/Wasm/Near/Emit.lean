@@ -141,7 +141,9 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => #[]
       | .ext (.promiseTransferDetached _ _ _)
-      | .ext (.promiseTransferReturned _ _ _) => #[]
+      | .ext (.promiseTransferReturned _ _ _)
+      | .ext (.promiseTransferAccountDetached _ _ _)
+      | .ext (.promiseTransferAccountReturned _ _ _) => #[]
       | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseResultRead _ _) => #[]
@@ -234,6 +236,7 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     match op with
     | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
     | .ext (.promiseTransferReturned _ _ _) => true
+    | .ext (.promiseTransferAccountReturned _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
@@ -261,7 +264,9 @@ private partial def opsTransferPromise (ops : Array (Op ValKind OpExt)) : Bool :
   ops.any fun op =>
     match op with
     | .ext (.promiseTransferDetached _ _ _)
-    | .ext (.promiseTransferReturned _ _ _) => true
+    | .ext (.promiseTransferReturned _ _ _)
+    | .ext (.promiseTransferAccountDetached _ _ _)
+    | .ext (.promiseTransferAccountReturned _ _ _) => true
     | .ite _ _ _ thn els => opsTransferPromise thn || opsTransferPromise els
     | .forBody _ body => opsTransferPromise body
     | _ => false
@@ -1179,6 +1184,57 @@ private def stagePromiseTransfer (p : Program ValKind OpExt) (st : EState)
   ]
   return { lines, promiseLocal, st := st' }
 
+/-- Stage one transfer-only receipt to a complete dynamic AccountId. The host receives exactly the
+active raw UTF-8 bytes: no Borsh length, inactive carrier padding, or JSON transformation. -/
+private def stagePromiseAccountTransfer (st : EState) (receiver : Array (Val ValKind))
+    (amountLo amountHi : Val ValKind) (level : Nat) : Except String StagedPromiseCall := do
+  unless receiver.size == 9 do
+    throw "extract/unsupported: near dynamic Promise receiver frame geometry"
+  let receiverLength ← renderVal st receiver[0]!
+  let receiverLengthLocal := localOfTemp st.fresh
+  let receiverPtrLocal := localOfTemp (st.fresh + 1)
+  let amountPtrLocal := localOfTemp (st.fresh + 2)
+  let promiseLocal := localOfTemp (st.fresh + 3)
+  let st' := { st with fresh := st.fresh + 4 }
+  let amountLo ← renderVal st amountLo
+  let amountHi ← renderVal st amountHi
+  let mut lines := #[
+    indent level ("(local.set " ++ receiverLengthLocal ++ " " ++ receiverLength ++ ")"),
+    indent level ("(if (i64.lt_u (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 2)) (then unreachable))"),
+    indent level ("(if (i64.gt_u (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 64)) (then unreachable))"),
+    indent level ("(local.set " ++ receiverPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (local.get " ++ receiverLengthLocal ++
+      ") (i64.const 1))))")
+  ]
+  for index in [0:64] do
+    let word ← renderVal st receiver[index / 8 + 1]!
+    let byte := "(i64.and (i64.shr_u " ++ word ++ " (i64.const " ++
+      toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        receiverLengthLocal ++ "))"),
+      indent (level + 2) "(then",
+      indent (level + 4) ("(i64.store8 (i32.add (i32.wrap_i64 (local.get " ++
+        receiverPtrLocal ++ ")) (i32.const " ++ toString index ++ ")) " ++ byte ++ ")"),
+      indent (level + 2) "))"
+    ]
+  lines := lines ++ #[
+    indent level ("(local.set " ++ amountPtrLocal ++
+      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
+    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ amountPtrLocal ++ ")) " ++
+      amountLo ++ ")"),
+    indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ amountPtrLocal ++
+      ")) (i32.const 8)) " ++ amountHi ++ ")"),
+    indent level ("(local.set " ++ promiseLocal ++
+      " (call $pf_promise_batch_create (local.get " ++ receiverLengthLocal ++
+      ") (local.get " ++ receiverPtrLocal ++ ")))"),
+    indent level ("(call $pf_promise_batch_action_transfer (local.get " ++ promiseLocal ++
+      ") (local.get " ++ amountPtrLocal ++ "))")
+  ]
+  return { lines, promiseLocal, st := st' }
+
 /-- Stage one static callback action dependent on `childPromiseLocal`. The callback receiver is the
 current contract account copied by the entry prelude; its normal arguments remain independent of
 the dependency result channel. -/
@@ -1540,6 +1596,25 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := staged.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseTransferAccountDetached receiver amountLo amountHi) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        let staged ← stagePromiseAccountTransfer st receiver amountLo amountHi level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
+    | .ext (.promiseTransferAccountReturned receiver amountLo amountHi) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let staged ← stagePromiseAccountTransfer st receiver amountLo amountHi level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { staged.st with pendingPromiseReturn := some staged.promiseLocal }
+        return {
+          lines := staged.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
         childArgsCapacity callbackArgsCapacity childArguments callbackArguments
         childDepositLo childDepositHi childGas
@@ -1707,6 +1782,9 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
           arguments.any valHas || valHas depositLo || valHas depositHi || valHas gas
       | .promiseTransferDetached _ amountLo amountHi
       | .promiseTransferReturned _ amountLo amountHi => valHas amountLo || valHas amountHi
+      | .promiseTransferAccountDetached receiver amountLo amountHi
+      | .promiseTransferAccountReturned receiver amountLo amountHi =>
+          receiver.any valHas || valHas amountLo || valHas amountHi
       | .promiseFunctionCallThenReturned _ _ _ _ _ childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
           childArguments.any valHas || callbackArguments.any valHas ||
@@ -1938,7 +2016,9 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseFunctionCallDetached _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _) => true
   | .ext (.promiseTransferDetached _ _ _)
-  | .ext (.promiseTransferReturned _ _ _) => true
+  | .ext (.promiseTransferReturned _ _ _)
+  | .ext (.promiseTransferAccountDetached _ _ _)
+  | .ext (.promiseTransferAccountReturned _ _ _) => true
   | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true

@@ -194,6 +194,12 @@ private def projectOpExt
       | .promiseTransferReturned receiver amountLo amountHi =>
           return .promiseTransferReturned receiver
             (← _projectVal amountLo) (← _projectVal amountHi)
+      | .promiseTransferAccountDetached receiver amountLo amountHi =>
+          return .promiseTransferAccountDetached (← receiver.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi)
+      | .promiseTransferAccountReturned receiver amountLo amountHi =>
+          return .promiseTransferAccountReturned (← receiver.mapM _projectVal)
+            (← _projectVal amountLo) (← _projectVal amountHi)
       | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
           childArgsCapacity callbackArgsCapacity childArguments callbackArguments
           childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -346,6 +352,14 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
       s!"npromise.transfer.returned:{receiver.toUTF8.size}:{receiver}(" ++
         s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
         s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .promiseTransferAccountDetached receiver amountLo amountHi =>
+      s!"npromise.transfer.account.detached({canonValues receiver};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
+  | .promiseTransferAccountReturned receiver amountLo amountHi =>
+      s!"npromise.transfer.account.returned({canonValues receiver};" ++
+        s!"{Wasm.IR.valCanon extValCanon amountLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon amountHi})"
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
       childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas =>
@@ -452,6 +466,12 @@ private def rewritePayload
         (← rewriteValue amountLo) (← rewriteValue amountHi)
   | .promiseTransferReturned receiver amountLo amountHi =>
       return .promiseTransferReturned receiver
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .promiseTransferAccountDetached receiver amountLo amountHi =>
+      return .promiseTransferAccountDetached (← receiver.mapM rewriteValue)
+        (← rewriteValue amountLo) (← rewriteValue amountHi)
+  | .promiseTransferAccountReturned receiver amountLo amountHi =>
+      return .promiseTransferAccountReturned (← receiver.mapM rewriteValue)
         (← rewriteValue amountLo) (← rewriteValue amountHi)
   | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
       childArgsCapacity callbackArgsCapacity childArguments callbackArguments
