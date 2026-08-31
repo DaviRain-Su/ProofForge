@@ -296,6 +296,11 @@ first so this is the caller card. -/
 @[pf_inline] def peekSelfDue : UInt64 :=
   Context.peekDueLimbs Context.selfW0 Context.selfW1 Context.selfW2
 
+/-- True when contract `due` is missing/0 or `due ≤ ledgerSqn`.
+Rewrites persist Owner to the contract card. Not a clock sysvar. -/
+@[pf_inline] def selfDueReached : Bool :=
+  Context.peekDueLimbs Context.selfW0 Context.selfW1 Context.selfW2 ≤ Context.ledgerSqn
+
 end Card
 
 namespace Pay
