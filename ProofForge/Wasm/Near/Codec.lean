@@ -119,6 +119,13 @@ def maxJsonFtTransferWhitespace : Nat := 32
 def maxJsonFtTransferInputBytes : Nat :=
   40 + 64 * 6 + 39 * 6 + 16 * 6 + maxJsonFtTransferWhitespace
 
+/-- Exact largest transfer-call-shaped wire: 49 structural bytes for receiver, amount, optional
+memo, and required message; each decoded value uses its own established bound and the object has
+one aggregate structural-whitespace allowance. -/
+def maxJsonFtTransferCallWhitespace : Nat := 32
+def maxJsonFtTransferCallInputBytes : Nat :=
+  49 + 64 * 6 + 39 * 6 + 16 * 6 + 64 * 6 + maxJsonFtTransferCallWhitespace
+
 /-- Exact largest private resolver-shaped wire: 45 structural bytes for two AccountIds and one
 quoted amount, two 64-byte ids and 39 digits each worst-case escaped, plus aggregate whitespace. -/
 def maxJsonFtResolveWhitespace : Nat := 32
@@ -151,6 +158,11 @@ def ftTransferArgsSchema : Core.Codec.Schema :=
     ("receiverId", accountIdSchema), ("amount", .scalar .uint128),
     ("memo", optionalMemo16Schema)]
 
+def ftTransferCallArgsSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.FtTransferCallArgs" #[
+    ("receiverId", accountIdSchema), ("amount", .scalar .uint128),
+    ("memo", optionalMemo16Schema), ("msg", boundedMessage64Schema)]
+
 def ftResolveTransferArgsSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.FtResolveTransferArgs" #[
     ("senderId", accountIdSchema), ("receiverId", accountIdSchema),
@@ -165,6 +177,7 @@ inductive InputPlan where
   | jsonOptionalMemo16
   | jsonMessage64
   | jsonFtTransferArgs
+  | jsonFtTransferCallArgs
   | jsonFtResolveTransferArgs
   deriving Repr, BEq, Inhabited
 
@@ -175,6 +188,7 @@ def InputPlan.localCount : InputPlan → Nat
   | .jsonOptionalMemo16 => 4
   | .jsonMessage64 => 9
   | .jsonFtTransferArgs => 15
+  | .jsonFtTransferCallArgs => 24
   | .jsonFtResolveTransferArgs => 20
 
 def InputPlan.canonical : InputPlan → String
@@ -194,6 +208,9 @@ def InputPlan.canonical : InputPlan → String
   | .jsonFtTransferArgs =>
       s!"near-json-ft-transfer-args-bounded-v1(max-wire={maxJsonFtTransferInputBytes}," ++
         s!"ws={maxJsonFtTransferWhitespace},order=any,keys=raw,unknown=reject)"
+  | .jsonFtTransferCallArgs =>
+      s!"near-json-ft-transfer-call-args-bounded-v1(max-wire={maxJsonFtTransferCallInputBytes}," ++
+        s!"ws={maxJsonFtTransferCallWhitespace},order=any,keys=raw,unknown=reject)"
   | .jsonFtResolveTransferArgs =>
       s!"near-json-ft-resolve-args-bounded-v1(max-wire={maxJsonFtResolveInputBytes}," ++
         s!"ws={maxJsonFtResolveWhitespace},order=any,keys=raw,unknown=reject)"
@@ -204,6 +221,7 @@ def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == optionalMemo16Schema then return .jsonOptionalMemo16
   if schema == boundedMessage64Schema then return .jsonMessage64
   if schema == ftTransferArgsSchema then return .jsonFtTransferArgs
+  if schema == ftTransferCallArgsSchema then return .jsonFtTransferCallArgs
   if schema == ftResolveTransferArgsSchema then return .jsonFtResolveTransferArgs
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)

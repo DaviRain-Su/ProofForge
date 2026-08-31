@@ -70,6 +70,15 @@ This is an input carrier only: it does not implement or claim the public NEP-141
   memo : OptionalMemo16
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for bounded canonical `ft_transfer_call`-shaped JSON. This carrier
+only decodes arguments; it neither transfers tokens nor creates a Promise. -/
+@[pf_boundary] structure FtTransferCallArgs where
+  receiverId : AccountId
+  amount : ProofForge.Core.Value.UInt128
+  memo : OptionalMemo16
+  msg : BoundedMessage64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned exact frame for the bounded canonical private resolver argument parser.
 This carrier only decodes `{sender_id,receiver_id,amount}`; it performs no ledger reconciliation. -/
 @[pf_boundary] structure FtResolveTransferArgs where

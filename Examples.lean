@@ -77,6 +77,7 @@ import Examples.NearJsonAmountInput
 import Examples.NearJsonMemoInput
 import Examples.NearJsonMessageInput
 import Examples.NearJsonFtTransferInput
+import Examples.NearJsonFtTransferCallInput
 import Examples.NearJsonFtResolveInput
 import Examples.NearStorage
 import Examples.NearStorageEconomics

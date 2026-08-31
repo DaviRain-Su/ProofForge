@@ -44,6 +44,10 @@ wsm-near-json-ft-transfer-input-001 combines those value decoders behind one bou
 required `receiver_id`/`amount` and optional `memo`. All key permutations are accepted; duplicate,
 unknown, escaped-key, and trailing forms reject. The compiler-owned 15-leaf frame is parser-only
 and deliberately does not export or implement `ft_transfer`.
+wsm-near-json-ft-transfer-call-input-001 extends that closed boundary with required `msg` in one
+four-field any-order loop. Its exact 24-leaf frame preserves independent AccountId/u128/memo/message
+geometry, and the 1179-byte wire bound accounts for worst-case escaping plus aggregate whitespace.
+It remains parser-only: no `ft_transfer_call` export, ledger mutation, event, or Promise is implied.
 wsm-near-json-ft-resolve-input-001 adds the separate exact 20-leaf `sender_id`/`receiver_id`/`amount`
 frame needed by a future private resolver. Its bounded any-order field loop reuses the same
 AccountId and quoted-u128 value decoders, while independent presence bits and zeroed 64-byte frames

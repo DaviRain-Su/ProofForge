@@ -255,6 +255,10 @@ asynchronous; dynamic handles and multi-action builders are absent.
    and reuses the checked value cursors. Exact geometry is 786 wire bytes and 32 aggregate
    structural-whitespace bytes. Unknown keys reject (unlike the broader generated serde wrapper),
    and this parser fixture intentionally has no standard `ft_transfer` export or ledger effect.
+   **NEAR-JSON-FT-TRANSFER-CALL-INPUT (wsm-near-json-ft-transfer-call-input-001 done):** one exact
+   24-leaf frame adds required bounded `msg` to receiver/amount/optional memo. The any-order loop
+   shares all existing value decoders, uses a 1179-byte exact worst-case wire budget, clears every
+   inactive frame, and deliberately has no standard export or effects.
    **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** the distinct exact
    `FtResolveTransferArgs` schema lowers sender AccountId, receiver AccountId, and full u128 amount
    to 20 ordered leaves. One bounded field loop accepts all six raw-key permutations with separate
