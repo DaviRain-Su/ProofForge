@@ -3,7 +3,7 @@ import ProofForge
 /-!
 Owner-managed UInt128 consumer of the shared `Core.SafeCast` policy. Unlike the permissionless
 accumulator, this application applies authorization first, rejects zero values with independent
-application errors, and replaces rather than adds to UInt64 and UInt32 state fields.
+application errors, and replaces rather than adds to UInt64, UInt32, and UInt16 state fields.
 -/
 
 namespace Examples.EvmSafeCastConfig
@@ -16,6 +16,7 @@ structure State where
   admin : Address
   limit : UInt64
   window : UInt32
+  threshold : UInt16
   deriving Repr, DecidableEq, Inhabited
 
 inductive Error where
@@ -23,11 +24,13 @@ inductive Error where
   | zero
   | invalidWindow
   | windowZero
+  | invalidThreshold
+  | thresholdZero
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_entry]
 def init (admin : Address) : State :=
-  { admin, limit := 7, window := 3 }
+  { admin, limit := 7, window := 3, threshold := 5 }
 
 @[pf_entry]
 def adminOf (s : State) : Address :=
@@ -40,6 +43,10 @@ def limitOf (s : State) : UInt64 :=
 @[pf_entry]
 def windowOf (s : State) : UInt32 :=
   s.window
+
+@[pf_entry]
+def thresholdOf (s : State) : UInt16 :=
+  s.threshold
 
 /-- Owner-gated UInt128→UInt64 replacement. Authorization and both validation decisions precede
 the only state update. -/
@@ -68,5 +75,19 @@ def setWindow (s : State) (value : UInt128) : Except Error (State × UInt32) :=
         .ok ({ s with window }, window)
   else
     .ok (s, Access.ownerViolation.toUInt32)
+
+/-- Owner-gated UInt128→UInt16 replacement. Authorization and every discarded-bit check precede
+the only `threshold` state update. -/
+@[pf_entry]
+def setThreshold (s : State) (value : UInt128) : Except Error (State × UInt16) :=
+  if Access.requireOwner s.admin then
+    do
+      let threshold ← SafeCast.UInt128.toUInt16 value .invalidThreshold
+      if threshold == 0 then
+        .error .thresholdZero
+      else
+        .ok ({ s with threshold }, threshold)
+  else
+    .ok (s, Access.ownerViolation.toUInt16)
 
 end Examples.EvmSafeCastConfig

@@ -87,7 +87,8 @@ R5-016 persistent bounded storage ring queue 与 explicit effect-result sequenci
 R5-017 persistent bounded enumerable set 与 mutable-query snapshot sequencing、
 R5-018 persistent bounded UInt64 checkpoints、R5-019 persistent bounded enumerable UInt64 map、
 R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
-R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind；
+R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind、
+R5-022 shared checked UInt128/UInt256→UInt16 SafeCast；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -96,11 +97,11 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-31）**：Lean 汇总 406 jobs；SVM manifest 全 67 programs；
+- **当前可验证基线（2026-08-31）**：Lean 汇总 411 jobs；SVM manifest 全 67 programs；
   Mollusk 全量 421/421（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
   40 programs 且 Anvil 40/40。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 406-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  并保留汇总 `test` gate；完整 411-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。两个 target lane 在 runtime fixtures 前核对实际 clean build manifest；
   Surfpool 同时等待 health/version RPC，并在退出时 bounded cleanup。任一 lane 失败不会跳过
   或延迟另两条 lane 的反馈。详见
@@ -854,6 +855,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   验证 permissionless 与 owner-first policy、typed width/zero errors 和失败原子性；原 UInt64
   路径保留。详见 `docs/plan/tasks/r5-021.md`。
 
+- R5-022 checked wide-to-UInt16 SafeCast 已完成集成：`Core.SafeCast` 在所有 upper limbs 为零后
+  精确要求 low limb `< 2^16`，才执行 explicit UInt16 narrowing；sentinel 继续只存在于 shared
+  policy。R5-021 的 generic fixed-scalar `Except` bind 原样复用，没有新增 width-specific
+  Ops/IR/CFG/Component/Runtime/Emit case。Accumulator/Config 现有 consumer 增加 batch/threshold
+  路径，分别验证 permissionless 与 owner-first ordering、typed width/zero errors、原 UInt64/
+  UInt32 字段保持和 raw-storage rollback。UInt8 与 signed casts 继续 fail closed，等待真实
+  consumer。详见 `docs/plan/tasks/r5-022.md`。
+
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
   geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
@@ -1003,7 +1012,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 406 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- `lake build Tests` 当前 411 jobs，汇总门覆盖全部 imported test modules 与 target guards。
 - SVM registry 67 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
   `pf build` 当前通过；全套 Mollusk 421/421，其中 MemoryOps 20/20、LamportTransfer 15/15、
   RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Owner-gated UInt128→UInt64/UInt32 checked replacement: independent zero policies, exact
+# Owner-gated UInt128→UInt64/UInt32/UInt16 checked replacement: independent zero policies, exact
 # boundaries, low-word/upper-limb overflow, authorization ordering, and storage atomicity.
 set -euo pipefail
 
@@ -20,8 +20,9 @@ bytecode="$(tr -d '\n\r ' < "$bin")"
 sender="$("$cast" wallet address --private-key "$private_key")"
 addr="$(solana_lean_deploy_ctor_address "$bytecode" "$sender")"
 
-read -r max32 just_over32 max64 just_over high_limb < <("$python" -I -S -c \
-  'print(2**32-1, 2**32, 2**64-1, 2**64, 2**127)')
+read -r max16 just_over16 max32 just_over32 max64 just_over high_limb < <( \
+  "$python" -I -S -c 'print(2**16-1, 2**16, 2**32-1, 2**32, 2**64-1, 2**64, 2**127)'
+)
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'limitOf()(uint64)')" 7 \
   "constructor limit"
@@ -29,6 +30,9 @@ solana_lean_require_storage "$addr" 3 7 "constructor limit slot"
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'windowOf()(uint32)')" 3 \
   "constructor window"
 solana_lean_require_storage "$addr" 4 3 "constructor window slot"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'thresholdOf()(uint16)')" 5 \
+  "constructor threshold"
+solana_lean_require_storage "$addr" 5 5 "constructor threshold slot"
 
 # Zero is representable, but this application's independent nonzero policy rejects it.
 solana_lean_require_named_revert "$addr" "$sender" \
@@ -125,4 +129,52 @@ solana_lean_require_unauthorized "$addr" "$other" \
 solana_lean_require_storage "$addr" 4 "$max32" "unauthorized window updates are atomic"
 solana_lean_require_storage "$addr" 3 "$max64" "window path preserves UInt64 limit"
 
-echo "evm-anvil-safe-cast-config: ok (owner + UInt64/UInt32 boundaries + application policy + atomicity; engineering only)"
+# UInt16 keeps authorization outermost, then applies the exact 2^16 low-word gate and the complete
+# UInt128 high-limb gate before publishing the narrow threshold.
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'setThreshold(uint128)' 0)" 'thresholdZero()' "zero threshold"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'setThreshold(uint128)' 0 >/dev/null 2>&1; then
+  echo "FAIL: zero threshold unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 5 5 "zero threshold is atomic"
+
+solana_lean_require_uint "$("$cast" call --from "$sender" --rpc-url "$rpc" "$addr" \
+  'setThreshold(uint128)(uint16)' "$max16")" "$max16" "exact UInt16 max threshold"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'setThreshold(uint128)' "$max16" >/dev/null
+solana_lean_require_storage "$addr" 5 "$max16" "exact UInt16 max threshold persists"
+
+for case in \
+  "$just_over16|threshold low-word upper-bit overflow" \
+  "$just_over|threshold w1 overflow" \
+  "$high_limb|threshold distant high-bit overflow"; do
+  value="${case%%|*}"
+  label="${case#*|}"
+  solana_lean_require_named_revert "$addr" "$sender" \
+    "$("$cast" calldata 'setThreshold(uint128)' "$value")" 'invalidThreshold()' "$label"
+  if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+      "$addr" 'setThreshold(uint128)' "$value" >/dev/null 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  solana_lean_require_storage "$addr" 5 "$max16" "$label is atomic"
+done
+
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'setThreshold(uint128)' 13)" "$other" \
+  "non-admin representable threshold"
+if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
+    "$addr" 'setThreshold(uint128)' 13 >/dev/null 2>&1; then
+  echo "FAIL: non-admin threshold update unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_unauthorized "$addr" "$other" \
+  "$("$cast" calldata 'setThreshold(uint128)' "$just_over16")" "$other" \
+  "non-admin UInt16 overflow reaches authorization first"
+solana_lean_require_storage "$addr" 5 "$max16" "unauthorized threshold updates are atomic"
+solana_lean_require_storage "$addr" 3 "$max64" "threshold path preserves UInt64 limit"
+solana_lean_require_storage "$addr" 4 "$max32" "threshold path preserves UInt32 window"
+
+echo "evm-anvil-safe-cast-config: ok (owner + UInt64/UInt32/UInt16 boundaries + application policy + atomicity; engineering only)"

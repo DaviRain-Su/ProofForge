@@ -16,11 +16,23 @@ There is no target Runtime leaf, operation, IR/emitter case, allocation, termina
 in this module. Extraction lowers each helper to scalar limb tests in the consuming application.
 -/
 
+/-- First UInt64 value that does not fit in UInt16. Kept at the shared policy boundary so
+applications never repeat a numeric width sentinel. -/
+private def uint16Limit : UInt64 := 65536
+
 /-- First UInt64 value that does not fit in UInt32. Kept at the shared policy boundary so
 applications never repeat a numeric width sentinel. -/
 private def uint32Limit : UInt64 := 4294967296
 
 namespace UInt128
+
+/-- Narrow a two-limb UInt128 to UInt16. The high limb must be zero and the low limb must fit below
+the first non-representable UInt16 value before the explicit narrowing conversion is evaluated. -/
+@[pf_inline] def toUInt16 (value : Value.UInt128) (error : ε) : Except ε UInt16 :=
+  if value.w1 == 0 then
+    if value.w0 < uint16Limit then .ok value.w0.toUInt16 else .error error
+  else
+    .error error
 
 /-- Narrow a two-limb UInt128 to UInt32. The high limb must be zero and the low limb must fit below
 the first non-representable UInt32 value before the explicit narrowing conversion is evaluated. -/
@@ -38,6 +50,14 @@ is zero. -/
 end UInt128
 
 namespace «UInt256»
+
+/-- Narrow a four-limb UInt256 to UInt16. Every upper limb and every bit above bit 15 in `w0` is
+checked before the explicit narrowing conversion is evaluated. -/
+@[pf_inline] def toUInt16 (value : Value.UInt256) (error : ε) : Except ε UInt16 :=
+  if (value.w1 ||| value.w2 ||| value.w3) == 0 then
+    if value.w0 < uint16Limit then .ok value.w0.toUInt16 else .error error
+  else
+    .error error
 
 /-- Narrow a four-limb UInt256 to UInt32. Every upper limb and every bit above bit 31 in `w0` is
 checked before the explicit narrowing conversion is evaluated. -/
