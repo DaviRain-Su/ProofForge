@@ -446,6 +446,129 @@ async function main() {
     throw new Error("missing ContractData for " + cfg.contract_account);
   }
 
+  // TrustSet from the seeded wallet (holder) with LimitAmount on the issuer
+  // at cfg.issuer, so the wallet must already cover base reserve.
+  if (cmd === "trustset") {
+    const { xrpl } = loadXrpl();
+    const wallet = xrpl.Wallet.fromSeed(secret, { algorithm });
+    const issuer = cfg.issuer;
+    const currency = cfg.currency || "USD";
+    const value = cfg.value || "1000000";
+    if (!issuer) throw new Error("trustset wants issuer");
+    const seq = (
+      await rpcRetry(url, "account_info", {
+        account: wallet.address,
+        ledger_index: "current",
+      })
+    ).account_data.Sequence;
+    const txJson = {
+      TransactionType: "TrustSet",
+      Account: wallet.address,
+      LimitAmount: { currency, issuer, value },
+      Fee: cfg.fee || "12",
+      Sequence: seq,
+      NetworkID: networkId,
+    };
+    const signed = await signTx(url, secret, txJson, defs);
+    const submitted = await submitBlob(url, signed.tx_blob);
+    if (submitted.engine_result !== "tesSUCCESS") {
+      throw new Error(submitted.engine_result + " " + (submitted.engine_result_message || ""));
+    }
+    const hash = submitted.tx_json.hash;
+    const tx = await waitTx(url, hash);
+    const result = (tx.meta || {}).TransactionResult;
+    process.stdout.write(
+      JSON.stringify({
+        success: result === "tesSUCCESS",
+        txHash: hash,
+        result,
+        holder: wallet.address,
+        issuer,
+        currency,
+        value,
+      }) + "\n"
+    );
+    if (result !== "tesSUCCESS") process.exit(1);
+    return;
+  }
+
+  // Issuer-to-holder IOU Payment so RippleState.Balance != 0. Zero Balance is
+  // fine for trustline_id/cache_le; this is opt-in via cfg.
+  if (cmd === "pay_iou") {
+    const { xrpl } = loadXrpl();
+    const wallet = xrpl.Wallet.fromSeed(secret, { algorithm });
+    const dest = cfg.destination;
+    const currency = cfg.currency || "USD";
+    const issuer = cfg.issuer;
+    const value = cfg.value || "1";
+    if (!dest || !issuer) throw new Error("pay_iou wants destination and issuer");
+    const seq = (
+      await rpcRetry(url, "account_info", {
+        account: wallet.address,
+        ledger_index: "current",
+      })
+    ).account_data.Sequence;
+    const txJson = {
+      TransactionType: "Payment",
+      Account: wallet.address,
+      Destination: dest,
+      Amount: { currency, issuer, value },
+      Fee: cfg.fee || "12",
+      Sequence: seq,
+      NetworkID: networkId,
+    };
+    const signed = await signTx(url, secret, txJson, defs);
+    const submitted = await submitBlob(url, signed.tx_blob);
+    if (submitted.engine_result !== "tesSUCCESS") {
+      throw new Error(submitted.engine_result + " " + (submitted.engine_result_message || ""));
+    }
+    const hash = submitted.tx_json.hash;
+    const tx = await waitTx(url, hash);
+    const result = (tx.meta || {}).TransactionResult;
+    process.stdout.write(
+      JSON.stringify({
+        success: result === "tesSUCCESS",
+        txHash: hash,
+        result,
+        account: wallet.address,
+        destination: dest,
+        currency,
+        issuer,
+        value,
+      }) + "\n"
+    );
+    if (result !== "tesSUCCESS") process.exit(1);
+    return;
+  }
+
+  // RippleState existence check (either side of the line).
+  if (cmd === "line") {
+    const account = cfg.account;
+    if (!account) throw new Error("line wants account");
+    const lines = await rpcRetry(url, "account_lines", {
+      account,
+      ledger_index: "validated",
+    });
+    const wantIssuer = cfg.issuer ? String(cfg.issuer) : null;
+    const wantCurrency = cfg.currency ? String(cfg.currency) : null;
+    // 3.3.0-rc1 drops the issuer side on peer lines and omits the
+    // LedgerEntryType tag, so match peer lines on counterparty.
+    const match =
+      (lines.lines || []).find(
+        (l) =>
+          (!wantIssuer || l.account === wantIssuer) &&
+          (!wantCurrency || l.currency === wantCurrency)
+      ) || null;
+    process.stdout.write(
+      JSON.stringify({
+        count: (lines.lines || []).length,
+        matched: match,
+      }) + "\n"
+    );
+    if (!match) process.exit(1);
+    return;
+  }
+
   if (cmd === "pay") {
     const { xrpl } = loadXrpl();
     const wallet = xrpl.Wallet.fromSeed(secret, { algorithm });

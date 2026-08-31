@@ -64,6 +64,7 @@ import Examples.XrplRaid
 import Examples.XrplRamp
 import Examples.XrplRank
 import Examples.XrplRant
+import Examples.XrplDraw
 import Examples.XrplNest
 import Examples.XrplStep
 import Examples.XrplRole
@@ -154,7 +155,8 @@ open ProofForge
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRamp" == some "3eaeb4e07e501d84"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRank" == some "dc7acc658d048610"
 #guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplRant" == some "5f79d58819a43529"
-#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke", "XrplReed", "XrplRake", "XrplRaid", "XrplRamp", "XrplRank", "XrplRant"]
+#guard ProofForge.Wasm.Xrpl.Registry.digestOf "XrplDraw" == some "169b4a3422828871"
+#guard ProofForge.Wasm.Xrpl.Registry.names == #["Counter", "XrplCtx", "XrplOwn", "XrplHash", "XrplRt2", "XrplVec", "XrplSmoke", "XrplGate", "XrplHold", "XrplMark", "XrplBal", "XrplBalRt", "XrplRoot", "XrplTx", "XrplSend", "XrplNest", "XrplStep", "XrplRole", "XrplPeer", "XrplFlag", "XrplTab", "XrplHand", "XrplCrew", "XrplPay", "XrplMint", "XrplLock", "XrplCard", "XrplVault", "XrplEmit", "XrplTip", "XrplGift", "XrplCash", "XrplBank", "XrplSafe", "XrplPool", "XrplFund", "XrplTreasury", "XrplToken", "XrplShare", "XrplTake", "XrplHoldEsc", "XrplVest", "XrplClaim", "XrplPayout", "XrplDual", "XrplLatch", "XrplEscape", "XrplFrost", "XrplGlaze", "XrplHinge", "XrplBrace", "XrplClamp", "XrplClasp", "XrplCleft", "XrplClip", "XrplClot", "XrplCrimp", "XrplRate", "XrplCrate", "XrplCinder", "XrplRevoke", "XrplReed", "XrplRake", "XrplRaid", "XrplRamp", "XrplRank", "XrplRant", "XrplDraw"]
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject " n:ident : command => do
@@ -304,6 +306,8 @@ elab "#pf_xrpl_reject " n:ident : command => do
 #pf_xrpl_build Examples.XrplRank
 
 #pf_xrpl_build Examples.XrplRant
+
+#pf_xrpl_build Examples.XrplDraw
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do

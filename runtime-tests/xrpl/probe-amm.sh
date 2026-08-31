@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Probe AlphaNet host_lib.amm_id. Not Sdk.Amm.
-# Missing import → ContractCreate fail (exit 1). RPC down → skip (exit 0).
-# Instantiation + poke that returns *any* i32 (index or negative) means the host exists.
+# Probe AlphaNet AMM read path: amm_id + cache_le + le_field (XLS-0102 hosts,
+# XLS-30 object). Not Sdk.Amm. Missing import → ContractCreate fail (exit 1).
+# RPC down → skip (exit 0). A negative vmReturnCode (object missing / bad
+# params) still means the read path ran and is reported as-is.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,7 +52,7 @@ wasm="$root/build/xrpl-alphanet/probe-amm.wasm"
 printf '{"rpc_url":"%s","network_id":21337,"wallet_seed":"%s","wasm_path":"%s"}\n' \
   "$RPC" "$WALLET" "$wasm" >"$cfg"
 if ! deploy_out="$(node "$here/alphanet-rpc.js" deploy "$cfg")"; then
-  echo "FAIL: ContractCreate rejected amm_id import (host not registered)" >&2
+  echo "FAIL: ContractCreate rejected amm_id/cache_le/le_field import (host not registered)" >&2
   echo "$deploy_out" >&2
   rm -f "$cfg"
   exit 1
@@ -80,5 +81,5 @@ else
   echo "FAIL: amm_id poke did not run ($result code=$code)" >&2
   exit 1
 fi
-echo "xrpl-probe-amm: amm_id(zero,zero) result=$result vmReturnCode=$code (host exists; not Sdk.Amm)"
+echo "xrpl-probe-amm: path amm_id(40B USD/EUR issues)→cache_le→le_field(LPTokenBalance) result=$result vmReturnCode=$code (not Sdk.Amm)"
 echo "xrpl-probe-amm: ok contract=$contract"

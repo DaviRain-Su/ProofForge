@@ -338,6 +338,14 @@ need_exports_rant = (
     '(i32.store8 (i32.const 80) (i32.const 104))',
     '(i32.store8 (i32.const 96) (i32.const 108))',
 )
+need_exports_draw = (
+    '(func (export "initialize") (result i32)',
+    '(func (export "credit") (result i32)',
+    '(func (export "draw") (result i32)',
+    '(func (export "get")',
+    '(import "host_lib" "build_txn"',
+    '(import "host_lib" "emit_built_txn"',
+)
 need_exports_rank = (
     '(func (export "initialize") (result i32)',
     '(func (export "credit") (result i32)',
@@ -846,6 +854,8 @@ for wat in wats:
         exports = need_exports_rank
     elif wat.stem == "XrplRant":
         exports = need_exports_rant
+    elif wat.stem == "XrplDraw":
+        exports = need_exports_draw
     else:
         exports = need_exports_counter
     for needle in exports:

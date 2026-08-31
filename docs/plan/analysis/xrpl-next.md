@@ -63,7 +63,8 @@
 | 两步移交 Ownable | 活网要第二把钥匙验 `accept` | 工程，不是 IR |
 | 8～16 槽登记表 / 小池 | 源码展开 `xs_i` 太吵；要 IR 开 counted `for` 或宏 | **IR v0** |
 | `mapping(address => uint)` | 用户 `ContractData`（Owner=用户）或 nested JSON | **存储剖面** |
-| 读 XRP 余额 / Trust line | `cache_le` + `le_field` | **已绿** Balance；Trust line 未探针 |
+| 读 XRP 余额 / Trust line | `cache_le` + `le_field` | **已绿** Balance；Trust line **tesSUCCESS/0**（wsm-101，零余额 STAmount `0x8000…`）。解码 IOU mantissa 才开 Runtime |
+| 读原生 AMM | `amm_id` 40B STIssue + `cache_le` | **路径跑了**（wsm-102：amm_id 绿，缺 SLE **-10**）。要 AMMCreate 才开 Runtime |
 | swap / 真转账 | `build_txn` / `emit_built_txn` Payment（**不是**叙事名 `submitTransaction`） | **Runtime host** |
 | 日志 / 索引 | `trace_*` 未证是否共识副作用 | **探针** |
 | ERC-20 façade | 永远不要 | fail closed |
@@ -193,6 +194,20 @@ A 解决「权限更像 Ownable2Step」，**不**解决 Uniswap。
 | 每用户余额的积分账本 | 公开只能 caller 卡；本地注资后程序卡已绿 | 公开 tfSendAmount |
 | 动 XRP 的 swap | 不能 | wsm-023 + wsm-030 |
 | EVM Uniswap 字节码 | 永远不要 | — |
+
+## 3.0 三类「不能做」（不要混）
+
+不是每一条「先放 / 不要」都是链不支持。分清了才知道下一刀往哪走。
+
+| 类 | 含义 | 例子 | 本仓怎么办 |
+|---|---|---|---|
+| **A. 这条网的节点挡住** | host 或 amendment 在该网上没有 / 拒了 | 主网没有 `ContractCreate`；公开 3.3.0 emit **-196**、程序卡 **-22**；本地 2.6.1 不能签 Parameters；公开没注册 parent hash / base fee | 换一张网继续接（本地 emit 已绿）；公开挡住的门面先关；主网 `deployable=false` |
+| **B. 链的 WASM VM 有，本仓 IR v0 拒** | 不是 rippled 缺指令 | `loop` / `bitAnd` / 运行时 vector 下标；`forAccum` 只编译期展开 1..8 | 可以开 IR（有界、fail-closed）。**不是**等节点 |
+| **C. 链上有，但不该用 WASM 再实现一遍** | 协议对象已经是 rippled C++ | AMM / NFT / IOU Trust line 引擎；ERC-20 façade；wasm bump 当 `Sdk.Map` | 只读或再提交原生交易。永远不要在 JSON 卡片里仿 Uniswap |
+
+A 才是「它给的这条链还不支持」。本地和公开还要再拆：同一条 host，2.6.1 绿、3.3.0 红，是 **版本差**，不是「XRPL 永远不能」。
+
+本地 Card+Pay+Access+Pausable 组合（到 wsm-099）已经证完。再加同形 Example 不增加 A/B/C 任何一类能力。
 
 ## 3.1 v0 能做完的已经做完
 

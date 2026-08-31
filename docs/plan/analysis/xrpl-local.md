@@ -98,16 +98,18 @@
 ## 本地下一刀（公网先放，这里继续）
 
 依赖只能：本地探针或已绿 host → Runtime 叶（wasm v0 ext arity 0/1/3）→ SDK → Example。
+本地 Card+Pay+pause+freeze 组合到 wsm-099 **收口**，不再加同形 Example。
 
-| 下一刀 | 物理 | 不做 |
-|---|---|---|
-| 可变 drops Payment（arity 1） | STAmount `0x40…` \| drops，仍付给 caller | 公开 `Sdk.Payments` |
-| 编译期目的地 Payment | dest 走 `accountLit` / 三叶，金额先固定 | 任意账户参数（本地不能签 Parameters） |
-| 程序卡 + XRP 组合 | `storeSelf` 记账，再 `emitToCaller` 付 drops | 把它叫成 AMM / Uniswap |
-| 更多编译期 JSON key | 程序卡或 caller 卡 | 任意 KV `Sdk.Map` |
-| IOU / TrustSet / AMMDeposit | 要另编 STAmount / 对象 id | 现在不要 |
+| 下一刀 | 物理 | 不做 | 哪一类「不能」 |
+|---|---|---|---|
+| **wsm-100/101 Trust line** | **已绿读路径**：缺 SLE -10；TrustSet 后 tesSUCCESS/0，`drops=0x8000…` | `Sdk.Trustline`；IOU mantissa 解码另开 Runtime | 不是不能：host+SLE 都在 |
+| **wsm-102 AMM 读路径** | 40B STIssue `amm_id` 绿；缺池 **cache_le=-10** | `Sdk.Amm`；不发 AMMCreate 本刀 | 不是不能：要一条真实 AMM SLE |
+| **wsm-103 状态金额 Payment** | **本地已绿** `XrplDraw`：`emitPayDrops s.bal` | 公开 `Sdk.Payments` | **A**：公开 -196 |
+| 编译期更大 `xs_i` / 有界 `for` | IR v0 展开，不是 wasm `loop` | 无界循环、`Sdk.Map` | **B**：本仓 IR，不是节点 |
+| 只读 AMM 对象 | `amm_id` host 在（零 issue 负码） | `Sdk.Amm` / WASM Uniswap | **C**：池子是协议对象 |
+| IOU Payment / TrustSet / AMMDeposit | 另编 STAmount / 对象 id + `emit_built_txn` | 现在不要；公开 emit 仍 -196 | **A** 公开；编金额是本仓活 |
 
-本地不能做、也先放：Function.ParameterType（2.6.1 `sign` 拒）、公开 -196/-22、主网 `ContractCreate`。
+本地不能做、也先放：Function.ParameterType（2.6.1 `sign` 拒）、公开 -196/-22、主网 `ContractCreate`。这三条是 **A**，改 WAT 攻不掉。
 
 ## 脚本约定
 

@@ -238,6 +238,10 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [wsm-097](tasks/wsm-097.md) | done | 本地 pause-gated take 再兑 XRP（XrplRamp）；公开仍 -22/-196 |
 | [wsm-098](tasks/wsm-098.md) | done | 本地 pause+freeze take 再兑 XRP（XrplRank）；公开仍 -22/-196 |
 | [wsm-099](tasks/wsm-099.md) | done | 本地 pause+freeze take 再 claw（XrplRant）；公开仍 -22/-196 |
+| [wsm-100](tasks/wsm-100.md) | done | 探针 Trust line 读路径：Create 绿，缺 SLE poke=-10；不开 Sdk.Trustline |
+| [wsm-101](tasks/wsm-101.md) | done | 公开 TrustSet 后 RippleState 读 tesSUCCESS/0；drops=0x8000…；不开 Sdk.Trustline |
+| [wsm-102](tasks/wsm-102.md) | done | 探针 AMM 40B STIssue：amm_id 绿，cache_le=-10；不开 Sdk.Amm |
+| [wsm-103](tasks/wsm-103.md) | done | 本地 XrplDraw：emitPayDrops 走 State `s.bal`；公开仍 -196 |
 
 
 积压：[backlog.md](backlog.md)
