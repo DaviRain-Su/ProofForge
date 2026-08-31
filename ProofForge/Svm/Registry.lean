@@ -58,6 +58,8 @@ def entries : Array Entry := #[
   { name := "TicketLine", digest := "2bc374a5816f2649" },
   { name := "FeatureBits", digest := "bb35806f97c686de" },
   { name := "ClaimBits", digest := "fe994472751df324" },
+  { name := "MemberDirectory", digest := "9e7360b53bb0c65f" },
+  { name := "UniqueRoster", digest := "875f30b95888c7cd" },
   { name := "Phoenix", digest := "2dfc5d8abbd4a2e0" },
   { name := "PhoenixV1Profile", digest := "af159cb894745102" },
   { name := "Book", digest := "525c5967ae68d203" },

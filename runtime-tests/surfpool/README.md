@@ -11,6 +11,7 @@ runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 runtime-tests/surfpool/smoke.sh RawEntry
 runtime-tests/surfpool/smoke.sh LamportTransfer
 runtime-tests/surfpool/smoke.sh FeatureBits
+runtime-tests/surfpool/smoke.sh MemberDirectory
 ```
 
 The script generates temporary payer/program keypairs under ignored `build/surfpool`, receives a
@@ -20,5 +21,6 @@ contacts devnet/mainnet and does not use `solana-test-validator`. Private key fi
 recovery log are removed when the script exits; non-secret RPC evidence remains under `build`.
 
 Successful local deployment proves that the selected ELF passed Surfpool's transaction and Loader
-path. Supported smoke targets are `Phoenix`, `PhoenixV1Profile`, `RawEntry`, `Info`, and
-`LamportTransfer`, and `FeatureBits`. This is not a public-network deployment claim.
+path. Supported smoke targets are `Phoenix`, `PhoenixV1Profile`, `RawEntry`, `Info`,
+`LamportTransfer`, `FeatureBits`, and `MemberDirectory`. This is not a public-network deployment
+claim.

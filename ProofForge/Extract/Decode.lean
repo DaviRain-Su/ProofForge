@@ -3894,18 +3894,24 @@ def mentionsSvmEffect (env : Environment) (fuel : Nat) (e : Expr) : Bool :=
     match fuel with
     | 0 => false
     | fuel' + 1 =>
-        match unfoldUserHelper env e with
-        | some (_, unfolded) => mentionsSvmEffect env fuel' unfolded
-        | none =>
-            match e.consumeMData with
-            | .letE _ _ value body _ =>
-                mentionsSvmEffect env fuel' value || mentionsSvmEffect env fuel' body
-            -- A lambda is a deferred continuation, not an effect at its definition site. Applied
-            -- lambdas are beta-reduced by `decodeExpr` before effect discovery.
-            | .lam .. => false
-            | .app fn arg =>
-                mentionsSvmEffect env fuel' fn || mentionsSvmEffect env fuel' arg
-            | _ => false
+        if let some reduced := reducePureInlineMatch? env e then
+          -- A match over a static SDK descriptor selects one applied branch at extraction time.
+          -- Reduce it before the generic lambda rule so effects in that selected branch are not
+          -- mistaken for deferred continuation effects.
+          mentionsSvmEffect env fuel' reduced
+        else
+          match unfoldUserHelper env e with
+          | some (_, unfolded) => mentionsSvmEffect env fuel' unfolded
+          | none =>
+              match e.consumeMData with
+              | .letE _ _ value body _ =>
+                  mentionsSvmEffect env fuel' value || mentionsSvmEffect env fuel' body
+              -- A lambda is a deferred continuation, not an effect at its definition site. Applied
+              -- lambdas are beta-reduced by `decodeExpr` before effect discovery.
+              | .lam .. => false
+              | .app fn arg =>
+                  mentionsSvmEffect env fuel' fn || mentionsSvmEffect env fuel' arg
+              | _ => false
 
 /-- Collect consecutive ignored CPI results without collapsing the final state transition. Every
 ignored call needs explicit sequencing: recursive invoke search would otherwise retain the CPI

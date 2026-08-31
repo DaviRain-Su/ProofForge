@@ -1,4 +1,5 @@
 import ProofForge.Attr
+import ProofForge.Core.Collections
 import ProofForge.Evm.Sdk.Storage
 
 namespace ProofForge.Evm.Sdk.StorageEnumerableSet
@@ -152,15 +153,15 @@ below before any physical write trusts it. -/
 
 /-- The runtime count is canonical: it never exceeds the compile-time capacity. -/
 @[pf_inline] def wellFormed (capacity count : UInt64) : Bool :=
-  count ≤ capacity
+  Core.Collections.BoundedSet.countWellFormed capacity count
 
 /-- No live keys. -/
 @[pf_inline] def isEmpty (count : UInt64) : Bool :=
-  count == 0
+  Core.Collections.BoundedSet.isEmptyCount count
 
 /-- The live keys already occupy every backing slot. -/
 @[pf_inline] def isFull (capacity count : UInt64) : Bool :=
-  capacity ≤ count
+  Core.Collections.BoundedSet.isFullCount capacity count
 
 /-! ### Membership (observed-position validation)
 
@@ -171,22 +172,22 @@ evidence. A nonzero position outside `1..count`, or one whose backing element do
 /-- Map evidence of absence: the exact zero. Key `0` is an ordinary member: a live `0` maps to
 `index + 1 ≥ 1`, never to the absent literal. -/
 @[pf_inline] def absent (position : UInt64) : Bool :=
-  position == 0
+  Core.Collections.BoundedSet.absentPosition position
 
 /-- A nonzero position that addresses a live element: `1 ≤ position ≤ count`. -/
 @[pf_inline] def positionLive (position count : UInt64) : Bool :=
-  0 < position && position ≤ count
+  Core.Collections.BoundedSet.positionLive position count
 
 /-- A nonzero position outside the live range: forged map metadata over canonical storage.
 Mutations must fail closed on it (never write, never repair). -/
 @[pf_inline] def forged (position count : UInt64) : Bool :=
-  position != 0 && !positionLive position count
+  Core.Collections.BoundedSet.forgedPosition position count
 
 /-- Membership decision over the observed scalars: the position addresses a live element and
 the backing value equals the key. This is the shared gate for contains views and for trusting
 the position before a mutation. -/
 @[pf_inline] def isPresent (position count stored key : UInt64) : Bool :=
-  positionLive position count && stored == key
+  Core.Collections.BoundedSet.isPresentAt position count stored key
 
 /-! ### Insert
 
@@ -198,20 +199,20 @@ write. -/
 
 /-- Backing slot that receives an insert. -/
 @[pf_inline] def insertIndex (count : UInt64) : UInt64 :=
-  count
+  Core.Collections.BoundedSet.insertIndex count
 
 /-- Map value stored for the inserted key: backing index + 1 (never the absent `0`). -/
 @[pf_inline] def insertPosition (count : UInt64) : UInt64 :=
-  count + 1
+  Core.Collections.BoundedSet.insertPosition count
 
 /-- Live count stored on successful insert. -/
 @[pf_inline] def insertedCount (count : UInt64) : UInt64 :=
-  count + 1
+  Core.Collections.BoundedSet.insertedCount count
 
 /-- Insert decision against already-observed map evidence: canonical space plus a key the map
 reports as absent. -/
 @[pf_inline] def canInsert (capacity count position : UInt64) : Bool :=
-  wellFormed capacity count && absent position && !isFull capacity count
+  Core.Collections.BoundedSet.canInsertAt capacity count position
 
 /-! ### Swap-remove
 
@@ -223,30 +224,30 @@ map entry to `i + 1 = position`. Stale backing values become unreachable. -/
 
 /-- Backing index a present position addresses. -/
 @[pf_inline] def indexOf (position : UInt64) : UInt64 :=
-  position - 1
+  Core.Collections.BoundedSet.indexOfPosition position
 
 /-- Backing index of the last live element. -/
 @[pf_inline] def lastIndex (count : UInt64) : UInt64 :=
-  count - 1
+  Core.Collections.BoundedSet.lastIndex count
 
 /-- Swap decision: the removed key's slot differs from the last live slot, so the last element
 moves. For the last (or only) element this is exactly `false`. -/
 @[pf_inline] def movesLast (position count : UInt64) : Bool :=
-  position != count
+  Core.Collections.BoundedSet.movesLast position count
 
 /-- Map value stored for the moved last key (it now sits at the removed key's slot). -/
 @[pf_inline] def movedPosition (position : UInt64) : UInt64 :=
-  position
+  Core.Collections.BoundedSet.movedPosition position
 
 /-- Live count stored on successful remove. -/
 @[pf_inline] def removedCount (count : UInt64) : UInt64 :=
-  count - 1
+  Core.Collections.BoundedSet.removedCount count
 
 /-- Remove decision against already-observed map evidence: canonical nonzero count plus
 evidence that the position addresses a live element. Absence is the explicit `absent`
 outcome (no store), not this decision. -/
 @[pf_inline] def canRemove (capacity count position : UInt64) : Bool :=
-  wellFormed capacity count && positionLive position count
+  Core.Collections.BoundedSet.canRemoveAt capacity count position
 
 /-! ### Bounded enumeration
 
@@ -256,7 +257,7 @@ clear — see the resource contract above. -/
 
 /-- Enumeration read decision: canonical count and an index that addresses the live prefix. -/
 @[pf_inline] def canValueAt (capacity count index : UInt64) : Bool :=
-  wellFormed capacity count && index < count
+  Core.Collections.BoundedSet.canValueAt capacity count index
 
 /-- The `0` fallback views return for out-of-range indexes and malformed counts (mirrors
 `Core.Value.BoundedVec`'s out-of-bounds `default`). -/

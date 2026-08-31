@@ -3,6 +3,7 @@ import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.Program
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.StorageBitSet
+import ProofForge.Svm.Sdk.StorageEnumerableSet
 import ProofForge.Svm.Sdk.Queue
 import ProofForge.Svm.Sdk.Pda
 import ProofForge.Svm.Sdk.System

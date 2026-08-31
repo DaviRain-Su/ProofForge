@@ -334,6 +334,50 @@ def remove? [BEq α] (set : BoundedSet α capacity) (value : α) :
     Option (BoundedSet α capacity) :=
   (BoundedMap.remove? set value).map (·.1)
 
+/-! The operations below are the target-neutral position+1 policy for persistent enumerable-set
+bindings. SVM account storage and EVM storage own different physical layouts, while both use `0`
+as absent position evidence and swap-remove over a bounded active prefix. -/
+
+@[pf_inline] def countWellFormed (capacity count : UInt64) : Bool :=
+  count ≤ capacity
+
+@[pf_inline] def isEmptyCount (count : UInt64) : Bool :=
+  count == 0
+
+@[pf_inline] def isFullCount (capacity count : UInt64) : Bool :=
+  capacity ≤ count
+
+@[pf_inline] def absentPosition (position : UInt64) : Bool :=
+  position == 0
+
+@[pf_inline] def positionLive (position count : UInt64) : Bool :=
+  0 < position && position ≤ count
+
+@[pf_inline] def forgedPosition (position count : UInt64) : Bool :=
+  position != 0 && !positionLive position count
+
+@[pf_inline] def isPresentAt (position count stored key : UInt64) : Bool :=
+  positionLive position count && stored == key
+
+@[pf_inline] def insertIndex (count : UInt64) : UInt64 := count
+@[pf_inline] def insertPosition (count : UInt64) : UInt64 := count + 1
+@[pf_inline] def insertedCount (count : UInt64) : UInt64 := count + 1
+
+@[pf_inline] def canInsertAt (capacity count position : UInt64) : Bool :=
+  countWellFormed capacity count && absentPosition position && !isFullCount capacity count
+
+@[pf_inline] def indexOfPosition (position : UInt64) : UInt64 := position - 1
+@[pf_inline] def lastIndex (count : UInt64) : UInt64 := count - 1
+@[pf_inline] def movesLast (position count : UInt64) : Bool := position != count
+@[pf_inline] def movedPosition (position : UInt64) : UInt64 := position
+@[pf_inline] def removedCount (count : UInt64) : UInt64 := count - 1
+
+@[pf_inline] def canRemoveAt (capacity count position : UInt64) : Bool :=
+  countWellFormed capacity count && positionLive position count
+
+@[pf_inline] def canValueAt (capacity count index : UInt64) : Bool :=
+  countWellFormed capacity count && index < count
+
 end BoundedSet
 
 /-! ## FIFO semantics -/

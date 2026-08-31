@@ -103,6 +103,7 @@ import Tests.TreeSpec
 import Tests.SvmSdkStorageSpec
 import Tests.SvmSdkQueueSpec
 import Tests.SvmSdkStorageBitSetSpec
+import Tests.SvmSdkStorageEnumerableSetSpec
 import Tests.SvmSdkAccountSpec
 import Tests.SvmTransientSpec
 import Tests.SvmSdkPdaSystemSpec
