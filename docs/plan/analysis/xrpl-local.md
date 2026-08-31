@@ -59,6 +59,7 @@
 | 合约卡 `esc` lockIn / releaseToB / refund | `XrplHoldEsc` | `holdesc.sh` |
 | `due = ledgerSqn+2` 再 refund | `XrplVest` | `vest.sh` |
 | B `claimB` after due | `XrplClaim` | `claim.sh` |
+| B `cashB` after due + 192 drops | `XrplPayout` | `payout.sh` |
 | caller 卡 / dest 卡 / `supp` `lock` `allw` | Mint / Lock / Pay / Card | 公开脚本仍有效 |
 
 本地 `sfContractAccount` = ACCOUNT/25 = **524313**。公开是 **524320**。不要写回 524315。
