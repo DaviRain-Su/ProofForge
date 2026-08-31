@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from near_rpc import NearClient, NearRpcError
 
 PREFIX = b"BAL2"
 MAX_U128 = (1 << 128) - 1
+_MISSING = object()
 
 
 def _require(name: str) -> str:
@@ -88,6 +90,84 @@ def _json_supply_fails(client: NearClient, wire: bytes, scene: str) -> None:
     except NearRpcError:
         return
     raise AssertionError(f"{scene}: nonempty no-argument input was accepted")
+
+
+def _receipt_logs(response: dict) -> list[str]:
+    return [
+        log
+        for receipt in response.get("receipts_outcome", ())
+        for log in receipt.get("outcome", {}).get("logs", ())
+    ]
+
+
+def _ft_args(receiver: str, amount: int, memo: object = _MISSING) -> bytes:
+    fields: dict[str, object] = {"receiver_id": receiver, "amount": str(amount)}
+    if memo is not _MISSING:
+        fields["memo"] = memo
+    return json.dumps(fields, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _ft_transfer(
+    client: NearClient,
+    receiver: str,
+    amount: int,
+    *,
+    signer: str | None = None,
+    memo: object = _MISSING,
+    wire: bytes | None = None,
+) -> None:
+    sender = signer or client.account_id
+    response = client.call_on(
+        client.account_id,
+        "ft_transfer",
+        wire if wire is not None else _ft_args(receiver, amount, memo),
+        signer=signer,
+        deposit=1,
+    )
+    if NearClient.success_value_bytes(response) != b"":
+        raise AssertionError("ft_transfer success did not return exact empty bytes")
+    data = {"old_owner_id": sender, "new_owner_id": receiver, "amount": str(amount)}
+    if memo is not _MISSING and memo is not None:
+        data["memo"] = memo
+    expected = "EVENT_JSON:" + json.dumps(
+        {
+            "standard": "nep141",
+            "version": "1.0.0",
+            "event": "ft_transfer",
+            "data": [data],
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    logs = _receipt_logs(response)
+    if logs != [expected]:
+        raise AssertionError(f"ft_transfer exact event mismatch: {logs!r} != {[expected]!r}")
+
+
+def _ft_transfer_fails(
+    client: NearClient,
+    receiver: str,
+    amount: int,
+    scene: str,
+    *,
+    signer: str | None = None,
+    deposit: int = 1,
+    memo: object = _MISSING,
+    wire: bytes | None = None,
+) -> None:
+    before = client.view_state_values()
+    response = client.call_on(
+        client.account_id,
+        "ft_transfer",
+        wire if wire is not None else _ft_args(receiver, amount, memo),
+        signer=signer,
+        deposit=deposit,
+        expect_success=False,
+    )
+    if _receipt_logs(response):
+        raise AssertionError(f"{scene}: rejected transfer emitted a log")
+    if client.view_state_values() != before:
+        raise AssertionError(f"{scene}: rejected transfer changed durable state")
 
 
 def main() -> None:
@@ -201,6 +281,80 @@ def main() -> None:
     caller = f"ledger-caller.{self_id}"
     client.create_subaccount_with_key(caller, 10**25)
     caller_key = _key(caller)
+
+    unregistered = f"ledger-unregistered.{self_id}"
+    client.create_subaccount_with_key(unregistered, 10**24)
+    _call(client, "fixturePutSelfZeroNoSupply")
+    _ft_transfer_fails(client, self_id, 1, "unregistered source", signer=unregistered)
+    _call(client, "mintCallerOne", signer=caller)
+    _ft_transfer_fails(client, "absent-ledger.test.near", 1, "unregistered destination", signer=caller)
+    _ft_transfer_fails(client, caller, 1, "sender equals receiver", signer=caller)
+    _ft_transfer_fails(client, self_id, 0, "zero amount", signer=caller)
+    _ft_transfer_fails(client, self_id, 1, "zero attached deposit", signer=caller, deposit=0)
+    _ft_transfer_fails(client, self_id, 1, "two yocto attached deposit", signer=caller, deposit=2)
+    _ft_transfer_fails(client, self_id, MAX_U128, "insufficient balance", signer=caller)
+    _ft_transfer_fails(
+        client,
+        self_id,
+        1,
+        "duplicate input field",
+        signer=caller,
+        wire=(b'{"receiver_id":"' + self_id.encode() +
+              b'","amount":"1","amount":"1"}'),
+    )
+    _call(client, "seedSelfMalformed8")
+    _ft_transfer_fails(client, self_id, 1, "malformed destination", signer=caller)
+    _call(client, "fixtureResetSelf")
+    _call(client, "fixtureResetCaller", signer=caller)
+    _call(client, "seedSelfMalformed20")
+    _call(client, "mintCallerOne", signer=caller)
+    _ft_transfer_fails(client, caller, 1, "malformed source")
+    _call(client, "fixtureResetSelf")
+    _call(client, "fixtureResetCaller", signer=caller)
+    print("near-ledger: ft_transfer guards, registration, malformed values, and rollback ok")
+
+    _call(client, "fixturePutSelfMaxNoSupply")
+    _call(client, "mintCallerOne", signer=caller)
+    _ft_transfer_fails(client, self_id, 1, "ft_transfer destination overflow", signer=caller)
+    _call(client, "fixtureResetSelf")
+    _call(client, "fixtureResetCaller", signer=caller)
+
+    _call(client, "fixturePutSelfZeroNoSupply")
+    _call(client, "mintCallerTwo64", signer=caller)
+    high_supply = _supply(client)
+    _ft_transfer(client, self_id, 1 << 64, signer=caller)
+    high_state = client.view_state_values()
+    if _balance(high_state, caller) != 0 or caller_key not in high_state:
+        raise AssertionError("ft_transfer did not preserve registered present-zero source")
+    if _balance(high_state, self_id) != 1 << 64 or _supply(client) != high_supply:
+        raise AssertionError("ft_transfer high-limb transfer changed supply or limb order")
+    _call(client, "fixtureResetSelf")
+    _call(client, "fixtureResetCaller", signer=caller)
+
+    _call(client, "fixturePutSelfZeroNoSupply")
+    for _ in range(5):
+        _call(client, "mintCallerOne", signer=caller)
+    transfer_supply = _supply(client)
+    _ft_transfer(client, self_id, 1, signer=caller)
+    _ft_transfer(client, self_id, 1, signer=caller, memo=None)
+    _ft_transfer(client, self_id, 1, signer=caller, memo="")
+    _ft_transfer(client, self_id, 1, signer=caller, memo='"\\\b\t\n')
+    # Exercise any-order field dispatch plus decoded non-ASCII memo bytes.
+    permuted = json.dumps(
+        {"memo": "雪😀", "amount": "1", "receiver_id": self_id},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode()
+    _ft_transfer(client, self_id, 1, signer=caller, memo="雪😀", wire=permuted)
+    transfer_state = client.view_state_values()
+    if _balance(transfer_state, caller) != 0 or caller_key not in transfer_state:
+        raise AssertionError("final ft_transfer did not retain zero balance registration")
+    if _balance(transfer_state, self_id) != 5 or _supply(client) != transfer_supply:
+        raise AssertionError("ft_transfer memo scenes violated balance/supply conservation")
+    print("near-ledger: exact empty output, u128 transfer, optional memo events, and conservation ok")
+
+    _call(client, "fixtureResetSelf")
+    _call(client, "fixtureResetCaller", signer=caller)
     _call(client, "mintCallerTwo64", signer=caller)
     _call(client, "mintCallerOne", signer=caller)
     if _json_balance(client, caller.encode()) != (1 << 64) + 1:
@@ -214,7 +368,7 @@ def main() -> None:
     if caller_key in state:
         raise AssertionError("zero source balance was not reclaimed")
     self_balance = _balance(state, self_id)
-    if self_balance != _supply(client) or self_balance != (1 << 65) + 2:
+    if self_balance != _supply(client) or self_balance != (1 << 64) + 1:
         raise AssertionError("distinct transfer violated conservation or limb ordering")
     _fail_unchanged(
         client, "transferCallerToSelfOne", "missing-source transfer", signer=caller

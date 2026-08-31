@@ -303,6 +303,7 @@ lookup_anchors = (
 ledger_anchors = (
     '(func (export "ft_balance_of")',
     '(func (export "ft_total_supply")',
+    '(func (export "ft_transfer")',
     '(func (export "mintSelfOne")',
     '(func (export "mintSelfTwo64")',
     '(func (export "mintSelfMax")',
@@ -314,6 +315,7 @@ ledger_anchors = (
     '(func (export "seedSelfMalformed20")',
     '(func (export "fixtureSetSupplyMax")',
     '(func $pf_json_account_id',
+    '(func $pf_json_ft_transfer_args',
     '(func $pf_storage_result_near_token_strict',
     '(func $pf_u128_decimal',
     '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',

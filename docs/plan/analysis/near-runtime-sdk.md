@@ -263,6 +263,14 @@ asynchronous; dynamic handles and multi-action builders are absent.
    exact zero-length input, unlike current near-sdk-rs generated wrappers, which do not inspect
    request bytes at all for methods without regular arguments. `{}` and malformed nonempty bytes
    therefore reject here, and full public compatibility is not claimed.
+   **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
+   fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
+   success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;
+   alias, zero amount, malformed/missing accounts, underflow, and overflow trap before writes.
+   Success writes source then receiver while preserving present zero and total supply, then emits
+   one exact no-memo or Some-memo NEP-141 event. Nearcore transaction rollback covers any
+   synchronous post-write trap. The input grammar still rejects serde-compatible forms outside
+   ProofForge's bounded canonical subset, so this does not claim full public ABI compliance.
 6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
    nearcore status/stale-register behavior and allocator-backed bounded register reads.
    **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;

@@ -51,6 +51,11 @@ wsm-near-ft-total-supply-001 adds the companion exact `ft_total_supply` export o
 ledger state's two supply limbs. It returns canonical quoted u128, but ProofForge's existing
 zero-parameter wrapper requires exactly empty input; near-sdk-rs ignores request bytes for methods
 without arguments, so `{}` and arbitrary nonempty bodies are an explicit compatibility difference.
+wsm-near-ft-transfer-001 integrates exact one-yocto, positive/non-alias, registered-account and
+checked two-limb balance rules over the same `BAL2` ledger. It writes source then destination,
+preserves supply and present-zero registration, emits one exact optional-memo NEP-141 event, and
+returns empty bytes. Its argument object remains the bounded canonical subset above, so the exact
+operation/output shape is not claimed as a fully serde-compatible public NEP-141 ABI.
 wsm-near-storage-001 再以同一 arena staging byte-exact bounded raw
 storage key/value，并保留 nearcore 0/1 status、stale register、present-empty 和 oversized
 no-copy 语义。wsm-near-storage-key-001 仅把 internal raw storage key budget 拆分并扩到 72，

@@ -32,5 +32,5 @@ near-sdk macros classify that as `ReturnKind::Default`, serialize no result, and
 
 ## Next
 
-Compose exact empty output with bounded transfer args, one-yocto validation, the `BAL2` ledger,
-and the NEP-141 transfer event. The bounded input subset remains narrower than serde_json.
+The composition landed in [wsm-near-ft-transfer-001](wsm-near-ft-transfer-001.md), retaining the
+bounded input compatibility boundary.

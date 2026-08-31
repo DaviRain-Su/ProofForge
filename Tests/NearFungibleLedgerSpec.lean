@@ -31,6 +31,8 @@ elab "#pf_near_fungible_ledger_check" : command => do
   unless methodSteps "mintSelfOne" == #["read.16.72", "write.16.72.16"] &&
       methodSteps "ft_balance_of" == #["read.16.72"] &&
       methodSteps "ft_total_supply" == #[] &&
+      methodSteps "ft_transfer" ==
+        #["read.16.72", "read.16.72", "write.16.72.16", "write.16.72.16"] &&
       methodSteps "burnSelfOne" ==
         #["read.16.72", "remove.16.72", "write.16.72.16"] &&
       methodSteps "transferCallerToSelfOne" ==
@@ -41,6 +43,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
     throwError s!"fungible ledger effects lost prerequisite reads or write-last branches: " ++
       s!"mint={methodSteps "mintSelfOne"}, burn={methodSteps "burnSelfOne"}, " ++
       s!"balance={methodSteps "ft_balance_of"}, " ++
+      s!"ft_transfer={methodSteps "ft_transfer"}, " ++
       s!"transfer={methodSteps "transferCallerToSelfOne"}, " ++
       s!"malformed8={methodSteps "seedSelfMalformed8"}, " ++
       s!"malformed20={methodSteps "seedSelfMalformed20"}"
@@ -64,6 +67,15 @@ elab "#pf_near_fungible_ledger_check" : command => do
       supply.outputPolicy == "near-json-u128-string-v1" && supply.paramCount == 0 &&
       supply.tupleArity == some 2 do
     throwError "ft_total_supply lost its no-input quoted-u128 view policy"
+  let some transfer := program.entries.find? (·.ixName == "ft_transfer")
+    | throwError "missing target ft_transfer"
+  unless transfer.kind == .increment && transfer.entryPolicy == "near.entry.v1:payable" &&
+      transfer.inputSchema == some Codec.ftTransferArgsSchema &&
+      transfer.inputPolicy ==
+        "near-json-ft-transfer-args-bounded-v1(max-wire=786,ws=32,order=any,keys=raw,unknown=reject)" &&
+      transfer.outputSchema == some .unit && transfer.outputPolicy == "near-void-empty-v1" &&
+      transfer.paramCount == 15 && transfer.tupleArity.isNone do
+    throwError "ft_transfer lost payable bounded-input or empty-output target policy"
   for method in program.entries do
     match Emit.emit { program with entries := #[method] } with
     | .ok _ => pure ()
@@ -79,6 +91,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"transferCallerToSelfZero\")",
       "(func (export \"ft_balance_of\")",
       "(func (export \"ft_total_supply\")",
+      "(func (export \"ft_transfer\")",
       "(func (export \"seedSelfMalformed8\")",
       "(func (export \"fixtureSetSupplyMax\")",
       "(call $pf_storage_read", "(call $pf_storage_write", "(call $pf_storage_remove",
@@ -126,11 +139,32 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !supplyBody.contains "(call $pf_log_utf8" &&
       !supplyBody.contains "(call $pf_promise" do
     throwError "ft_total_supply must enforce empty input and value_return once without effects"
+  let transferBody ← match wat.splitOn "(func (export \"ft_transfer\")" with
+    | [_before, tail] =>
+        match tail.splitOn "\n  )\n" with
+        | body :: _ => pure body
+        | [] => throwError "ft_transfer body terminator is missing"
+    | _ => throwError "ft_transfer must occur exactly once"
+  let mapWrites := transferBody.splitOn
+    "(global.set $pf_storage_result_status (call $pf_storage_write"
+  let depositParts := transferBody.splitOn "(call $pf_attached_deposit"
+  unless (transferBody.splitOn "(call $pf_input").length == 2 &&
+      depositParts.length == 2 &&
+      !depositParts[0]!.contains "(global.set $pf_storage_result_status" &&
+      depositParts[1]!.contains
+        "(global.set $pf_storage_result_status (call $pf_storage_read" &&
+      (transferBody.splitOn
+        "(global.set $pf_storage_result_status (call $pf_storage_read").length == 3 &&
+      mapWrites.length == 3 && !mapWrites[1]!.contains "(call $pf_log_utf8" &&
+      mapWrites[2]!.contains "(call $pf_log_utf8" &&
+      !transferBody.contains "(call $pf_storage_remove" &&
+      !transferBody.contains "(call $pf_value_return" do
+    throwError "ft_transfer lost guard/read/read/write/write/event/empty-return ordering"
   logInfo m!"proofforge-near-fungible-ledger: digest = {IR.digestHex program}"
 
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "954015ffa13ff1f1"
+  some "32ee3f8cecbb17cf"
 
 end Tests.NearFungibleLedgerSpec

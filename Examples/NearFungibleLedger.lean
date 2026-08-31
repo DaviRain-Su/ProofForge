@@ -60,6 +60,57 @@ def ft_balance_of (_state : State)
   ⟨ProofForge.Wasm.Near.Runtime.storageResultNearTokenW0Strict,
     ProofForge.Wasm.Near.Runtime.storageResultNearTokenW1Strict⟩
 
+/-- Exact near-contract-standards transfer policy over the closed `BAL2` ledger. The generated
+JSON input wrapper remains ProofForge's bounded canonical subset, not general serde_json. -/
+@[pf_entry, pf_near_payable, pf_near_void]
+def ft_transfer (state : State) (args : ProofForge.Wasm.Near.Runtime.FtTransferArgs) :
+    Except Error (State × Unit) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit then
+    let sender := Context.caller
+    if !AccountId.eq sender args.receiverId then
+      if !Ledger.isZero args.amount then
+        let _ := balances.read sender
+        if Registration.readWasValidPresent then
+          let senderW0 := resultNearTokenW0D 0
+          let senderW1 := resultNearTokenW1D 0
+          if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+              senderW0 senderW1 args.amount.w0 args.amount.w1 != 0 then
+            let _ := balances.read args.receiverId
+            if Registration.readWasValidPresent then
+              let receiverW0 := resultNearTokenW0D 0
+              let receiverW1 := resultNearTokenW1D 0
+              if ProofForge.Wasm.Near.Runtime.nearTokenAddOk
+                  receiverW0 receiverW1 args.amount.w0 args.amount.w1 != 0 then
+                let nextSender : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                      senderW0 senderW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                      senderW0 senderW1 args.amount.w0 args.amount.w1⟩
+                let nextReceiver : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenAddW0
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenAddW1
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1⟩
+                let senderStatus := balances.put sender nextSender
+                let receiverStatus := balances.put args.receiverId nextReceiver
+                if args.memo.present = 0 then
+                  let _ := Events.FungibleToken.transfer sender args.receiverId args.amount
+                  .ok (⟨state.supplyW0, state.supplyW1,
+                    senderStatus ||| receiverStatus⟩, ())
+                else
+                  let _ := Events.FungibleToken.transferWithMemo sender args.receiverId args.amount
+                    16 (Ledger.memoString args.memo)
+                  .ok (⟨state.supplyW0, state.supplyW1,
+                    senderStatus ||| receiverStatus⟩, ())
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 @[pf_inline] private def mint (state : State) (owner : ProofForge.Wasm.Near.Runtime.AccountId)
     (amount : NearToken) :
     Except Error (State × UInt64) :=
@@ -267,6 +318,11 @@ def fixtureSetSupplyMax (state : State) : Except Error (State × UInt64) :=
 @[pf_entry]
 def fixtureResetSelf (_state : State) : Except Error (State × UInt64) :=
   let status := balances.remove Context.self
+  .ok (⟨0, 0, status⟩, status)
+
+@[pf_entry]
+def fixtureResetCaller (_state : State) : Except Error (State × UInt64) :=
+  let status := balances.remove Context.caller
   .ok (⟨0, 0, status⟩, status)
 
 end Examples.NearFungibleLedger
