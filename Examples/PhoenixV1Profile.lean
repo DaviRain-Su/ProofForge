@@ -1713,6 +1713,15 @@ def adjustedQuoteLots512At (layout : Examples.PhoenixV1.Layout) (price baseLots 
     UInt64 :=
   price * layout.tickSize * baseLots
 
+/-- Spec-facing pure fee formula (same arithmetic as `takerFeeQuoteLots512At`, explicit params). -/
+def takerFeeQuoteLotsOf (adjustedQuote bps baseLotsPerBaseUnit : UInt64) : UInt64 :=
+  if adjustedQuote = 0 || bps = 0 then
+    0
+  else
+    let adjustedFee := (adjustedQuote * bps + 9999) / 10000
+    let whole := adjustedFee / baseLotsPerBaseUnit
+    if adjustedFee % baseLotsPerBaseUnit = 0 then whole else whole + 1
+
 /-- Phoenix's aggregate taker fee: ceil at basis-point precision, then ceil to one quote lot. -/
 def takerFeeQuoteLots512At (layout : Examples.PhoenixV1.Layout)
     (adjustedQuote : UInt64) : UInt64 :=
@@ -2735,7 +2744,7 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   bidRootNeighborhood4096 profileAccountBytesAt profileAccountBytes allocatorHeadersValidAt
   allocatorHeadersValid reduceAskFreeFunds512At reduceBidFreeFunds512At reduceFreeFunds512At
   quoteLotsReleased512At claimReleasedFunds512At beginMarketBatchAt recordReduceAt recordPlaceAt
-  recordFillAt recordFillSummaryAt adjustedQuoteLots512At takerFeeQuoteLots512At
+  recordFillAt recordFillSummaryAt adjustedQuoteLots512At takerFeeQuoteLotsOf takerFeeQuoteLots512At
   postingQuoteLotsOrZero512At twoMatchPostingValid512At
   finishMarketBatch withdrawReleasedAt cancelAllStorageValid512At cancelAllTraderIndex512At
   beginCancelAll cancelAllBids512At cancelAllAsks512At cancelUpToBids512At

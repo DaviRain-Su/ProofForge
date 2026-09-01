@@ -231,7 +231,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sdk-006](tasks/svm-sdk-006.md) | done | UTF-8 Memo + migration payload |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | done | 持久容器有界 iteration |
 | [svm-app-001](tasks/svm-app-001.md) | done | Phoenix-v1 tags 10/11 CancelMultipleById (cap=1) |
-| [svm-app-002](tasks/svm-app-002.md) | todo | matching/fee/remainder 宣称面 |
+| [svm-app-002](tasks/svm-app-002.md) | done | matching/fee/remainder 宣称面 |
 | [svm-app-003](tasks/svm-app-003.md) | todo | 非 Phoenix SDK 小例子集 |
 | [svm-sem-001](tasks/svm-sem-001.md) | done | L3/E1 operand materialization + straightline |
 | [svm-sem-002](tasks/svm-sem-002.md) | done | L3/E2 assembler-semantics golden 差分门 |
@@ -241,7 +241,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | done | 能力+证明双矩阵收口页（[svm-status-matrix.md](svm-status-matrix.md)） |
 
-本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`..`005`** + **`svm-app-001`** done → 下一刀 **`svm-app-002`** / closeout audit。
+本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`..`005`** + **`svm-app-001`/`002`** done → 下一刀 **`svm-app-003`** / closeout audit。
 WASM PR #4/#5 仍开着不阻塞。
 
 

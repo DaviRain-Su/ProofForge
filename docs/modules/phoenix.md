@@ -171,7 +171,13 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   跳过并仍 bump sequence + header-only；成功取消写一条 Reduce。tag 11 保留 free funds；
   tag 10 claim 本次释放量并保留 pre-existing free。Phoenix source 只做组合；没有新增
   Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建 heap Map、node copy 或 persistent pointer。
-- **未支持（P5 remaining instructions/公网）**：matching/placement wire、runtime remaining
+- **部分支持（P5 tag 3 Limit/PostOnly matching/fee/remainder）**：官方 tag 3 `PlaceLimitOrder`
+  wire 的有界片：PostOnly（对面空簿+本侧有空位，永不撮合）；Limit `match_limit∈{1,2}` +
+  no-TIF + Abort + deposited-funds-only。一/二 maker 撮合按总成交 adjusted quote 收 taker fee
+  （bps ceil → quote-lot ceil）；maker 完全吃掉后可在本侧有空位时挂 **非交叉** remainder；仍交叉
+  remainder、full-book eviction、同 maker 聚合、其他 TIF/self-trade 策略 fail closed。Lean Spec
+  钉 fee/posting 纯算术；Mollusk 覆盖 one/two-match fee 与 remainder 成功路径及 unsupported 形状。
+- **未支持（P5 remaining instructions/公网）**：完整 placement/matching 策略矩阵、runtime remaining
   accounts、Token-2022 extension 语义、多 id CancelMultiple 满容量 Vec、全部 Phoenix-v1
   指令兼容与公网部署。
 
@@ -191,6 +197,6 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 
 独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
 `EntryAdapter → Component(FifoCancel/BatchRecorder/AccountStorage) → target-owned SVM backend`
-已贯通 official tags 4–11（含 CancelUpTo 与容量-1 CancelMultipleOrdersById）；下一应用片在
-相同稳定边界上补 matching/fee/remainder 宣称面，而不是再改顶层 Ops/IR/主 Emit。完整
-Phoenix-v1 指令集和公网部署不在本片范围。
+已贯通 official tags 3–11：tag 3 有界 PostOnly/Limit matching+fee+noncrossing remainder，
+tags 4–11 cancel/reduce 面。下一应用片转向非 Phoenix SDK 小例子（`svm-app-003`），
+而不是再改顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和公网部署不在本片范围。

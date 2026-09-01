@@ -1636,6 +1636,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "rb_find_found_" && asm.contains "rb_find_missing_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
 
+
+-- svm-app-002: matching / fee / remainder policy pins (pure arithmetic + entry surface)
+#guard takerFeeQuoteLotsOf 0 5 1 == 0
+#guard takerFeeQuoteLotsOf 10000 0 1 == 0
+#guard takerFeeQuoteLotsOf 10000 5 1 == 5
+#guard takerFeeQuoteLotsOf 1 1 1 == 1
+#guard takerFeeQuoteLotsOf 9999 1 1 == 1
+#guard takerFeeQuoteLotsOf 10000 1 1 == 1
+#guard postingQuoteLotsOrZero512At 0 1 10 1 == 0
+#guard postingQuoteLotsOrZero512At 100 1 10 1 == 1000
+#guard postingQuoteLotsOrZero512At 100 1 10 0 == 0
+#guard postingQuoteLotsOrZero512At 100 1 1 3 == 33
+
 #pf_guard_phoenix_v1_profile
 
 end Tests.PhoenixV1ProfileSpec
