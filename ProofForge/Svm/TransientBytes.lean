@@ -62,8 +62,11 @@ def Config.fixedVec (config : Config) : FixedVec :=
     elementBytes := 1
     capacity := config.payload }
 
-def Config.wellFormed (config : Config) : Bool :=
-  config.slot < maxHandleSlots && config.fixedVec.wellFormed
+/-- Geometry gate under the default two-slot resource manifest (`svm-sdk-004`). A future
+program-attached manifest can tighten this further; declaring more than two slots remains
+ill-formed until deep-scratch relayout. -/
+def Config.wellFormed (config : Config) (manifest : ResourceManifest := defaultManifest) : Bool :=
+  manifest.admitsBytesSlot config.slot && config.fixedVec.wellFormed
 
 /-- Static precondition for one fixed-width little-endian append: the completed record must be
 representable inside this buffer. -/

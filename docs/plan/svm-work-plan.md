@@ -152,14 +152,15 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001/002/005 **done** → next transient / Memo / sliced sysvar
+          · C: svm-sdk-001/002/003/004/005 **done** → next Memo / iteration / sliced sysvar
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
+          · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
 
 Phase 3   Transient 证明 + SDK 形状加宽 + Counter 全函数 L3
           · A: sf-006..sf-007（TransientModel）
           · E: svm-sem-003 Counter increment 有界 CFG end-to-end
-          · C: svm-sdk-003 generic POD transient record shapes
-          · C: svm-sdk-004 更多 manifest-bounded transient slots
+          · C: svm-sdk-003 generic POD transient record shapes（**done**）
+          · C: svm-sdk-004 更多 manifest-bounded transient slots（**done**：manifest-first）
 
 Phase 4   Map/Tree 证明 + Token-2022 + 内存桥
           · A: sf-008..sf-011（Allocator/Map/EnumerableSet/Tree）
@@ -212,7 +213,7 @@ Phase 7   收口
 | [svm-sdk-001](tasks/svm-sdk-001.md) | resize **rent top-up** 显式政策（组合 Rent sysvar + lamports） | F1 | **done**；`topUpRentExempt`/`resizeDataWithRentTopUp`；digests `389be3285e53c93d` / `754ab90d0d3145ae`；Mollusk 4+2 |
 | [svm-sdk-002](tasks/svm-sdk-002.md) | **owner-reassign** 生命周期（或书面永久 fail-closed + 矩阵 n/a） | F1 | **done (n/a)**；永久 fail-closed；Lean policy guard + Mollusk foreign-owner reject |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | generic POD transient shapes（超出 Record64/Vector128/256 的下一形状） | F1 | **done**；`VectorPubkey`；digests `8958053c8b1f52ac` / `106f41e98d4dcc9c`；Mollusk 8/8 |
-| [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | manifest 先行；默认仍 2 |
+| [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | **done**；`ResourceManifest` 先行；默认 2；`>2` fail-closed 至 scratch relayout |
 | [svm-sdk-005](tasks/svm-sdk-005.md) | Token-2022 extension 的 **Sdk facade**（对接 rt-002） | F2 | **done**；`Sdk.Token2022` mint-close view/CPI；不把 extension 名写进 Emit |
 | [svm-sdk-006](tasks/svm-sdk-006.md) | UTF-8 Memo + richer account **migration payload** shapes | F1/F2 | strict UTF-8；migration 单边显式 |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | 持久容器 insert/remove/**iteration** 有界 API（在现有 Map/Set 上） | F1/F2 | 无 heap iterator object |
@@ -258,7 +259,7 @@ Phase 7   收口
 |---|---|---|
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
 | B | svm-rt-001 … 005 | svm-rt-001/002/003 **done**；004–005 todo |
-| C | svm-sdk-001 … 007 | svm-sdk-001/002/003/005 **done**（002 = n/a fail-closed）；其余 todo |
+| C | svm-sdk-001 … 007 | svm-sdk-001/002/003/004/005 **done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed）；其余 todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
 | F | svm-eng-001 … 002 | todo |
@@ -295,7 +296,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`005` done → 下一刀 **`svm-sdk-004` manifest slots**（或 `svm-rt-004` sliced sysvar / `svm-sdk-006` Memo）
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` done → 下一刀 **`svm-sdk-006` Memo/migration**（或 `svm-rt-004` sliced sysvar / `svm-sdk-007` iteration）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

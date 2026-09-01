@@ -53,8 +53,11 @@ def Config.fixedVec (config : Config) : FixedVec :=
     elementBytes := 8
     capacity := config.payload }
 
-def Config.wellFormed (config : Config) : Bool :=
-  config.slot < maxHandleSlots && config.fixedVec.wellFormed
+/-- Geometry gate under the default two-slot resource manifest (`svm-sdk-004`). A future
+program-attached manifest can tighten this further; declaring more than two slots remains
+ill-formed until deep-scratch relayout. -/
+def Config.wellFormed (config : Config) (manifest : ResourceManifest := defaultManifest) : Bool :=
+  manifest.admitsVectorSlot config.slot && config.fixedVec.wellFormed
 
 inductive Query where
   | length (config : Config)

@@ -225,7 +225,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sdk-001](tasks/svm-sdk-001.md) | done | resize rent top-up |
 | [svm-sdk-002](tasks/svm-sdk-002.md) | done (n/a) | owner-reassign 永久 fail-closed |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | done | generic POD transient shapes (`VectorPubkey`) |
-| [svm-sdk-004](tasks/svm-sdk-004.md) | todo | 更多 manifest-bounded handles |
+| [svm-sdk-004](tasks/svm-sdk-004.md) | done | 更多 manifest-bounded handles（默认 2；>2 fail-closed） |
 | [svm-sdk-005](tasks/svm-sdk-005.md) | done | Token-2022 extension Sdk facade（MintCloseAuthority） |
 | [svm-sdk-006](tasks/svm-sdk-006.md) | todo | UTF-8 Memo + migration payload |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | todo | 持久容器有界 iteration |
@@ -240,7 +240,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`005` **done** → 下一刀 **`svm-sdk-004`**（manifest slots）或并行 `svm-sem-001` / `svm-eng-001`。
+本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` **done** → 下一刀 **`svm-sdk-006`**（Memo/migration）或并行 `svm-sem-001` / `svm-eng-001`。
 WASM PR #4/#5 仍开着不阻塞。
 
 

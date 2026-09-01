@@ -7,13 +7,15 @@ import ProofForge.Svm.Scratch
 
 Reusable SDK contracts for memory that dies with one SVM invocation. Persistent state belongs in
 fixed-capacity account bytes; these descriptors instead model bounded heap buffers, fixed vectors,
-byte writers, and composed scratch codecs.
+byte writers, composed scratch codecs, and a compile-time `ResourceManifest` slot budget.
 
 The module builds on the existing target contracts rather than hiding them behind another
 allocator: `Heap.State` remains the official downward bump state, `Scratch.Plan` remains the
 aligned stack-bank planner, and `Scratch.Lifetime.invocationOnly` remains the sole lifetime.
 Descriptors contain only compile-time geometry. A `HeapReservation` contains an allocator result
-for the emitter/runtime boundary, but it is never an account-state handle.
+for the emitter/runtime boundary, but it is never an account-state handle. Slot counts are
+manifest-bounded (`svm-sdk-004`); the default remains two same-kind handles, and declaring more
+fails closed until deep-scratch geometry is remapped.
 -/
 
 namespace ProofForge.Svm.Sdk.Transient
@@ -50,6 +52,43 @@ def firstSlotWord (payload : Nat) : Nat := payload
 /-- Slot-1 handle word: the payload with its slot packed above bit 32. Additive on literals so
 extraction decodes it without any new runtime leaf or opcode. -/
 @[pf_inline] def secondSlotWord (payload : Nat) : Nat := payload + handleSlotBit
+
+/-- Generalized erased handle word for a compile-time slot index. Slot 0 stays the historical
+plain payload; higher slots pack `slot * handleSlotBit` above the low 32-bit payload field. -/
+def slotWord (payload slot : Nat) : Nat := payload + slot * handleSlotBit
+
+/-! ## Resource manifest (`svm-sdk-004`)
+
+Same-kind transient handles stay compile-time bounded. The default program budget is still two
+slots per kind (the packed deep-scratch layout from R3-021). Programs may declare an explicit
+`ResourceManifest`; declaring more than two slots is currently **ill-formed** until a follow-up
+scratch-relayout slice lands. There is no runtime-dynamic slot count and no half-open third handle.
+-/
+
+/-- Compile-time per-program transient slot budget. Defaults preserve the historical two-slot
+ceiling; values above `maxHandleSlots` fail `wellFormed` until deep-scratch geometry is remapped. -/
+structure ResourceManifest where
+  vectorSlots : Nat := maxHandleSlots
+  bytesSlots : Nat := maxHandleSlots
+  deriving BEq, Repr, Inhabited
+
+/-- Historical default: two Vector64 slots and two Bytes slots. -/
+def defaultManifest : ResourceManifest := {}
+
+/-- A manifest is well-formed when every declared kind stays within the currently mapped scratch
+ceiling (`maxHandleSlots`) and keeps at least one slot. Requests for a third same-kind slot fail
+closed here rather than emitting a half-open handle API. -/
+def ResourceManifest.wellFormed (manifest : ResourceManifest) : Bool :=
+  0 < manifest.vectorSlots && manifest.vectorSlots ≤ maxHandleSlots &&
+    0 < manifest.bytesSlots && manifest.bytesSlots ≤ maxHandleSlots
+
+/-- Slot index admitted by the manifest for Vector64-backed containers. -/
+def ResourceManifest.admitsVectorSlot (manifest : ResourceManifest) (slot : Nat) : Bool :=
+  manifest.wellFormed && slot < manifest.vectorSlots
+
+/-- Slot index admitted by the manifest for Bytes containers. -/
+def ResourceManifest.admitsBytesSlot (manifest : ResourceManifest) (slot : Nat) : Bool :=
+  manifest.wellFormed && slot < manifest.bytesSlots
 
 /-! ## Heap-backed buffers -/
 
