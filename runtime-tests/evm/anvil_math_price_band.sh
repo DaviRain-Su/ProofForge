@@ -99,6 +99,20 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'weighted(uint64,uint64,uint64)' "$max" 2 2 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "full-precision ratio persists"
 
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'weightedUp(uint64,uint64,uint64)(uint64)' 10 20 3)" 67 \
+  "full-precision ceiling ratio"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'weightedUp(uint64,uint64,uint64)' 10 20 3 >/dev/null
+solana_lean_require_storage "$addr" 0 67 "full-precision ceiling ratio persists"
+
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'weightedUp(uint64,uint64,uint64)(uint64)' "$max" 2 2)" "$max" \
+  "full-precision ceiling preserves exact maximum"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'weightedUp(uint64,uint64,uint64)' "$max" 2 2 >/dev/null
+solana_lean_require_storage "$addr" 0 "$max" "exact ceiling maximum persists"
+
 solana_lean_require_named_revert "$addr" "$sender" \
   "$("$cast" calldata 'weighted(uint64,uint64,uint64)' 7 9 0)" 'zeroTick()' \
   "full-precision zero denominator"
@@ -111,6 +125,19 @@ if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   exit 1
 fi
 solana_lean_require_storage "$addr" 0 "$max" "full-precision failure is atomic"
+
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'weightedUp(uint64,uint64,uint64)' 7 9 0)" 'zeroTick()' \
+  "full-precision ceiling zero denominator"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'weightedUp(uint64,uint64,uint64)' 6 15372286728091293013 5)" \
+  'quoteOverflow()' "full-precision ceiling overflow"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'weightedUp(uint64,uint64,uint64)' 6 15372286728091293013 5 >/dev/null 2>&1; then
+  echo "FAIL: overflowing full-precision ceiling unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 0 "$max" "full-precision ceiling failure is atomic"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'increase(uint64)(uint64)' 1)" "$max" "saturating increase at maximum"

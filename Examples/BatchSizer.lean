@@ -109,4 +109,11 @@ def prorate (state : State) (items weight totalWeight : UInt64) :
   let batches ← Math.UInt64.mulDiv items weight totalWeight .zeroCapacity .ratioOverflow
   .ok ({ state with lastBatchCount := batches }, batches)
 
+/-- Apply a full-precision fractional capacity weight and cover any nonzero remainder. -/
+@[pf_entry]
+def prorateUp (state : State) (items weight totalWeight : UInt64) :
+    Except Error (State × UInt64) := do
+  let batches ← Math.UInt64.mulDivCeil items weight totalWeight .zeroCapacity .ratioOverflow
+  .ok ({ state with lastBatchCount := batches }, batches)
+
 end Examples.BatchSizer

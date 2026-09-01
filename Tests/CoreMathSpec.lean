@@ -124,6 +124,18 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard match Math.UInt64.mulDiv 7 9 0 false true with
   | .error false => true
   | _ => false
+#guard match Math.UInt64.mulDivCeil 10 20 3 false true with
+  | .ok value => value == 67
+  | _ => false
+#guard match Math.UInt64.mulDivCeil u64Max 2 2 false true with
+  | .ok value => value == u64Max
+  | _ => false
+#guard match Math.UInt64.mulDivCeil 6 15372286728091293013 5 false true with
+  | .error true => true
+  | _ => false
+#guard match Math.UInt64.mulDivCeil 7 9 0 false true with
+  | .error false => true
+  | _ => false
 
 private def mulDivSamples : List UInt64 :=
   [0, 1, 2, 3, 7, 31, 0xffffffff, 0x100000000,
@@ -149,6 +161,28 @@ private def validMulDiv (left right denominator : UInt64) : Bool :=
 #guard mulDivSamples.all fun left =>
   mulDivSamples.all fun right =>
     mulDivSamples.all fun denominator => validMulDiv left right denominator
+
+private def validMulDivCeil (left right denominator : UInt64) : Bool :=
+  let result := Math.UInt64.mulDivCeil left right denominator false true
+  if denominator == 0 then
+    match result with
+    | .error false => true
+    | _ => false
+  else
+    let product := left.toNat * right.toNat
+    let quotient := (product + denominator.toNat - 1) / denominator.toNat
+    if u64Max.toNat < quotient then
+      match result with
+      | .error true => true
+      | _ => false
+    else
+      match result with
+      | .ok value => value.toNat == quotient
+      | _ => false
+
+#guard mulDivSamples.all fun left =>
+  mulDivSamples.all fun right =>
+    mulDivSamples.all fun denominator => validMulDivCeil left right denominator
 
 private def validFloorRoot (value : UInt64) : Bool :=
   let root := Math.UInt64.sqrt value
@@ -200,6 +234,12 @@ open Examples.BatchSizer in
   | _ => false) &&
   (match prorate (init 8) ((1 : UInt64) <<< 63) 2 1 with
   | .error .ratioOverflow => true
+  | _ => false) &&
+  (match prorateUp (init 8) 10 20 3 with
+  | .ok (state, result) => state.lastBatchCount == 67 && result == 67
+  | _ => false) &&
+  (match prorateUp (init 8) 6 15372286728091293013 5 with
+  | .error .ratioOverflow => true
   | _ => false)
 
 open Examples.EvmPriceBand in
@@ -228,6 +268,12 @@ open Examples.EvmPriceBand in
   | .ok (state, result) => state.lastQuote == u64Max && result == u64Max
   | _ => false) &&
   (match weighted (init 9) ((1 : UInt64) <<< 63) 2 1 with
+  | .error .quoteOverflow => true
+  | _ => false) &&
+  (match weightedUp (init 9) 10 20 3 with
+  | .ok (state, result) => state.lastQuote == 67 && result == 67
+  | _ => false) &&
+  (match weightedUp (init 9) 6 15372286728091293013 5 with
   | .error .quoteOverflow => true
   | _ => false)
 
@@ -326,13 +372,16 @@ elab "#pf_guard_core_math_no_effects" : command => do
         throwError s!"{module}.{rootName}: expected exact five-step seed and six-step Newton ladders"
       unless noAccumLoop root.ops do
         throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
-    let mulDivName := if module == `Examples.BatchSizer then "prorate" else "weighted"
-    let some mulDiv := source.methods.find? (·.ixName == mulDivName)
-      | throwError s!"{module}.{mulDivName}: missing full-precision multiply/divide consumer"
-    unless loopBounds mulDiv.ops == #[64] do
-      throwError s!"{module}.{mulDivName}: expected exact 64-step restoring-division frame"
-    unless noAccumLoop mulDiv.ops do
-      throwError s!"{module}.{mulDivName}: restoring division was incorrectly lowered as accumulation"
+    let mulDivNames : Array String :=
+      if module == `Examples.BatchSizer then #["prorate", "prorateUp"]
+      else #["weighted", "weightedUp"]
+    for mulDivName in mulDivNames do
+      let some mulDiv := source.methods.find? (·.ixName == mulDivName)
+        | throwError s!"{module}.{mulDivName}: missing full-precision multiply/divide consumer"
+      unless loopBounds mulDiv.ops == #[64] do
+        throwError s!"{module}.{mulDivName}: expected exact 64-step restoring-division frame"
+      unless noAccumLoop mulDiv.ops do
+        throwError s!"{module}.{mulDivName}: restoring division was incorrectly lowered as accumulation"
 
 #pf_guard_core_math_no_effects
 #pf_build Examples.BatchSizer

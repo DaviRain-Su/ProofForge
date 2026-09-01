@@ -261,15 +261,52 @@ fn full_precision_mul_div_handles_wide_product_and_atomic_errors() {
         .clone();
     assert_eq!(slot(&account, 0), u64::MAX);
 
-    for (params, error) in [
-        ([7, 9, 0], ProgramError::Custom(1)),
-        ([1u64 << 63, 2, 1], ProgramError::Custom(1)),
+    let rounded = fixture.call(
+        program_id,
+        account,
+        "prorateUp",
+        &[10, 20, 3],
+        true,
+        &[Check::success(), Check::return_data(&67u64.to_le_bytes())],
+    );
+    let account = rounded
+        .get_account(&fixture.state_key)
+        .expect("state after rounded full-precision ratio")
+        .clone();
+    assert_eq!(slot(&account, 0), 67);
+
+    let rounded_exact = fixture.call(
+        program_id,
+        account,
+        "prorateUp",
+        &[u64::MAX, 2, 2],
+        true,
+        &[
+            Check::success(),
+            Check::return_data(&u64::MAX.to_le_bytes()),
+        ],
+    );
+    let account = rounded_exact
+        .get_account(&fixture.state_key)
+        .expect("state after exact rounded ratio")
+        .clone();
+    assert_eq!(slot(&account, 0), u64::MAX);
+
+    for (method, params, error) in [
+        ("prorate", [7, 9, 0], ProgramError::Custom(1)),
+        ("prorate", [1u64 << 63, 2, 1], ProgramError::Custom(1)),
+        ("prorateUp", [7, 9, 0], ProgramError::Custom(1)),
+        (
+            "prorateUp",
+            [6, 15_372_286_728_091_293_013, 5],
+            ProgramError::Custom(1),
+        ),
     ] {
         let before = account.data.clone();
         let rejected = fixture.call(
             program_id,
             account.clone(),
-            "prorate",
+            method,
             &params,
             true,
             &[

@@ -47,7 +47,7 @@ def entries : Array Entry := #[
   { name := "EvmCheckpointTrace", digest := "904229061bdc4a3e" },
   { name := "EvmSafeCastAccumulator", digest := "f9eb0bacf4d40cfd" },
   { name := "EvmSafeCastConfig", digest := "40d1569adcdc05a6" },
-  { name := "EvmPriceBand", digest := "21fa9b07841abdf" }
+  { name := "EvmPriceBand", digest := "c05e77d597d1a0ef" }
 ]
 
 def names : Array String := entries.map (·.name)

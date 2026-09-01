@@ -109,4 +109,11 @@ def weighted (state : State) (quote numerator denominator : UInt64) :
   let result ← Math.UInt64.mulDiv quote numerator denominator .zeroTick .quoteOverflow
   .ok ({ state with lastQuote := result }, result)
 
+/-- Scale a quote by a rational weight and round every nonzero remainder upward. -/
+@[pf_entry]
+def weightedUp (state : State) (quote numerator denominator : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← Math.UInt64.mulDivCeil quote numerator denominator .zeroTick .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
+
 end Examples.EvmPriceBand

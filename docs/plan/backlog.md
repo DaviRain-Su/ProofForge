@@ -96,6 +96,7 @@ R1-026 shared allocation-free UInt64 floor log2/log10/log256、
 R1-027 shared allocation-free UInt64 floor integer sqrt、
 R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
 R1-029 shared allocation-free full-precision UInt64 mulDiv；
+R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -432,6 +433,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   capacity-ratio 与 EVM weighted-quote policy；不新增 Runtime/Ops/IR/CFG/Component/Emit、
   allocation、pointer、wide heap value 或 shared layout。ceiling `mulDiv`、signed/fixed-point
   与 wider returned quotient 继续 fail closed。详见 `docs/plan/tasks/r1-029.md`。
+
+- R1-030 shared full-precision UInt64 ceiling `mulDivCeil` 已完成：R1-029 的 product formation、
+  quotient overflow preflight 与唯一 64-step restoring-division frame 收口到同一个 private
+  rounding kernel；ceiling 只在 exact remainder 非零时做 checked increment，floor maximum
+  加 remainder 的唯一额外 overflow 也返回 caller-owned error。BatchSizer/EvmPriceBand 分别
+  暴露 `prorateUp`/`weightedUp`，没有复制除法循环或新增 target effect、allocation、pointer、
+  layout。signed/fixed-point 与 wider returned quotient 继续 fail closed。详见
+  `docs/plan/tasks/r1-030.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

@@ -179,14 +179,7 @@ steps. The final division-based correction avoids squaring an intermediate estim
         quotient := predecessor / estimate
       return min estimate quotient + 1
 
-/-- Floor of `(left * right) / denominator` with a full 128-bit intermediate product.
-
-The two caller-owned errors distinguish a zero denominator from a quotient that does not fit in
-UInt64. Multiplication is split into four 32-bit partial products, then a fixed 64-step restoring
-division consumes the low product word with the high word as its initial remainder. The
-`denominator ≤ high` preflight is exactly the quotient-overflow condition. No target needs a wide
-integer opcode, heap value, or hidden wrapping arithmetic. -/
-@[pf_inline] def mulDiv (left right denominator : UInt64)
+@[pf_inline] private def mulDivRounded (left right denominator : UInt64) (roundUp : Bool)
     (divisionByZero overflow : ε) : Except ε UInt64 :=
   if denominator == 0 then
     .error divisionByZero
@@ -206,8 +199,7 @@ integer opcode, heap value, or hidden wrapping arithmetic. -/
       highHigh + (lowHigh >>> 32) + (highLow >>> 32) + (middle >>> 32)
     if denominator ≤ productHigh then
       .error overflow
-    else
-      .ok (Id.run do
+    else Id.run do
         let upper := ~~~(0 : UInt64)
         let complement := upper - denominator + 1
         let mut remainder := productHigh
@@ -226,6 +218,30 @@ integer opcode, heap value, or hidden wrapping arithmetic. -/
             quotient := quotient ||| 1
           else
             remainder := shifted
-        return quotient)
+        if roundUp && 0 < remainder then
+          if quotient == upper then
+            return .error overflow
+          else
+            return .ok (quotient + 1)
+        else
+          return .ok quotient
+
+/-- Floor of `(left * right) / denominator` with a full 128-bit intermediate product.
+
+The two caller-owned errors distinguish a zero denominator from a quotient that does not fit in
+UInt64. Multiplication is split into four 32-bit partial products, then a fixed 64-step restoring
+division consumes the low product word with the high word as its initial remainder. The
+`denominator ≤ high` preflight is exactly the floor-quotient overflow condition. No target needs a
+wide integer opcode, heap value, or hidden wrapping arithmetic. -/
+@[pf_inline] def mulDiv (left right denominator : UInt64)
+    (divisionByZero overflow : ε) : Except ε UInt64 :=
+  mulDivRounded left right denominator false divisionByZero overflow
+
+/-- Ceiling of `(left * right) / denominator` with the same exact 128-bit product and restoring
+division as `mulDiv`. A nonzero remainder increments the quotient only after checking that the
+rounded result remains representable. -/
+@[pf_inline] def mulDivCeil (left right denominator : UInt64)
+    (divisionByZero overflow : ε) : Except ε UInt64 :=
+  mulDivRounded left right denominator true divisionByZero overflow
 
 end ProofForge.Core.Math.UInt64
