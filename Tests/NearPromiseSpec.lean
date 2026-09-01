@@ -376,7 +376,7 @@ elab "#pf_near_promise_check" : command => do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
-  unless decodes.size == 17 && (decodes.filter (· == 8)).size == 16 &&
+  unless decodes.size == 23 && (decodes.filter (· == 8)).size == 22 &&
       (decodes.filter (· == 4)).size == 1 do
     throwError s!"extractor lost strict callback UInt64 decoders: {repr decodes}"
   let quotedLeaves := source.methods.foldl (init := #[]) fun acc method =>
@@ -1071,7 +1071,7 @@ elab "#pf_near_promise_check" : command => do
     "(i64.const 6) (i64.const 8437)",
     "(i64.const 4) (i64.const 8443)",
     "(i64.const 15) (i64.const 8454)",
-    "(i64.const 14) (i64.const 8499)",
+    "(i64.const 14) (i64.const 8514)",
     "(i64.const 20000000000000)"
   ]
   for anchor in anchors do

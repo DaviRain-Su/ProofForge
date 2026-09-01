@@ -150,6 +150,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
+      | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseResultRead _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
@@ -244,6 +245,12 @@ private partial def promiseLiteralsOfOps
           fifthReceiver fifthMethod callbackMethod _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) =>
           #[leftReceiver, leftMethod, midReceiver, midMethod, rightReceiver, rightMethod,
             fourthReceiver, fourthMethod, fifthReceiver, fifthMethod, callbackMethod]
+      | .ext (.promiseFunctionCallAnd6ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) =>
+          #[leftReceiver, leftMethod, midReceiver, midMethod, rightReceiver, rightMethod,
+            fourthReceiver, fourthMethod, fifthReceiver, fifthMethod, sixthReceiver, sixthMethod,
+            callbackMethod]
       | .ite _ _ _ thn els => promiseLiteralsOfOps thn ++ promiseLiteralsOfOps els
       | .forBody _ body => promiseLiteralsOfOps body
       | _ => #[]
@@ -267,6 +274,7 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
     | .forBody _ body => opsReturnPromise body
     | _ => false
@@ -284,6 +292,7 @@ private partial def opsCallPromiseFunction (ops : Array (Op ValKind OpExt)) : Bo
     | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsCallPromiseFunction thn || opsCallPromiseFunction els
     | .forBody _ body => opsCallPromiseFunction body
     | _ => false
@@ -328,6 +337,7 @@ private partial def opsChainPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsChainPromise thn || opsChainPromise els
     | .forBody _ body => opsChainPromise body
     | _ => false
@@ -342,6 +352,7 @@ private partial def opsJoinPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsJoinPromise thn || opsJoinPromise els
     | .forBody _ body => opsJoinPromise body
     | _ => false
@@ -2387,6 +2398,42 @@ private partial def emitRegion (p : Program ValKind OpExt)
             joint.lines ++ callback.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFunctionCallAnd6ThenReturned
+        leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+        fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod leftArgsCapacity midArgsCapacity
+        rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity
+        leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+        callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+        rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+        fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+        callbackDepositLo callbackDepositHi callbackGas) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let left ← stagePromiseCall p st leftReceiver leftMethod leftArgsCapacity leftArguments
+          leftDepositLo leftDepositHi leftGas level
+        let mid ← stagePromiseCall p left.st midReceiver midMethod midArgsCapacity midArguments
+          midDepositLo midDepositHi midGas level
+        let right ← stagePromiseCall p mid.st rightReceiver rightMethod rightArgsCapacity
+          rightArguments rightDepositLo rightDepositHi rightGas level
+        let fourth ← stagePromiseCall p right.st fourthReceiver fourthMethod fourthArgsCapacity
+          fourthArguments fourthDepositLo fourthDepositHi fourthGas level
+        let fifth ← stagePromiseCall p fourth.st fifthReceiver fifthMethod fifthArgsCapacity
+          fifthArguments fifthDepositLo fifthDepositHi fifthGas level
+        let sixth ← stagePromiseCall p fifth.st sixthReceiver sixthMethod sixthArgsCapacity
+          sixthArguments sixthDepositLo sixthDepositHi sixthGas level
+        let joint := stagePromiseAndN sixth.st
+          #[left.promiseLocal, mid.promiseLocal, right.promiseLocal, fourth.promiseLocal,
+            fifth.promiseLocal, sixth.promiseLocal] level
+        let callback ← stagePromiseThen p joint.st joint.promiseLocal callbackMethod
+          callbackArgsCapacity callbackArguments callbackDepositLo callbackDepositHi callbackGas level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { callback.st with pendingPromiseReturn := some callback.promiseLocal }
+        return {
+          lines := left.lines ++ mid.lines ++ right.lines ++ fourth.lines ++ fifth.lines ++
+            sixth.lines ++ joint.lines ++ callback.lines ++ region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseResultRead capacity index) =>
         if view then throw "extract/unsupported: near view cannot read promise results"
         let index ← renderVal st index
@@ -2608,6 +2655,20 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
               rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
               fifthDepositLo, fifthDepositHi, fifthGas, callbackDepositLo, callbackDepositHi,
               callbackGas].any valHas
+      | .promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+          leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+          callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+          fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          leftArguments.any valHas || midArguments.any valHas || rightArguments.any valHas ||
+            fourthArguments.any valHas || fifthArguments.any valHas || sixthArguments.any valHas ||
+            callbackArguments.any valHas ||
+            #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+              rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
+              fifthDepositLo, fifthDepositHi, fifthGas, sixthDepositLo, sixthDepositHi, sixthGas,
+              callbackDepositLo, callbackDepositHi, callbackGas].any valHas
       | .promiseResultRead _ index => valHas index
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
@@ -2842,6 +2903,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallAnd4ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+  | .ext (.promiseFunctionCallAnd6ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8Bounded _ _) => true
   | .ext (.storageUnregisteredLog _) => true

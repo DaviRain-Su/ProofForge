@@ -343,6 +343,31 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
     fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAnd6ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (sixthDepositLo sixthDepositHi sixthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd6ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod leftArgsCapacity midArgsCapacity
+      rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 
