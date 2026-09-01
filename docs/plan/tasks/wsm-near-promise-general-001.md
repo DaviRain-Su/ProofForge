@@ -59,7 +59,9 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
    `Runtime.promiseFunctionCallAnd3ThenReturned`, `Promises.callAnd3ThenReturned`, Extract/Emit
    `stagePromiseAndN`, fixtures `sendAnd3Success` / `sendAnd3RightMissing` / `callbackJoined3`;
    registry digest `604403f53aa23d87`; generalize to parameterized maxFanIn remains follow-up
-3. Sandbox DAG: create→then; create×3→and→callback
+3. ~~Sandbox DAG: create→then; create×3→and→callback~~ — **landed** in
+   `runtime-tests/near/promise.py` (`sendAnd3Success` / `sendAnd3RightMissing` scenes on
+   `NearPromise.wasm`); handle fixture `sendHandleAnd3` + registry digest `b6a5c316187f4df9`
 4. Docs + capability-matrix row
 
 ## Deliverables

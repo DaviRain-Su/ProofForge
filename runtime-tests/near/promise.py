@@ -387,6 +387,32 @@ def main() -> None:
         raise AssertionError("left-child failure short-circuited or reordered the right result")
     print("near-promise: failed left child did not short-circuit successful right result")
 
+    joined3_success = _call_u64(client, "sendAnd3Success", 607)
+    if NearClient.success_value_bytes(joined3_success) != NearClient.encode_u64_le(333):
+        raise AssertionError("3-way joined callback did not forward the successful right result")
+    if client.view_u64("get") != 83:
+        raise AssertionError("3-way joined callback did not commit its independent argument 83")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("3-way joined callback did not preserve left/middle/right order")
+    print("near-promise: ordered 3-way join exposed three successful child results to one callback")
+
+    joined3_right_failure = _call_u64(
+        client, "sendAnd3RightMissing", 608, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined3_right_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("3-way right-child failure did not forward the right-result fallback")
+    if client.view_u64("get") != 84:
+        raise AssertionError("3-way right-child failure did not run and commit callback argument 84")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("3-way right-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed right child in 3-way join retained successful left/middle results"
+    )
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
     if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")

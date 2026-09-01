@@ -40,6 +40,23 @@ def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (Sta
   let childValue := result.borshUInt64D 0
   .ok ({ state with marker := callbackValue }, childValue)
 
+@[pf_inline] private def joinedChildGas : UInt64 := 8_000_000_000_000
+
+/-- Pure child used by join fixtures to observe echoed UInt64 results. -/
+@[pf_entry]
+def echo (_state : State) (value : UInt64) : UInt64 :=
+  value
+
+/-- Same DAG as `NearPromise.sendAnd3Success`; persisted depth models N13 handle metadata. -/
+@[pf_entry]
+def sendHandleAnd3 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd3ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 83) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value, depth := 1 }, value)
+
 /-- Same DAG as `NearPromise.sendThenSuccess`; persisted depth models N13 handle metadata. -/
 @[pf_entry]
 def sendHandleThen (state : State) (value : UInt64) : Except Error (State × UInt64) :=
