@@ -17,6 +17,12 @@ maintenance stay with **sf-011** (`Examples/Tree`); this slice owns:
 Trust boundary: host `accDataRbTree*` stubs are not refined here; the assoc-list
 is the L2 index contract OrderedMap callers rely on once a validated tree view
 exists.
+
+Interface with **sf-011** (`Examples/Tree`): `AssocIndex` answers “which slot
+holds this key?”; Tree supplies geometric `wf`, bounded `reachable` /
+`parentInv` / `bstLocal`, and (in progress) insert/remove/rotate preservation.
+Callers may compose index hit with Tree slot reads; they must not assume RB
+link/color lemmas from this module.
 -/
 
 namespace ProofForge.Svm.Sdk.OrderedMapModel

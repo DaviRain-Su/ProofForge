@@ -860,11 +860,19 @@ def removeNode (s : State) (k : UInt64) : Except Error (State × UInt64) :=
 
 section Proofs
 
-/-! ### 良构谓词（WF）第一批切片：分配器几何 + 指针有界
+/-! ### 良构谓词（WF）与 sf-011 全树保持
 
-`wf` 是 insertNode / removeNode 的 BST 有序性证明要建立在上面的不变量基础。
-本切片只收「分配器 + 链接指针有界」；BST 全序需要先证可达集与自由集分离，
-是 p-004 的主体。 -/
+几何 `wf`（p-004）：分配器游标 + 已分配槽的 left/right/parent/color 有界。
+
+sf-011 在其上补三层可陈述结构（均在 N=4 燃料下；不引入无界谓词）：
+
+* `reachable` — 从 root 沿 left/right 至多 3 步可达
+* `parentInv` — 可达节点的孩子回指该父（父子互逆）
+* `bstLocal` — 可达节点的直接孩子满足局部 key 序
+
+颜色：`wf` 已钉 `color ≤ 1`；根黑由 `rootBlack` 陈述。索引层合同见
+`ProofForge.Svm.Sdk.OrderedMapModel`（sf-009）：`AssocIndex` 负责
+find/insert/remove 键槽代数；本文件负责树链接 / 旋转 / 染色几何。 -/
 
 /-- N=4 树的分配器与指针几何良构：
 - `size ≤ 4`；bump 游标在 `[1, 5]`；freeHead 是哨兵或槽地址且不超前 bump；
@@ -878,6 +886,46 @@ def wf (s : State) : Prop :=
       s.nodes[(a.toNat - 1) % 4]!.right ≤ s.bumpIndex ∧
       s.nodes[(a.toNat - 1) % 4]!.parent ≤ s.bumpIndex ∧
       s.nodes[(a.toNat - 1) % 4]!.color ≤ 1)
+
+/-- 槽下标：1-based 地址 → `Vector` 下标。 -/
+@[inline] def slotIdx (a : UInt64) : Nat :=
+  (a.toNat - 1) % 4
+
+/-- 已进入 bump 区的地址（含自由链表节点）。 -/
+def allocated (s : State) (a : UInt64) : Prop :=
+  1 ≤ a ∧ a < s.bumpIndex
+
+/-- 一步父子边（孩子非哨兵）。 -/
+def isChild (s : State) (parent child : UInt64) : Prop :=
+  child ≠ sentinel ∧
+  (s.nodes[slotIdx parent]!.left = child ∨
+    s.nodes[slotIdx parent]!.right = child)
+
+/-- 有界可达性：root 起至多深度 3（N=4 树高上界）。 -/
+def reachable (s : State) (a : UInt64) : Prop :=
+  a ≠ sentinel ∧ s.root ≠ sentinel ∧ (
+    a = s.root ∨
+    isChild s s.root a ∨
+    (∃ p1, isChild s s.root p1 ∧ isChild s p1 a) ∨
+    (∃ p1 p2, isChild s s.root p1 ∧ isChild s p1 p2 ∧ isChild s p2 a))
+
+/-- 父子互逆：可达节点的非哨兵孩子的 parent 字段回指自己。 -/
+def parentInv (s : State) : Prop :=
+  ∀ a, reachable s a →
+    let n := s.nodes[slotIdx a]!
+    (n.left ≠ sentinel → s.nodes[slotIdx n.left]!.parent = a) ∧
+    (n.right ≠ sentinel → s.nodes[slotIdx n.right]!.parent = a)
+
+/-- 局部 BST 序：可达节点左孩 key 更小、右孩 key 更大。 -/
+def bstLocal (s : State) : Prop :=
+  ∀ a, reachable s a →
+    let n := s.nodes[slotIdx a]!
+    (n.left ≠ sentinel → s.nodes[slotIdx n.left]!.key < n.key) ∧
+    (n.right ≠ sentinel → n.key < s.nodes[slotIdx n.right]!.key)
+
+/-- 根黑（空树或根 color = 0）。 -/
+def rootBlack (s : State) : Prop :=
+  s.root = sentinel ∨ s.nodes[slotIdx s.root]!.color = 0
 
 /-- 槽位映射 `a ↦ (a-1) % 4` 在槽地址 `[1, 5)` 上单射。 -/
 private theorem vec_set_self {α : Type} [Inhabited α] {n : Nat} (xs : Vector α n)
@@ -912,6 +960,21 @@ theorem init_wf (x : UInt64) : wf (init x) := by
   have h0 : (1 : Nat) ≤ a.toNat := ha0
   have h1 : a.toNat < 1 := ha1
   omega
+
+theorem init_reachable_false (x a : UInt64) : ¬ reachable (init x) a := by
+  intro h
+  simp [reachable, init, sentinel] at h
+
+theorem init_parentInv (x : UInt64) : parentInv (init x) := by
+  intro a hr
+  exact (init_reachable_false x a hr).elim
+
+theorem init_bstLocal (x : UInt64) : bstLocal (init x) := by
+  intro a hr
+  exact (init_reachable_false x a hr).elim
+
+theorem init_rootBlack (x : UInt64) : rootBlack (init x) := by
+  simp [rootBlack, init, sentinel]
 
 private theorem u64_succ_bound {a : UInt64} (h : a < 4) : (a + 1).toNat ≤ 4 := by
   have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
@@ -1291,6 +1354,161 @@ theorem rotateRight_root (s : State) (x : UInt64) {t : State} {y : UInt64}
          | exact Or.inl rfl
          | exact Or.inr rfl)
     | rfl)
+
+/-! ### sf-011：几何 `wf` 辅助引理与元数据保持
+
+本批：结构谓词已在上方；此处收指针有界辅助引理，以及旋转的 size/bump/free
+元数据守恒。`rotateLeft_wf` / `insertRoot_wf` / `removeNode_wf` 紧随补全。 -/
+
+/-- `Vector.set` 在不同下标上读回旧值。 -/
+private theorem vec_set_ne {α : Type} [Inhabited α] {n : Nat} (xs : Vector α n)
+    (i j : Nat) (x : α) (hi : i < n) (hne : i ≠ j) (hj : j < n) :
+    (xs.set i x hi)[j]! = xs[j]! := by
+  show (xs.set i x hi)[j]?.get! = xs[j]!
+  have h2 : (xs.set i x hi)[j]? = xs[j]? :=
+    Vector.getElem?_set_ne (xs := xs) (x := x) hi hne
+  rw [h2]
+  simp [hj]
+
+/-- 任意向量上单槽写入保持指针有界全称。 -/
+private theorem ptr_bound_set (bump : UInt64) (nodes : Vector Node 4)
+    (i : Nat) (n : Node) (hi : i < 4)
+    (hold : ∀ a : UInt64, 1 ≤ a → a < bump →
+      nodes[(a.toNat - 1) % 4]!.left ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.right ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.parent ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.color ≤ 1)
+    (hl : n.left ≤ bump) (hr : n.right ≤ bump)
+    (hp : n.parent ≤ bump) (hc : n.color ≤ 1) :
+    ∀ a : UInt64, 1 ≤ a → a < bump →
+      (nodes.set i n hi)[(a.toNat - 1) % 4]!.left ≤ bump ∧
+      (nodes.set i n hi)[(a.toNat - 1) % 4]!.right ≤ bump ∧
+      (nodes.set i n hi)[(a.toNat - 1) % 4]!.parent ≤ bump ∧
+      (nodes.set i n hi)[(a.toNat - 1) % 4]!.color ≤ 1 := by
+  intro a ha0 ha1
+  have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+  by_cases hia : i = (a.toNat - 1) % 4
+  · subst hia
+    rw [vec_set_self]
+    exact ⟨hl, hr, hp, hc⟩
+  · have hget := vec_set_ne nodes i ((a.toNat - 1) % 4) n hi hia hslot
+    rw [hget]
+    exact hold a ha0 ha1
+
+/-- 仅改 `nodes` 时把指针全称推回 `wf`。 -/
+private theorem wf_of_nodes (s : State) (nodes' : Vector Node 4) (hwf : wf s)
+    (hptr : ∀ a : UInt64, 1 ≤ a → a < s.bumpIndex →
+      nodes'[(a.toNat - 1) % 4]!.left ≤ s.bumpIndex ∧
+      nodes'[(a.toNat - 1) % 4]!.right ≤ s.bumpIndex ∧
+      nodes'[(a.toNat - 1) % 4]!.parent ≤ s.bumpIndex ∧
+      nodes'[(a.toNat - 1) % 4]!.color ≤ 1) :
+    wf { s with nodes := nodes' } := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, _⟩ := hwf
+  exact ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩
+
+/-- 只改某个槽的 `value` 保持 `wf`。 -/
+theorem set_value_wf (s : State) (i : Nat) (v : UInt64) (hi : i < 4)
+    (hwf : wf s) :
+    wf { s with nodes := s.nodes.set i { s.nodes[i]! with value := v } } := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+  intro a ha0 ha1
+  have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+  by_cases hia : i = (a.toNat - 1) % 4
+  · subst hia
+    rw [vec_set_self]
+    exact hptr a ha0 ha1
+  · have hget := vec_set_ne s.nodes i ((a.toNat - 1) % 4)
+      { s.nodes[i]! with value := v } hi hia hslot
+    rw [hget]
+    exact hptr a ha0 ha1
+
+/-- `paintNode` 在 `color ≤ 1` 时保持 `wf`。 -/
+theorem paintNode_wf (s : State) (addr c : UInt64)
+    (hwf : wf s) (hc : c ≤ 1) : wf (paintNode s addr c) := by
+  unfold paintNode
+  split
+  · exact hwf
+  · obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+    refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+    intro a ha0 ha1
+    have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    have hi4 : (addr.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    by_cases hia : (addr.toNat - 1) % 4 = (a.toNat - 1) % 4
+    · have hold := hptr a ha0 ha1
+      have hget : (s.nodes.set ((addr.toNat - 1) % 4)
+          { s.nodes[(addr.toNat - 1) % 4]! with color := c } hi4)[(a.toNat - 1) % 4]! =
+          { s.nodes[(addr.toNat - 1) % 4]! with color := c } := by
+        rw [← hia, vec_set_self]
+      rw [hget]
+      -- left/right/parent of written node equal old slot fields (= a's old fields)
+      have hsame : s.nodes[(addr.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+        rw [hia]
+      rw [hsame]
+      exact ⟨hold.1, hold.2.1, hold.2.2.1, hc⟩
+    · have hget := vec_set_ne s.nodes ((addr.toNat - 1) % 4) ((a.toNat - 1) % 4)
+        { s.nodes[(addr.toNat - 1) % 4]! with color := c } hi4 hia hslot
+      rw [hget]
+      exact hptr a ha0 ha1
+
+/-- 旋转成功时 size / bumpIndex / freeHead 不变。 -/
+theorem rotateLeft_meta (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateLeft s x = .ok (t, y)) :
+    t.size = s.size ∧ t.bumpIndex = s.bumpIndex ∧ t.freeHead = s.freeHead := by
+  have hs := rotateLeft_size s x h
+  unfold rotateLeft at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; exact ⟨hs, rfl, rfl⟩)
+    | rfl)
+
+theorem rotateRight_meta (s : State) (x : UInt64) {t : State} {y : UInt64}
+    (h : rotateRight s x = .ok (t, y)) :
+    t.size = s.size ∧ t.bumpIndex = s.bumpIndex ∧ t.freeHead = s.freeHead := by
+  have hs := rotateRight_size s x h
+  unfold rotateRight at h
+  repeat (first
+    | split at h
+    | simp only [] at h
+    | simp at h
+    | (obtain ⟨rfl, rfl⟩ := h; exact ⟨hs, rfl, rfl⟩)
+    | rfl)
+
+/-- 写入未分配槽（地址 `≥ bump` 且 `< 5`）不破坏已分配槽的指针有界。 -/
+private theorem ptr_bound_set_unalloc (bump : UInt64) (nodes : Vector Node 4)
+    (p : UInt64) (n : Node) (hp4 : p.toNat - 1 < 4)
+    (hp0 : 1 ≤ p) (hp5 : p < 5) (hpb : bump ≤ p)
+    (hold : ∀ a : UInt64, 1 ≤ a → a < bump →
+      nodes[(a.toNat - 1) % 4]!.left ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.right ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.parent ≤ bump ∧
+      nodes[(a.toNat - 1) % 4]!.color ≤ 1) :
+    ∀ a : UInt64, 1 ≤ a → a < bump →
+      (nodes.set (p.toNat - 1) n hp4)[(a.toNat - 1) % 4]!.left ≤ bump ∧
+      (nodes.set (p.toNat - 1) n hp4)[(a.toNat - 1) % 4]!.right ≤ bump ∧
+      (nodes.set (p.toNat - 1) n hp4)[(a.toNat - 1) % 4]!.parent ≤ bump ∧
+      (nodes.set (p.toNat - 1) n hp4)[(a.toNat - 1) % 4]!.color ≤ 1 := by
+  intro a ha0 ha1
+  have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+  have ha0n : (1 : Nat) ≤ a.toNat := ha0
+  have ha1n : a.toNat < bump.toNat := ha1
+  have hp0n : (1 : Nat) ≤ p.toNat := hp0
+  have hp5n : p.toNat < 5 := hp5
+  have hpbn : bump.toNat ≤ p.toNat := hpb
+  have hne : (p.toNat - 1) ≠ (a.toNat - 1) % 4 := by
+    intro heq
+    have habn : a.toNat < 5 := by omega
+    have hab : a < 5 := habn
+    have hpmod : (p.toNat - 1) % 4 = p.toNat - 1 := Nat.mod_eq_of_lt hp4
+    have hslots : (a.toNat - 1) % 4 = (p.toNat - 1) % 4 := by omega
+    have heqap : a = p := slot_inj ha0 hab hp0 hp5 hslots
+    have : a.toNat = p.toNat := congrArg UInt64.toNat heqap
+    omega
+  have hget := vec_set_ne nodes (p.toNat - 1) ((a.toNat - 1) % 4) n hp4 hne hslot
+  rw [hget]
+  exact hold a ha0 ha1
 
 end Proofs
 
