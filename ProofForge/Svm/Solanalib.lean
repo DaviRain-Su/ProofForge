@@ -2310,4 +2310,95 @@ theorem walkAccount1ExecRentAfterSkip_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 16 - Loader account-1 → account-2 marker skip chain (`svm-sem-021`)
+
+Knife 15 completes account-1 fields after the account-0 skip. Emit chains the same
+`emitSkipAccount` geometry from the account-1 header cursor to reach the next dup marker.
+This knife composes the account-0 skip with an account-1 zero-dataLen skip and proves the
+loaded account-2 marker matches an absolute `r6`-relative load. Still not account-2 meta
+fields, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-2 dup marker after account-1 zero-dataLen rent. -/
+def account2HeaderOffset : Nat := account1RentEpochOffset + 8
+def account2HeaderAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2HeaderOffset
+
+/-- Seed account-0/1 layout plus account-1 zero data_len and account-2 dup marker. -/
+def account1SkipNextInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) : Option Mem := do
+  let m₁ ← account1ExecRentInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+  let m₂ ← storev .m64 m₁ account1DataLenAddr (.vlong 0)
+  storev .m8 m₂ account2HeaderAddr (.vbyte acc2Marker)
+
+/-- Typed double skip: account-0 zero-dataLen skip lands on account-1 header, then the same
+skip geometry from account-1 header reaches account-2 marker; stage marker. -/
+def walkAccount1SkipNextAfterAccount0Skip? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained account-0/1 skip-to-account-2-marker walk against seeded input memory. -/
+def evalWalkAccount1SkipNextAfterAccount0SkipToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount1SkipNextAfterAccount0Skip? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative load of the account-2 dup marker. -/
+def evalAbsAccount2Marker? (memory : Mem) : Option U8 := do
+  let marker ← loadv .m8 memory account2HeaderAddr
+  match marker with
+  | .vbyte m => some m
+  | _ => none
+
+/-- Walked account-1→account-2 skip-chain assembly is well-formed. -/
+theorem walkAccount1SkipNextAfterAccount0Skip_verified :
+    (walkAccount1SkipNextAfterAccount0Skip? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip: account-2 marker=`0xff`, staged at `[r10-16]`. -/
+theorem evalWalkAccount1_skip_next_marker_0xff :
+    (do
+      let mem ← account1SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker
+      let (regs, finalMem) ← evalWalkAccount1SkipNextAfterAccount0SkipToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) =
+      some true := by
+  native_decide
+
+/-- Chained skip marker agrees with absolute `r6`-relative load at account-2 header. -/
+theorem walkAccount1SkipNextAfterAccount0Skip_eq_absLoad :
+    (do
+      let mem ← account1SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAB
+      let (regs, _) ← evalWalkAccount1SkipNextAfterAccount0SkipToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount2Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xAB)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

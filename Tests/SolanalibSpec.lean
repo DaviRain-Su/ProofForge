@@ -579,5 +579,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 16: Loader account-1 → account-2 skip chain (`svm-sem-021`)
+#guard (walkAccount1SkipNextAfterAccount0Skip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker
+      let (regs, finalMem) ← evalWalkAccount1SkipNextAfterAccount0SkipToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAB
+      let (regs, _) ← evalWalkAccount1SkipNextAfterAccount0SkipToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount2Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xAB)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
