@@ -1,6 +1,7 @@
 import ProofForge.Attr
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Source
+import Std.Tactic.BVDecide
 
 /-!
 # SVM SDK persistent-storage facade
@@ -463,6 +464,11 @@ theorem initialCursor_decompose :
     Allocator.initialCursor &&& 0xffffffff = 1 ∧
     Allocator.initialCursor >>> 32 = 1 := by
   constructor <;> (unfold Allocator.initialCursor; decide)
+
+/-- **packed cursor 高 32 位读回**（bump 已掩码到 u32）。 -/
+theorem packed_cursor_high (cursor slot : UInt64) :
+    ((cursor &&& (0xffffffff : UInt64)) ||| slot <<< 32) >>> 32 = slot &&& (0xffffffff : UInt64) := by
+  bv_decide
 
 /-- **Allocator.alloc 满返回 0**。 -/
 theorem allocator_alloc_full (allocator : Allocator)
