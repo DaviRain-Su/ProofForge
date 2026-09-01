@@ -1,5 +1,8 @@
 # Backlog
 
+> **形式化主线不在本文件逐条推进**：见 [svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
+> 本 backlog 继续记录 Runtime/SDK 工程证据；SVM L1/L2 证明进度以形式化计划 §6 矩阵为准。
+
 补全依据：[analysis/authority.md](analysis/authority.md)。
 缺口阶段：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。

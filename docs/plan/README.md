@@ -8,6 +8,9 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
 
+**当前主线（形式化）**：[SVM 组件形式化收口计划](svm-formalization-plan.md)
+（`sf-000`…`sf-016`）。先把 Solana 侧 L1/L2 全部证完；WASM PR #4/#5 继续开着。
+
 任务：
 
 | ID | 状态 | 内容 |
@@ -172,6 +175,34 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [p-003](tasks/p-003.md) | done | asVal 巨石拆分 + Tree 结构不变量证明 |
 | [p-004](tasks/p-004.md) | done | removeNode size 守恒 + wf 良构谓词第一批切片 |
 | [p-005](tasks/p-005.md) | done | SDK 组件验证：三层策略 + 几何安全定理第一批 |
+
+## SVM 组件形式化收口（当前主线）
+
+权威计划：[svm-formalization-plan.md](svm-formalization-plan.md)。
+目标：把 SVM SDK + Component 的 L1/L2 形式化全部做完；**不做** sBPF L3 refinement。
+WASM PR #4 / #5 保持开着，不阻塞本轨。
+
+| ID | 状态 | 内容 |
+|---|---|---|
+| [sf-000](tasks/sf-000.md) | todo | 证明基础设施成文（wf-parts / word 引理习惯） |
+| [sf-001](tasks/sf-001.md) | todo | Queue 非空 push 读回 |
+| [sf-002](tasks/sf-002.md) | todo | Queue pop / peek / initialize / 往返 |
+| [sf-003](tasks/sf-003.md) | todo | BoundedVec pop + setAt 读回 |
+| [sf-004](tasks/sf-004.md) | todo | Versioned 状态机 |
+| [sf-005](tasks/sf-005.md) | todo | StorageBitSet mask 代数 + 账户桥 |
+| [sf-006](tasks/sf-006.md) | todo | TransientModel + Vector64 |
+| [sf-007](tasks/sf-007.md) | todo | Bytes + Record64 + WideVec |
+| [sf-008](tasks/sf-008.md) | todo | Allocator alloc/free 往返 |
+| [sf-009](tasks/sf-009.md) | todo | OrderedMap find/insert/remove 模型 |
+| [sf-010](tasks/sf-010.md) | todo | StorageEnumerableSet |
+| [sf-011](tasks/sf-011.md) | todo | Tree 全树 wf 保持 |
+| [sf-012](tasks/sf-012.md) | todo | FifoCancel 有界折料 |
+| [sf-013](tasks/sf-013.md) | todo | BatchRecorder begin/append/finish |
+| [sf-014](tasks/sf-014.md) | todo | Account / Memory / Sysvar / Telemetry L1 |
+| [sf-015](tasks/sf-015.md) | todo | Token / ATA / Pda / System / Memo 扫尾 |
+| [sf-016](tasks/sf-016.md) | todo | SVM 形式化收口审计 |
+
+开工顺序：`sf-000` → `sf-001` → `sf-002`（先收口 Queue），再按计划波次下行。
 
 
 积压：[backlog.md](backlog.md)
