@@ -1079,6 +1079,202 @@ theorem mQueuePop_advance_links (mem : AccountWords) (q : BoundedQueue)
   unfold mQueuePop
   simp only [if_neg hguard, if_neg hrem, mQueueNext, if_neg hneqcap]
 
+
+/-- **pop 环绕推进链接**：size ≥ 2 且 head = cap 时，
+`mQueuePop` 整体 = `mQueuePopAt`（remaining = size - 1、head 复位 1）。 -/
+theorem mQueuePop_wrap_advance_links (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
+    (hhead0 : mReadField mem q.head 0 ≠ 0)
+    (heqcap : mReadField mem q.head 0 = BoundedQueue.capacity q) :
+    mQueuePop mem q =
+      (mQueuePopAt mem q (mReadField mem q.count 0 - 1) 1,
+        mReadField mem q.slots (mReadField mem q.head 0)) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hguard : ¬ ((mReadField mem q.count 0) = 0 ∨ (mReadField mem q.head 0) = 0) := by
+    intro h
+    rcases h with hc | hr
+    · have h2 : (mReadField mem q.count 0).toNat = 0 := by
+        rw [hc]
+        rfl
+      omega
+    · exact hhead0 hr
+  have hrem : ¬ ((mReadField mem q.count 0 - (1:UInt64)) = 0) := by
+    intro hc
+    have h1n : UInt64.toNat 1 = 1 := rfl
+    have hs2 : (mReadField mem q.count 0).toNat ≥ 2 := hsize
+    have h1 : ((mReadField mem q.count 0 - (1:UInt64)).toNat)
+        = (mReadField mem q.count 0).toNat - 1 :=
+      u64toNatSub (by omega)
+    have h2 : (mReadField mem q.count 0 - (1:UInt64)).toNat = 0 := by
+      rw [hc]
+      rfl
+    rw [h2] at h1
+    omega
+  unfold mQueuePop
+  simp only [if_neg hguard, if_neg hrem, mQueueNext, if_pos heqcap]
+
+
+/-- **pop 清空读回**：size = 1 时，pop 后 count = 0、head = 0，返回原队首 payload。 -/
+theorem mQueuePop_clear_readback (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : mReadField mem q.count 0 = 1)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (1 : Nat) ≤ (mReadField mem q.head 0).toNat)
+    (hheadc : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity) :
+    let head := mReadField mem q.head 0
+    let value := mReadField mem q.slots head
+    (mQueuePop mem q).2 = value ∧
+    mReadField (mQueuePop mem q).1 q.count 0 = 0 ∧
+    mReadField (mQueuePop mem q).1 q.head 0 = 0 ∧
+    mReadField (mQueuePop mem q).1 q.slots head = value := by
+  have links := mQueuePop_clear_links mem q hwf hsize hhead
+  rw [links]
+  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0) 0 0 hwf hheadb hheadc
+  refine ⟨rfl, h2.2, ?_, h2.1⟩
+  exact mReadField_write_same _ _ _ _ q.head.firstWord
+    (mFieldWord_queue_head q hwf)
+
+
+/-- **pop 推进读回（非环绕）**：size ≥ 2 且 head ≠ cap 时，
+count = size-1、head = head+1、payload 槽不变。 -/
+theorem mQueuePop_advance_readback (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hhead0 : mReadField mem q.head 0 ≠ 0)
+    (hneqcap : ¬ (mReadField mem q.head 0 = BoundedQueue.capacity q)) :
+    let head := mReadField mem q.head 0
+    let size := mReadField mem q.count 0
+    let value := mReadField mem q.slots head
+    (mQueuePop mem q).2 = value ∧
+    mReadField (mQueuePop mem q).1 q.count 0 = size - 1 ∧
+    mReadField (mQueuePop mem q).1 q.head 0 = head + 1 ∧
+    mReadField (mQueuePop mem q).1 q.slots head = value := by
+  have hhead_ge : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
+    have : (mReadField mem q.head 0).toNat ≠ 0 := by
+      intro hz
+      apply hhead0
+      cases hhd : mReadField mem q.head 0 with
+      | ofBitVec val =>
+        have hz' : val.toNat = 0 := by
+          simpa [hhd, UInt64.toNat] using hz
+        have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
+        subst this
+        rfl
+    omega
+  have links := mQueuePop_advance_links mem q hwf hsize hheadb hhead0 hneqcap
+  rw [links]
+  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
+    (mReadField mem q.count 0 - 1) (mReadField mem q.head 0 + 1) hwf hhead_ge hheadb
+  refine ⟨rfl, h2.2, ?_, h2.1⟩
+  exact mReadField_write_same _ _ _ _ q.head.firstWord
+    (mFieldWord_queue_head q hwf)
+
+
+/-- **pop 环绕推进读回**：size ≥ 2 且 head = cap 时，
+count = size-1、head = 1、原 payload 槽不变。 -/
+theorem mQueuePop_wrap_advance_readback (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
+    (hhead0 : mReadField mem q.head 0 ≠ 0)
+    (heqcap : mReadField mem q.head 0 = BoundedQueue.capacity q) :
+    let head := mReadField mem q.head 0
+    let size := mReadField mem q.count 0
+    let value := mReadField mem q.slots head
+    (mQueuePop mem q).2 = value ∧
+    mReadField (mQueuePop mem q).1 q.count 0 = size - 1 ∧
+    mReadField (mQueuePop mem q).1 q.head 0 = 1 ∧
+    mReadField (mQueuePop mem q).1 q.slots head = value := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity := by
+    rw [heqcap, hcapnat]
+    exact Nat.le_refl _
+  have hhead_ge : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
+    rw [heqcap, hcapnat]
+    exact hcap1
+  have links := mQueuePop_wrap_advance_links mem q hwf hsize hhead0 heqcap
+  rw [links]
+  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
+    (mReadField mem q.count 0 - 1) 1 hwf hhead_ge hheadb
+  refine ⟨rfl, h2.2, ?_, h2.1⟩
+  exact mReadField_write_same _ _ _ _ q.head.firstWord
+    (mFieldWord_queue_head q hwf)
+
+
+/-- 模型版 peek：与 `BoundedQueue.peek` 逐字对应。 -/
+def mQueuePeek (mem : AccountWords) (q : BoundedQueue) : UInt64 :=
+  let head := mReadField mem q.head 0
+  if head = 0 then 0 else mReadField mem q.slots head
+
+/-- **空 peek 哨兵**：head = 0 时 peek 返回 0。 -/
+theorem mQueuePeek_empty (mem : AccountWords) (q : BoundedQueue)
+    (hhead : mReadField mem q.head 0 = 0) :
+    mQueuePeek mem q = 0 := by
+  unfold mQueuePeek
+  simp [hhead]
+
+/-- **非空 peek**：head ≠ 0 时 peek 等于 slots[head]。 -/
+theorem mQueuePeek_eq (mem : AccountWords) (q : BoundedQueue)
+    (hhead : mReadField mem q.head 0 ≠ 0) :
+    mQueuePeek mem q = mReadField mem q.slots (mReadField mem q.head 0) := by
+  unfold mQueuePeek
+  simp [hhead]
+
+
+/-- 模型版 initialize：双 header 置零（payload 不动）。 -/
+def mQueueInitialize (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
+  (mWriteField (mWriteField mem q.head 0 0) q.count 0 0, 1)
+
+/-- **initialize 零头**：两 header 均读回 0，返回 1。 -/
+theorem mQueueInitialize_zero_headers (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true) :
+    (mQueueInitialize mem q).2 = 1 ∧
+    mReadField (mQueueInitialize mem q).1 q.head 0 = 0 ∧
+    mReadField (mQueueInitialize mem q).1 q.count 0 = 0 := by
+  unfold mQueueInitialize
+  refine ⟨rfl, ?_, ?_⟩
+  · have step : mReadField (mWriteField (mWriteField mem q.head 0 0) q.count 0 0) q.head 0
+        = mReadField (mWriteField mem q.head 0 0) q.head 0 :=
+      mReadField_write_other _ q.head q.count _ _ 0
+        (mFieldWord_queue_head q hwf) (mFieldWord_queue_count q hwf)
+        (queue_count_ne_head q hwf).symm
+    rw [step, mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)]
+  · exact mReadField_write_same _ _ _ _ q.count.firstWord
+      (mFieldWord_queue_count q hwf)
+
+
+/-- **空队列 push→pop 往返**：empty push 后 pop 读回原 value，并清空双 header。 -/
+theorem mQueuePush_pop_roundtrip_empty (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : mReadField mem q.count 0 = 0)
+    (hhead : mReadField mem q.head 0 = 0) :
+    let afterPush := (mQueuePush mem q value).1
+    (mQueuePop afterPush q).2 = value ∧
+    mReadField (mQueuePop afterPush q).1 q.count 0 = 0 ∧
+    mReadField (mQueuePop afterPush q).1 q.head 0 = 0 := by
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have pushLinks := mQueuePush_empty_links mem q value hwf hsize hhead
+  have pushRb := mQueuePush_empty_readback mem q value hwf hsize hhead
+  -- After empty push: count=1, head=1, slots[1]=value
+  have hcount1 : mReadField (mQueuePush mem q value).1 q.count 0 = 1 := pushRb.1
+  have hhead1 : mReadField (mQueuePush mem q value).1 q.head 0 = 1 := pushRb.2.1
+  have hslot : mReadField (mQueuePush mem q value).1 q.slots 1 = value := pushRb.2.2
+  have hhead_ne : mReadField (mQueuePush mem q value).1 q.head 0 ≠ 0 := by
+    rw [hhead1]
+    decide
+  have popRb := mQueuePop_clear_readback (mQueuePush mem q value).1 q hwf hcount1 hhead_ne
+    (by rw [hhead1]; decide) (by rw [hhead1]; exact hcap1)
+  -- Align value equality through head=1
+  have : mReadField (mQueuePush mem q value).1 q.slots
+      (mReadField (mQueuePush mem q value).1 q.head 0) = value := by
+    rw [hhead1, hslot]
+  refine ⟨?_, popRb.2.1, popRb.2.2.1⟩
+  simpa [this] using popRb.1
+
 end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
