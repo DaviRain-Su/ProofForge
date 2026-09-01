@@ -20,13 +20,13 @@ namespace ProofForge.Svm.TransientVec
 
 open Sdk.Transient
 
-/-- Deep invocation-only metadata, disjoint from FIFO's `2056..2304` cells and fixed PDA/sysvar
-scratch. Slot 0 owns `2312..2343`; slot 1 owns `2344..2375`, exactly one `slotStride` above. These
+/-- Deep invocation-only metadata, disjoint from FIFO's `2248..2496` cells and fixed PDA/sysvar
+scratch. Slot 0 owns `2504..2535`; slot 1 owns `2536..2567`, exactly one `slotStride` above. These
 cells may survive across ordinary component calls but never across invocations. -/
-def pointerStack : Nat := 2312
-def lengthStack : Nat := 2320
-def capacityStack : Nat := 2328
-def activeStack : Nat := 2336
+def pointerStack : Nat := 2504
+def lengthStack : Nat := 2512
+def capacityStack : Nat := 2520
+def activeStack : Nat := 2528
 
 /-- Distinct terminal errors let clients and runtime tests distinguish allocator OOM, bounds/full,
 and handle-lifetime violations. -/

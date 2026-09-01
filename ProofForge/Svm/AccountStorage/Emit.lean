@@ -5,8 +5,9 @@ namespace ProofForge.Svm.AccountStorage.Emit
 /-- Whole-tree validation reuses the bottom 512 bytes after all operand expressions have been
 loaded. It makes no syscalls, so this fixed bitmap never overlaps live PDA/sysvar scratch. -/
 private def rbTreeBitmapScratch : Nat := 4096
-/-- Four-word-key validation keeps a 64-entry traversal stack above the shared bitmap. -/
-private def rbTreeTraversalScratch : Nat := 3000
+/-- Four-word-key validation keeps a 64-entry traversal stack above FIFO/transient deep cells and
+below the shared bitmap (`r10-3184` down through `r10-2680`). -/
+private def rbTreeTraversalScratch : Nat := 3184
 
 /-- The storage backend receives the surrounding method's value loader and walked-account frame
 locations. Container routines own their labels, bounds, authorization, and account-data stores. -/
@@ -1137,7 +1138,7 @@ private def emitKey4RbTreeValid (context : Context) (tree : Key4RbTree)
   jgt r3, r1, {failure}
   jge r3, r4, {failure}
 {startLive}:
-  ; bitmap: r10-4096 .. r10-3049; traversal stack: r10-3000 .. r10-2489.
+  ; bitmap: r10-4096 .. r10-3049; traversal stack: r10-3184 .. r10-2680.
   mov64 r9, r10
   add64 r9, -{rbTreeBitmapScratch}
   lddw r1, 0

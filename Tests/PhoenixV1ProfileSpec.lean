@@ -1634,7 +1634,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
         "bounded key-based acc2 FIFO cursor root=110 links=114 stride=8 capacity=512" &&
       asm.contains
         "bounded key-based acc2 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
-      asm.contains "stxdw [r10 - 2056], r1" &&
+      asm.contains "stxdw [r10 - 2248], r1" &&
       asm.contains "jge r1, 65535, fifo_cancel_failure_" &&
       asm.contains "official Solana downward bump allocation bytes=1246 align=8" &&
       asm.contains "jge r1, 32, recorder_append_flush_" &&

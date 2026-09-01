@@ -93,7 +93,7 @@ private def vector2B : TransientVec.Config :=
 -- account-storage scratch.
 #guard TransientBytes.pointerStack + ProofForge.Svm.Transient.Emit.slotStride + 24 ≤
   TransientBytes.descriptorStack - 16
-#guard TransientBytes.descriptorStack ≤ 2488
+#guard TransientBytes.descriptorStack ≤ 2664
 #guard TransientVec.oomErrorCode != TransientVec.boundsErrorCode
 #guard TransientVec.boundsErrorCode != TransientVec.stateErrorCode
 
