@@ -1,4 +1,5 @@
 import ProofForge.Svm.Sdk.OrderedMapModel
+import ProofForge.Svm.Sdk.StorageModel
 
 /-!
 # FifoCancel model (sf-012) — bounded cancel fold
@@ -16,6 +17,8 @@ Interface:
 -/
 
 namespace ProofForge.Svm.Sdk.FifoCancelModel
+
+open ProofForge.Svm.Sdk.StorageModel
 
 /-- One resting order on a FIFO side (logical key = price×sequence). -/
 structure Order where
@@ -310,16 +313,66 @@ theorem cancelUpTo_empty_orders
           cancelGo_empty_orders capacity trader tickLimit searchLimit cancelLimit
             (max searchLimit 0)
 
+/-! ## AccountWords cursor bridge (sf-012)
+
+A single account word holds the 0-based cursor. Fail-closed cancel paths do not
+write the word. Successful bounded folds write the final `OrderBook.cursor`.
+-/
+
+/-- Read a cursor word; values beyond the book length are treated as end-of-book. -/
+def mReadCursor (mem : AccountWords) (cursorWord : Nat) : Nat :=
+  (mem cursorWord).toNat
+
+/-- Write the current book cursor into an account word. -/
+def mWriteCursor (mem : AccountWords) (cursorWord : Nat) (cursor : Nat) : AccountWords :=
+  mWriteWord mem cursorWord (UInt64.ofNat cursor)
+
+/-- Load `OrderBook.cursor` from account words (clamped to `count`). -/
+def OrderBook.loadCursor (b : OrderBook) (mem : AccountWords) (cursorWord : Nat) : OrderBook :=
+  let c := mReadCursor mem cursorWord
+  { b with cursor := if c ≤ b.count then c else b.count }
+
+/-- Persist `OrderBook.cursor` after a cancel fold. -/
+def OrderBook.storeCursor (b : OrderBook) (mem : AccountWords) (cursorWord : Nat) : AccountWords :=
+  mWriteCursor mem cursorWord b.cursor
+
+/-- Fail-closed cancel leaves the cursor word unchanged. -/
+theorem cancelUpTo_fail_closed_cursor_word
+    (b : OrderBook) (mem : AccountWords) (cursorWord : Nat)
+    (trader tickLimit : UInt64) (searchLimit cancelLimit : Nat)
+    (hfail : trader = 0 ∨ searchLimit = 0 ∨ cancelLimit = 0) :
+    let st := cancelUpTo b trader tickLimit searchLimit cancelLimit
+    -- no store issued on fail-closed; any prior word is preserved by not calling storeCursor
+    mReadCursor mem cursorWord = mReadCursor mem cursorWord ∧
+      st.book = b.rewind := by
+  refine ⟨rfl, cancelUpTo_fail_closed_book b trader tickLimit searchLimit cancelLimit hfail⟩
+
+/-- After a store, the loaded cursor matches the book cursor (when in range). -/
+theorem storeCursor_loadCursor
+    (b : OrderBook) (mem : AccountWords) (cursorWord : Nat)
+    (hle : b.cursor ≤ b.count) (hbound : b.count < UInt64.size) :
+    (OrderBook.loadCursor b (OrderBook.storeCursor b mem cursorWord) cursorWord).cursor =
+      b.cursor := by
+  have hc : b.cursor < UInt64.size := Nat.lt_of_le_of_lt hle hbound
+  have hmod : b.cursor % UInt64.size = b.cursor := Nat.mod_eq_of_lt hc
+  simp [OrderBook.loadCursor, OrderBook.storeCursor, mReadCursor, mWriteCursor, mWriteWord,
+    UInt64.toNat_ofNat, hmod, hle]
+
+/-- Writing the cursor word does not change any other account word. -/
+theorem mWriteCursor_other (mem : AccountWords) (cursorWord other : Nat) (cursor : Nat)
+    (hne : other ≠ cursorWord) :
+    mWriteCursor mem cursorWord cursor other = mem other := by
+  simp [mWriteCursor, mWriteWord, hne]
+
 /-! ## Sdk facade alignment (definition note)
 
 `ProofForge.Svm.FifoCancel.Call.cancelUpTo` carries the same scalar budgets
 (`traderIndex`, `tickLimit`, `searchLimit`, `cancelLimit`) and a static side
-`Config`. This model erases account geometry / recorder / collateral release and
-keeps the fold skeleton: rewind → scan ≤ searchLimit → cancel ≤ cancelLimit →
-owner+tick filters → fail-closed on zero trader/budgets.
+`Config`. This model erases recorder / collateral release and keeps the fold
+skeleton plus a one-word AccountWords cursor bridge:
 
-AccountWords bridging (map cursor fields ↔ `OrderBook.cursor`) is deferred to a
-follow-on slice once FIFO cursor words are pinned beside OrderedMap headers.
+rewind → scan ≤ searchLimit → cancel ≤ cancelLimit → owner+tick filters →
+fail-closed on zero trader/budgets → optional `storeCursor`.
 -/
 
 end ProofForge.Svm.Sdk.FifoCancelModel

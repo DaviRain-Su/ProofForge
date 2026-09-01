@@ -163,11 +163,11 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-5b | OrderedMap find/insert/remove（索引层） | L2 | done | [sf-009](tasks/sf-009.md) |
 | SF-6 | EnumerableSet（索引/前缀层） | L2 | done | [sf-010](tasks/sf-010.md) |
 | SF-7 | Tree 全树 wf 保持 | L2 | **几何 done** | [sf-011](tasks/sf-011.md) |
-| SF-8a | FifoCancel 有界折料 | L2 | **doing** | [sf-012](tasks/sf-012.md) |
-| SF-8b | BatchRecorder begin/append/finish | L2 | **doing** | [sf-013](tasks/sf-013.md) |
+| SF-8a | FifoCancel 有界折料 | L2 | **done** | [sf-012](tasks/sf-012.md) |
+| SF-8b | BatchRecorder begin/append/finish | L2 | **done** | [sf-013](tasks/sf-013.md) |
 | SF-9a | Account / Memory / Sysvar / Telemetry L1 | L1 | **done** | [sf-014](tasks/sf-014.md) |
 | SF-9b | Token / ATA / Pda / System / Memo 扫尾 | L1 | **done** | [sf-015](tasks/sf-015.md) |
-| SF-10 | 收口审计 | gate | todo | [sf-016](tasks/sf-016.md) |
+| SF-10 | 收口审计 | gate | **doing** | [sf-016](tasks/sf-016.md) |
 
 ---
 
