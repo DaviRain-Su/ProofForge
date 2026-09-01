@@ -18,6 +18,5 @@ depends-on: []
 
 ## Follow-up
 
-- Optional `do` notation guide in docs
-- Structure-valued `Except.ok` Decode for inline `NearToken.addChecked` — **done** via `ofLimbs (addW0 …) (addW1 …)` SDK spelling + producer unfold in fixed-limb bind
+- ~~Optional `do` notation guide in docs~~ — **done** (`docs/plan/do-notation-guide.md`)
 - Extract `PromiseHandle`-typed entry bodies for NEAR N13

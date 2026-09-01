@@ -44,6 +44,7 @@ structure Options where
   target : Target := .svm
   outDir : System.FilePath := "build/out"
   names : Array String := #[]
+  evmBackend : Option ProofForge.Evm.Assemble.Backend := none
   rpcUrl : String := "https://alphanet.xrpl.org"
   wallet : String := "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
   contract : String := ""
@@ -57,12 +58,12 @@ private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm|xrpl|xrpl-alphanet|near> [--out DIR] [Program ...]\n" ++
+    "  pf build --target <svm|evm|xrpl|xrpl-alphanet|near> [--out DIR] [--backend solc|yulc] [Program ...]\n" ++
     "  pf deploy --target <xrpl|xrpl-alphanet> [--out DIR] [--rpc URL] [--wallet SEED] [--send-amount DROPS] Program\n" ++
     "  pf call --target <xrpl|xrpl-alphanet> --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
-    "evm  writes Name.bin / Name.yul / Name.abi.json\n" ++
+    "evm  writes Name.bin / Name.yul / Name.abi.json (default backend solc; --backend yulc or PROOFFORGE_EVM_BACKEND=yulc)\n" ++
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
     "near writes Name.wat / Name.wasm (NEAR raw-u64; locked wat2wasm)\n" ++
@@ -90,8 +91,17 @@ def parseArgs (args : List String) : Except String Options :=
     | "--wallet" :: s :: rest => go rest { o with wallet := s }
     | "--contract" :: a :: rest => go rest { o with contract := a }
     | "--send-amount" :: d :: rest => go rest { o with sendAmount := d }
+    | "--backend" :: b :: rest =>
+      match ProofForge.Evm.Assemble.parseBackend b with
+      | some backend => go rest { o with evmBackend := some backend }
+      | none => .error s!"unknown evm backend {b} (want solc or yulc)"
     | flag :: rest =>
-      if flag.startsWith "-" then .error s!"unknown flag {flag}"
+      if flag.startsWith "--backend=" then
+        let b := (flag.replace "--backend=" "").trimAscii.toString
+        match ProofForge.Evm.Assemble.parseBackend b with
+        | some backend => go rest { o with evmBackend := some backend }
+        | none => .error s!"unknown evm backend {b} (want solc or yulc)"
+      else if flag.startsWith "-" then .error s!"unknown flag {flag}"
       else if o.command == .call && o.functionName.isEmpty then
         go rest { o with functionName := flag }
       else if o.command == .call then
@@ -408,9 +418,16 @@ unsafe def run (args : List String) : IO UInt32 := do
           return 1
         | .ok programs =>
           IO.FS.createDirAll opts.outDir
+          let backend ← match opts.evmBackend with
+            | some b => pure b
+            | none => ProofForge.Evm.Assemble.backendFromEnv
           for program in programs do
-            let r ← ProofForge.Evm.Assemble.assembleProgram opts.outDir program
-            IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
+            let r ← ProofForge.Evm.Assemble.assembleProgramWithBackend opts.outDir program backend
+            let backendName :=
+              match r.backend with
+              | .solc => "solc"
+              | .yulc => "yulc"
+            IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes, {backendName})"
           return 0
     | .xrpl =>
       match selectXrplNames opts.names with

@@ -5,11 +5,30 @@ namespace ProofForge.Evm.Assemble
 
 open ProofForge.Evm
 
+/-- EVM bytecode assembler selection. Default remains solc (Feature A). -/
+inductive Backend where
+  | solc
+  | yulc
+  deriving BEq, Repr, Inhabited
+
+def parseBackend (s : String) : Option Backend :=
+  match s.trimAscii.toString with
+  | "solc" => some .solc
+  | "yulc" => some .yulc
+  | _ => none
+
+def backendFromEnv : IO Backend := do
+  match ← IO.getEnv "PROOFFORGE_EVM_BACKEND" with
+  | some "yulc" => pure .yulc
+  | some "solc" => pure .solc
+  | _ => pure .solc
+
 structure Result where
   yulPath : System.FilePath
   abiPath : System.FilePath
   binPath : System.FilePath
   binHex : String
+  backend : Backend := .solc
 
 def requiredSolcVersion : String := "0.8.34"
 
@@ -70,7 +89,70 @@ private def requireSolc : IO System.FilePath := do
   | some reason => throw <| IO.userError reason
   | none => throw <| IO.userError s!"assemble/tool: solc {requiredSolcVersion} not found"
 
-def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
+private def yulcCandidates (repoRoot : System.FilePath) : Array System.FilePath := #[
+  repoRoot / "powdr-probe/.lake/packages/yul_evm_compiler/.lake/build/bin/yulc",
+  repoRoot / "powdr-probe/.lake/build/bin/yulc",
+  System.FilePath.mk "yulc"
+]
+
+private def requireYulc (repoRoot : System.FilePath) : IO System.FilePath := do
+  for c in yulcCandidates repoRoot do
+    if c.toString != "yulc" then
+      if ← c.pathExists then
+        return c
+    else
+      let proc ← IO.Process.output { cmd := "bash", args := #["-lc", "command -v yulc 2>/dev/null"] }
+      if proc.exitCode == 0 && !proc.stdout.trimAscii.isEmpty then
+        return System.FilePath.mk "yulc"
+  throw <| IO.userError
+    "assemble/tool: yulc not found; run scripts/build_yulc.sh or set PROOFFORGE_YULC to the binary path"
+
+private def resolveYulc (repoRoot : System.FilePath) : IO System.FilePath := do
+  match ← IO.getEnv "PROOFFORGE_YULC" with
+  | some path =>
+    let c := System.FilePath.mk path
+    return c
+  | none => requireYulc repoRoot
+
+private def assembleBytecode (backend : Backend) (repoRoot : System.FilePath)
+    (outDir : System.FilePath) (programName : String) : IO String := do
+  match backend with
+  | .solc =>
+    let solc ← requireSolc
+    let proc ← IO.Process.output {
+      cmd := solc.toString
+      args := #["--strict-assembly", "--optimize", "--evm-version", requiredEvmVersion,
+        "--bin", s!"{programName}.yul"]
+      cwd := outDir
+    }
+    unless proc.exitCode == 0 do
+      throw <| IO.userError s!"assemble/tool: solc failed\n{proc.stderr}"
+    match parseBytecode proc.stdout with
+    | .ok h => pure h
+    | .error reason => throw <| IO.userError reason
+  | .yulc =>
+    let yulc ← resolveYulc repoRoot
+    let yulFile := outDir / s!"{programName}.yul"
+    let proc ← IO.Process.output {
+      cmd := yulc.toString
+      args := #["--backend=classic", yulFile.toString]
+    }
+    if proc.exitCode == 2 then
+      throw <| IO.userError
+        s!"assemble/tool: yulc rejected {programName}.yul (outside verified fragment; see scripts/check_yul_fragment.py)\n{proc.stderr}"
+    unless proc.exitCode == 0 do
+      throw <| IO.userError s!"assemble/tool: yulc failed\n{proc.stderr}"
+    let hex := proc.stdout.trimAscii.toString
+    if hex.isEmpty then
+      throw <| IO.userError "assemble/tool: yulc returned no bytecode"
+    else if !looksLikeHex hex then
+      throw <| IO.userError "assemble/tool: yulc bytecode is not hex"
+    else
+      pure hex
+
+def assembleProgramWithBackend (outDir : System.FilePath) (program : IR.Program)
+    (backend : Backend) : IO Result := do
+  let repoRoot ← IO.currentDir
   let (yul, abi) ← match Emit.emit program with
     | .error reason => throw <| IO.userError reason
     | .ok pair => pure pair
@@ -80,19 +162,12 @@ def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Resul
   let binPath := outDir / s!"{program.name}.bin"
   IO.FS.writeFile yulPath yul
   IO.FS.writeFile abiPath abi
-  let solc ← requireSolc
-  let proc ← IO.Process.output {
-    cmd := solc.toString
-    args := #["--strict-assembly", "--optimize", "--evm-version", requiredEvmVersion,
-      "--bin", s!"{program.name}.yul"]
-    cwd := outDir
-  }
-  unless proc.exitCode == 0 do
-    throw <| IO.userError s!"assemble/tool: solc failed\n{proc.stderr}"
-  let hex ← match parseBytecode proc.stdout with
-    | .ok h => pure h
-    | .error reason => throw <| IO.userError reason
+  let hex ← assembleBytecode backend repoRoot outDir program.name
   IO.FS.writeFile binPath (hex ++ "\n")
-  return { yulPath, abiPath, binPath, binHex := hex }
+  return { yulPath, abiPath, binPath, binHex := hex, backend }
+
+def assembleProgram (outDir : System.FilePath) (program : IR.Program) : IO Result := do
+  let backend ← backendFromEnv
+  assembleProgramWithBackend outDir program backend
 
 end ProofForge.Evm.Assemble
