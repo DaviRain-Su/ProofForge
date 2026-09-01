@@ -244,12 +244,74 @@ walk_full_{i}_{tag}:
 "
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
+/--
+Combined account-view + direct-mutation walk (`svm-rt-003`). The static prefix `0..n-1` uses the
+same Loader-v3 alias resolution as `emitWalkAccountsAliasing`. The variable remaining accounts keep
+the runtime-count traversal of `emitWalkAccountsVariable`, but a non-`0xff` entry may resolve to a
+canonical header already stored in the static prefix (`prior_index < n`). Aliases that point into
+the unresolved variable region, or any malformed duplicate marker, exit `Custom(1)`. View-only
+programs keep the strict variable walk; mutation-only programs keep the static aliasing walk.
+-/
+private def emitWalkAccountsVariableAliasing (n : Nat) (captureOriginal : Bool)
+    (tag err : String) : String :=
+  let static := emitWalkAccountsAliasing n captureOriginal tag err
+  let loop := s!"view_alias_walk_{tag}"
+  let align := s!"view_alias_al_{tag}"
+  let full := s!"view_alias_full_{tag}"
+  let aliasOk := s!"view_alias_ok_{tag}"
+  let finished := s!"view_alias_done_{tag}"
+  static ++ s!"\
+  ldxdw r9, [r6 + NUM_ACCOUNTS]
+  lddw r1, {Ops.maxTxAccountLocks}
+  jgt r9, r1, {err}
+  jlt r9, {n}, {err}
+  sub64 r9, {n}
+{loop}:
+  jeq r9, 0, {finished}
+  ldxb r1, [r8 + 0]
+  jeq r1, 0xff, {full}
+  lddw r2, {n}
+  jlt r1, r2, {aliasOk}
+  ja {err}
+{aliasOk}:
+  ldxdw r2, [r8 + 0]
+  jne r2, r1, {err}
+  add64 r8, 8
+  sub64 r9, 1
+  ja {loop}
+{full}:
+  ldxdw r4, [r8 + 80]
+  mov64 r5, r8
+  add64 r5, 88
+  add64 r5, r4
+  add64 r5, MAX_PERMITTED_DATA_INCREASE
+  mov64 r1, r4
+  and64 r1, 7
+  jeq r1, 0, {align}
+  lddw r3, 8
+  sub64 r3, r1
+  add64 r5, r3
+{align}:
+  ldxdw r1, [r5 + 0]
+  add64 r5, 8
+  mov64 r8, r5
+  sub64 r9, 1
+  ja {loop}
+{finished}:
+  stxdw [r10 - {headerStack n}], r8
+"
+
 /-- Walk selection: account-view programs traverse the runtime account count; components declaring
-the canonical-alias capability resolve duplicates in the static prefix; every other existing
-program keeps the byte-stable unrolled strict walk. -/
+the canonical-alias capability resolve duplicates in the static prefix; when both are present the
+combined variable+aliasing walk applies; every other existing program keeps the byte-stable
+unrolled strict walk. -/
 private def emitWalkAccountsFor (p : IR.Program) (n : Nat) (tag err : String) : String :=
   let captureOriginal := IR.requiresOriginalAccountDataLengths p
-  if IR.usesAccountView p then emitWalkAccountsVariable n captureOriginal tag err
+  if IR.usesAccountView p then
+    if IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p then
+      emitWalkAccountsVariableAliasing n captureOriginal tag err
+    else
+      emitWalkAccountsVariable n captureOriginal tag err
   else if IR.requiresCanonicalAccountAliases p then
     emitWalkAccountsAliasing n captureOriginal tag err
   else emitWalkAccounts n captureOriginal tag err
@@ -1035,7 +1097,9 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
         loadOwnerIsSelf := emitLoadOwnerIsSelf p
         headerStack
         originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
-        accountCount := IR.cpiAccountCount p }
+        accountCount := IR.cpiAccountCount p
+        useWalkedHeaders :=
+          IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p }
       query operands stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
@@ -4247,7 +4311,9 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           loadOwnerIsSelf := emitLoadOwnerIsSelf p
           headerStack
           originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
-          accountCount := IR.cpiAccountCount p }
+          accountCount := IR.cpiAccountCount p
+          useWalkedHeaders :=
+            IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p }
         { accountStorage := accountStorageMutationBackend p }
         storageLabel call)
     | .errorNamed name =>

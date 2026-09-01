@@ -118,6 +118,7 @@ import Tests.SvmSdkProgramSpec
 import Tests.SvmSdkSysvarSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
+import Tests.AccountViewMutationSpec
 import Tests.SvmMemorySpec
 import Tests.SvmAccountResizeSpec
 import Tests.SvmTransientVectorSpec

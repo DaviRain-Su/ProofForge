@@ -69,6 +69,7 @@ def entries : Array Entry := #[
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" },
   { name := "AccountView", digest := "d5f1d730f3364a31" },
+  { name := "AccountViewMutation", digest := "fee09f06d0cc60d4" },
   { name := "MemoryOps", digest := "ce32c42ef22e10c6" },
   { name := "TransientPair", digest := "899815d9f910e597" },
   { name := "TransientLedger", digest := "a91e5e115c1f83b" },

@@ -175,7 +175,7 @@ Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
 
 Phase 6   Facade 扫尾 + 序列化/返回政策
           · A: sf-014..sf-015
-          · B: svm-rt-003 nested/wide dynamic return（若仍在 ceiling 内）
+          · B: svm-rt-005 nested/wide dynamic return（若仍在 ceiling 内）
           · C: svm-sdk-006 UTF-8 Memo / richer migration payload
 
 Phase 7   收口
@@ -201,7 +201,7 @@ Phase 7   收口
 |---|---|---|---|
 | [svm-rt-001](tasks/svm-rt-001.md) | Clock **signed** timestamp 视图（与 unsigned 字段并存；明确布局） | F1 | **done**；Lean + Mollusk 12/12；digest `19039a4899e65b6d` |
 | [svm-rt-002](tasks/svm-rt-002.md) | Token-2022 **第一个** typed extension：`MintCloseAuthority`（非 transfer-fee） | F2 | **done**；CPI `Token2022MintClose` + Sdk host parse；fee/hook/未知仍 fail-closed；digest `607b3786fb54eaee` |
-| [svm-rt-003](tasks/svm-rt-003.md) | AccountView 与 direct mutation 共用时的 **alias-aware** 变量 walk | F1 | 别名/只读/owner 矩阵；无 persistent pointer |
+| [svm-rt-003](tasks/svm-rt-003.md) | AccountView 与 direct mutation 共用时的 **alias-aware** 变量 walk | F1 | **done**；`AccountViewMutation` digest `fee09f06d0cc60d4`；Mollusk 6/6；view-only digest 不变 |
 | [svm-rt-004](tasks/svm-rt-004.md) | Instructions / sliced sysvar（有界） | F2 | 按需；无通用任意切片 |
 | [svm-rt-005](tasks/svm-rt-005.md) | nested / constructed / wide dynamic **return** 政策（仍有界） | F0/F1 | 与 codec budget 一致；超界 fail closed |
 
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`svm-rt-002`/`svm-sdk-005` done → **`svm-rt-003` alias-aware walk**（或 `svm-sdk-001` rent top-up）
+1. **主线能力**：`svm-rt-001`/`svm-rt-002`/`svm-sdk-005`/`svm-rt-003` done → **`svm-sdk-001` rent top-up**（或 `svm-rt-004` sliced sysvar）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
