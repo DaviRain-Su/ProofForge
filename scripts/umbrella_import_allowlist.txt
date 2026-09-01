@@ -3,6 +3,7 @@
 # CI fails if a new file uses the umbrella import, or if an entry is stale.
 
 Examples/AccountView.lean
+Examples/AccountViewMutation.lean
 Examples/Ata.lean
 Examples/BatchSizer.lean
 Examples/Book.lean
@@ -41,12 +42,14 @@ Examples/Flag.lean
 Examples/Gate.lean
 Examples/Hash.lean
 Examples/Info.lean
+Examples/InstructionsSlice.lean
 Examples/Keccak.lean
 Examples/Keys.lean
 Examples/LamportTransfer.lean
 Examples/Lang.lean
 Examples/Maybe.lean
 Examples/Memo.lean
+Examples/MemoUtf8.lean
 Examples/MemoryOps.lean
 Examples/NearBytes.lean
 Examples/NearCtx.lean
@@ -97,6 +100,7 @@ Examples/Ping.lean
 Examples/PubkeyGate.lean
 Examples/RawEntry.lean
 Examples/Rent.lean
+Examples/RentTopUp.lean
 Examples/Seat.lean
 Examples/SelfLog.lean
 Examples/Signed.lean
@@ -104,6 +108,7 @@ Examples/SysAlloc.lean
 Examples/SysSeed.lean
 Examples/SysXfer.lean
 Examples/Token2022.lean
+Examples/Token2022MintClose.lean
 Examples/TokenAcc.lean
 Examples/TokenApprove.lean
 Examples/TokenAuth.lean
@@ -120,11 +125,14 @@ Examples/Transfer.lean
 Examples/TransientLedger.lean
 Examples/TransientOrderTape.lean
 Examples/TransientPair.lean
+Examples/TransientPubkeyBatch.lean
+Examples/TransientPubkeyRing.lean
 Examples/TransientWide128.lean
 Examples/TransientWide256.lean
 Examples/Tree.lean
 Examples/Trio.lean
 Examples/TwoStepCounter.lean
+Examples/VaultRentGrow.lean
 Examples/Wide.lean
 Examples/Window.lean
 Examples/XrplBal.lean

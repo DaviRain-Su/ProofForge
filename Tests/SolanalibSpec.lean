@@ -1010,5 +1010,51 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 35: Loader account-4 owner limbs 2/3 after skip chain (`svm-sem-040`)
+#guard (walkAccount4OwnerHiAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account4OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A
+      let (regs, finalMem) ← evalWalkAccount4OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0x19 && regs .br2 == 0x2A &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x19))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account4OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A
+      let (regs, _) ← evalWalkAccount4OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      let (owner2, owner3) ← evalAbsAccount4OwnerHi? mem
+      pure (regs .br1 == owner2 && regs .br2 == owner3 &&
+        owner2 == 0x19 && owner3 == 0x2A)) with
+  | some true => true
+  | _ => false
+
+-- E∞ knife 36: Loader account-4 executable/rent after skip chain (`svm-sem-041`)
+#guard (walkAccount4ExecRentAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account4ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF
+      let (regs, finalMem) ← evalWalkAccount4ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xEF &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account4ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF
+      let (regs, _) ← evalWalkAccount4ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      let (executable, rentEpoch) ← evalAbsAccount4ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rentEpoch &&
+        executable == 0 && rentEpoch == 0xEF)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
