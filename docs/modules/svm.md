@@ -90,5 +90,6 @@ inactive/capacity mismatch、OOM 分别 fail with `0x1202`、`0x1203`、`0x1201`
 ## Tests
 
 `Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`、
-`Tests/SvmHeapSpec.lean`、`Tests/SvmTransientVectorSpec.lean`、`Tests/AccountViewSpec.lean`。
+`Tests/SvmHeapSpec.lean`、`Tests/SvmTransientVectorSpec.lean`、`Tests/AccountViewSpec.lean`、
+`Tests/SemanticsSpec.lean`（E2：Counter+Window emit→parse→step；见 [semantics-bridge.md](semantics-bridge.md)）。
 汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。

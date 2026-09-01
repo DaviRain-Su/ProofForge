@@ -13,6 +13,7 @@
 | [Phoenix](phoenix.md) | `Examples` 应用：双边 bounded N=4 与 Phoenix-v1 profile；只消费通用 SVM 组件 |
 | [Svm](svm.md) | Ops → sBPF / IDL / locked sbpf |
 | [Solanalib](solanalib.md) | Core/SVM target IR → bounded typed sBPF semantics |
+| [SemanticsBridge](semantics-bridge.md) | Emit `.s` → sbpfSemantics parse/step（L3/E2 golden gate） |
 | [Emit](emit.md) | `Svm.Emit`：Counter → sBPF 文本 |
 | [Assemble](assemble.md) | `Svm.Assemble`：`sbpf` 子进程 → `.so` + IDL |
 | [Idl](idl.md) | `Svm.Idl`：Solana IDL spec 0.1.0 |
