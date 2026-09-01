@@ -1960,6 +1960,14 @@ theorem mFindValueKey4_miss (mem : AccountWords) (orderedMap : OrderedMap) (payl
   unfold mFindValueKey4 mSlotValue
   simp [h]
 
+/-- Hit lookup reads payload at the one-based slot returned by find. -/
+theorem mFindValueKey4_hit (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
+    (k0 k1 k2 k3 slot : UInt64) (hslot : slot ≠ 0)
+    (hfind : mFindKey4 mem orderedMap.map k0 k1 k2 k3 = slot) :
+    mFindValueKey4 mem orderedMap payload k0 k1 k2 k3 = mReadField mem payload slot := by
+  unfold mFindValueKey4 mSlotValue
+  simp [hfind, hslot]
+
 /-- Find is a pure read: identical memory yields identical results. -/
 theorem mFindKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
     (h : ∀ w, mem w = mem' w) :
@@ -2004,6 +2012,19 @@ theorem mRemoveKey4_after_find_miss (mem : AccountWords) (map : RbMap) (k0 k1 k2
   unfold mRemoveKey4 mAccDataRbTreeKey4Remove
   cases map <;> rfl
 
+/-- Remove is a pure read until sf-011 wires RB mutation (stub returns `0`). -/
+theorem mRemoveKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
+    (_h : ∀ w, mem w = mem' w) :
+    mRemoveKey4 mem map k0 k1 k2 k3 = mRemoveKey4 mem' map k0 k1 k2 k3 := by
+  unfold mRemoveKey4 mAccDataRbTreeKey4Remove
+  cases map <;> rfl
+
+/-- Post-remove find is miss for fifo maps (index layer; RB linking deferred to sf-011). -/
+theorem mFindKey4_after_remove_fifo (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
+    (k0 k1 k2 k3 : UInt64) (_hrem : mRemoveKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0) :
+    mFindKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 :=
+  mFindKey4_fifo_miss mem rootWord tree k0 k1 k2 k3
+
 /-- On miss, allocate a fresh one-based slot; on hit return the existing slot without touching
 the allocator. RB tree linking deferred to sf-011 — this layer models slot acquisition only. -/
 def mInsertKey4Alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
@@ -2033,6 +2054,13 @@ theorem mInsertKey4Alloc_hit (mem : AccountWords) (map : RbMap) (alloc : Allocat
     mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = (mem, slot) := by
   unfold mInsertKey4Alloc
   simp [hfind, hne]
+
+/-- Hit path leaves account words unchanged (allocator not consulted). -/
+theorem mInsertKey4Alloc_hit_mem (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (k0 k1 k2 k3 slot : UInt64) (hfind : mFindKey4 mem map k0 k1 k2 k3 = slot)
+    (hne : slot ≠ 0) :
+    (mInsertKey4Alloc mem map alloc k0 k1 k2 k3).1 = mem := by
+  rw [mInsertKey4Alloc_hit mem map alloc k0 k1 k2 k3 slot hfind hne]
 
 /-- Full allocator on miss is fail-closed like bare `mAlloc`. -/
 theorem mInsertKey4Alloc_full (mem : AccountWords) (map : RbMap) (alloc : Allocator)

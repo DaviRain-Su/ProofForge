@@ -13,32 +13,47 @@ updated: 2026-09-01
 Regression-test that yulc-assembled bytecode matches solc **behavior** (not bytes) on
 Anvil for fixtures inside the verified fragment.
 
-## Delivered (Counter seed)
+## Delivered
 
 | Gate | Script |
 |---|---|
+| Shared helpers | `runtime-tests/evm/lib_yulc.sh` |
 | Compile smoke | `scripts/smoke_yulc_counter.sh` |
-| Anvil behavior diff | `runtime-tests/evm/anvil_yulc_counter.sh` |
+| Compile matrix | `scripts/check_yulc_compile_matrix.py` |
+| Anvil behavior diff (Counter) | `runtime-tests/evm/anvil_yulc_counter.sh` |
+| Anvil behavior diff (Capped) | `runtime-tests/evm/anvil_yulc_capped.sh` |
+| Anvil behavior diff (Const) | `runtime-tests/evm/anvil_yulc_const.sh` |
 | Runner | `runtime-tests/evm/yulc.sh` |
 
 **Counter evidence (2026-09-01):** bytecode differs (solc 1694 vs yulc 2426 hex chars) but
 ctor/increment/get storage behavior matches on Anvil.
 
+**Capped evidence (2026-09-01):** bytecode differs (solc 5562 vs yulc 17328 hex chars) but
+dual-backend behavior matches on Anvil.
+
+**Const evidence (2026-09-01):** bytecode differs (solc 2018 vs yulc 5862 hex chars) but
+immutable ctor fields and touch behavior match on Anvil.
+
+**Compile matrix (2026-09-01):** 7/10 registry programs accept yulc (Counter, Capped, Const,
+Wide, Flag, Phase, TipJar). Ownable/Token/Vault reject on fragment.
+
 ## Known rejections (no dual-backend yet)
 
 | Fixture | Blocker |
 |---|---|
-| Token, Vault, TipJar | `gas()` in call paths (R1) |
-| Wide | may compile; not in Anvil ladder yet |
+| Ownable | fragment (immutables / Ownable pattern) |
+| Token, Vault | `gas()` in call paths (R1) |
 
 ## Still open
 
-- Expand ladder: Capped, Ownable (immutables caveat), Const
+- Expand ladder: Const, Wide, Flag, Phase, TipJar
 - CI optional job `evm-yulc` with yul-compiler Mathlib cache
 - Fragment allowlist table in manifest
 
 ## Acceptance
 
 - [x] Counter dual-backend Anvil gate green locally
+- [x] Capped dual-backend Anvil gate green locally
+- [x] Const dual-backend Anvil gate green locally
 - [ ] CI optional lane green with cached `build_yulc.sh`
-- [ ] ≥3 fixtures on behavior-diff allowlist
+- [x] ≥3 fixtures on behavior-diff allowlist (Counter, Capped, Const)
