@@ -41,7 +41,9 @@ theorem maxBytes_eq : maxBytes = 512 := rfl
 /-- Numeric form of `wf_bounded` for callers that do not unfold the budget constant. -/
 theorem wf_bounded_512 (value : String) (h : wellFormed value = true) :
     value.length ≤ 512 := by
-  simpa [maxBytes] using wf_bounded value h
+  have hb := wf_bounded value h
+  unfold maxBytes ProofForge.Svm.Memo.Ascii.maxBytes at hb
+  exact hb
 
 end Ascii
 

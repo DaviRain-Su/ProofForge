@@ -75,7 +75,7 @@ theorem wf_ascii (seed : String) (h : wellFormed seed = true) :
     seed.toList.all (·.toNat < 128) = true := by
   unfold wellFormed ProofForge.Svm.Seed.Ascii.wellFormed at h
   simp at h
-  exact h.2
+  simpa using h.2
 
 end Proofs
 
