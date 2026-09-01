@@ -55,10 +55,11 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
    `ProofForge/Wasm/Near/Sdk/Promise.lean` (`createReturned`, `thenReturned`, `depthOk`);
    compile-time smoke in `Examples/NearPromiseHandle.handleDepthSmoke`; Extract of handle-typed
    entry bodies remains follow-up
-2. ~~Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)~~ — **landed** for N=3:
-   `Runtime.promiseFunctionCallAnd3ThenReturned`, `Promises.callAnd3ThenReturned`, Extract/Emit
-   `stagePromiseAndN`, fixtures `sendAnd3Success` / `sendAnd3RightMissing` / `callbackJoined3`;
-   registry digest `604403f53aa23d87`; generalize to parameterized maxFanIn remains follow-up
+2. ~~Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)~~ — **landed** for N=3 and **default maxFanIn=4** (N=4):
+   `Runtime.promiseFunctionCallAnd3ThenReturned` / `And4ThenReturned`, `Promises.callAnd3ThenReturned` /
+   `callAnd4ThenReturned`, `PromiseHandle.and4Returned`, Extract/Emit `stagePromiseAndN`, fixtures
+   `sendAnd3*` / `sendAnd4*` / `callbackJoined3` / `callbackJoined4`; registry digest `a19e23d096fefd22`;
+   parameterized compile-time `maxFanIn` beyond fixed N=4 remains follow-up
 3. ~~Sandbox DAG: create→then; create×3→and→callback~~ — **landed** in
    `runtime-tests/near/promise.py` (`sendAnd3Success` / `sendAnd3RightMissing` scenes on
    `NearPromise.wasm`); handle fixture `sendHandleAnd3` + registry digest `b6a5c316187f4df9`
@@ -67,7 +68,7 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 
 ## Still open
 
-- Parameterized `maxFanIn` `andN` on `PromiseHandle`
+- Parameterized compile-time `maxFanIn` `andN` beyond fixed N=4 (N=5..8)
 - Extract of handle-typed entry bodies
 
 ## Deliverables

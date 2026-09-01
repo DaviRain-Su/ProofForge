@@ -163,6 +163,23 @@ def callbackJoined3 (state : State) (callbackValue : UInt64) : Except Error (Sta
   else
     .error .overflow
 
+/-- Authenticated four-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined4 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 4 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let fourth := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, fourth)
+  else
+    .error .overflow
+
 /-- Diagnostic callback for the strict standalone quoted-u128 result codec. This callback owns the
 exact one-result guard and index zero read. Status is returned while validity and both limbs are persisted
 for sandbox observation; this is not the FT resolver. -/
@@ -405,6 +422,28 @@ def sendAnd3RightMissing (state : State) (value : UInt64) : Except Error (State 
     receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     receiver "missing" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     "callbackJoined3" (borshUInt64 84) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join four successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd4Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd4ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined4" (borshUInt64 85) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed fourth child retains left/middle/right/fourth callback-result ordering. -/
+@[pf_entry]
+def sendAnd4FourthMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd4ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined4" (borshUInt64 86) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
   .ok ({ state with marker := value }, value)
 
 /-- The caller succeeds while this detached receipt fails remotely on an absent method. -/

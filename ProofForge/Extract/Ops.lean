@@ -304,6 +304,24 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
     rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAnd4ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd4ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+    callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+    callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 

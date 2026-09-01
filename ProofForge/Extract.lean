@@ -746,6 +746,28 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                   (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
                   (flipVal fuel' rightGas) (flipVal fuel' callbackDepositLo)
                   (flipVal fuel' callbackDepositHi) (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd4ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments
+                callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+                rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd4ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                  callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
             | .promiseResultRead capacity index =>
                 .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity

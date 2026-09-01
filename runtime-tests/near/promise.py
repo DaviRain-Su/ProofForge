@@ -413,6 +413,32 @@ def main() -> None:
         "near-promise: failed right child in 3-way join retained successful left/middle results"
     )
 
+    joined4_success = _call_u64(client, "sendAnd4Success", 609)
+    if NearClient.success_value_bytes(joined4_success) != NearClient.encode_u64_le(444):
+        raise AssertionError("4-way joined callback did not forward the successful fourth result")
+    if client.view_u64("get") != 85:
+        raise AssertionError("4-way joined callback did not commit its independent argument 85")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("4-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 4-way join exposed four successful child results to one callback")
+
+    joined4_fourth_failure = _call_u64(
+        client, "sendAnd4FourthMissing", 610, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined4_fourth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("4-way fourth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 86:
+        raise AssertionError("4-way fourth-child failure did not run and commit callback argument 86")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("4-way fourth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed fourth child in 4-way join retained successful left/middle/right results"
+    )
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
     if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")

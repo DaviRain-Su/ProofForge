@@ -61,6 +61,15 @@ private partial def promiseSteps : Array ProofForge.Extract.IR.Op → Array Stri
             s!"{leftCapacity}.{midCapacity}.{rightCapacity}.{callbackCapacity}." ++
             s!"{leftArguments.size}.{midArguments.size}.{rightArguments.size}." ++
             s!"{callbackArguments.size}"]
+      | .ext (.near (.promiseFunctionCallAnd4ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          callbackMethod leftCapacity midCapacity rightCapacity fourthCapacity callbackCapacity
+          leftArguments midArguments rightArguments fourthArguments callbackArguments _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)) =>
+          #[s!"and4.{leftReceiver}.{leftMethod}.{midReceiver}.{midMethod}." ++
+            s!"{rightReceiver}.{rightMethod}.{fourthReceiver}.{fourthMethod}.{callbackMethod}." ++
+            s!"{leftCapacity}.{midCapacity}.{rightCapacity}.{fourthCapacity}.{callbackCapacity}." ++
+            s!"{leftArguments.size}.{midArguments.size}.{rightArguments.size}." ++
+            s!"{fourthArguments.size}.{callbackArguments.size}"]
       | .ite _ _ _ thn els => promiseSteps thn ++ promiseSteps els
       | .forBody _ body => promiseSteps body
       | _ => #[]
@@ -289,7 +298,7 @@ elab "#pf_near_promise_check" : command => do
   unless sourceRecordValue.annotations == #["near.payable.v1"] do
     throwError "extractor lost NEAR payable metadata"
   for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined",
-      "callbackJoined3", "callbackQuotedU128"] do
+      "callbackJoined3", "callbackJoined4", "callbackQuotedU128"] do
     let callback ← match source.methods.find? (·.ixName == name) with
       | some method => pure method
       | none => throwError s!"missing extracted {name} callback"
@@ -313,6 +322,10 @@ elab "#pf_near_promise_check" : command => do
     "and3.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.echo.callbackJoined3.8.8.8.8.9.9.9.9"
   let and3RightMissing :=
     "and3.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.missing.callbackJoined3.8.8.8.8.9.9.9.9"
+  let and4Success :=
+    "and4.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.echo.callbackJoined4.8.8.8.8.8.9.9.9.9.9"
+  let and4FourthMissing :=
+    "and4.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.echo.receiver.test.near.missing.callbackJoined4.8.8.8.8.8.9.9.9.9.9"
   let transferDetached := "transfer.detached.receiver.test.near"
   let transferReturned := "transfer.returned.receiver.test.near"
   let transferAccountDetached := "transfer.account.detached.9"
@@ -321,7 +334,7 @@ elab "#pf_near_promise_check" : command => do
   let ftResolveReturned := "ft-on-transfer.resolve.returned.9.9.9"
   let quotedCallbacks := steps.filter (·.startsWith
     "then.json-result.test.near.json")
-  unless steps.size == 41 && quotedCallbacks.size == 14 &&
+  unless steps.size == 43 && quotedCallbacks.size == 14 &&
       quotedCallbacks.all (·.contains ".callbackQuotedU128.8.8.9.9") &&
       (steps.filter (· == detachedRecord)).size == 4 &&
       (steps.filter (· == detachedMissing)).size == 1 &&
@@ -335,6 +348,8 @@ elab "#pf_near_promise_check" : command => do
       (steps.filter (· == andLeftMissing)).size == 1 &&
       (steps.filter (· == and3Success)).size == 1 &&
       (steps.filter (· == and3RightMissing)).size == 1 &&
+      (steps.filter (· == and4Success)).size == 1 &&
+      (steps.filter (· == and4FourthMissing)).size == 1 &&
       (steps.filter (· == transferDetached)).size == 2 &&
       (steps.filter (· == transferReturned)).size == 1 &&
       (steps.filter (· == transferAccountDetached)).size == 4 &&
@@ -344,7 +359,7 @@ elab "#pf_near_promise_check" : command => do
     throwError s!"extractor lost or duplicated promise effects: {repr steps}"
   let decodes := source.methods.foldl (init := #[]) fun acc method =>
     acc ++ resultDecodes method.ops
-  unless decodes.size == 8 && (decodes.filter (· == 8)).size == 7 &&
+  unless decodes.size == 12 && (decodes.filter (· == 8)).size == 11 &&
       (decodes.filter (· == 4)).size == 1 do
     throwError s!"extractor lost strict callback UInt64 decoders: {repr decodes}"
   let quotedLeaves := source.methods.foldl (init := #[]) fun acc method =>
@@ -362,7 +377,7 @@ elab "#pf_near_promise_check" : command => do
   unless recordValue.entryPolicy == "near.entry.v1:payable" do
     throwError "NEAR IR lost canonical payable entry policy"
   for name in #["callbackSuccess", "callbackFailure", "callbackOversized", "callbackJoined",
-      "callbackJoined3", "callbackQuotedU128"] do
+      "callbackJoined3", "callbackJoined4", "callbackQuotedU128"] do
     let callback ← match program.entries.find? (·.ixName == name) with
       | some method => pure method
       | none => throwError s!"missing lowered {name} callback"
@@ -751,6 +766,40 @@ elab "#pf_near_promise_check" : command => do
   | _ => throwError "3-way joined Promise method must call promise_and exactly once"
   unless (and3Wat.splitOn "(call $pf_promise_batch_action_function_call").length == 5 do
     throwError "3-way joined Promise method must append exactly four function-call actions"
+  let sendAnd4Success ← match program.entries.find? (·.ixName == "sendAnd4Success") with
+    | some method => pure method
+    | none => throwError "missing sendAnd4Success entry"
+  let and4Wat ← match Emit.emit { program with entries := #[sendAnd4Success] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(call $pf_promise_and (local.get ",
+      "(i64.const 4)))",
+      "(call $pf_promise_batch_then (local.get ",
+      "(call $pf_promise_return (local.get " ] do
+    unless and4Wat.contains anchor do
+      throwError s!"4-way joined Promise WAT missing {anchor}\n{and4Wat}"
+  match and4Wat.splitOn "(call $pf_promise_and" with
+  | [beforeAnd, afterAnd] =>
+      unless (beforeAnd.splitOn "(call $pf_promise_batch_create").length == 5 &&
+          (beforeAnd.splitOn "(call $pf_promise_batch_action_function_call").length == 5 do
+        throwError "promise_and count=4 must follow exactly four created child function-call actions"
+      unless (beforeAnd.splitOn "(i64.store").length ≥ 13 do
+        throwError "4-way promise_and input indices were not stored after all child deposit frames"
+      match afterAnd.splitOn "(call $pf_promise_batch_then" with
+      | [_joinTail, afterThen] =>
+          match afterThen.splitOn "(call $pf_promise_batch_action_function_call" with
+          | [_thenTail, afterCallbackAction] =>
+              match afterCallbackAction.splitOn "(call $pf_promise_return" with
+              | [beforeReturn, _afterReturn] =>
+                  unless beforeReturn.contains "(call $pf_storage_write" do
+                    throwError "4-way joined callback was returned before caller-state persistence"
+              | _ => throwError "4-way joined callback must call promise_return exactly once"
+          | _ => throwError "4-way joined callback must append exactly one action after batch_then"
+      | _ => throwError "4-way joined Promise must feed exactly one promise_batch_then dependency"
+  | _ => throwError "4-way joined Promise method must call promise_and exactly once"
+  unless (and4Wat.splitOn "(call $pf_promise_batch_action_function_call").length == 6 do
+    throwError "4-way joined Promise method must append exactly five function-call actions"
   let callbackJoined3 ← match program.entries.find? (·.ixName == "callbackJoined3") with
     | some method => pure method
     | none => throwError "missing callbackJoined3 entry"
@@ -768,6 +817,24 @@ elab "#pf_near_promise_check" : command => do
       "(i64.const 3)" ] do
     unless callbackJoined3Wat.contains anchor do
       throwError s!"3-way joined callback WAT missing {anchor}\n{callbackJoined3Wat}"
+  let callbackJoined4 ← match program.entries.find? (·.ixName == "callbackJoined4") with
+    | some method => pure method
+    | none => throwError "missing callbackJoined4 entry"
+  let callbackJoined4Wat ← match Emit.emit { program with entries := #[callbackJoined4] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  for anchor in #[
+      "(call $pf_promise_results_count)",
+      "(call $pf_promise_result (i64.const 0)",
+      "(call $pf_promise_result (i64.const 1)",
+      "(call $pf_promise_result (i64.const 2)",
+      "(call $pf_promise_result (i64.const 3)",
+      "(else (i64.const 999))",
+      "(local.set $depositLo (local.get $pf_v0))",
+      "(local.set $depositHi (local.get $pf_v1))",
+      "(i64.const 4)" ] do
+    unless callbackJoined4Wat.contains anchor do
+      throwError s!"4-way joined callback WAT missing {anchor}\n{callbackJoined4Wat}"
   let callbackSuccess ← match program.entries.find? (·.ixName == "callbackSuccess") with
     | some method => pure method
     | none => throwError "missing callbackSuccess entry"
@@ -934,7 +1001,7 @@ elab "#pf_near_promise_check" : command => do
     "(i64.const 6) (i64.const 8437)",
     "(i64.const 4) (i64.const 8443)",
     "(i64.const 15) (i64.const 8454)",
-    "(i64.const 14) (i64.const 8469)",
+    "(i64.const 14) (i64.const 8484)",
     "(i64.const 20000000000000)"
   ]
   for anchor in anchors do
