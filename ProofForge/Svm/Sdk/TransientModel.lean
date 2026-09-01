@@ -1,6 +1,7 @@
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.TransientVec
+import ProofForge.Svm.TransientBytes
 
 /-!
 # Transient Vector64 model (sf-006)
@@ -216,5 +217,156 @@ theorem mVec64Begin_finish_stale (tw : TransientWords) (slot : Fin 2) (cap : Nat
     let done := (mVec64Finish mid slot cap).1
     requireActive done slot cap = false := by
   simp [mVec64Begin, hcap, mVec64Finish, setBank, requireActive, upd_same]
+
+/-! ## Bytes store (sf-007)
+
+Two byte slots, independent of Vector64 banks. Byte values must be `≤ 255`; `appendLe64`
+requires eight free bytes and writes little-endian limbs without a partial prefix on failure. -/
+
+def bytesOomCode : UInt64 := UInt64.ofNat ProofForge.Svm.TransientBytes.oomErrorCode
+def bytesBoundsCode : UInt64 := UInt64.ofNat ProofForge.Svm.TransientBytes.boundsErrorCode
+def bytesStateCode : UInt64 := UInt64.ofNat ProofForge.Svm.TransientBytes.stateErrorCode
+def bytesRangeCode : UInt64 := UInt64.ofNat ProofForge.Svm.TransientBytes.rangeErrorCode
+
+structure BytesBank where
+  active : Bool := false
+  capacity : Nat := 0
+  length : Nat := 0
+  deriving BEq, Repr, Inhabited
+
+structure BytesWords where
+  bank : Fin 2 → BytesBank
+  bytes : Fin 2 → Nat → UInt8
+
+def emptyBytes : BytesWords :=
+  { bank := fun _ => {}, bytes := fun _ _ => 0 }
+
+def setBytesBank (bw : BytesWords) (slot : Fin 2) (b : BytesBank) : BytesWords :=
+  { bw with bank := upd bw.bank slot b }
+
+def setByte (bw : BytesWords) (slot : Fin 2) (i : Nat) (v : UInt8) : BytesWords :=
+  { bw with bytes := upd bw.bytes slot (upd (bw.bytes slot) i v) }
+
+def requireBytesActive (bw : BytesWords) (slot : Fin 2) (cap : Nat) : Bool :=
+  let b := bw.bank slot
+  b.active && decide (b.capacity = cap)
+
+def mBytesBegin (bw : BytesWords) (slot : Fin 2) (cap : Nat) : BytesWords × UInt64 :=
+  if cap = 0 then (bw, bytesStateCode)
+  else
+    (setBytesBank bw slot { active := true, capacity := cap, length := 0 }, okCode)
+
+def mBytesPush (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt64) :
+    BytesWords × UInt64 :=
+  if !requireBytesActive bw slot cap then (bw, bytesStateCode)
+  else if byte > 255 then (bw, bytesRangeCode)
+  else
+    let b := bw.bank slot
+    if b.length ≥ cap then (bw, bytesBoundsCode)
+    else
+      let bw := setByte bw slot b.length (UInt8.ofNat byte.toNat)
+      (setBytesBank bw slot { b with length := b.length + 1 }, okCode)
+
+/-- Append eight LE bytes, or leave the store unchanged when room/range/state fails. -/
+def mBytesAppendLe64 (bw : BytesWords) (slot : Fin 2) (cap : Nat) (value : UInt64) :
+    BytesWords × UInt64 :=
+  if !requireBytesActive bw slot cap then (bw, bytesStateCode)
+  else
+    let b := bw.bank slot
+    if b.length + 8 > cap then (bw, bytesBoundsCode)
+    else
+      let write (bw : BytesWords) (off : Nat) (byte : UInt8) : BytesWords :=
+        setByte bw slot (b.length + off) byte
+      let bw := write bw 0 (UInt8.ofNat (value.toNat % 256))
+      let bw := write bw 1 (UInt8.ofNat ((value.toNat / 256) % 256))
+      let bw := write bw 2 (UInt8.ofNat ((value.toNat / 256 ^ 2) % 256))
+      let bw := write bw 3 (UInt8.ofNat ((value.toNat / 256 ^ 3) % 256))
+      let bw := write bw 4 (UInt8.ofNat ((value.toNat / 256 ^ 4) % 256))
+      let bw := write bw 5 (UInt8.ofNat ((value.toNat / 256 ^ 5) % 256))
+      let bw := write bw 6 (UInt8.ofNat ((value.toNat / 256 ^ 6) % 256))
+      let bw := write bw 7 (UInt8.ofNat ((value.toNat / 256 ^ 7) % 256))
+      (setBytesBank bw slot { b with length := b.length + 8 }, okCode)
+
+theorem mBytesPush_range (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true) (hoob : byte > 255) :
+    mBytesPush bw slot cap byte = (bw, bytesRangeCode) := by
+  simp [mBytesPush, hact, hoob]
+
+theorem mBytesAppendLe64_no_room (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (value : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hfull : (bw.bank slot).length + 8 > cap) :
+    mBytesAppendLe64 bw slot cap value = (bw, bytesBoundsCode) := by
+  simp [mBytesAppendLe64, hact, hfull]
+
+theorem mBytesAppendLe64_stale (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (value : UInt64) (h : requireBytesActive bw slot cap = false) :
+    mBytesAppendLe64 bw slot cap value = (bw, bytesStateCode) := by
+  simp [mBytesAppendLe64, h]
+
+/-! ## Combined invocation scratch: vec slots ⟂ bytes slots -/
+
+structure InvocationScratch where
+  vec : TransientWords := empty
+  bytes : BytesWords := emptyBytes
+
+/-- Updating the vec component leaves the bytes component identical. -/
+theorem invocation_vec_update_preserves_bytes (s : InvocationScratch)
+    (vec' : TransientWords) :
+    ({ s with vec := vec' } : InvocationScratch).bytes = s.bytes :=
+  rfl
+
+/-- Updating the bytes component leaves the vec component identical. -/
+theorem invocation_bytes_update_preserves_vec (s : InvocationScratch)
+    (bytes' : BytesWords) :
+    ({ s with bytes := bytes' } : InvocationScratch).vec = s.vec :=
+  rfl
+
+/-- A successful vec push composed into the scratch keeps the original bytes banks. -/
+theorem mVec64Push_scratch_preserves_bytes (s : InvocationScratch) (slot : Fin 2)
+    (cap : Nat) (value : UInt64)
+    (_hact : requireActive s.vec slot cap = true)
+    (_hroom : (s.vec.bank slot).length < cap) :
+    let s' : InvocationScratch := { s with vec := (mVec64Push s.vec slot cap value).1 }
+    s'.bytes = s.bytes := by
+  rfl
+
+/-- A successful bytes push composed into the scratch keeps the original vec banks. -/
+theorem mBytesPush_scratch_preserves_vec (s : InvocationScratch) (slot : Fin 2)
+    (cap : Nat) (byte : UInt64)
+    (_hact : requireBytesActive s.bytes slot cap = true)
+    (_hin : byte ≤ 255)
+    (_hroom : (s.bytes.bank slot).length < cap) :
+    let s' : InvocationScratch := { s with bytes := (mBytesPush s.bytes slot cap byte).1 }
+    s'.vec = s.vec := by
+  rfl
+
+/-! ## Record64 / WideVec whole-record preflight (sf-007)
+
+Modeled over Vector64 length: an append of `limbs` words is rejected before any write when
+`length + limbs > capacity`, so no partial record prefix is left. -/
+
+def recordHasRoom (length capacity limbs : Nat) : Bool :=
+  decide (length + limbs ≤ capacity)
+
+/-- A 1-limb record append with no room is exactly a full Vector64 push (store unchanged). -/
+theorem mRecordAppend1_rejected_noop (tw : TransientWords) (slot : Fin 2)
+    (cap : Nat) (v0 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hno : recordHasRoom (tw.bank slot).length cap 1 = false) :
+    mVec64Push tw slot cap v0 = (tw, boundsCode) := by
+  have : (tw.bank slot).length ≥ cap := by
+    simp [recordHasRoom] at hno
+    omega
+  exact mVec64Push_full tw slot cap v0 hact this
+
+/-- Without room for two limbs, the first word push of a Vector128 is rejected (no partial). -/
+theorem mVec128Push_first_rejected (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (w0 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (_hno : recordHasRoom (tw.bank slot).length cap 2 = false)
+    (hfull : (tw.bank slot).length ≥ cap) :
+    mVec64Push tw slot cap w0 = (tw, boundsCode) :=
+  mVec64Push_full tw slot cap w0 hact hfull
 
 end ProofForge.Svm.Sdk.TransientModel
