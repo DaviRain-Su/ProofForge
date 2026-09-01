@@ -1000,6 +1000,18 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       retSchema := .scalar .uint64
       retCount := 1 }, some {
         ixName := method.ixName, schema := Codec.storageBalanceBoundsResultSchema, plan })
+  if method.retSchema == Codec.base64Hash32ResultSchema then
+    unless method.kind == .get do
+      throw s!"near/codec: {method.ixName} Base64 hash output currently requires a view"
+    let plan := Codec.OutputPlan.jsonBase64Hash32
+    unless method.retCount == plan.sourceValueCount do
+      throw s!"near/codec: {method.ixName} output frame does not match its Base64 hash plan"
+    return ({ method with
+      retWidths := #[8]
+      retTypes := #[.uint64]
+      retSchema := .scalar .uint64
+      retCount := 1 }, some {
+        ixName := method.ixName, schema := Codec.base64Hash32ResultSchema, plan })
   if method.retSchema == Codec.jsonBooleanResultSchema then
     unless method.kind == .increment do
       throw s!"near/codec: {method.ixName} JSON Boolean output requires a mutating entry"

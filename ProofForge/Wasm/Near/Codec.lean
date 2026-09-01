@@ -215,6 +215,11 @@ def jsonBooleanResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.JsonBooleanResult" #[
     ("value", .scalar .uint64)]
 
+def base64Hash32ResultSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.Base64Hash32Result" #[
+    ("w0", .scalar .uint64), ("w1", .scalar .uint64),
+    ("w2", .scalar .uint64), ("w3", .scalar .uint64)]
+
 def storageBalanceResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageBalanceResult" #[
     ("registered", .scalar .uint64), ("total", .scalar .uint128),
@@ -373,6 +378,7 @@ inductive OutputPlan where
   | promiseOrJsonU128
   | jsonStorageBalanceOption
   | jsonStorageBalanceBounds
+  | jsonBase64Hash32
   | jsonBoolean
   | jsonNullUnit
   | voidEmpty
@@ -384,6 +390,7 @@ def OutputPlan.sourceValueCount : OutputPlan → Nat
   | .promiseOrJsonU128 => 2
   | .jsonStorageBalanceOption => 5
   | .jsonStorageBalanceBounds => 5
+  | .jsonBase64Hash32 => 4
   | .jsonBoolean => 1
   | .jsonNullUnit => 0
   | .voidEmpty => 0
@@ -394,6 +401,7 @@ def OutputPlan.canonical : OutputPlan → String
   | .promiseOrJsonU128 => "near-promise-or-json-u128-v1"
   | .jsonStorageBalanceOption => "near-json-storage-balance-option-v1"
   | .jsonStorageBalanceBounds => "near-json-storage-balance-bounds-v1"
+  | .jsonBase64Hash32 => "near-json-base64-hash32-v1"
   | .jsonBoolean => "near-json-boolean-v1"
   | .jsonNullUnit => "near-json-null-unit-v1"
   | .voidEmpty => "near-void-empty-v1"
@@ -407,6 +415,7 @@ def targetOutputPlan : Core.Codec.Schema → Except String OutputPlan
   | schema =>
       if schema == storageBalanceResultSchema then pure .jsonStorageBalanceOption
       else if schema == storageBalanceBoundsResultSchema then pure .jsonStorageBalanceBounds
+      else if schema == base64Hash32ResultSchema then pure .jsonBase64Hash32
       else if schema == jsonBooleanResultSchema then pure .jsonBoolean
       else if schema == .unit then pure .jsonNullUnit
       else throw "near/codec: unsupported specialized output schema"

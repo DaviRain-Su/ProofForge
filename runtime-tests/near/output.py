@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import struct
 import sys
@@ -68,6 +69,25 @@ def main() -> None:
         if not (3 <= len(expected) <= 41):
             raise AssertionError(f"{method}: JSON u128 output length escaped 3..41")
     print("near-output: zero/high/mixed/max u128 exact quoted decimal bytes ok")
+
+    hashes = {
+        "jsonBase64Hash32": bytes(range(32)),
+        "jsonBase64Hash32Zero": bytes(32),
+        "jsonBase64Hash32Max": b"\xff" * 32,
+    }
+    before_hash_views = client.view_state_values()
+    for method, raw in hashes.items():
+        expected = b'"' + base64.b64encode(raw) + b'"'
+        _expect(client, method, b"", expected)
+        if len(expected) != 46 or expected[44:45] != b"=" or expected[45:] != b'"':
+            raise AssertionError(f"{method}: Base64 quote/padding geometry changed")
+        if b"\\" in expected or b"\r" in expected or b"\n" in expected:
+            raise AssertionError(f"{method}: Base64 JSON string was unnecessarily escaped")
+        if base64.b64decode(expected[1:-1], validate=True) != raw:
+            raise AssertionError(f"{method}: independent Base64 round trip changed packed bytes")
+    if client.view_state_values() != before_hash_views:
+        raise AssertionError("Base64 hash output view changed contract state")
+    print("near-output: exact 32-byte RFC4648 STANDARD Base64 JSON string ok")
 
     for raw in (b"", b"x", bytes(range(8))):
         wire = NearClient.borsh_bytes(raw)

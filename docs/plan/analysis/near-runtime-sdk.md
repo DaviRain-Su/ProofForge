@@ -341,6 +341,11 @@ asynchronous; dynamic handles and multi-action builders are absent.
    current near-sdk-rs behavior: methods without regular arguments do not inspect request bytes.
    Other zero-parameter ProofForge entries retain exact-empty input, and full public compatibility
    is not claimed.
+   **NEAR-NEP148-HASH-OUTPUT (wsm-near-json-base64-hash32-output-001 done):** an exact nominal
+   four-word frame now serializes one 32-byte `reference_hash` as a quoted 44-character RFC 4648
+   STANDARD Base64 value with one `=` pad. This is only the hash scalar prerequisite; bounded
+   metadata strings, seven-field object composition, optional-field coupling, and `ft_metadata`
+   remain separate, and no complete NEP-148 claim is made.
    **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
    fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
    success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;

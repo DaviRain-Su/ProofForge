@@ -127,6 +127,16 @@ nominal so ordinary Bool or one-field record returns retain their existing targe
   value : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact 32-byte frame for the RFC 4648 STANDARD Base64 string emitted by
+NEP-148's `Base64VecU8` hash field. Four words pack bytes little-endian; this is not a generic
+byte-vector or JSON-string encoder. -/
+@[pf_boundary] structure Base64Hash32Result where
+  w0 : UInt64
+  w1 : UInt64
+  w2 : UInt64
+  w3 : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
 `registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
 serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record

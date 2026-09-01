@@ -676,6 +676,65 @@ private def returnJsonBooleanInstr (st : EState) (values : Array (Val ValKind))
     indent level "(call $pf_value_return (local.get $pf_output_length) (i64.extend_i32_u (local.get $pf_output_ptr)))"
   ]
 
+private def base64StandardChar (index : String) : String :=
+  "(if (result i64) (i64.lt_u " ++ index ++ " (i64.const 26)) " ++
+    "(then (i64.add " ++ index ++ " (i64.const 65))) " ++
+    "(else (if (result i64) (i64.lt_u " ++ index ++ " (i64.const 52)) " ++
+      "(then (i64.add " ++ index ++ " (i64.const 71))) " ++
+      "(else (if (result i64) (i64.lt_u " ++ index ++ " (i64.const 62)) " ++
+        "(then (i64.sub " ++ index ++ " (i64.const 4))) " ++
+        "(else (if (result i64) (i64.eq " ++ index ++ " (i64.const 62)) " ++
+          "(then (i64.const 43)) (else (i64.const 47)))))))))"
+
+private def packedHashByte (words : Array String) (index : Nat) : String :=
+  "(i64.and (i64.shr_u " ++ words[index / 8]! ++ " (i64.const " ++
+    toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+
+/-- Serialize one exact 32-byte packed frame as serde_json's quoted RFC 4648 STANDARD Base64.
+Thirty bytes form ten complete groups; the final two bytes form three characters and one `=`. -/
+private def returnJsonBase64Hash32Instr (st : EState) (values : Array (Val ValKind))
+    (level : Nat) : Except String (Array String) := do
+  unless values.size == 4 do
+    throw "near/codec: Base64 hash output plan does not match result leaves"
+  let words ← values.mapM (renderVal st)
+  let mut lines : Array String := #[
+    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 46) (i64.const 1)))",
+    indent level "(i64.store8 (local.get $pf_output_ptr) (i64.const 34))"
+  ]
+  for group in [0:10] do
+    let b0 := packedHashByte words (group * 3)
+    let b1 := packedHashByte words (group * 3 + 1)
+    let b2 := packedHashByte words (group * 3 + 2)
+    let indices := #[
+      "(i64.shr_u " ++ b0 ++ " (i64.const 2))",
+      "(i64.or (i64.shl (i64.and " ++ b0 ++ " (i64.const 3)) (i64.const 4)) " ++
+        "(i64.shr_u " ++ b1 ++ " (i64.const 4)))",
+      "(i64.or (i64.shl (i64.and " ++ b1 ++ " (i64.const 15)) (i64.const 2)) " ++
+        "(i64.shr_u " ++ b2 ++ " (i64.const 6)))",
+      "(i64.and " ++ b2 ++ " (i64.const 63))"]
+    for lane in [0:4] do
+      lines := lines.push (indent level
+        ("(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const " ++
+          toString (1 + group * 4 + lane) ++ ")) " ++
+          base64StandardChar indices[lane]! ++ ")"))
+  let b30 := packedHashByte words 30
+  let b31 := packedHashByte words 31
+  let finalIndices := #[
+    "(i64.shr_u " ++ b30 ++ " (i64.const 2))",
+    "(i64.or (i64.shl (i64.and " ++ b30 ++ " (i64.const 3)) (i64.const 4)) " ++
+      "(i64.shr_u " ++ b31 ++ " (i64.const 4)))",
+    "(i64.shl (i64.and " ++ b31 ++ " (i64.const 15)) (i64.const 2))"]
+  for lane in [0:3] do
+    lines := lines.push (indent level
+      ("(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const " ++
+        toString (41 + lane) ++ ")) " ++ base64StandardChar finalIndices[lane]! ++ ")"))
+  lines := lines ++ #[
+    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const 44)) (i64.const 61))",
+    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const 45)) (i64.const 34))",
+    indent level "(call $pf_value_return (i64.const 46) (i64.extend_i32_u (local.get $pf_output_ptr)))"
+  ]
+  return lines
+
 private def outputPlanOf (method : Method ValKind OpExt) :
     Except String (Option Codec.OutputPlan) := do
   match method.outputSchema with
@@ -2161,6 +2220,10 @@ private partial def emitRegion (p : Program ValKind OpExt)
               throw "extract/unsupported: StorageBalanceBounds output cannot also return a promise"
             return {
               lines := ← returnJsonStorageBalanceBoundsInstr st values level, st, terminal := true }
+        | some .jsonBase64Hash32 =>
+            if st.pendingPromiseReturn.isSome then
+              throw "extract/unsupported: Base64 hash output cannot also return a promise"
+            return { lines := ← returnJsonBase64Hash32Instr st values level, st, terminal := true }
         | some .jsonBoolean =>
             if st.pendingPromiseReturn.isSome then
               throw "extract/unsupported: JSON Boolean output cannot also return a promise"

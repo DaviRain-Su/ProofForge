@@ -32,6 +32,23 @@ def touch (_state : State) : Except Error (State × UInt64) :=
 @[pf_entry] def jsonU128Max (_state : State) : UInt128 :=
   ⟨0xffffffffffffffff, 0xffffffffffffffff⟩
 
+/-- Exact packed 0..31 byte sequence for the NEP-148 hash Base64 prerequisite. -/
+@[pf_entry] def jsonBase64Hash32 (_state : State) :
+    ProofForge.Wasm.Near.Runtime.Base64Hash32Result :=
+  { w0 := 0x0706050403020100
+    w1 := 0x0f0e0d0c0b0a0908
+    w2 := 0x1716151413121110
+    w3 := 0x1f1e1d1c1b1a1918 }
+
+@[pf_entry] def jsonBase64Hash32Zero (_state : State) :
+    ProofForge.Wasm.Near.Runtime.Base64Hash32Result :=
+  { w0 := 0, w1 := 0, w2 := 0, w3 := 0 }
+
+@[pf_entry] def jsonBase64Hash32Max (_state : State) :
+    ProofForge.Wasm.Near.Runtime.Base64Hash32Result :=
+  { w0 := 0xffffffffffffffff, w1 := 0xffffffffffffffff
+    w2 := 0xffffffffffffffff, w3 := 0xffffffffffffffff }
+
 @[pf_entry]
 def emptyBytes (_state : State) : BoundedBytes 8 :=
   { length := 0, values := #v[0, 0, 0, 0, 0, 0, 0, 0] }
