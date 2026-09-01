@@ -119,10 +119,12 @@ Phoenix 撮合正确性、syscall host 全模型、任何 WASM/EVM 工作。
 ```text
 SF-0  证明基础设施（wf-parts / word 引理习惯成文）
   └─► SF-1  Queue 收口                    ← **done**
-        └─► SF-2  BoundedVec                     ← done；下一刀 Allocator（sf-008）
-              ├─► SF-3  BitSet
-              ├─► SF-4  TransientModel + Vec/Bytes/Record/Wide
+        └─► SF-2  BoundedVec                     ← done
+              ├─► SF-3  BitSet                    ← done
+              ├─► SF-4  TransientModel + Vec/Bytes/Record/Wide ← done
               └─► SF-5  Allocator + OrderedMap/Rb
+                    ├─► SF-5a Allocator           ← **done**（sf-008）
+                    ├─► SF-5b OrderedMap          ← 下一刀（sf-009）
                     ├─► SF-6  EnumerableSet
                     ├─► SF-7  Tree 全树 wf 保持
                     └─► SF-8  FifoCancel + BatchRecorder
