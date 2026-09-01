@@ -293,13 +293,10 @@ Phase 7   收口
 
 ---
 
-## 9. 开工建议（本周，merge main 之后）
+## 9. 开工建议（本周）
 
-1. **主线证明**：SF-0..SF-7 几何已收口；`sf-012` FifoCancel 与 `sf-013` BatchRecorder 进行中
-2. **并行可选**：`svm-sem-001` / `svm-rt-001` / `svm-eng-001`   
-3. **主线 L3**：`svm-sem-001`（E1）  
-4. **并行可选**：`svm-rt-001` 或 `svm-sdk-001`  
-5. **顺手**：`svm-eng-001`  
-6. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写  
+1. **主线能力**：Track A 已收口 → **`svm-rt-001` signed Clock**
+2. **并行**：`svm-sem-001`（E1）/ `svm-sdk-001` / `svm-eng-001`
+3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。
