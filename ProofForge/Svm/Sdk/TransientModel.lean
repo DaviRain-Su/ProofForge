@@ -141,6 +141,33 @@ theorem mVec64Set_oob (tw : TransientWords) (slot : Fin 2) (cap : Nat) (index : 
     mVec64Set tw slot cap index value = (tw, boundsCode) := by
   simp [mVec64Set, hact, hoob]
 
+private theorem mVec64Set_eq (tw : TransientWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (value : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hin : index < (tw.bank slot).length) :
+    mVec64Set tw slot cap index value = (setWord tw slot index value, okCode) := by
+  have hoob : ¬(index ≥ (tw.bank slot).length) := Nat.not_le_of_lt hin
+  simp [mVec64Set, hact, hoob]
+
+/-- Set succeeds at an in-bounds index; length and active state unchanged. -/
+theorem mVec64Set_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (value : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hin : index < (tw.bank slot).length) :
+    let r := mVec64Set tw slot cap index value
+    r.2 = okCode ∧
+    r.1.words slot index = value ∧
+    (r.1.bank slot).length = (tw.bank slot).length ∧
+    requireActive r.1 slot cap = true := by
+  have hr := mVec64Set_eq tw slot cap index value hact hin
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp [hr]
+  · simp [hr, setWord, upd_same]
+  · rw [hr]; simp [setWord]
+  · have := hact
+    simp [requireActive] at this ⊢
+    simp [hr, setWord, upd_same, this]
+
 theorem mVec64Pop_empty (tw : TransientWords) (slot : Fin 2) (cap : Nat)
     (hact : requireActive tw slot cap = true)
     (hempty : (tw.bank slot).length = 0) :
@@ -512,5 +539,65 @@ theorem mRecordAppend4_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
     have hlen2 := h2.2.2.1
     have hlen3 := h3.2.2.1
     omega
+
+/-! ## Vector128 / Vector256 whole-value success (sf-007) -/
+
+/-- After a successful in-bounds set, `mVec64Get` returns the written value. -/
+theorem mVec64Set_get (tw : TransientWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (value : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hin : index < (tw.bank slot).length) :
+    mVec64Get (mVec64Set tw slot cap index value).1 slot cap index = value := by
+  have hr := mVec64Set_readback tw slot cap index value hact hin
+  have hact' : requireActive (mVec64Set tw slot cap index value).1 slot cap = true := hr.2.2.2
+  have hoob : ¬(index ≥ ((mVec64Set tw slot cap index value).1.bank slot).length) := by
+    have := hr.2.2.1; omega
+  simp [mVec64Get, hact', hoob, hr.2.1]
+
+/-- Vector128 push is a two-limb record append. -/
+theorem mVec128Push_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (w0 w1 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 2 ≤ cap) :
+    (mVec64Push tw slot cap w0).2 = okCode ∧
+    (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).2 = okCode ∧
+    (mVec64Push tw slot cap w0).1.words slot (tw.bank slot).length = w0 ∧
+    (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot
+      ((tw.bank slot).length + 1) = w1 ∧
+    ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length =
+      (tw.bank slot).length + 2 :=
+  mRecordAppend2_readback tw slot cap w0 w1 hact hroom
+
+/-- Vector256 push is a four-limb record append (length +4). -/
+theorem mVec256Push_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (w0 w1 w2 w3 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 4 ≤ cap) :
+    ((mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+        slot cap w3).1.bank slot).length = (tw.bank slot).length + 4 := by
+  exact (mRecordAppend4_readback tw slot cap w0 w1 w2 w3 hact hroom).2.2.2.2.2.2.2.2
+
+/-- Without room for four limbs, the first word push of a Vector256 is rejected (no partial). -/
+theorem mVec256Push_first_rejected (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (w0 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (_hno : recordHasRoom (tw.bank slot).length cap 4 = false)
+    (hfull : (tw.bank slot).length ≥ cap) :
+    mVec64Push tw slot cap w0 = (tw, boundsCode) :=
+  mVec64Push_full tw slot cap w0 hact hfull
+
+/-- In-bounds set updates one Vector128 limb; get readback and length unchanged. -/
+theorem mVec128Set_limb_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (recIdx limbIdx : Nat) (new : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hrec : recIdx * 2 + 2 ≤ (tw.bank slot).length)
+    (hlimb : limbIdx < 2) :
+    (mVec64Set tw slot cap (recIdx * 2 + limbIdx) new).2 = okCode ∧
+    mVec64Get (mVec64Set tw slot cap (recIdx * 2 + limbIdx) new).1 slot cap (recIdx * 2 + limbIdx) =
+      new ∧
+    ((mVec64Set tw slot cap (recIdx * 2 + limbIdx) new).1.bank slot).length = (tw.bank slot).length := by
+  have hbase : recIdx * 2 + limbIdx < (tw.bank slot).length := by omega
+  have h := mVec64Set_readback tw slot cap (recIdx * 2 + limbIdx) new hact hbase
+  exact ⟨h.1, mVec64Set_get tw slot cap (recIdx * 2 + limbIdx) new hact hbase, h.2.2.1⟩
 
 end ProofForge.Svm.Sdk.TransientModel
