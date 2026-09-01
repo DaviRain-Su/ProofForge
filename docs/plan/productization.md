@@ -213,7 +213,7 @@ my-program/
 
 - [x] 权威方案本文
 - [x] 任务卡 [prod-001](tasks/prod-001.md) … [prod-004](tasks/prod-004.md)
-- [x] `templates/svm-counter`、`templates/evm-counter` 目标工程骨架（尚不可隔离构建）
+- [x] `templates/svm-counter`、`templates/evm-counter` 目标工程骨架（`pf init` 后可 `lake build`）
 - [x] `docs/INDEX.md` / `docs/plan/README.md` 入口链接
 
 ### 待做 · P0（prod-001）— SDK 导入表面
@@ -227,29 +227,29 @@ my-program/
 
 ### 待做 · P1（prod-002）— Lake 包拆分 + CLI 去硬编码
 
-- [ ] `lakefile.lean` 增加 `ProofForgeSvmSdk` / `ProofForgeEvmSdk` / `ProofForgeCompiler`（按需 Attr/Core）
-- [ ] 伞模块 `ProofForge.lean` 降级为 compiler workspace 便利聚合；用户模板禁止引用
-- [ ] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit
-- [ ] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
-- [ ] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
-- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变
+- [x] `lakefile.lean` 增加 `ProofForgeSvmSdk` / `ProofForgeEvmSdk` / compiler lib `ProofForge`（+ `ProofForgeCore`）
+- [x] 伞模块 `ProofForge.lean` 降级为 compiler workspace 便利聚合；用户模板禁止引用
+- [x] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit（`scripts/check_sdk_import_closure.py`）
+- [x] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
+- [x] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
+- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变（交 CI；本环境缺 `sbpf` 二进制未跑 assemble）
 
 ### 待做 · P2（prod-003）— `pf init` + 可构建模板
 
-- [ ] CLI 子命令：`pf init <name> --target svm|evm`
-- [ ] 以 `templates/svm-counter`、`templates/evm-counter` 为源生成工程
-- [ ] 生成物：`lakefile.lean`、`lean-toolchain`、`pf.toml`、最小合约、`README.md`
-- [ ] 模板只 `require` 对应 `*Sdk`（path 或 git tag）
-- [ ] 验收：临时目录 `pf init` → `pf build` 产出对应 target 制品
+- [x] CLI 子命令：`pf init <name> --target svm|evm`
+- [x] 以 `templates/svm-counter`、`templates/evm-counter` 为源生成工程
+- [x] 生成物：`lakefile.lean`、`lean-toolchain`、`pf.toml`、最小合约、`README.md`
+- [x] 模板 path-`require` monorepo；合约只 import 对应 `*Sdk`（git tag 钉死见 P3）
+- [x] 验收：`pf init` → `lake build` 绿；`lake exe pf -- build` 可抽 IR（assemble 需本机 `sbpf`/`solc`）
 - [ ] （后续）near / xrpl 模板等 WASM SDK facade 稳定后再加
 
 ### 待做 · P3（prod-004）— Release 打包
 
-- [ ] GitHub Release workflow：`pf` 二进制（linux/mac）+ checksums + changelog
-- [ ] 同 tag `vX.Y.Z` 供 Lake `require … @ "vX.Y.Z"`
-- [ ] `pf --version` 打印 CLI / Lean / sbpf / solc / wat2wasm 等 pin
-- [ ] Release notes 附 fail-closed capability 摘要（摘自 capability matrix）
-- [ ] 验收：干净机器安装 CLI + require SDK tag + 模板工程 `pf build` 成功
+- [x] GitHub Release workflow：`pf` 二进制（linux/mac）+ checksums + changelog（`.github/workflows/release.yml`）
+- [x] 同 tag `vX.Y.Z` 供 Lake `require … @ "vX.Y.Z"`（Release notes 说明）
+- [x] `pf --version` 打印 CLI / Lean / sbpf / solc / wat2wasm 等 pin
+- [x] Release notes 附 fail-closed capability 摘要（`docs/plan/release-capability-summary.md`）
+- [ ] 验收：干净机器安装 CLI + require SDK tag + 模板工程 `pf build` 成功（待首次 tag 发布后人工验证）
 
 ### 明确不在本 PR
 

@@ -36,3 +36,10 @@
 ## 依赖
 
 prod-001。解锁 prod-003。同一 PR #11。
+
+## 本 PR 落地状态
+
+- [x] Lake libs：`ProofForgeSvmSdk` / `ProofForgeEvmSdk` / `ProofForge`（compiler）+ `ProofForgeCore`
+- [x] CLI：`--module` + `pf.toml`；Examples 硬编码仅作 Registry 回退
+- [x] import-closure CI：`scripts/check_sdk_import_closure.py`
+- [ ] 全量 CI 回归 digest（交 GitHub Actions）

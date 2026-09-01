@@ -32,3 +32,10 @@
 ## 依赖
 
 prod-003。本卡完成后 PR #11 可合并。
+
+## 本 PR 落地状态
+
+- [x] `.github/workflows/release.yml`（linux/mac + checksums + notes）
+- [x] `pf --version` pin 输出
+- [x] `docs/plan/release-capability-summary.md`
+- [ ] 首次 tag 后干净机器验收
