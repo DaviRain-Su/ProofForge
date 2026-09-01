@@ -10,11 +10,10 @@ depends-on: []
 ## Delivered
 
 - `NearToken.isZero`, `le`, `lt`, `ofLimbs`
-- Checked helpers: `add?`, `sub?`, `mulUInt64?`, `addChecked`, `subChecked`, `mulUInt64Checked` (source/proof layer; NEAR Extract for `addChecked`/`andThen` chains remains follow-up)
+- Checked helpers: `add?`, `sub?`, `mulUInt64?`, `addChecked`, `subChecked`, `mulUInt64Checked` (source + NEAR Extract via `ofLimbs`/`addW0`/`addW1` path)
 - Legacy limb API (`addW0`, `canAdd`, …) preserved
-- Example `Examples.NearTokenErgonomics` + **`addViaAndThen` / `addCheckedViaAndThen`** (`Core.Except.andThen` + JSON u128 `NearToken` return) + registry digest `ab9da3168e8cd786`
+- Example `Examples.NearTokenErgonomics` + **`addViaAndThen` / `addCheckedViaAndThen` / `addCheckedHelperViaAndThen`** (`Core.Except.andThen` + JSON u128 `NearToken` return) + registry digest `c2e097e411bbd3b4`
 
 ## Follow-up
 
-- Wire inline `NearToken.addChecked` through Extract for NEAR mutating entries (2026-09-01: explicit `if canAdd / ofLimbs` works; inline helper still differs)
-- Refactor `NearFungibleLedger.ft_transfer` to use `addChecked` once extraction supports it
+- Refactor `NearFungibleLedger.ft_transfer` to use `NearToken.addChecked` in `andThen` chains

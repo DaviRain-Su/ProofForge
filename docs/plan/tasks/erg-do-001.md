@@ -12,7 +12,7 @@ depends-on: []
 - `ProofForge.Core.Except`: `ok`, `err`, `andThen`, `map`, `guard`
 - Imported through root `ProofForge` module
 - Extract: `Core.Except.andThen` sequenced like `Bind.bind`; `ok`/`err` recognized alongside std `Except`
-- NEAR example: `Examples.NearTokenErgonomics.addViaAndThen` + **`addCheckedViaAndThen`** / **`addCheckedDirect`** (JSON u128 `NearToken` mutating return; digest `ab9da3168e8cd786`)
+- NEAR example: `Examples.NearTokenErgonomics.addViaAndThen` + **`addCheckedViaAndThen` / `addCheckedHelperViaAndThen` / `addCheckedDirect`** (JSON u128 `NearToken` mutating return; digest `c2e097e411bbd3b4`)
 - EVM example: `Examples.EvmExceptErgonomics.addViaAndThen` (digest `8def48aa72cd2c19`)
 - SVM example: `Examples.SvmExceptErgonomics.addViaAndThen` (extract digest `d826699c521e0b7c`)
 
