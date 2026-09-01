@@ -232,7 +232,7 @@ my-program/
 - [x] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit（`scripts/check_sdk_import_closure.py`）
 - [x] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
 - [x] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
-- [x] 全量 SVM/EVM/XRPL/NEAR 回归绿且 Registry digest 不变（本地：70 `.so` / 44 `.bin` / 23 + 38 `.wasm`，各 target `check_artifact_manifest` ok）
+- [x] 全量 SVM/EVM/XRPL/NEAR 回归绿且 Registry digest 不变（本地：70 `.so` / 44 `.bin` / 23 + 38 `.wasm`，各 target `check_artifact_manifest` ok；**CI run [`33531419129`](https://github.com/DaviRain-Su/ProofForge/actions/runs/33531419129) Lean/SVM/EVM/NEAR 全绿 @ `c6a96454`**）
   - 另已验证：`Examples.Counter` digest 钉；`pf init`→`lake build`→`pf build` 出 `.so`/`.bin`
   - `lean_lib Examples` 使用 `globs := #[.one, .submodules]`，保证 Registry 中未写入 `Examples.lean` 伞的模块（如 `NearQueue`/`NearIterable`/`NearPromise*`/`NearMigration`）也会被 `lake build Examples` 产出 olean
 
@@ -269,3 +269,5 @@ my-program/
 3. **P2（prod-003）** `pf init` 使模板可隔离构建。
 4. **P3（prod-004）** tag / 二进制 release。
 5. 每阶段推送到本分支并更新本节勾选；全部勾完再转 ready / 合并。
+
+**2026-09-01：** prod-001…004 必做项已勾选；CI [`33531419129`](https://github.com/DaviRain-Su/ProofForge/actions/runs/33531419129) 全 lane 绿（`c6a96454`）。剩余未勾仅为明确 defer（Examples 伞迁移、near/xrpl 模板、首次 tag 人工复核）。
