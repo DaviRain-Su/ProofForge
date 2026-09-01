@@ -40,24 +40,19 @@
 
 | 资产 | 位置 | 状态 |
 |---|---|---|
-| 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue 几何 + **空 push 读回** + **非空 nowrap push 链接** + **pop clear/advance(head≠cap) 链接**（2026-09-01 main） |
+| 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue：**empty/nowrap/wrap push 链接+读回**、**pop clear/advance/wrap + 读回**、**peek / initialize / 空往返**（2026-09-01 Phase 1） |
 | L1 几何包 | `ProofForge/Svm/Sdk/Storage.lean` | scalarHeader / BoundedVec / RbTree 等一批 wf 定理 |
 | Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / OrderedMap 委托 | 有定理但不齐 |
 | RB 结构 | `Examples/Tree.lean`（p-003/p-004） | size / 局部 wf；**全树保持未完** |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
-**Queue 下一刀（main 已推进，2026-09-01）**：
+**Queue 收口（Phase 1，2026-09-01）**：
 
-已落 main：`mQueuePush_empty_*`、`mQueuePush_nowrap_links`、`mQueuePop_clear_links`、
-`mQueuePop_advance_links`（head≠cap）+ 通用 `u64toNatAdd/Sub` 无回绕桥。
+已完成：`mQueuePush_empty_*` / `mQueuePush_nowrap_*` / `mQueuePush_wrap_*`（链接+读回）、
+`mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
+`mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
 
-仍缺：
-
-1. 非空 **wrap** push 链接 + 非空 push **读回**（SF-1a 余量）
-2. pop **wrap** 推进（head=cap→1）+ pop **读回** / size 效应（SF-1b 余量）
-3. `peek` / `initialize` 模型对应
-4. push-then-pop 往返（容量允许）
-
+下一形式化刀：SF-2a BoundedVec pop/setAt（`sf-003`）。
 ---
 
 ## 4. 组件清单
@@ -68,7 +63,7 @@
 |---|---|---|---|---|
 | Field / Region / scalarHeader | `Sdk/Storage.lean` | 部分 done | 字段代数 done | 收成标准引理包 |
 | BoundedVec | `Sdk/Storage.lean` | done | push done；**pop/setAt 待补** | 底座 |
-| BoundedQueue | `Sdk/Queue.lean` | wf parts done | 空 push + nowrap push 链接 + pop clear/advance(非 wrap) **done**；wrap / 读回 / peek / 往返 **待补** | **当前主线** |
+| BoundedQueue | `Sdk/Queue.lean` | wf parts done | push/pop 全分支链接+读回、peek、initialize、空往返 **done** | **已收口**；下一刀 Vec |
 | BitSet | `Sdk/StorageBitSet.lean` | wf 待定理化 | 单字 mask 代数待建 | 可先纯函数后桥账户 |
 | EnumerableSet | `Sdk/StorageEnumerableSet.lean` | wf 待 | 依赖 map + values 槽 | 后置 |
 | OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | **模型层几乎空白** | 最大块；对齐 `Examples/Tree.lean` |
@@ -123,8 +118,8 @@ Phoenix 撮合正确性、syscall host 全模型、任何 WASM/EVM 工作。
 
 ```text
 SF-0  证明基础设施（wf-parts / word 引理习惯成文）
-  └─► SF-1  Queue 收口                    ← 立刻开工
-        └─► SF-2  BoundedVec pop/set + Versioned
+  └─► SF-1  Queue 收口                    ← **done**
+        └─► SF-2  BoundedVec                     ← 下一刀 pop/set + Versioned
               ├─► SF-3  BitSet
               ├─► SF-4  TransientModel + Vec/Bytes/Record/Wide
               └─► SF-5  Allocator + OrderedMap/Rb
@@ -153,10 +148,10 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 
 | ID | 对象 | 层 | 状态 | task |
 |---|---|---|---|---|
-| SF-0 | wf-parts / word 引理习惯成文 | infra | todo | [sf-000](tasks/sf-000.md) |
-| SF-1a | Queue 非空 push（wrap + 读回） | L2 | doing（nowrap 链接已在 main） | [sf-001](tasks/sf-001.md) |
-| SF-1b | Queue pop / peek / initialize / 往返 | L2 | doing（clear/advance 链接已在 main） | [sf-002](tasks/sf-002.md) |
-| SF-2a | BoundedVec pop + setAt | L2 | todo | [sf-003](tasks/sf-003.md) |
+| SF-0 | wf-parts / word 引理习惯成文 | infra | **done** | [sf-000](tasks/sf-000.md) |
+| SF-1a | Queue 非空 push（wrap + 读回） | L2 | **done** | [sf-001](tasks/sf-001.md) |
+| SF-1b | Queue pop / peek / initialize / 往返 | L2 | **done** | [sf-002](tasks/sf-002.md) |
+| SF-2a | BoundedVec pop + setAt | L2 | todo（**下一刀**） | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned 状态机 | L1+L2 | todo | [sf-004](tasks/sf-004.md) |
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | todo | [sf-005](tasks/sf-005.md) |
 | SF-4a | TransientModel + Vector64 | L2 | todo | [sf-006](tasks/sf-006.md) |
@@ -196,10 +191,10 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 ## 9. 开工 checklist
 
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
-2. [sf-000](tasks/sf-000.md)  
-3. [sf-001](tasks/sf-001.md)（**只补 wrap + 读回**；nowrap 已在 main）→ [sf-002](tasks/sf-002.md)（**wrap/peek/往返**）  
-4. 按波次向下，每片更新矩阵  
+2. [sf-000](tasks/sf-000.md) → **done**  
+3. [sf-001](tasks/sf-001.md) / [sf-002](tasks/sf-002.md) → **done**（Queue 收口）  
+4. 下一刀 [sf-003](tasks/sf-003.md)（Vec pop/setAt），按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
-WASM PR #4 / #5：继续开着；本轨不要求它们先合。已 merge 2026-09-01 main。
-外分支对 SVM 的真实重叠仅 `Svm/IR` reject 臂 / EntryAdapter 拒 foreign annotation / README 任务表——见 [svm-work-plan.md §3.2](svm-work-plan.md)；**不改** Queue 证明目标与 L3 阶梯。
+WASM PR #4 / #5：继续开着；本轨不要求它们先合。
+外分支对 SVM 的真实重叠仅 `Svm/IR` reject 臂 / EntryAdapter 拒 foreign annotation / README 任务表——见 [svm-work-plan.md §3.2](svm-work-plan.md)；**不改** L3 阶梯。

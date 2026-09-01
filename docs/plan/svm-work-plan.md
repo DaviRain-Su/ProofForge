@@ -91,7 +91,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | Runtime (R2) | remaining-account view、scratch/CPI plan、signer tail、Token-2022 TLV envelope、program-memory、telemetry、Clock/EpochSchedule/Rent unsigned、checked lamports、resize | **signed Clock**、**Instructions/sliced sysvar**、**AccountView+direct mutation 的 alias-aware variable walk**、**nested/wide dynamic return**、**Token-2022 各 extension 完整语义** |
 | SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund | **rent top-up / owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**Token-2022 extension facade** |
 | Shared math（新） | `Core.Math.UInt64` + `Core.FixedPoint.UInt64` + SafeCast→UInt8/16；SVM Mollusk `core_math` + EVM Anvil 双 consumer（R1-024…031 / R5-022/023） | signed / 更宽 root·sat / typed fixed-point — **不挡 SVM 主线**；Phoenix fee 可直接组合 |
-| 形式化 (A) | StorageModel；Queue：**空 push 读回 + nowrap push 链接 + pop clear/advance(非 wrap)** 已在 main | Queue **wrap / 读回 / peek / 往返**；然后 Vec/BitSet/Map/Transient/Tree/Component |
+| 形式化 (A) | StorageModel；Queue：**push/pop 全分支链接+读回、peek、initialize、空往返** 已收口 | **Vec pop/setAt**（sf-003）→ BitSet/Map/Transient/Tree/Component |
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
 | 语义桥 / L3 | checked arith / CFG branch correspondence；assembler-semantics golden（E0） | E1–E5 ladder |
 | 工程 | 三 lane CI、Lean/SVM/EVM 门 | 形式化门进 CI、artifact/digest 漂移说明 |
@@ -101,7 +101,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 
 | 来源 | 变更 | 对本轨影响 |
 |---|---|---|
-| **main** Queue 三刀 | `mQueuePush_nowrap_links`、`mQueuePop_clear_links`、`mQueuePop_advance_links` | **SF-1a/1b 部分完成**；下一刀改打 wrap + 读回 + peek/往返，勿重证 nowrap/clear |
+| **Phase 1** Queue 收口 | wrap push/pop + 读回 + peek/initialize/空往返 | **SF-0/1a/1b done**；下一刀 `sf-003` Vec；勿重证已落定理 |
 | **main** R1-024…031 | shared UInt64 math + fixed-point | Track D fee/matching **少造轮子**；不新增 Runtime leaf |
 | **main** R5-022/023 | SafeCast→UInt8/16 | 共享层；非 blocker |
 | **main** docs | backlog / roadmap / capability / parity 刷新 | 本分支已 merge；总图入口保留 |
@@ -142,7 +142,7 @@ Phase 0   导航对齐
           · 确认 WASM PR 不阻塞
 
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
-          · A: sf-000 → **sf-001 wrap/读回** → **sf-002 wrap/peek/往返**（Queue 收口）
+          · A: sf-000/001/002 **done** → **sf-003 Vec pop/setAt**（下一刀）
             （nowrap push / pop clear·advance 已在 main，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（可并行）
           · B: svm-rt-001 signed Clock（可并行）
@@ -256,7 +256,7 @@ Phase 7   收口
 
 | 轨道 | 片 | 状态 |
 |---|---|---|
-| A | sf-000 … sf-016 | Queue SF-1a/1b = **doing**（main 已吃掉 nowrap/clear/advance）；其余 todo |
+| A | sf-000 … sf-016 | SF-0/1a/1b = **done**；下一刀 SF-2a（sf-003）；其余 todo |
 | B | svm-rt-001 … 005 | todo |
 | C | svm-sdk-001 … 007 | todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
@@ -295,8 +295,8 @@ Phase 7   收口
 
 ## 9. 开工建议（本周，merge main 之后）
 
-1. **主线证明**：`sf-001` 只打 **wrap + 读回**（nowrap 已在 main）  
-2. **紧接**：`sf-002` 打 **wrap advance + peek/往返**（clear/advance 已在 main）  
+1. **主线证明**：Queue SF-1 已收口；下一刀 `sf-003` BoundedVec pop/setAt  
+2. **并行可选**：`svm-sem-001` / `svm-rt-001` / `svm-eng-001`   
 3. **主线 L3**：`svm-sem-001`（E1）  
 4. **并行可选**：`svm-rt-001` 或 `svm-sdk-001`  
 5. **顺手**：`svm-eng-001`  
