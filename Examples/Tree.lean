@@ -1514,8 +1514,9 @@ private theorem ptr_bound_set_unalloc (bump : UInt64) (nodes : Vector Node 4)
 
 已收：结构谓词、`paintNode_wf` / `set_value_wf`、`rotateLeft_meta` / `rotateRight_meta`、
 `rotateLeft_wf` / `rotateRight_wf`、`insertRoot_wf` /
-`insertNode_wf_empty` / `insertNode_wf_update`。
-待补：`insertAt` 臂、`removeNode_wf`。 -/
+`insertNode_wf_empty` / `insertNode_wf_update` / `fixInserted_wf` / `insertAt_wf` /
+`insertNode_wf_insertAt`。
+待补：`removeNode_wf`。 -/
 
 /-! ### sf-011：旋转 `wf` 与插入保持 -/
 
