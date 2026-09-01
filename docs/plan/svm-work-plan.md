@@ -286,6 +286,7 @@ Phase 7   收口
 | [svm-sem-036](tasks/svm-sem-036.md) | E∞ knife | Loader account-4 header/key after skip chain | **done** — knife 31; acc4 header/key |
 | [svm-sem-037](tasks/svm-sem-037.md) | E∞ knife | Loader account-4 signer/writable after skip chain | **done** — knife 32; acc4 flags |
 | [svm-sem-038](tasks/svm-sem-038.md) | E∞ knife | Loader account-4 lamports/data_len after skip chain | **done** — knife 33; acc4 budget |
+| [svm-sem-039](tasks/svm-sem-039.md) | E∞ knife | Loader account-4 owner limbs 0/1 after skip chain | **done** — knife 34; acc4 owner lo |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
