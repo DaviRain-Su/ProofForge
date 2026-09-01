@@ -363,6 +363,8 @@ storage_registration_anchors = (
     '(call $pf_promise_batch_create',
     '(call $pf_promise_batch_action_transfer',
     '(call $pf_json_storage_unregister_args',
+    '(call $pf_arena_alloc (i64.const 94) (i64.const 1))',
+    '(call $pf_log_utf8',
     '(call $pf_value_return (local.get $pf_output_length)',
     '(call $pf_mul64_lo',
     '(call $pf_mul64_hi',

@@ -252,6 +252,16 @@ asynchronous; dynamic handles and multi-action builders are absent.
    result persists independent state fields first. The bounded parser and variable-cost economics
    remain deliberately narrower/different from stock near-contract-standards, so this is not a full
    NEP-145 compatibility claim.
+   **NEAR-STORAGE-UNREGISTER (wsm-near-storage-unregister-integration-001 done):** the exact payable
+   export combines bounded optional force, JSON Boolean output, and the integrated `BAL2` ledger.
+   Missing callers now receive near-contract-standards 5.29's exact ordinary
+   `The account <id> is not registered` log before `false`; zero and forced-positive removals keep
+   the measured dynamic refund/supply rules. The bounded input, variable economics, and checked
+   rather than saturating refund addition remain explicit compatibility differences.
+   **NEAR-STORAGE-WITHDRAW (wsm-near-storage-withdraw-001 done):** the exact payable export accepts
+   missing/null/zero amount for a registered caller and returns its variable total with zero
+   available. Positive amounts, missing/malformed registration, and arithmetic failure reject
+   without map, supply, log, refund, or transfer effects; the security yocto remains attached.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

@@ -15,6 +15,7 @@ private partial def registrationSteps : Array ProofForge.Extract.IR.Op → Array
       | .ext (.near (.storageRead ..)) => #["read"]
       | .ext (.near (.storageWrite ..)) => #["write"]
       | .ext (.near (.storageRemove ..)) => #["remove"]
+      | .ext (.near (.storageUnregisteredLog ..)) => #["missing-log"]
       | .ext (.near (.promiseTransferAccountDetached ..)) => #["refund"]
       | .letLocal _ (.ext (.near .storageUsage) _) => #["usage"]
       | .ite _ _ _ thn els => registrationSteps thn ++ registrationSteps els
@@ -75,7 +76,8 @@ elab "#pf_near_storage_registration_check" : command => do
       withdraw.paramSchemas == #[Codec.storageWithdrawArgsSchema] &&
       withdraw.retSchema == Codec.storageBalanceResultSchema && withdraw.retCount == 5 do
     throwError "storage_withdraw lost its parser/one-read/StorageBalance source contract"
-  unless registrationSteps publicUnregister.ops == #["read", "usage", "remove", "usage", "refund"] &&
+  unless registrationSteps publicUnregister.ops ==
+      #["read", "missing-log", "usage", "remove", "usage", "refund"] &&
       publicUnregister.paramSchemas == #[Codec.storageUnregisterArgsSchema] &&
       publicUnregister.retSchema == Codec.jsonBooleanResultSchema &&
       publicUnregister.retCount == 1 do
@@ -241,7 +243,8 @@ elab "#pf_near_storage_registration_check" : command => do
       unregisterBody.contains "(call $pf_storage_usage" &&
       unregisterBody.contains "(call $pf_promise_batch_action_transfer" &&
       unregisterBody.contains "(call $pf_value_return (local.get $pf_output_length)" &&
-      !unregisterBody.contains "(call $pf_log_utf8" do
+      unregisterBody.contains "(call $pf_arena_alloc (i64.const 94) (i64.const 1))" &&
+      unregisterBody.contains "(call $pf_log_utf8" do
     throwError "storage_unregister lost bounded parse/guard/read-remove/refund/Boolean structure"
   let beforeRemove := unregisterBody.splitOn "(call $pf_storage_remove" |>.head!
   unless beforeRemove.contains "(call $pf_storage_read" &&
@@ -262,6 +265,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "f5bfb45576eacf83"
+  some "1a2bdb2d02f88de5"
 
 end Tests.NearStorageRegistrationSpec

@@ -268,6 +268,13 @@ preserve `BoundedString.wellFormed`; canonical NEAR String input already enforce
   let _ := message
   0
 
+/-- Emit the exact ordinary informational log used by near-contract-standards when
+`storage_unregister` finds no registration for the predecessor. This is intentionally specialized:
+it does not expose a generic AccountId/string composer. -/
+@[irreducible] def storageUnregisteredLog (account : AccountId) : UInt64 :=
+  let _ := account
+  0
+
 /-- Emit one exact NEP-297 envelope whose `data` member is a bounded dynamic JSON string.
 Metadata remains compile-time; the target owns all JSON escaping and the final host log. -/
 @[irreducible] def nep297StringData (capacity : Nat) (standard version event : String)

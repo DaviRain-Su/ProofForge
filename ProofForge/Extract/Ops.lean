@@ -200,6 +200,9 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
 @[match_pattern] def Op.nearLogUtf8Bounded (capacity : Nat) (message : Array Val) : Op :=
   .ext (.near (.logUtf8Bounded capacity message))
 
+@[match_pattern] def Op.nearStorageUnregisteredLog (account : Array Val) : Op :=
+  .ext (.near (.storageUnregisteredLog account))
+
 @[match_pattern] def Op.nearNep297StringData (standard version event : String)
     (capacity : Nat) (data : Array Val) : Op :=
   .ext (.near (.nep297StringData standard version event capacity data))
@@ -616,6 +619,7 @@ def hasNearEffect (ops : Array Op) : Bool :=
   walk ops fun
     | .ext (.near (.logUtf8 _))
     | .ext (.near (.logUtf8Bounded _ _))
+    | .ext (.near (.storageUnregisteredLog _))
     | .ext (.near (.nep297StringData _ _ _ _ _))
     | .ext (.near (.nep141FtMint _ _ _))
     | .ext (.near (.nep141FtTransfer _ _ _ _))

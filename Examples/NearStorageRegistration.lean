@@ -388,8 +388,9 @@ true burns it from total supply before removing the account. Like near-contract-
 missing account returns `false` and retains the attached yocto, while successful removal returns
 the live reclaimed storage cost plus that yocto through an asynchronous transfer. Synchronous
 failures after removal rely on nearcore receipt rollback; asynchronous refund failure does not.
-Unlike near-contract-standards 5.29, the missing path emits no informational log and refund
-addition is checked rather than saturating, so this exact export is not a full NEP-145 ABI claim. -/
+The missing path emits near-contract-standards 5.29's exact ordinary informational log. Refund
+addition remains checked rather than saturating, so this exact export is not a full NEP-145 ABI
+claim. -/
 @[pf_entry, pf_near_payable]
 def storage_unregister (state : State)
     (args : ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs) :
@@ -402,6 +403,7 @@ def storage_unregister (state : State)
       if Registration.trustedCostValid perByteCost then
         let _ := registrations.read caller
         if Registration.readWasMissing then
+          let _ := Logs.storageUnregistered caller
           .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
             state.lastCostW0, state.lastCostW1,
             state.totalSupplyW0, state.totalSupplyW1, 0⟩, { value := 0 })

@@ -159,6 +159,8 @@ private def projectOpExt
       | .logUtf8 message => pure (.logUtf8 message)
       | .logUtf8Bounded capacity message =>
           return .logUtf8Bounded capacity (← message.mapM _projectVal)
+      | .storageUnregisteredLog account =>
+          return .storageUnregisteredLog (← account.mapM _projectVal)
       | .nep297StringData standard version event capacity data =>
           return .nep297StringData standard version event capacity (← data.mapM _projectVal)
       | .nep141FtMint owner amountLo amountHi =>
@@ -320,6 +322,8 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
   | .logUtf8 message => s!"nlog:{message.toUTF8.size}:{message}"
   | .logUtf8Bounded capacity message =>
       s!"nlog.bounded.{capacity}({canonValues message})"
+  | .storageUnregisteredLog account =>
+      s!"nlog.storage-unregistered({canonValues account})"
   | .nep297StringData standard version event capacity data =>
       s!"nevent.string:{standard.toUTF8.size}:{standard}:{version.toUTF8.size}:{version}:" ++
         s!"{event.toUTF8.size}:{event}.{capacity}({canonValues data})"
@@ -451,6 +455,8 @@ private def rewritePayload
   | .logUtf8Bounded capacity message => do
       let rewritten ← message.mapM rewriteValue
       return .logUtf8Bounded capacity (rewritten.map simplifyLiteralSelect)
+  | .storageUnregisteredLog account =>
+      return .storageUnregisteredLog (← account.mapM rewriteValue)
   | .nep297StringData standard version event capacity data => do
       let rewritten ← data.mapM rewriteValue
       return .nep297StringData standard version event capacity

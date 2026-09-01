@@ -131,6 +131,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
     messages ++ match op with
       | .ext (.logUtf8 message) => #[message]
       | .ext (.logUtf8Bounded _ _) => #[]
+      | .ext (.storageUnregisteredLog _) => #[]
       | .ext (.nep297StringData _ _ _ _ _) => #[]
       | .ext (.nep141FtMint _ _ _) => #[]
       | .ext (.nep141FtTransfer _ _ _ _) => #[]
@@ -166,6 +167,7 @@ private def logMessages (p : Program ValKind OpExt) : Array String :=
 private partial def hasBoundedLogOps (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun
     | .ext (.logUtf8Bounded _ _) => true
+    | .ext (.storageUnregisteredLog _) => true
     | .ext (.nep297StringData _ _ _ _ _) => true
     | .ext (.nep141FtMint _ _ _) => true
     | .ext (.nep141FtTransfer _ _ _ _) => true
@@ -1096,6 +1098,8 @@ private def ftResolveTransferPrefix : Array UInt8 := "{\"sender_id\":\"".toUTF8.
 private def ftResolveTransferReceiverPrefix : Array UInt8 := "\",\"receiver_id\":\"".toUTF8.data
 private def ftResolveTransferAmountPrefix : Array UInt8 := "\",\"amount\":\"".toUTF8.data
 private def ftResolveTransferSuffix : Array UInt8 := "\"}".toUTF8.data
+private def storageUnregisteredPrefix : Array UInt8 := "The account ".toUTF8.data
+private def storageUnregisteredSuffix : Array UInt8 := " is not registered".toUTF8.data
 
 private structure FtEventBuffer where
   lines : Array String
@@ -1239,6 +1243,37 @@ private def finishFtEvent (buffer : FtEventBuffer) : StagedEvent := {
   length := "(local.get " ++ buffer.outputLengthLocal ++ ")"
   st := buffer.st
 }
+
+/-- Stage near-contract-standards' ordinary missing-registration log. AccountId bytes are copied
+verbatim rather than JSON-escaped; the protocol grammar makes every active byte valid ASCII. -/
+private def stageStorageUnregisteredLog (st : EState) (account : Array (Val ValKind))
+    (level : Nat) : Except String StagedEvent := do
+  unless account.size == 9 do
+    throw "extract/unsupported: near storage-unregistered AccountId frame geometry"
+  let allocation := storageUnregisteredPrefix.size + 64 + storageUnregisteredSuffix.size
+  let buffer := startFtEvent st storageUnregisteredPrefix allocation level
+  let accountLength ← renderVal buffer.st account[0]!
+  let accountLengthLocal := localOfTemp buffer.st.fresh
+  let st' := { buffer.st with fresh := buffer.st.fresh + 1 }
+  let mut lines := buffer.lines ++ #[
+    indent level ("(local.set " ++ accountLengthLocal ++ " " ++ accountLength ++ ")"),
+    indent level ("(if (i32.or (i64.lt_u (local.get " ++ accountLengthLocal ++
+      ") (i64.const 2)) (i64.gt_u (local.get " ++ accountLengthLocal ++
+      ") (i64.const 64))) (then unreachable))")
+  ]
+  for index in [0:64] do
+    let word ← renderVal buffer.st account[index / 8 + 1]!
+    let byte := "(i64.and (i64.shr_u " ++ word ++ " (i64.const " ++
+      toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+    lines := lines ++ #[
+      indent level ("(if (i64.lt_u (i64.const " ++ toString index ++ ") (local.get " ++
+        accountLengthLocal ++ "))"),
+      indent (level + 2) "(then"
+    ] ++ appendEventByte buffer.pointerLocal buffer.outputLengthLocal byte (level + 4) ++ #[
+      indent (level + 2) "))"
+    ]
+  let buffer := { buffer with lines, st := st' }
+  return finishFtEvent (appendFtLiteral buffer storageUnregisteredSuffix level)
 
 /-- Stage one exact no-memo NEP-141 `ft_mint` envelope. -/
 private def stageNep141FtMint (st : EState) (owner : Array (Val ValKind))
@@ -1838,6 +1873,15 @@ private partial def emitRegion (p : Program ValKind OpExt)
             region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.storageUnregisteredLog account) =>
+        let staged ← stageStorageUnregisteredLog st account level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
+        return {
+          lines := staged.lines ++ #[indent level
+            ("(call $pf_log_utf8 " ++ staged.length ++ " " ++ staged.pointer ++ ")")] ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.nep297StringData standard version event capacity data) =>
         let staged ← stageNep297StringData st standard version event capacity data level
         let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
@@ -2167,6 +2211,7 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
       match payload with
       | .logUtf8 _ | .transientBuffer64Begin _ | .transientBuffer64Finish _ | .reserved => false
       | .logUtf8Bounded _ message => message.any valHas
+      | .storageUnregisteredLog account => account.any valHas
       | .nep297StringData _ _ _ _ data => data.any valHas
       | .nep141FtMint owner amountLo amountHi =>
           owner.any valHas || valHas amountLo || valHas amountHi
@@ -2440,6 +2485,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8Bounded _ _) => true
+  | .ext (.storageUnregisteredLog _) => true
   | .ext (.nep297StringData _ _ _ _ _) => true
   | .ext (.nep141FtMint _ _ _) => true
   | .ext (.nep141FtTransfer _ _ _ _) => true

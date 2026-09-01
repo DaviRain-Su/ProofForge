@@ -71,6 +71,8 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
       | .logUtf8 message => .near (.logUtf8 message)
       | .logUtf8Bounded capacity message =>
           .near (.logUtf8Bounded capacity (message.map mapValue))
+      | .storageUnregisteredLog account =>
+          .near (.storageUnregisteredLog (account.map mapValue))
       | .nep297StringData standard version event capacity data =>
           .near (.nep297StringData standard version event capacity (data.map mapValue))
       | .nep141FtMint owner amountLo amountHi =>
@@ -158,6 +160,7 @@ def OpExt.values : OpExt Val → Array Val
       match payload with
       | .logUtf8 _ => #[]
       | .logUtf8Bounded _ message => message
+      | .storageUnregisteredLog account => account
       | .nep297StringData _ _ _ _ data => data
       | .nep141FtMint owner amountLo amountHi => owner ++ #[amountLo, amountHi]
       | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
@@ -241,6 +244,8 @@ def OpExt.wellFormed : OpExt Val → Bool
           Wasm.Near.Codec.storageCapacityValid capacity &&
             message.size == capacity + 1 &&
             message.all (·.wellFormed ValKind.arity)
+      | .storageUnregisteredLog account =>
+          account.size == 9 && account.all (·.wellFormed ValKind.arity)
       | .nep297StringData standard version event capacity data =>
           standard.toUTF8.size ≤ 64 && version.toUTF8.size ≤ 64 && event.toUTF8.size ≤ 64 &&
             Wasm.Near.Codec.storageCapacityValid capacity && data.size == capacity + 1 &&

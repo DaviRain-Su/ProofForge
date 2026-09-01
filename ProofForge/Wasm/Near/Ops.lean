@@ -80,6 +80,7 @@ UTF-8 frame; the emitter stages the latter through invocation-local linear memor
 inductive OpExt (V : Type) where
   | logUtf8 (message : String)
   | logUtf8Bounded (capacity : Nat) (message : Array V)
+  | storageUnregisteredLog (account : Array V)
   | nep297StringData (standard version event : String) (capacity : Nat) (data : Array V)
   | nep141FtMint (owner : Array V) (amountLo amountHi : V)
   | nep141FtTransfer (oldOwner newOwner : Array V) (amountLo amountHi : V)
@@ -146,6 +147,7 @@ private def packedBytes64FrameWellFormed (values : Array Val) : Bool :=
 def OpExt.wellFormed : OpExt Val → Bool
   | .logUtf8 message => message.toUTF8.size ≤ 1024
   | .logUtf8Bounded capacity message => storageFrameWellFormed capacity message
+  | .storageUnregisteredLog account => accountIdFrameWellFormed account
   | .nep297StringData standard version event capacity data =>
       standard.toUTF8.size ≤ 64 && version.toUTF8.size ≤ 64 && event.toUTF8.size ≤ 64 &&
         storageFrameWellFormed capacity data
@@ -245,6 +247,7 @@ def Op.wellFormed (op : Op) : Bool :=
 private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
   | .logUtf8 message => .logUtf8 message
   | .logUtf8Bounded capacity message => .logUtf8Bounded capacity (message.map mapValue)
+  | .storageUnregisteredLog account => .storageUnregisteredLog (account.map mapValue)
   | .nep297StringData standard version event capacity data =>
       .nep297StringData standard version event capacity (data.map mapValue)
   | .nep141FtMint owner amountLo amountHi =>
@@ -325,6 +328,7 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
 private def cfgPayloadValues : OpExt Val → Array Val
   | .logUtf8 _ => #[]
   | .logUtf8Bounded _ message => message
+  | .storageUnregisteredLog account => account
   | .nep297StringData _ _ _ _ data => data
   | .nep141FtMint owner amountLo amountHi => owner ++ #[amountLo, amountHi]
   | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>

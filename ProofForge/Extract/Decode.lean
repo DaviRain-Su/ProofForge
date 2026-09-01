@@ -5830,6 +5830,7 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
       e.getUsedConstantsAsSet.toList.any fun name =>
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
         name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageUnregisteredLog ||
         name == ``ProofForge.Wasm.Near.Runtime.nep297StringData ||
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtMint ||
         name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer ||
@@ -5907,6 +5908,9 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 .nearLogUtf8Bounded capacity message
             else none
         | none => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageUnregisteredLog &&
+          e.getAppArgs.size ≥ 1 then
+        (nearAccountIdFrame? env e.getAppArgs.back!).map Ops.Op.nearStorageUnregisteredLog
       else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep297StringData &&
           e.getAppArgs.size ≥ 5 then
         let args := e.getAppArgs

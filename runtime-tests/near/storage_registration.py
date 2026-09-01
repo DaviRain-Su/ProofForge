@@ -320,7 +320,7 @@ def _run_storage_deposit_scenes(
 
 
 def _run_public_storage_unregister_scenes(
-    client: NearClient, wasm: Path, contract: str, caller: str, malformed: str,
+    client: NearClient, wasm: Path, contract: str, caller: str, max_caller: str, malformed: str,
     per_byte: int,
 ) -> None:
     client.deploy_to(contract, wasm)
@@ -328,20 +328,29 @@ def _run_public_storage_unregister_scenes(
 
     missing = _storage_unregister(client, contract, caller, b"{}")
     _assert_json_boolean(missing, False, "missing public storage_unregister")
-    if _outcome_logs(missing):
-        raise AssertionError("missing public storage_unregister unexpectedly emitted a log")
+    expected_missing_log = f"The account {caller} is not registered"
+    if _outcome_logs(missing) != [expected_missing_log]:
+        raise AssertionError("missing public storage_unregister log mismatch")
     if _key(caller) in client.view_state_values(contract):
         raise AssertionError("missing public storage_unregister created a balance key")
     forced_missing = _storage_unregister(client, contract, caller, b'{"force":true}')
     _assert_json_boolean(forced_missing, False, "forced missing public storage_unregister")
-    if _outcome_logs(forced_missing) or _key(caller) in client.view_state_values(contract):
-        raise AssertionError("forced missing public storage_unregister had effects")
+    if _outcome_logs(forced_missing) != [expected_missing_log] or \
+            _key(caller) in client.view_state_values(contract):
+        raise AssertionError("forced missing public storage_unregister effects/log mismatch")
+
+    max_missing = _storage_unregister(client, contract, max_caller, b'{"force":false}')
+    _assert_json_boolean(max_missing, False, "max-account missing public storage_unregister")
+    if _outcome_logs(max_missing) != [f"The account {max_caller} is not registered"]:
+        raise AssertionError("max-account missing public storage_unregister log mismatch")
 
     for deposit in (0, 2):
         before = client.view_state_values(contract)
-        _storage_unregister(
+        rejected = _storage_unregister(
             client, contract, caller, b'{"force":true}', deposit=deposit, success=False
         )
+        if _outcome_logs(rejected):
+            raise AssertionError("one-yocto rejection emitted missing-registration log")
         if client.view_state_values(contract) != before:
             raise AssertionError("public storage_unregister one-yocto guard changed state")
 
@@ -397,11 +406,14 @@ def _run_public_storage_unregister_scenes(
     )
     if client.view_state_values(contract) != parser_before:
         raise AssertionError("late public storage_unregister parse failure changed state")
+    repeated_missing = _storage_unregister(client, contract, caller, b'{"force":null}')
     _assert_json_boolean(
-        _storage_unregister(client, contract, caller, b'{"force":null}'),
+        repeated_missing,
         False,
         "repeated missing public storage_unregister",
     )
+    if _outcome_logs(repeated_missing) != [expected_missing_log]:
+        raise AssertionError("repeated missing public storage_unregister log mismatch")
 
     client.call_on(contract, "seedCallerOne", b"", signer=caller)
     underflow_before = client.view_state_values(contract)
@@ -538,7 +550,7 @@ def main() -> None:
         client, wasm, deposit_contract, short, long, malformed, per_byte
     )
     _run_public_storage_unregister_scenes(
-        client, wasm, unregister_contract, short, malformed, per_byte
+        client, wasm, unregister_contract, short, long, malformed, per_byte
     )
     _run_storage_withdraw_scenes(
         client, wasm, withdraw_contract, short, long, malformed, withdraw_overflow, per_byte

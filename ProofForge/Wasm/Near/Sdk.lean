@@ -147,6 +147,11 @@ before source execution; internally constructed values must satisfy `BoundedStri
     (message : ProofForge.Core.Value.BoundedString capacity) : UInt64 :=
   Runtime.logUtf8Bounded capacity message
 
+/-- Emit near-contract-standards' exact missing-registration informational log for one complete
+AccountId. This closed helper does not expose arbitrary prefix/suffix composition. -/
+@[pf_inline] def storageUnregistered (account : AccountId) : UInt64 :=
+  Runtime.storageUnregisteredLog account
+
 end Logs
 
 namespace Events
