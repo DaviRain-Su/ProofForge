@@ -472,6 +472,16 @@ private def staticRequest : Schema :=
   | .ok type => type == "(uint64,(uint32,bool),uint16[2])"
   | .error _ => false
 
+-- Depth-2 products remain in Feature A (matches maxProductNesting).
+#guard ProofForge.Evm.Codec.productNestingDepth staticRequest == 2
+
+-- Depth-3 nested products fail closed until evm-rt-nested-001 widens the ceiling.
+#guard
+  match ProofForge.Evm.Codec.abiTypeOfSchema
+      (.tuple #[.tuple #[.tuple #[.scalar .uint64]]]) with
+  | .error reason => reason.contains "product nesting depth"
+  | .ok _ => false
+
 private def typedMethod : ProofForge.Evm.IR.Method := {
   kind := .get
   name := "typed"

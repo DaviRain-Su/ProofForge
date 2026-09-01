@@ -1,7 +1,7 @@
 ---
 id: evm-rt-nested-001
 scope: evm
-status: todo
+status: partial
 depends-on: []
 plan: ../multi-target-strategy.md
 ---
@@ -21,6 +21,15 @@ still outside the accepted surface.
 2. Codec/Extract: accept the in-scope subset; reject the rest with stable `evm/codec:` errors
 3. Anvil malformed matrix: nested OK cases + reject cases
 4. No Feature B / powdr coupling
+
+## Progress (2026-09-01)
+
+- **Ceiling landed**: `ProofForge.Evm.Codec.maxProductNesting = 2` with
+  `productNestingDepth` + gate in `abiTypeOfSchema`
+- Depth-2 shapes already in use (`(uint64,(uint32,bool),uint16[2])`) stay accepted
+- Depth ≥ 3 fail-closes with `evm/codec: product nesting depth …`
+- Spec guards in `Tests/CoreCodecSpec.lean`
+- Still open: constructed/wide dynamic returns, Anvil matrix, raising the ceiling under policy
 
 ## Non-goals
 

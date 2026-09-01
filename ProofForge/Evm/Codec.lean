@@ -50,6 +50,26 @@ private def abiPartIndex : String → Option Nat
   | "w3" => some 3
   | _ => none
 
+/-- Feature A nesting ceiling for product schemas (tuple/record). Depth 0 = scalar leaf;
+depth 1 = flat product of scalars/arrays-of-scalars; depth 2 = one nested product (already used
+by existing codecs). Depth ≥ 3 stays fail-closed until `evm-rt-nested-001` widens the surface. -/
+def maxProductNesting : Nat := 2
+
+/-- Product nesting depth: tuples/records add one level; fixed arrays inherit the element depth;
+scalars stay at 0. Dynamic carriers are not measured here (they keep their explicit policy gate). -/
+partial def productNestingDepth : Schema → Nat
+  | .unit | .scalar _ => 0
+  | .tuple items =>
+      1 + items.foldl (fun acc item => Nat.max acc (productNestingDepth item)) 0
+  | .record _ fields =>
+      1 + fields.foldl (fun acc field => Nat.max acc (productNestingDepth field.2)) 0
+  | .fixedArray _ element => productNestingDepth element
+  | .option inner => productNestingDepth inner
+  | .enumeration _ _ variants =>
+      variants.foldl (fun acc variant => Nat.max acc (productNestingDepth variant.2)) 0
+  | .boundedArray _ element => productNestingDepth element
+  | .boundedBytes _ | .boundedString _ => 0
+
 private partial def abiTypeOfSchemaAt : Schema → Except String String
   | .unit => throw "evm/codec: unit has no canonical ABI parameter type"
   | .scalar type => abiType type
@@ -72,9 +92,13 @@ private partial def abiTypeOfSchemaAt : Schema → Except String String
 
 /-- Canonical Solidity ABI spelling for one logical parameter or result. Nested records and Lean
 products are tuples; literal vectors are fixed arrays. This target-owned function deliberately
-does not expose ABI words or padding to Core. -/
+does not expose ABI words or padding to Core. Product nesting deeper than `maxProductNesting`
+fail-closes (see `evm-rt-nested-001`). -/
 def abiTypeOfSchema (schema : Schema) : Except String String := do
   let _ ← validate schema
+  let depth := productNestingDepth schema
+  if depth > maxProductNesting then
+    throw s!"evm/codec: product nesting depth {depth} exceeds Feature A ceiling {maxProductNesting}"
   match schema with
   | .boundedArray _ element =>
       return (← abiTypeOfSchemaAt element) ++ "[]"
