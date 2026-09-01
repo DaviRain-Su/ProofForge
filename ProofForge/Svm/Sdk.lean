@@ -7,6 +7,7 @@ import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.StorageBitSet
 import ProofForge.Svm.Sdk.StorageBitSetModel
 import ProofForge.Svm.Sdk.StorageEnumerableSet
+import ProofForge.Svm.Sdk.AllocatorModel
 import ProofForge.Svm.Sdk.Versioned
 import ProofForge.Svm.Sdk.VersionedModel
 import ProofForge.Svm.Sdk.Queue
