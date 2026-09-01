@@ -1,0 +1,7 @@
+# 由 `pf init --target svm` 生成。在 ProofForge 发布 tag 上钉 SDK。
+name = "my-program"
+target = "svm"
+
+[[program]]
+name = "Counter"
+module = "MyProgram.Counter"
