@@ -35,11 +35,22 @@ theorem wf_bounded (value : String) (h : wellFormed value = true) :
   unfold maxBytes
   exact h.1
 
+/-- The public Memo budget is pinned to the extractor's 512-byte ceiling. -/
+theorem maxBytes_eq : maxBytes = 512 := rfl
+
+/-- Numeric form of `wf_bounded` for callers that do not unfold the budget constant. -/
+theorem wf_bounded_512 (value : String) (h : wellFormed value = true) :
+    value.length ≤ 512 := by
+  simpa [maxBytes] using wf_bounded value h
+
 end Ascii
 
 /-- Compatibility spelling for the original fixed payload. New applications should select their
 own static payload through `Ascii.write`. -/
 @[pf_inline] def writeOk : UInt64 :=
   Ascii.write "ok"
+
+/-- `writeOk` is only a compatibility delegate to the generic bounded ASCII writer. -/
+theorem writeOk_def : writeOk = Ascii.write "ok" := rfl
 
 end ProofForge.Svm.Sdk.Memo

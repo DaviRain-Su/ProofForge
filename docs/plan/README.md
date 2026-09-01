@@ -210,7 +210,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-012](tasks/sf-012.md) | doing | FifoCancel 有界折料 |
 | [sf-013](tasks/sf-013.md) | doing | BatchRecorder begin/append/finish（纯 L2 Bytes 模型已落地） |
 | [sf-014](tasks/sf-014.md) | done | Account / Memory / Sysvar / Telemetry L1 |
-| [sf-015](tasks/sf-015.md) | todo | Token / ATA / Pda / System / Memo 扫尾 |
+| [sf-015](tasks/sf-015.md) | done | Token / ATA / Pda / System / Memo 扫尾 |
 | [sf-016](tasks/sf-016.md) | todo | SVM 形式化收口审计 |
 
 ### Track B–F — 能力 / 应用 / 语义 / 工程

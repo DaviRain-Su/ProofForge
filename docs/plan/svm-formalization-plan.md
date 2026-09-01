@@ -166,7 +166,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-8a | FifoCancel 有界折料 | L2 | **doing** | [sf-012](tasks/sf-012.md) |
 | SF-8b | BatchRecorder begin/append/finish | L2 | **doing** | [sf-013](tasks/sf-013.md) |
 | SF-9a | Account / Memory / Sysvar / Telemetry L1 | L1 | **done** | [sf-014](tasks/sf-014.md) |
-| SF-9b | Token / ATA / Pda / System / Memo 扫尾 | L1 | todo | [sf-015](tasks/sf-015.md) |
+| SF-9b | Token / ATA / Pda / System / Memo 扫尾 | L1 | **done** | [sf-015](tasks/sf-015.md) |
 | SF-10 | 收口审计 | gate | todo | [sf-016](tasks/sf-016.md) |
 
 ---
