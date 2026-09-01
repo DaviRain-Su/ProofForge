@@ -33,6 +33,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       methodSteps "storage_balance_of" == #["read.16.72"] &&
       methodSteps "storage_balance_bounds" == #[] &&
       methodSteps "storage_deposit" == #["read.16.72", "write.16.72.16"] &&
+      methodSteps "storage_withdraw" == #["read.16.72"] &&
       methodSteps "ft_total_supply" == #[] &&
       methodSteps "ft_metadata" == #[] &&
       methodSteps "ft_transfer" ==
@@ -82,6 +83,12 @@ elab "#pf_near_fungible_ledger_check" : command => do
       sourceStorageDeposit.retSchema == Codec.storageBalanceResultSchema &&
       sourceStorageDeposit.retCount == 5 do
     throwError "integrated storage_deposit lost its exact source frames"
+  let some sourceStorageWithdraw := source.methods.find? (·.ixName == "storage_withdraw")
+    | throwError "missing source storage_withdraw"
+  unless sourceStorageWithdraw.paramSchemas == #[Codec.storageWithdrawArgsSchema] &&
+      sourceStorageWithdraw.retSchema == Codec.storageBalanceResultSchema &&
+      sourceStorageWithdraw.retCount == 5 do
+    throwError "integrated storage_withdraw lost its exact source frames"
   let duplicateNoArgs := { source with methods := source.methods.map fun candidate =>
     if candidate.ixName == "ft_total_supply" then
       { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
@@ -165,6 +172,16 @@ elab "#pf_near_fungible_ledger_check" : command => do
       storageDeposit.entryPolicy == "near.entry.v1:payable" &&
       storageDeposit.tupleArity == some 5 do
     throwError "integrated storage_deposit lost payable specialized policies"
+  let some storageWithdraw := program.entries.find? (·.ixName == "storage_withdraw")
+    | throwError "missing target storage_withdraw"
+  unless storageWithdraw.inputSchema == some Codec.storageWithdrawArgsSchema &&
+      storageWithdraw.inputPolicy ==
+        "near-json-storage-withdraw-args-bounded-v1(max-wire=279,ws=32,digits=1..39,keys=raw,unknown=reject)" &&
+      storageWithdraw.outputSchema == some Codec.storageBalanceResultSchema &&
+      storageWithdraw.outputPolicy == "near-json-storage-balance-option-v1" &&
+      storageWithdraw.entryPolicy == "near.entry.v1:payable" &&
+      storageWithdraw.tupleArity == some 5 do
+    throwError "integrated storage_withdraw lost payable specialized policies"
   let some transfer := program.entries.find? (·.ixName == "ft_transfer")
     | throwError "missing target ft_transfer"
   unless transfer.kind == .increment && transfer.entryPolicy == "near.entry.v1:payable" &&
@@ -215,6 +232,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"storage_balance_of\")",
       "(func (export \"storage_balance_bounds\")",
       "(func (export \"storage_deposit\")",
+      "(func (export \"storage_withdraw\")",
       "(func (export \"ft_transfer\")",
       "(func (export \"ft_transfer_call\")",
       "(func (export \"seedSelfMalformed8\")",
@@ -307,6 +325,19 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !storageDepositBody.contains "(call $pf_storage_remove" &&
       !storageDepositBody.contains "(call $pf_log_utf8" do
     throwError "storage_deposit lost parse/read/write/measure/refund/result composition"
+  let storageWithdrawBody ← match wat.splitOn "(func (export \"storage_withdraw\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "storage_withdraw must occur exactly once"
+  unless storageWithdrawBody.contains "(i64.const 279)" &&
+      storageWithdrawBody.contains "(call $pf_json_storage_withdraw_args" &&
+      storageWithdrawBody.contains "(call $pf_attached_deposit" &&
+      storageWithdrawBody.contains "(call $pf_storage_read" &&
+      storageWithdrawBody.contains "(call $pf_value_return" &&
+      !storageWithdrawBody.contains "(call $pf_storage_write" &&
+      !storageWithdrawBody.contains "(call $pf_storage_remove" &&
+      !storageWithdrawBody.contains "(call $pf_log_utf8" &&
+      !storageWithdrawBody.contains "(call $pf_promise" do
+    throwError "storage_withdraw lost guard/read/result no-effect composition"
   let legacyNoArgsBody ← match wat.splitOn "(func (export \"balanceSelfHas\")" with
     | [_before, tail] =>
         match tail.splitOn "\n  )\n" with
@@ -439,6 +470,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "a8215b23cfefdb79"
+  some "9eda44986bf6420d"
 
 end Tests.NearFungibleLedgerSpec

@@ -259,6 +259,39 @@ def storage_deposit (state : State)
     else .error .overflow
   else .error .overflow
 
+/-- Closed zero-available withdrawal over the integrated registration/balance namespace. Exact one
+yocto, a registered predecessor, and missing/null/zero amount succeed with the current variable
+total; positive amounts reject without map, supply, log, refund, or Promise effects. -/
+@[pf_entry, pf_near_payable]
+def storage_withdraw (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageWithdrawArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.StorageBalanceResult) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit then
+    let caller := Context.caller
+    if DirectAccountNearTokenMap.accountLengthValid caller then
+      let _ := balances.read caller
+      if Registration.readWasValidPresent then
+        if args.amountPresent ≤ 1 &&
+            (args.amountPresent = 0 || Registration.tokenIsZero args.amount) then
+          let storagePrice : NearToken := ⟨1, 0⟩
+          let bytes := Registration.variableAccountEntryBytes caller
+          if Registration.trustedCostValid storagePrice &&
+              NearToken.canMulUInt64 storagePrice bytes then
+            let cost : NearToken :=
+              ⟨NearToken.mulUInt64W0 storagePrice bytes,
+                NearToken.mulUInt64W1 storagePrice bytes⟩
+            let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+              { registered := 1, total := ⟨cost.w0, cost.w1⟩,
+                available := ⟨0, 0⟩ }
+            let next : State := ⟨state.supplyW0, state.supplyW1, state.marker⟩
+            .ok (next, result)
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

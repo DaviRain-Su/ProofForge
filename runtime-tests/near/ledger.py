@@ -134,6 +134,17 @@ def _assert_transfer_receipt(
     raise AssertionError(f"missing refund transfer to {receiver} for {amount}")
 
 
+def _assert_no_transfer_receipt(client: NearClient, outcome: dict, scene: str) -> None:
+    for record in outcome.get("receipts_outcome", ()):
+        receipt_id = record.get("id")
+        if not receipt_id:
+            continue
+        receipt = client.rpc_call("EXPERIMENTAL_receipt", {"receipt_id": receipt_id})
+        actions = receipt.get("receipt", {}).get("Action", {}).get("actions", ())
+        if any(isinstance(action, dict) and "Transfer" in action for action in actions):
+            raise AssertionError(f"{scene}: unexpected transfer receipt")
+
+
 def _ft_args(receiver: str, amount: int, memo: object = _MISSING) -> bytes:
     fields: dict[str, object] = {"receiver_id": receiver, "amount": str(amount)}
     if memo is not _MISSING:
@@ -417,6 +428,25 @@ def main() -> None:
     _assert_transfer_receipt(client, registered, client.account_id, deposit - self_cost)
     if _storage_balance(client, client.account_id) != expected_registration:
         raise AssertionError("integrated storage_deposit did not create BAL2 registration")
+    for wire in (b"{}", b'{"amount":null}', b'{"amount":"0"}'):
+        before_withdraw = client.view_state_values()
+        withdrawn = client.call_on(
+            client.account_id, "storage_withdraw", wire,
+            signer=client.account_id, deposit=1,
+        )
+        if NearClient.success_value_bytes(withdrawn) != expected_registration:
+            raise AssertionError("integrated zero-available storage_withdraw output mismatch")
+        if client.view_state_values() != before_withdraw:
+            raise AssertionError("successful zero storage_withdraw changed BAL2/state")
+        _assert_no_transfer_receipt(client, withdrawn, "zero storage_withdraw")
+    for wire, attached in ((b'{"amount":"1"}', 1), (b"{}", 0), (b"{}", 2)):
+        before_withdraw = client.view_state_values()
+        client.call_on(
+            client.account_id, "storage_withdraw", wire,
+            signer=client.account_id, deposit=attached, expect_success=False,
+        )
+        if client.view_state_values() != before_withdraw:
+            raise AssertionError("rejected storage_withdraw changed BAL2/state")
     duplicate = client.call_on(
         client.account_id, "storage_deposit", b'{"registration_only":true}',
         signer=client.account_id, deposit=7,
@@ -432,6 +462,13 @@ def main() -> None:
     _call(client, "fixtureResetSelf")
     if _storage_balance(client, client.account_id) != b"null":
         raise AssertionError("storage_deposit registration did not share BAL2 lifecycle")
+    missing_withdraw_before = client.view_state_values()
+    client.call_on(
+        client.account_id, "storage_withdraw", b"{}",
+        signer=client.account_id, deposit=1, expect_success=False,
+    )
+    if client.view_state_values() != missing_withdraw_before:
+        raise AssertionError("missing-account storage_withdraw changed ledger state")
     explicit = client.call_on(
         client.account_id, "storage_deposit",
         b'{"account_id":"aa","registration_only":true}',

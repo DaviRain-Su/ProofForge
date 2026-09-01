@@ -499,5 +499,11 @@ measures live storage delta, retains delta × the immutable fixture price, refun
 excess, and leaves supply unchanged. Duplicate registration refunds the complete deposit. The
 bounded input and non-network fixture price remain explicit compatibility boundaries.
 
+**NEAR-INTEGRATED-STORAGE-WITHDRAW (wsm-near-ft-ledger-storage-withdraw-001 done):** the integrated
+artifact now accepts bounded missing/null/zero withdrawal under exact-one-yocto and returns the
+registered predecessor's variable total with zero available. Positive/wrong-deposit/missing paths
+reject; the operation has no map, supply, refund, log, or Promise effect. This preserves the closed
+zero-available economics rather than adding a meaningless withdrawal balance.
+
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

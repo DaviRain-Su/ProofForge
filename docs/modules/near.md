@@ -397,3 +397,7 @@ available 恒为零，2..64-byte bounds 为 66..128 bytes。集成 fixture 使�
 `storage_deposit` 也已组合到该 artifact：new registration 写入同一 BAL2 present-zero key，
 按真实 storage_usage delta × fixture price 留存并把 excess refund 给 predecessor；duplicate
 refund 全额 deposit。该操作不改变 supply，bounded parser/fixture price 差异继续明确保留。
+
+`storage_withdraw` 同样已组合：exact 1 yocto 且 amount missing/null/zero 时只返回 variable
+total/available0；positive、missing registration 或错误 deposit 均失败。closed policy 没有
+实质 available 可提取，因此无 map/supply mutation、refund receipt、log 或 Promise。
