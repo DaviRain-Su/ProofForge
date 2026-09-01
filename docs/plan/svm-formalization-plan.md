@@ -17,7 +17,7 @@
 - **L1**：`wellFormed` / fail-closed 守卫 / 几何与角色下标
 - **L2**：在 `AccountWords` 或新建 `TransientWords` 模型上的组合代数
 
-**不做 L3**：sBPF instruction refinement（项目信任边界排除；继续靠 pinned Mollusk / Surfpool）。
+**L3 不在本文件展开**：sBPF correspondence 见总计划 Track E（`svm-sem-*`，E0–E5 要做完；E∞ Agave 主机不承诺）。本文件专注 SDK/Component 的 L1/L2。
 
 「做完」= §6 矩阵每一行 `done` 或显式 `n/a`，且 `scripts/check_no_sorry.py`、`scripts/check_ownership.py`、既有 SVM 工程门全绿。
 
@@ -30,7 +30,7 @@
 | L1 描述符 / 守卫 | wellFormed、几何、ASCII bound、role index、pure 谓词 | kernel | **必须做完** |
 | L2 组合代数 | 抽象状态上的 RAW、非干涉、push/pop、alloc/free、set 代数 | kernel；模型与 SDK 控制流同构 | **必须做完** |
 | 工程门 | `@[irreducible]` 宿主 stub 与发射同语义 | pinned Mollusk / Surfpool | **保持，不扩成证明** |
-| L3 refinement | 发射代码逐步实现模型 | — | **明确不做** |
+| L3 refinement | emit ↔ Solanalib/`sbpfSemantics` | 总计划 Track E | **E0–E5 另轨做；本文件不重复** |
 
 禁止「证 stub 占位返回值假装证链上行为」（p-003 负结果）。
 

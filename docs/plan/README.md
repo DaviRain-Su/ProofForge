@@ -188,7 +188,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | B Runtime | `svm-rt-*` | signed Clock、Token-2022 extension、alias walk、动态返回… |
 | C SDK | `svm-sdk-*` | rent top-up、owner 政策、POD/transient、Memo/migration… |
 | D 应用 | `svm-app-*` | Phoenix-v1 指令面、matching/fee、非 Phoenix 例子 |
-| E 语义桥 | `svm-sem-*` | Solanalib / assembler-semantics 加深 |
+| E L3 语义 | `svm-sem-*` | sBPF refinement 阶梯 E0–E5（Solanalib + sbpfSemantics） |
 | F 工程 | `svm-eng-*` | 形式化 CI 门、双矩阵收口页 |
 
 ### Track A — 形式化（`sf-000`…`sf-016`）
@@ -232,8 +232,11 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-app-001](tasks/svm-app-001.md) | todo | Phoenix-v1 下一组 instruction |
 | [svm-app-002](tasks/svm-app-002.md) | todo | matching/fee/remainder 宣称面 |
 | [svm-app-003](tasks/svm-app-003.md) | todo | 非 Phoenix SDK 小例子集 |
-| [svm-sem-001](tasks/svm-sem-001.md) | todo | Solanalib correspondence 加深 |
-| [svm-sem-002](tasks/svm-sem-002.md) | todo | assembler-semantics golden 扩样 |
+| [svm-sem-001](tasks/svm-sem-001.md) | todo | L3/E1 operand materialization + straightline |
+| [svm-sem-002](tasks/svm-sem-002.md) | todo | L3/E2 assembler-semantics golden 差分门 |
+| [svm-sem-003](tasks/svm-sem-003.md) | todo | L3/E3 Counter 整函数 CFG correspondence |
+| [svm-sem-004](tasks/svm-sem-004.md) | todo | L3/E4 AccountWords ↔ storev 桥 |
+| [svm-sem-005](tasks/svm-sem-005.md) | todo | L3/E5 选定容器全函数有界证明 |
 | [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
