@@ -206,8 +206,8 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-008](tasks/sf-008.md) | done | Allocator alloc/free 往返 |
 | [sf-009](tasks/sf-009.md) | done | OrderedMap 索引层 find/insert/remove |
 | [sf-010](tasks/sf-010.md) | done | StorageEnumerableSet 索引/前缀层 |
-| [sf-011](tasks/sf-011.md) | doing | Tree 全树 wf 保持 |
-| [sf-012](tasks/sf-012.md) | todo | FifoCancel 有界折料 |
+| [sf-011](tasks/sf-011.md) | doing | Tree 全树 wf 保持（几何 done；可达/互逆可选） |
+| [sf-012](tasks/sf-012.md) | doing | FifoCancel 有界折料 |
 | [sf-013](tasks/sf-013.md) | todo | BatchRecorder begin/append/finish |
 | [sf-014](tasks/sf-014.md) | todo | Account / Memory / Sysvar / Telemetry L1 |
 | [sf-015](tasks/sf-015.md) | todo | Token / ATA / Pda / System / Memo 扫尾 |
