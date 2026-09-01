@@ -310,6 +310,7 @@ Phase 7   收口
 | [svm-sem-060](tasks/svm-sem-060.md) | E∞ knife | Loader account-7 owner limbs 0/1 after skip chain | **done** — knife 55; acc7 owner lo |
 | [svm-sem-061](tasks/svm-sem-061.md) | E∞ knife | Loader account-7 owner limbs 2/3 after skip chain | **done** — knife 56; acc7 owner hi |
 | [svm-sem-062](tasks/svm-sem-062.md) | E∞ knife | Loader account-7 executable/rent after skip chain | **done** — knife 57; acc7 exec/rent |
+| [svm-sem-063](tasks/svm-sem-063.md) | E∞ knife | Loader account-7 → account-8 skip chain | **done** — knife 58; acc8 skip |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
