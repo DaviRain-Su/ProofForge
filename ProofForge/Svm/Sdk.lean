@@ -5,6 +5,7 @@ import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.Program
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.StorageBitSet
+import ProofForge.Svm.Sdk.StorageBitSetModel
 import ProofForge.Svm.Sdk.StorageEnumerableSet
 import ProofForge.Svm.Sdk.Versioned
 import ProofForge.Svm.Sdk.VersionedModel

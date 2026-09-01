@@ -200,7 +200,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-002](tasks/sf-002.md) | doing | Queue wrap pop / peek / 往返（clear/advance 已在 main） |
 | [sf-003](tasks/sf-003.md) | todo | BoundedVec pop + setAt 读回 |
 | [sf-004](tasks/sf-004.md) | todo | Versioned 状态机 |
-| [sf-005](tasks/sf-005.md) | todo | StorageBitSet mask 代数 + 账户桥 |
+| [sf-005](tasks/sf-005.md) | done | StorageBitSet mask 代数 + 账户桥 |
 | [sf-006](tasks/sf-006.md) | todo | TransientModel + Vector64 |
 | [sf-007](tasks/sf-007.md) | todo | Bytes + Record64 + WideVec |
 | [sf-008](tasks/sf-008.md) | todo | Allocator alloc/free 往返 |

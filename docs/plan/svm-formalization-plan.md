@@ -52,7 +52,7 @@
 `mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
 `mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
 
-下一形式化刀：SF-3 BitSet（`sf-005`）。
+下一形式化刀：SF-4a TransientModel + Vector64（`sf-006`）。
 ---
 
 ## 4. 组件清单
@@ -63,8 +63,8 @@
 |---|---|---|---|---|
 | Field / Region / scalarHeader | `Sdk/Storage.lean` | 部分 done | 字段代数 done | 收成标准引理包 |
 | BoundedVec | `Sdk/Storage.lean` | done | push done；**pop/setAt 待补** | 底座 |
-| BoundedQueue | `Sdk/Queue.lean` | wf parts done | push/pop 全分支链接+读回、peek、initialize、空往返 **done** | **已收口**；下一刀 Vec |
-| BitSet | `Sdk/StorageBitSet.lean` | wf 待定理化 | 单字 mask 代数待建 | 可先纯函数后桥账户 |
+| BoundedQueue | `Sdk/Queue.lean` | wf parts done | push/pop 全分支链接+读回、peek、initialize、空往返 **done** | **已收口** |
+| BitSet | `Sdk/StorageBitSet.lean` + `StorageBitSetModel.lean` | wf parts done | mask 代数 + OOB 无写 + insert/remove 读回 **done** | **SF-3 已收口** |
 | EnumerableSet | `Sdk/StorageEnumerableSet.lean` | wf 待 | 依赖 map + values 槽 | 后置 |
 | OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | **模型层几乎空白** | 最大块；对齐 `Examples/Tree.lean` |
 | Versioned | `Sdk/Versioned.lean` | wf 待 | classify / initialize / apply | 宜早做 |
@@ -119,7 +119,7 @@ Phoenix 撮合正确性、syscall host 全模型、任何 WASM/EVM 工作。
 ```text
 SF-0  证明基础设施（wf-parts / word 引理习惯成文）
   └─► SF-1  Queue 收口                    ← **done**
-        └─► SF-2  BoundedVec                     ← 下一刀 pop/set + Versioned
+        └─► SF-2  BoundedVec                     ← done；下一刀 Transient（sf-006）
               ├─► SF-3  BitSet
               ├─► SF-4  TransientModel + Vec/Bytes/Record/Wide
               └─► SF-5  Allocator + OrderedMap/Rb
@@ -153,7 +153,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-1b | Queue pop / peek / initialize / 往返 | L2 | **done** | [sf-002](tasks/sf-002.md) |
 | SF-2a | BoundedVec pop + setAt | L2 | **done** | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned classify/initialize/apply | L1+L2 | **done** | [sf-004](tasks/sf-004.md) |
-| SF-3 | BitSet mask + 账户桥 | L1+L2 | todo | [sf-005](tasks/sf-005.md) |
+| SF-3 | BitSet mask + 账户桥 | L1+L2 | **done** | [sf-005](tasks/sf-005.md) |
 | SF-4a | TransientModel + Vector64 | L2 | todo | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | todo | [sf-007](tasks/sf-007.md) |
 | SF-5a | Allocator alloc/free 往返 | L2 | todo | [sf-008](tasks/sf-008.md) |
@@ -193,7 +193,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md) → **done**  
 3. [sf-001](tasks/sf-001.md) / [sf-002](tasks/sf-002.md) → **done**（Queue 收口）  
-4. 下一刀 [sf-003](tasks/sf-003.md)（Vec pop/setAt），按波次向下，每片更新矩阵  
+4. 下一刀 [sf-006](tasks/sf-006.md)（TransientModel + Vector64），按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
 WASM PR #4 / #5：继续开着；本轨不要求它们先合。
