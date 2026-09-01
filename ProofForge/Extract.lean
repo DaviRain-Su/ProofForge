@@ -92,6 +92,17 @@ private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
   if fuel == 0 then
     throw "extract/unsupported: boundary schema nesting exceeds extractor limit"
   let type := type.consumeMData
+  let type :=
+    if type.getAppFn.constName? == some ``ProofForge.Wasm.Near.Runtime.NearToken then
+      mkConst ``ProofForge.Core.Value.UInt128
+    else
+      match type.getAppFn.constName? with
+      | some name =>
+          match env.find? name with
+          | some (.defnInfo info) =>
+              if info.type.hasLooseBVars then type else info.value
+          | _ => type
+      | none => type
   if let some scalar := codecScalarOfType type then
     return .scalar scalar
   let head := type.getAppFn.constName?
@@ -922,7 +933,13 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       if retSchema == .unit then 0
       else
         let nRet := maxReturnCount 32 ops
-        if nRet = 0 then 1 else nRet
+        let nRet := if nRet = 0 then 1 else nRet
+        match retSchema with
+        | .scalar s =>
+            if s == Core.Codec.Scalar.uint128 then max nRet 2
+            else if s == Core.Codec.Scalar.uint256 then max nRet 4
+            else nRet
+        | _ => nRet
     | .init => 1
   let retTypes :=
     match retSchema with

@@ -12,12 +12,12 @@ depends-on: []
 - `ProofForge.Core.Except`: `ok`, `err`, `andThen`, `map`, `guard`
 - Imported through root `ProofForge` module
 - Extract: `Core.Except.andThen` sequenced like `Bind.bind`; `ok`/`err` recognized alongside std `Except`
-- NEAR example: `Examples.NearTokenErgonomics.addViaAndThen`
+- NEAR example: `Examples.NearTokenErgonomics.addViaAndThen` + **`addCheckedViaAndThen`** / **`addCheckedDirect`** (JSON u128 `NearToken` mutating return; digest `ab9da3168e8cd786`)
 - EVM example: `Examples.EvmExceptErgonomics.addViaAndThen` (digest `8def48aa72cd2c19`)
 - SVM example: `Examples.SvmExceptErgonomics.addViaAndThen` (extract digest `d826699c521e0b7c`)
 
 ## Follow-up
 
 - Optional `do` notation guide in docs
-- Structure-valued `Except.ok` Decode (blocked for `NearToken.addChecked`)
+- Structure-valued `Except.ok` Decode for inline `NearToken.addChecked` (explicit `if canAdd / ofLimbs` path works)
 - Extract `PromiseHandle`-typed entry bodies for NEAR N13

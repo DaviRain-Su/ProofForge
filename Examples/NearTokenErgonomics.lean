@@ -34,6 +34,30 @@ def addViaAndThen (state : State) (delta : UInt64) : Except Error (State × UInt
   andThen (checkedAdd state.marker delta) fun sum =>
     ok (⟨sum⟩, sum)
 
+/-- Fallible NearToken chain via overflow-checked add + `andThen`; returns the summed token.
+Uses one `UInt64` delta against `⟨state.marker, 0⟩` so the entry stays NEAR v0 single-arg. -/
+@[pf_entry]
+def addCheckedViaAndThen (state : State) (delta : UInt64) : Except Error (State × NearToken) :=
+  let left : NearToken := ⟨state.marker, 0⟩
+  let right : NearToken := ⟨delta, 0⟩
+  andThen (
+    if NearToken.canAdd left right then
+      .ok (NearToken.ofLimbs (NearToken.addW0 left right) (NearToken.addW1 left right))
+    else
+      .error .overflow
+  ) fun sum =>
+    ok (state, sum)
+
+/-- Direct overflow-checked add without bind; NEAR serializes the result as JSON u128. -/
+@[pf_entry]
+def addCheckedDirect (state : State) (delta : UInt64) : Except Error (State × NearToken) :=
+  let left : NearToken := ⟨state.marker, 0⟩
+  let right : NearToken := ⟨delta, 0⟩
+  if NearToken.canAdd left right then
+    .ok (state, NearToken.ofLimbs (NearToken.addW0 left right) (NearToken.addW1 left right))
+  else
+    .error .overflow
+
 @[pf_entry]
 def canAddViaHelper (_state : State) : UInt64 :=
   if NearToken.canAdd ⟨1, 0⟩ ⟨2, 0⟩ then 1 else 0

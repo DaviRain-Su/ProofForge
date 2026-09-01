@@ -3007,7 +3007,10 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
       let right ← scalarResultValues env fuel' args[args.size - 1]!
       return left ++ right
     else
-      asWideCtorFields env e <|> asRegisteredBoundaryCtorFields env e <|>
+      let unfolded := strip (unfoldUserHelpers env 16 e)
+      asWideCtorFields env unfolded <|> asWideCtorFields env e
+        <|> asRegisteredBoundaryCtorFields env unfolded
+        <|> asRegisteredBoundaryCtorFields env e <|>
         (asBoolVal env fuel e <|> val env e).map (#[·])
 
 /-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
@@ -3024,6 +3027,20 @@ private def effectfulResultOps (env : Environment) (e : Expr) : Option (Array Op
     -- rather than exposing it as a public result.
     return #[.okState (.lit 0)]
 
+/-- `Except.ok` carrying a fixed-width boundary value (for example `NearToken` / `UInt128`). -/
+private def asExceptOkBoundaryReturns (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
+  if !isExceptOkHead e || e.getAppArgs.size < 1 then none else
+  let payload := strip (unfoldUserHelpers env 16 (strip e.getAppArgs[e.getAppArgs.size - 1]!))
+  if isConstNamed payload ``Prod.mk then none else
+  match asWideCtorFields env payload <|> asRegisteredBoundaryCtorFields env payload with
+  | some values => some (values.map fun value => (.returnU64 value : Ops.Op))
+  | none =>
+      match scalarResultValues env 16 payload with
+      | some values =>
+          if values.size > 1 then some (values.map fun value => (.returnU64 value : Ops.Op)) else none
+      | none => none
+
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr)
     (includeSingle : Bool := false) : Option (Array Ops.Op) :=
@@ -3037,10 +3054,20 @@ private def asStoreFields (env : Environment) (e : Expr)
       if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
         let st := pair.getAppArgs[pair.getAppArgs.size - 2]!
         let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
+        if isConstNamed (strip st) ``methodArgRef then
+          effectfulResultOps env ret
+        else
         let vectorBase := vectorBaseName env 32 st
         let leaves := (flattenLeaves env "" st).filter fun p => some p.1 != vectorBase
         let explicitSingle := includeSingle || containsUInt64NewtypeCtor env 16 st
-        if leaves.isEmpty || (!explicitSingle && leaves.size == 1) then none
+        if leaves.isEmpty then none
+        else if !explicitSingle && leaves.size == 1 then
+          match effectfulResultOps env ret with
+          | some returns =>
+              if returns.any fun op => match op with | .returnU64 _ => true | _ => false then
+                some returns
+              else none
+          | none => none
         else
           let stores := leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)
           match effectfulResultOps env ret with
@@ -3207,17 +3234,13 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
                         | _ => false
                       else false
                 | none => false
+              let retValues? := scalarResultValues env 16 pairArgs[pairArgs.size - 1]!
               let reconstructedUnchanged :=
                 let leaves := flattenLeaves env "" state
-                match userCtorFields env state with
-                | some fields =>
-                  -- A reconstructed multi-field State can be entirely projections of the input.
-                  -- `flattenLeaves` then has no writes; preserve an independent wide result rather
-                  -- than letting the scalar state fallback expose the final State field.
-                  !fields.isEmpty && leaves.isEmpty &&
-                    (scalarResultValues env 16 pairArgs[pairArgs.size - 1]).any
-                      (·.size > 1)
-                | none => false
+                match userCtorFields env state, retValues? with
+                | some fields, some retValues =>
+                  !fields.isEmpty && leaves.isEmpty && retValues.size > 1
+                | _, _ => false
               if reconstructedFromOneBinder || reconstructedUnchanged then
                 scalarResultValues env 16 pairArgs[pairArgs.size - 1]
               else none
@@ -7463,6 +7486,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       .ok (values.map fun value => .returnU64 value)
   else if let some ops := asStoreFields env e includeSingleStore then
     .ok (snapshotStateUpdate localDepth ops)
+  else if let some ops := asExceptOkBoundaryReturns env e then
+    .ok ops
   else if let some v := asOkState env e then
     .ok #[.okState v]
   else if let some v := asOkScalar env e then
@@ -7637,6 +7662,85 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
         lowered := lowered.push op
     | _ => return none
   return some (lowered, hadSuccess, false)
+
+/-- Like `lowerBindProducer`, but terminal success assigns `limbCount` consecutive `.returnU64`
+values into `slot .. slot + limbCount - 1`. -/
+private def terminalReturnLimbs? (limbCount : Nat) (ops : Array Ops.Op) : Option (Array Ops.Val) :=
+  if ops.size < limbCount then none else
+  let tail := ops.extract (ops.size - limbCount) ops.size
+  tail.mapM fun op =>
+    match op with
+    | .returnU64 value => some value
+    | _ => none
+
+private partial def lowerBindProducerMulti (slot limbCount : Nat) (ops : Array Ops.Op) :
+    Option (Array Ops.Op × Bool × Bool) :=
+  if let some values := terminalReturnLimbs? limbCount ops then
+    some (ops.extract 0 (ops.size - limbCount) ++ (Array.range limbCount).map fun i =>
+      (.setLocal (slot + i) values[i]! : Ops.Op), true, true)
+  else Id.run do
+    let mut lowered := #[]
+    let mut hadSuccess := false
+    for op in ops do
+      match op with
+      | .errorOverflow | .errorNamed _ =>
+          return some (lowered.push op, hadSuccess, true)
+      | .ite cmp lhs rhs thn els =>
+          let some (thn', thnSuccess, thnTerminates) := lowerBindProducerMulti slot limbCount thn
+            | return none
+          let some (els', elsSuccess, elsTerminates) := lowerBindProducerMulti slot limbCount els
+            | return none
+          lowered := lowered.push (.ite cmp lhs rhs thn' els')
+          hadSuccess := hadSuccess || thnSuccess || elsSuccess
+          if thnTerminates && elsTerminates then
+            return some (lowered, hadSuccess, true)
+      | .okState value =>
+          if limbCount == 1 then
+            return some (lowered.push (.setLocal slot value), true, true)
+          else
+            return none
+      | .letLocal .. | .joinLocal .. | .setLocal ..
+      | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
+      | .checkedDivU64 .. | .checkedModU64 .. | .forAccum .. =>
+          lowered := lowered.push op
+      | .forBody bound body =>
+          let some (body', bodySuccess, bodyTerminates) := lowerBindProducerMulti slot limbCount body
+            | return none
+          if bodySuccess || bodyTerminates then return none
+          lowered := lowered.push (.forBody bound body')
+      | .ext _ =>
+          lowered := lowered.push op
+      | _ => return none
+    return some (lowered, hadSuccess, false)
+
+private def boundaryBindArg (localDepth : Nat) (ty : Expr) : Expr :=
+  let ty := ty.consumeMData
+  let localRefLit (offset : Nat) : Expr :=
+    mkApp (mkConst ``localRef) (mkNatLit (localDepth + offset))
+  if isUInt128Type ty then
+    mkApp (mkApp (mkConst ``ProofForge.Core.Value.UInt128.mk) (localRefLit 0))
+      (localRefLit 1)
+  else if isUInt256Type ty then
+    mkApp (mkApp (mkApp (mkApp (mkConst ``ProofForge.Core.Value.UInt256.mk)
+          (localRefLit 0)) (localRefLit 1)) (localRefLit 2)) (localRefLit 3)
+  else if isAddr20Type ty then
+    mkApp (mkApp (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.mk)
+          (localRefLit 0)) (localRefLit 1)) (localRefLit 2)
+  else
+    localRefLit 0
+
+private def joinLocals (localDepth limbCount : Nat) : Array Ops.Op :=
+  (Array.range limbCount).map fun i => (.joinLocal (localDepth + i) : Ops.Op)
+
+/-- After a fixed-limb bind producer stores into locals, the continuation must run on the success
+path before the branch ends. Appending it after a top-level `ite` leaves `setLocal` sequences
+without a terminal and drops JSON u128 returns on the floor. -/
+private partial def appendBindContinuation (continuation : Array Ops.Op) (ops : Array Ops.Op) :
+    Array Ops.Op :=
+  match ops.toList with
+  | [.ite cmp lhs rhs thn els] =>
+      #[.ite cmp lhs rhs (appendBindContinuation continuation thn ++ continuation) els]
+  | _ => ops ++ continuation
 
 /-- The return of an ignored scalar helper is not a method return. Keep its branch structure and
 effects, but splice the caller's continuation after every successful helper path. -/
@@ -7897,6 +8001,26 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
                   return .error s!"extract/unsupported: bind continuation: {reason}"
             | _ =>
                 return .error "extract/unsupported: bind producer is not a scalar control value"
+        else if let some limbCount := fixedLimbBindCount? env ty then
+          match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
+              (localDepth := localDepth + limbCount) (stateType? := stateType?)
+              (deepScalars := deepScalars) with
+          | .error reason =>
+              return .error s!"extract/unsupported: bind producer: {reason}"
+          | .ok producerOps =>
+            match lowerBindProducerMulti localDepth limbCount producerOps with
+            | some (joinedProducer, true, true) =>
+              let boundArg := boundaryBindArg localDepth ty
+              match decodeExpr env fuel' (body.instantiate1 boundArg) (stateful := stateful)
+                  (preserveLocals := preserveLocals) (localDepth := localDepth + limbCount)
+                  (stateType? := stateType?) (deepScalars := deepScalars) with
+              | .ok continuationOps =>
+                  let joined := appendBindContinuation continuationOps joinedProducer
+                  return .ok (joinLocals localDepth limbCount ++ joined)
+              | .error reason =>
+                  return .error s!"extract/unsupported: bind continuation: {reason}"
+            | _ =>
+                return .error "extract/unsupported: bind producer is not a fixed-limb boundary value"
         else
           pure ()
       | _ => pure ()

@@ -657,6 +657,27 @@ def isScalarResult (env : Environment) (type : Expr) : Bool :=
         name == ``Bool || isUInt64Newtype env name
   | none => false
 
+/-- Fixed-width boundary values sequenced through `Except.andThen` expose ordered scalar limbs. -/
+def fixedLimbBindCount? (env : Environment) (type : Expr) : Option Nat :=
+  let rec resolve (ty : Expr) (fuel : Nat) : Option Nat :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let ty := ty.consumeMData
+      if isUInt128Type ty then some 2
+      else if isUInt256Type ty then some 4
+      else if isAddr20Type ty then some 3
+      else
+        match ty.getAppFn.constName? with
+        | some name =>
+            if name == ``ProofForge.Wasm.Near.Runtime.NearToken then some 2
+            else
+              match env.find? name with
+              | some (.defnInfo info) => resolve info.value fuel'
+              | _ => none
+        | none => none
+  resolve (resultType 16 type) 16
+
 private def firstUserInputType (env : Environment) : Nat → Expr → Option Name
   | 0, _ => none
   | fuel + 1, type =>
