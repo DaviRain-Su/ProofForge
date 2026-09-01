@@ -1622,20 +1622,22 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
       hxptr.1 hinnerLe hyLe hxptr.2.2.2
   have hxne : xAddress ≠ 0 := by
     intro hzero
-    subst xAddress
-    omega
+    have hnat : xAddress.toNat ≠ 0 := by omega
+    apply hnat
+    rw [hzero]
   have hyne : yAddress ≠ 0 := by
     intro hzero
-    subst yAddress
-    omega
+    have hnat : yAddress.toNat ≠ 0 := by omega
+    apply hnat
+    rw [hzero]
   have hinner4 : ¬(4 : UInt64) < innerAddress := by
     show ¬(4 : Nat) < innerAddress.toNat
     omega
   have hparent4 : ¬(4 : UInt64) < parentAddress := by
     show ¬(4 : Nat) < parentAddress.toNat
     omega
-  simp (config := { zeta := true }) only [rotateLeft, hxne, hxi, hyne, hyi,
-    hinner4, hparent4] at h
+  simp (config := { zeta := true }) only [rotateLeft, hxne, hxi, xi, x, yAddress,
+    hyne, hyi, yi, y, innerAddress, parentAddress, hinner4, hparent4] at h
   by_cases hinner0 : innerAddress = 0
   · simp only [hinner0, if_pos] at h
     by_cases hparent0 : parentAddress = 0
@@ -1879,20 +1881,22 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
       hinnerLe hxptr.2.1 hyLe hxptr.2.2.2
   have hxne : xAddress ≠ 0 := by
     intro hzero
-    subst xAddress
-    omega
+    have hnat : xAddress.toNat ≠ 0 := by omega
+    apply hnat
+    rw [hzero]
   have hyne : yAddress ≠ 0 := by
     intro hzero
-    subst yAddress
-    omega
+    have hnat : yAddress.toNat ≠ 0 := by omega
+    apply hnat
+    rw [hzero]
   have hinner4 : ¬(4 : UInt64) < innerAddress := by
     show ¬(4 : Nat) < innerAddress.toNat
     omega
   have hparent4 : ¬(4 : UInt64) < parentAddress := by
     show ¬(4 : Nat) < parentAddress.toNat
     omega
-  simp (config := { zeta := true }) only [rotateRight, hxne, hxi, hyne, hyi,
-    hinner4, hparent4] at h
+  simp (config := { zeta := true }) only [rotateRight, hxne, hxi, xi, x, yAddress,
+    hyne, hyi, yi, y, innerAddress, parentAddress, hinner4, hparent4] at h
   by_cases hinner0 : innerAddress = 0
   · simp only [hinner0, if_pos] at h
     by_cases hparent0 : parentAddress = 0
