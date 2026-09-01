@@ -1,0 +1,16 @@
+name = "ProofForgePowdrProbe"
+version = "0.1.0"
+defaultTargets = ["ProofForgePowdrProbe"]
+
+# Isolated from the main ProofForge package (Lean v4.31 + Mathlib). This probe
+# pins powdr-labs/evm-semantics on its native v4.33 toolchain without linking
+# the default `lake build ProofForge` graph.
+
+[[require]]
+name = "evm_semantics"
+git = "https://github.com/powdr-labs/evm-semantics"
+rev = "2f8714d6ba960a3de67720019b54513f5bc1a2e3"
+
+[[lean_lib]]
+name = "ProofForgePowdrProbe"
+roots = ["ProofForgePowdrProbe.Basic"]

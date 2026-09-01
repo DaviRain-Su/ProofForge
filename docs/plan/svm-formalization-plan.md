@@ -52,7 +52,7 @@
 `mQueuePeek*`、`mQueueInitialize*`、`mQueuePush_pop_roundtrip_empty`；
 通用 `u64toNatAdd/Sub` 无回绕桥。
 
-下一刀：推进 **SF-5b** OrderedMap find 模型（[sf-009](tasks/sf-009.md) — MapProofs scaffold landed）；NEAR N13 固定 **3..8-way `andN`** 已收口（parameterized `maxFanIn` 仍开）；EVM powdr 仍 blocked（[evm-powdr-dep-001](tasks/evm-powdr-dep-001.md)）。
+下一刀：推进 **SF-5b** OrderedMap insert/remove 代数（[sf-009](tasks/sf-009.md)）；NEAR N13 固定 **3..8-way `andN`** 已收口；EVM E-B0 **`evm-semantics` isolated probe** landed（yul 两库仍开）。
 
 ---
 

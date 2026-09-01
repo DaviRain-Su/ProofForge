@@ -1967,6 +1967,43 @@ theorem mFindKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UIn
   unfold mFindKey4 mAccDataRbTreeKey4Find mAccDataWord
   cases map <;> simp [h]
 
+/-- Insert stub matching `Runtime.accDataRbTreeKey4Insert` until sf-011. -/
+def mAccDataRbTreeKey4Insert
+    (_mem : AccountWords) (_rootWord : Nat) (_tree : Key4RbTree)
+    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 := 0
+
+/-- Remove stub matching `Runtime.accDataRbTreeKey4Remove` until sf-011. -/
+def mAccDataRbTreeKey4Remove
+    (_mem : AccountWords) (_rootWord : Nat) (_tree : Key4RbTree)
+    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 := 0
+
+/-- Abstract four-word-key insert mirroring `AccountStorage.Source.insertKey4`. -/
+def mInsertKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  match map with
+  | .key4 rootWord tree => mAccDataRbTreeKey4Insert mem rootWord tree key0 key1 key2 key3
+  | .fifo .. => 0
+
+/-- Abstract four-word-key remove mirroring `AccountStorage.Source.removeKey4`. -/
+def mRemoveKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  match map with
+  | .key4 rootWord tree => mAccDataRbTreeKey4Remove mem rootWord tree key0 key1 key2 key3
+  | .fifo .. => 0
+
+theorem mInsertKey4_fifo_fail (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
+    (k0 k1 k2 k3 : UInt64) :
+    mInsertKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
+
+theorem mRemoveKey4_fifo_fail (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
+    (k0 k1 k2 k3 : UInt64) :
+    mRemoveKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
+
+/-- Absent keys stay absent under the current insert/remove stubs. -/
+theorem mRemoveKey4_after_find_miss (mem : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
+    (_h : mFindKey4 mem map k0 k1 k2 k3 = 0) :
+    mRemoveKey4 mem map k0 k1 k2 k3 = 0 := by
+  unfold mRemoveKey4 mAccDataRbTreeKey4Remove
+  cases map <;> rfl
+
 end MapProofs
 
 end ProofForge.Svm.Sdk.StorageModel
