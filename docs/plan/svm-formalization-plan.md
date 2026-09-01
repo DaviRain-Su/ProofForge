@@ -52,7 +52,7 @@
 `mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
 `mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
 
-下一形式化刀：SF-5b OrderedMap（`sf-009`）。
+下一形式化刀：SF-6 EnumerableSet（`sf-010`）。OrderedMap 索引层（`sf-009`）已收口；RB 结构保持见 sf-011。
 ---
 
 ## 4. 组件清单
@@ -124,7 +124,8 @@ SF-0  证明基础设施（wf-parts / word 引理习惯成文）
               ├─► SF-4  TransientModel + Vec/Bytes/Record/Wide ← done
               └─► SF-5  Allocator + OrderedMap/Rb
                     ├─► SF-5a Allocator           ← **done**（sf-008）
-                    ├─► SF-5b OrderedMap          ← 下一刀（sf-009）
+                    ├─► SF-5b OrderedMap 索引层   ← **done**（sf-009；RB→sf-011）
+                    ├─► SF-6  EnumerableSet        ← 下一刀（sf-010）
                     ├─► SF-6  EnumerableSet
                     ├─► SF-7  Tree 全树 wf 保持
                     └─► SF-8  FifoCancel + BatchRecorder
@@ -159,7 +160,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-4a | TransientModel + Vector64 | L2 | **done** | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | **done** | [sf-007](tasks/sf-007.md) |
 | SF-5a | Allocator alloc/free 往返 | L2 | done | [sf-008](tasks/sf-008.md) |
-| SF-5b | OrderedMap find/insert/remove | L2 | todo | [sf-009](tasks/sf-009.md) |
+| SF-5b | OrderedMap find/insert/remove（索引层） | L2 | done | [sf-009](tasks/sf-009.md) |
 | SF-6 | EnumerableSet | L2 | todo | [sf-010](tasks/sf-010.md) |
 | SF-7 | Tree 全树 wf 保持 | L2 | todo | [sf-011](tasks/sf-011.md) |
 | SF-8a | FifoCancel 有界折料 | L2 | todo | [sf-012](tasks/sf-012.md) |
@@ -195,7 +196,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md) → **done**  
 3. [sf-001](tasks/sf-001.md) / [sf-002](tasks/sf-002.md) → **done**（Queue 收口）  
-4. 下一刀 [sf-009](tasks/sf-009.md)（OrderedMap）；`sf-008` Allocator 已收口；按波次向下，每片更新矩阵  
+4. 下一刀 [sf-010](tasks/sf-010.md)（EnumerableSet）；`sf-009` OrderedMap 索引层已收口；按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
 WASM PR #4 / #5：继续开着；本轨不要求它们先合。

@@ -204,7 +204,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-006](tasks/sf-006.md) | done | TransientModel + Vector64 |
 | [sf-007](tasks/sf-007.md) | done | Bytes + Record64 + WideVec |
 | [sf-008](tasks/sf-008.md) | done | Allocator alloc/free 往返 |
-| [sf-009](tasks/sf-009.md) | todo | OrderedMap find/insert/remove 模型 |
+| [sf-009](tasks/sf-009.md) | done | OrderedMap 索引层 find/insert/remove |
 | [sf-010](tasks/sf-010.md) | todo | StorageEnumerableSet |
 | [sf-011](tasks/sf-011.md) | todo | Tree 全树 wf 保持 |
 | [sf-012](tasks/sf-012.md) | todo | FifoCancel 有界折料 |
