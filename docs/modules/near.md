@@ -375,3 +375,9 @@ CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes
 `NearFungibleTokenEvent`、`NearTokenArithmetic`、`NearTokenStorage`、`NearMemory`、
 `NearOutput`、`NearStorageBalanceOutput`、`NearStorageBalanceBoundsOutput`、`NearJsonUnitOutput`、`NearJsonU128Mutation`、`NearJsonAccountInput`、`NearJsonAmountInput`、`NearJsonMemoInput`、`NearJsonFtTransferInput`、`NearJsonFtOnTransferInput`、`NearFtReceiverValue`、`NearPromiseOrValue`、`NearFtReceiverDual`、`NearJsonFtResolveInput`、`NearStorage`、`NearStorageEconomics`、`NearVector`、`NearLookup`、`NearQueue`、`NearIterable`、
 `NearPromise`、`NearPromiseResult`、`NearMigration`。
+
+`NearOutput` 还包含 diagnostic-only 的 bounded NEP-148 metadata object 输出：固定字段顺序
+`spec,name,symbol,icon,reference,reference_hash,decimals`，Option 显式 `null`，32-byte hash
+复用 RFC4648 STANDARD Base64。name/symbol/icon/reference 的 64/16/256/128 UTF-8 byte caps
+是 ProofForge 产品边界，不是 near-contract-standards 的权威限制；codec 不自动调用
+`assert_valid`，也不导出 `ft_metadata` 或声称完整 NEP-148 ABI。

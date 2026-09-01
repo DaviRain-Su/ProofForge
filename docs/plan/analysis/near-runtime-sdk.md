@@ -346,6 +346,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
    STANDARD Base64 value with one `=` pad. This is only the hash scalar prerequisite; bounded
    metadata strings, seven-field object composition, optional-field coupling, and `ft_metadata`
    remain separate, and no complete NEP-148 claim is made.
+   **NEAR-NEP148-METADATA-OUTPUT (wsm-near-json-ft-metadata-output-001 done):** the exact nominal
+   70-leaf frame now serializes fixed `ft-1.0.0`, bounded UTF-8 name/symbol/icon/reference fields,
+   explicit null/Some option values, the shared exact-32-byte STANDARD Base64 hash, and bare u8
+   decimals in near-contract-standards field order. Product capacities are 64/16/256/128 decoded
+   bytes and are not authoritative NEP-148 limits. The codec deliberately does not call
+   `assert_valid` or couple reference/hash presence; `ft_metadata` remains a separate integration.
    **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
    fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
    success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;

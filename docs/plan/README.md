@@ -239,6 +239,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-storage-withdraw-001](tasks/wsm-near-storage-withdraw-001.md) | done | payable zero-available storage withdraw over canonical BAL2 registration |
 | [wsm-near-no-args-input-001](tasks/wsm-near-no-args-input-001.md) | done | opt-in near-sdk no-args request-ignore boundary for standard views |
 | [wsm-near-json-base64-hash32-output-001](tasks/wsm-near-json-base64-hash32-output-001.md) | done | exact quoted STANDARD Base64 output for NEP-148 32-byte hashes |
+| [wsm-near-json-ft-metadata-output-001](tasks/wsm-near-json-ft-metadata-output-001.md) | done | bounded seven-field NEP-148 metadata object output prerequisite |
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |

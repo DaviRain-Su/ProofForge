@@ -137,6 +137,82 @@ byte-vector or JSON-string encoder. -/
   w3 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Exact 70-leaf bounded NEP-148 metadata output carrier: name9 + symbol3 + icon34 + reference18,
+plus hash5 and decimals1. Option presence and packed inactive bytes are validated by the target codec.
+The serializer does not automatically apply near-contract-standards' optional `assert_valid`. -/
+@[pf_boundary] structure FungibleTokenMetadataResult where
+  nameLength : UInt64
+  nameW0 : UInt64
+  nameW1 : UInt64
+  nameW2 : UInt64
+  nameW3 : UInt64
+  nameW4 : UInt64
+  nameW5 : UInt64
+  nameW6 : UInt64
+  nameW7 : UInt64
+  symbolLength : UInt64
+  symbolW0 : UInt64
+  symbolW1 : UInt64
+  iconPresent : UInt64
+  iconLength : UInt64
+  iconW0 : UInt64
+  iconW1 : UInt64
+  iconW2 : UInt64
+  iconW3 : UInt64
+  iconW4 : UInt64
+  iconW5 : UInt64
+  iconW6 : UInt64
+  iconW7 : UInt64
+  iconW8 : UInt64
+  iconW9 : UInt64
+  iconW10 : UInt64
+  iconW11 : UInt64
+  iconW12 : UInt64
+  iconW13 : UInt64
+  iconW14 : UInt64
+  iconW15 : UInt64
+  iconW16 : UInt64
+  iconW17 : UInt64
+  iconW18 : UInt64
+  iconW19 : UInt64
+  iconW20 : UInt64
+  iconW21 : UInt64
+  iconW22 : UInt64
+  iconW23 : UInt64
+  iconW24 : UInt64
+  iconW25 : UInt64
+  iconW26 : UInt64
+  iconW27 : UInt64
+  iconW28 : UInt64
+  iconW29 : UInt64
+  iconW30 : UInt64
+  iconW31 : UInt64
+  referencePresent : UInt64
+  referenceLength : UInt64
+  referenceW0 : UInt64
+  referenceW1 : UInt64
+  referenceW2 : UInt64
+  referenceW3 : UInt64
+  referenceW4 : UInt64
+  referenceW5 : UInt64
+  referenceW6 : UInt64
+  referenceW7 : UInt64
+  referenceW8 : UInt64
+  referenceW9 : UInt64
+  referenceW10 : UInt64
+  referenceW11 : UInt64
+  referenceW12 : UInt64
+  referenceW13 : UInt64
+  referenceW14 : UInt64
+  referenceW15 : UInt64
+  referenceHashPresent : UInt64
+  referenceHashW0 : UInt64
+  referenceHashW1 : UInt64
+  referenceHashW2 : UInt64
+  referenceHashW3 : UInt64
+  decimals : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
 `registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
 serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record

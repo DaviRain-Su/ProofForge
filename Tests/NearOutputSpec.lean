@@ -34,6 +34,16 @@ open ProofForge.Wasm.Near
     ("w2", .scalar .uint64), ("w3", .scalar .uint64)]) with
   | .error _ => true
   | .ok _ => false
+#guard Codec.OutputPlan.jsonFungibleTokenMetadata.sourceValueCount == 70
+#guard Codec.OutputPlan.jsonFungibleTokenMetadata.canonical ==
+  "near-json-ft-metadata-bounded-v1(name=64,symbol=16,icon=256,reference=128,hash=32)"
+private def ordinaryMetadataSchema : ProofForge.Core.Codec.Schema :=
+  match Codec.fungibleTokenMetadataResultSchema with
+  | .record _ fields => .record "Ordinary70LeafRecord" fields
+  | schema => schema
+#guard match Codec.targetOutputPlan ordinaryMetadataSchema with
+  | .error _ => true
+  | .ok _ => false
 
 private def returnCount (method : IR.Method) : Nat :=
   method.ops.foldl (init := 0) fun count op =>
@@ -55,11 +65,15 @@ elab "#pf_near_output_check" : command => do
     | throwError "missing source jsonU128Asymmetric"
   let some sourceHash := source.methods.find? (·.ixName == "jsonBase64Hash32")
     | throwError "missing source jsonBase64Hash32"
+  let some sourceMetadata := source.methods.find? (·.ixName == "jsonMetadataDecimals")
+    | throwError "missing source jsonMetadataDecimals"
   unless sourceBytes.retSchema == .boundedBytes 8 && sourceBytes.retCount == 9 &&
       sourceValues.retSchema == .boundedArray 4 (.scalar .uint16) &&
       sourceValues.retCount == 5 && sourceJson.retSchema == .scalar .uint128 &&
       sourceJson.retCount == 2 && sourceJson.ops.size == 2 &&
       sourceHash.retSchema == Codec.base64Hash32ResultSchema && sourceHash.retCount == 4 &&
+      sourceMetadata.retSchema == Codec.fungibleTokenMetadataResultSchema &&
+      sourceMetadata.retCount == 70 && sourceMetadata.paramCount == 1 &&
       (match sourceJson.ops[0]!, sourceJson.ops[1]! with
         | .returnU64 (.lit 2), .returnU64 (.lit 1) => true
         | _, _ => false) do
@@ -80,6 +94,8 @@ elab "#pf_near_output_check" : command => do
     | throwError "missing target jsonU128Asymmetric"
   let some hash := program.entries.find? (·.ixName == "jsonBase64Hash32")
     | throwError "missing target jsonBase64Hash32"
+  let some metadata := program.entries.find? (·.ixName == "jsonMetadataDecimals")
+    | throwError "missing target jsonMetadataDecimals"
   unless bytes.outputSchema == some (.boundedBytes 8) &&
       bytes.outputPolicy == "near-borsh-output-bytes-v1(capacity=8,width=1)" &&
       bytes.tupleArity == some 9 && returnCount bytes == 9 &&
@@ -92,6 +108,9 @@ elab "#pf_near_output_check" : command => do
       json.outputPolicy == "near-json-u128-string-v1" && json.tupleArity == some 2 &&
       hash.outputSchema == some Codec.base64Hash32ResultSchema &&
       hash.outputPolicy == "near-json-base64-hash32-v1" && hash.tupleArity == some 4 &&
+      metadata.outputSchema == some Codec.fungibleTokenMetadataResultSchema &&
+      metadata.outputPolicy == Codec.OutputPlan.jsonFungibleTokenMetadata.canonical &&
+      metadata.tupleArity == some 70 && returnCount metadata == 70 &&
       returnCount json == 2 do
     throwError "NEAR target lost bounded output metadata or fixed return leaves"
   let malformedCount := { source with methods := source.methods.map fun method =>
@@ -115,6 +134,26 @@ elab "#pf_near_output_check" : command => do
       unless reason.contains "Base64 hash output currently requires a view" do
         throwError s!"wrong mutating Base64 hash rejection: {reason}"
   | .ok _ => throwError "mutating Base64 hash output was accepted"
+  let mutatingMetadata := { source with methods := source.methods.map fun method =>
+    if method.ixName == "jsonMetadataDecimals" then { method with kind := .increment } else method }
+  match IR.fromExtracted mutatingMetadata with
+  | .error reason =>
+      unless reason.contains "bounded FT metadata output currently requires a view" do
+        throwError s!"wrong mutating bounded metadata rejection: {reason}"
+  | .ok _ => throwError "mutating bounded metadata output was accepted"
+  let malformedMetadataCount := { source with methods := source.methods.map fun method =>
+    if method.ixName == "jsonMetadataDecimals" then { method with retCount := 69 } else method }
+  match IR.fromExtracted malformedMetadataCount with
+  | .error reason =>
+      unless reason.contains "output frame does not match its bounded FT metadata plan" do
+        throwError s!"wrong malformed bounded metadata frame rejection: {reason}"
+  | .ok _ => throwError "malformed bounded metadata frame was accepted"
+  let wrongMetadata := { source with methods := source.methods.map fun method =>
+    if method.ixName == "jsonMetadataDecimals" then
+      { method with retSchema := .record "Ordinary70LeafRecord" #[] } else method }
+  match IR.fromExtracted wrongMetadata with
+  | .error _ => pure ()
+  | .ok _ => throwError "ordinary record was mistaken for compiler-owned bounded metadata"
   let mutatingOutput := { source with methods := source.methods.map fun method =>
     if method.ixName == "staticBytes" then { method with kind := .increment } else method }
   match IR.fromExtracted mutatingOutput with
@@ -145,14 +184,18 @@ elab "#pf_near_output_check" : command => do
     "(local.set $pf_output_length (call $pf_u128_decimal",
     "(i64.add (local.get $pf_output_length) (i64.const 2))",
     "(call $pf_arena_alloc (i64.const 46) (i64.const 1))",
-    "(i32.const 44)) (i64.const 61))",
-    "(call $pf_value_return (i64.const 46)"
+    "(i64.const 61)",
+    "(call $pf_arena_alloc (i64.const 2929) (i64.const 1))",
+    "(call $pf_json_escape_byte",
+    "(call $pf_utf8_valid (local.get $pf_output_ptr)",
+    "(i64.const 255)) (then unreachable)",
+    "(i64.const 2929)) (then unreachable)"
   ]
   for anchor in anchors do
     unless wat.contains anchor do
       throwError s!"NEAR bounded-output WAT missing {anchor}"
-  if wat.contains "(func $pf_json_escape_byte" then
-    throwError "pure JSON u128 output pulled in the unrelated JSON string escaper"
+  unless (wat.splitOn "(func $pf_json_escape_byte").length == 2 do
+    throwError "bounded metadata output did not include exactly one shared JSON string escaper"
   unless (wat.splitOn "(func $pf_u128_decimal").length == 2 do
     throwError "JSON u128 output did not include exactly one shared decimal helper"
   let hashParts := wat.splitOn "(func (export \"jsonBase64Hash32\")"
@@ -162,6 +205,18 @@ elab "#pf_near_output_check" : command => do
   unless (hashBody.splitOn "(call $pf_value_return").length == 2 &&
       hashBody.contains "(i64.const 43)" && hashBody.contains "(i64.const 47)" do
     throwError "Base64 hash export lost one return or STANDARD alphabet branches"
+  let metadataParts := wat.splitOn "(func (export \"jsonMetadataDecimals\")"
+  unless metadataParts.length == 2 do
+    throwError "missing unique bounded metadata diagnostic export"
+  let metadataBody := (metadataParts[1]!).splitOn "(func (export \"" |>.head!
+  unless (metadataBody.splitOn "(call $pf_value_return").length == 2 &&
+      metadataBody.contains "(call $pf_arena_alloc (i64.const 2929)" &&
+      metadataBody.contains "(call $pf_metadata_append_byte" &&
+      metadataBody.contains "(call $pf_metadata_stage_byte" &&
+      metadataBody.contains "(call $pf_utf8_valid" &&
+      !metadataBody.contains "$pf_storage_write" && !metadataBody.contains "$pf_log_utf8" &&
+      !metadataBody.contains "$pf_promise_return" do
+    throwError "bounded metadata output lost its one-return, arena, validation, or view-only policy"
   let jsonParts := wat.splitOn "(func (export \"jsonU128Asymmetric\")"
   unless jsonParts.length == 2 do
     throwError "missing unique JSON u128 export body"

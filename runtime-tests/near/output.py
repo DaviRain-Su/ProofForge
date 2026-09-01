@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import struct
 import sys
@@ -88,6 +89,90 @@ def main() -> None:
     if client.view_state_values() != before_hash_views:
         raise AssertionError("Base64 hash output view changed contract state")
     print("near-output: exact 32-byte RFC4648 STANDARD Base64 JSON string ok")
+
+    def metadata_wire(
+        name: str = "",
+        symbol: str = "",
+        icon: str | None = None,
+        reference: str | None = None,
+        reference_hash: bytes | None = None,
+        decimals: int = 0,
+    ) -> bytes:
+        payload = {
+            "spec": "ft-1.0.0",
+            "name": name,
+            "symbol": symbol,
+            "icon": icon,
+            "reference": reference,
+            "reference_hash": (
+                base64.b64encode(reference_hash).decode("ascii")
+                if reference_hash is not None
+                else None
+            ),
+            "decimals": decimals,
+        }
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+    _expect(client, "jsonMetadataEscaped", b"", metadata_wire(
+        'A"\\\0é😀', "FT", "icon\n", "参考", bytes(range(32)), 9
+    ))
+    max_metadata = metadata_wire(
+            "\0" * 64,
+            "\0" * 16,
+            "\0" * 256,
+            "\0" * 128,
+            b"\xff" * 32,
+            255,
+    )
+    _expect(client, "jsonMetadataMax", b"", max_metadata)
+    _expect(client, "jsonMetadataReferenceOnly", b"", metadata_wire(reference="", decimals=10))
+    _expect(client, "jsonMetadataHashOnly", b"", metadata_wire(reference_hash=bytes(32), decimals=99))
+    _expect(client, "jsonMetadataBothEmpty", b"",
+        metadata_wire(icon="", reference="", reference_hash=bytes(32), decimals=100))
+    before_metadata_views = client.view_state_values()
+    for decimals in (0, 9, 10, 99, 100, 255):
+        _expect(client, "jsonMetadataDecimals", NearClient.encode_u64_le(decimals),
+            metadata_wire(decimals=decimals))
+    if len(max_metadata) != 2929:
+        raise AssertionError(
+            f"max metadata wire expected exact 2929 bytes, got {len(max_metadata)}"
+        )
+    for method, args, scene in (
+        ("jsonMetadataNameLength", NearClient.encode_u64_le(65), "name length 65"),
+        ("jsonMetadataSymbolLength", NearClient.encode_u64_le(17), "symbol length 17"),
+        ("jsonMetadataIconLength", NearClient.encode_u64_le(257), "icon length 257"),
+        ("jsonMetadataReferenceLength", NearClient.encode_u64_le(129), "reference length 129"),
+        ("jsonMetadataPresence", NearClient.encode_u64_le(2), "option presence above one"),
+        ("jsonMetadataInactiveByte", b"", "inactive partial-word byte"),
+        ("jsonMetadataNoneStaleHash", b"", "None hash stale word"),
+        ("jsonMetadataMalformedUtf8", b"", "malformed UTF-8"),
+        ("jsonMetadataOverlongUtf8", b"", "overlong UTF-8"),
+        ("jsonMetadataSurrogateUtf8", b"", "surrogate UTF-8"),
+        ("jsonMetadataAboveUnicodeUtf8", b"", "above-Unicode UTF-8"),
+        ("jsonMetadataTruncatedUtf8", b"", "truncated UTF-8"),
+        ("jsonMetadataNoneStaleIcon", b"", "None icon stale byte"),
+        ("jsonMetadataNoneStaleReference", b"", "None reference stale byte"),
+        ("jsonMetadataDecimals", NearClient.encode_u64_le(256), "decimals above 255"),
+    ):
+        _expect_failure(
+            client,
+            method,
+            args,
+            f"bounded metadata {scene}",
+        )
+    # A late failed frame cannot leak staged bytes into the next successful view.
+    _expect(client, "jsonMetadataEscaped", b"", metadata_wire(
+        'A"\\\0é😀', "FT", "icon\n", "参考", bytes(range(32)), 9))
+    _expect_failure(
+        client,
+        "jsonMetadataNoneStaleHash",
+        b"",
+        "bounded metadata stale isolation failure",
+    )
+    _expect(client, "jsonMetadataDecimals", NearClient.encode_u64_le(0), metadata_wire())
+    if client.view_state_values() != before_metadata_views:
+        raise AssertionError("bounded metadata output view changed contract state")
+    print("near-output: bounded metadata options/UTF-8/Base64/decimals/max/fail-closed matrix ok")
 
     for raw in (b"", b"x", bytes(range(8))):
         wire = NearClient.borsh_bytes(raw)

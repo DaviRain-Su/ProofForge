@@ -220,6 +220,16 @@ def base64Hash32ResultSchema : Core.Codec.Schema :=
     ("w0", .scalar .uint64), ("w1", .scalar .uint64),
     ("w2", .scalar .uint64), ("w3", .scalar .uint64)]
 
+def fungibleTokenMetadataResultSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.FungibleTokenMetadataResult" <|
+    #["nameLength"] ++ (Array.range 8 |>.map fun i => s!"nameW{i}") ++
+    #["symbolLength", "symbolW0", "symbolW1", "iconPresent", "iconLength"] ++
+    (Array.range 32 |>.map fun i => s!"iconW{i}") ++
+    #["referencePresent", "referenceLength"] ++
+    (Array.range 16 |>.map fun i => s!"referenceW{i}") ++
+    #["referenceHashPresent", "referenceHashW0", "referenceHashW1", "referenceHashW2",
+      "referenceHashW3", "decimals"] |>.map fun name => (name, .scalar .uint64)
+
 def storageBalanceResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageBalanceResult" #[
     ("registered", .scalar .uint64), ("total", .scalar .uint128),
@@ -379,6 +389,7 @@ inductive OutputPlan where
   | jsonStorageBalanceOption
   | jsonStorageBalanceBounds
   | jsonBase64Hash32
+  | jsonFungibleTokenMetadata
   | jsonBoolean
   | jsonNullUnit
   | voidEmpty
@@ -391,6 +402,7 @@ def OutputPlan.sourceValueCount : OutputPlan → Nat
   | .jsonStorageBalanceOption => 5
   | .jsonStorageBalanceBounds => 5
   | .jsonBase64Hash32 => 4
+  | .jsonFungibleTokenMetadata => 70
   | .jsonBoolean => 1
   | .jsonNullUnit => 0
   | .voidEmpty => 0
@@ -402,6 +414,8 @@ def OutputPlan.canonical : OutputPlan → String
   | .jsonStorageBalanceOption => "near-json-storage-balance-option-v1"
   | .jsonStorageBalanceBounds => "near-json-storage-balance-bounds-v1"
   | .jsonBase64Hash32 => "near-json-base64-hash32-v1"
+  | .jsonFungibleTokenMetadata =>
+      "near-json-ft-metadata-bounded-v1(name=64,symbol=16,icon=256,reference=128,hash=32)"
   | .jsonBoolean => "near-json-boolean-v1"
   | .jsonNullUnit => "near-json-null-unit-v1"
   | .voidEmpty => "near-void-empty-v1"
@@ -416,6 +430,7 @@ def targetOutputPlan : Core.Codec.Schema → Except String OutputPlan
       if schema == storageBalanceResultSchema then pure .jsonStorageBalanceOption
       else if schema == storageBalanceBoundsResultSchema then pure .jsonStorageBalanceBounds
       else if schema == base64Hash32ResultSchema then pure .jsonBase64Hash32
+      else if schema == fungibleTokenMetadataResultSchema then pure .jsonFungibleTokenMetadata
       else if schema == jsonBooleanResultSchema then pure .jsonBoolean
       else if schema == .unit then pure .jsonNullUnit
       else throw "near/codec: unsupported specialized output schema"

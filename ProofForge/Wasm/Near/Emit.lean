@@ -690,17 +690,14 @@ private def packedHashByte (words : Array String) (index : Nat) : String :=
   "(i64.and (i64.shr_u " ++ words[index / 8]! ++ " (i64.const " ++
     toString ((index % 8) * 8) ++ ")) (i64.const 255))"
 
-/-- Serialize one exact 32-byte packed frame as serde_json's quoted RFC 4648 STANDARD Base64.
-Thirty bytes form ten complete groups; the final two bytes form three characters and one `=`. -/
-private def returnJsonBase64Hash32Instr (st : EState) (values : Array (Val ValKind))
-    (level : Nat) : Except String (Array String) := do
-  unless values.size == 4 do
-    throw "near/codec: Base64 hash output plan does not match result leaves"
-  let words ← values.mapM (renderVal st)
-  let mut lines : Array String := #[
-    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 46) (i64.const 1)))",
-    indent level "(i64.store8 (local.get $pf_output_ptr) (i64.const 34))"
-  ]
+private def appendBase64Hash32At (pointer lengthLocal : String) (words : Array String)
+    (level : Nat) : Array String := Id.run do
+  let append (value : String) : Array String := #[
+    indent level ("(i64.store8 (i32.add " ++ pointer ++ " (i32.wrap_i64 (local.get " ++
+      lengthLocal ++ "))) " ++ value ++ ")"),
+    indent level ("(local.set " ++ lengthLocal ++ " (i64.add (local.get " ++ lengthLocal ++
+      ") (i64.const 1)))")]
+  let mut lines := #[]
   for group in [0:10] do
     let b0 := packedHashByte words (group * 3)
     let b1 := packedHashByte words (group * 3 + 1)
@@ -713,27 +710,165 @@ private def returnJsonBase64Hash32Instr (st : EState) (values : Array (Val ValKi
         "(i64.shr_u " ++ b2 ++ " (i64.const 6)))",
       "(i64.and " ++ b2 ++ " (i64.const 63))"]
     for lane in [0:4] do
-      lines := lines.push (indent level
-        ("(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const " ++
-          toString (1 + group * 4 + lane) ++ ")) " ++
-          base64StandardChar indices[lane]! ++ ")"))
+      lines := lines ++ append (base64StandardChar indices[lane]!)
   let b30 := packedHashByte words 30
   let b31 := packedHashByte words 31
-  let finalIndices := #[
-    "(i64.shr_u " ++ b30 ++ " (i64.const 2))",
-    "(i64.or (i64.shl (i64.and " ++ b30 ++ " (i64.const 3)) (i64.const 4)) " ++
-      "(i64.shr_u " ++ b31 ++ " (i64.const 4)))",
-    "(i64.shl (i64.and " ++ b31 ++ " (i64.const 15)) (i64.const 2))"]
-  for lane in [0:3] do
-    lines := lines.push (indent level
-      ("(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const " ++
-        toString (41 + lane) ++ ")) " ++ base64StandardChar finalIndices[lane]! ++ ")"))
-  lines := lines ++ #[
-    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const 44)) (i64.const 61))",
-    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const 45)) (i64.const 34))",
-    indent level "(call $pf_value_return (i64.const 46) (i64.extend_i32_u (local.get $pf_output_ptr)))"
-  ]
+  for index in #[
+      "(i64.shr_u " ++ b30 ++ " (i64.const 2))",
+      "(i64.or (i64.shl (i64.and " ++ b30 ++ " (i64.const 3)) (i64.const 4)) " ++
+        "(i64.shr_u " ++ b31 ++ " (i64.const 4)))",
+      "(i64.shl (i64.and " ++ b31 ++ " (i64.const 15)) (i64.const 2))"] do
+    lines := lines ++ append (base64StandardChar index)
+  return lines ++ append "(i64.const 61)"
+
+/-- Serialize one exact 32-byte packed frame as serde_json's quoted RFC 4648 STANDARD Base64.
+Thirty bytes form ten complete groups; the final two bytes form three characters and one `=`. -/
+private def returnJsonBase64Hash32Instr (st : EState) (values : Array (Val ValKind))
+    (level : Nat) : Except String (Array String) := do
+  unless values.size == 4 do
+    throw "near/codec: Base64 hash output plan does not match result leaves"
+  let words ← values.mapM (renderVal st)
+  return #[
+    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 46) (i64.const 1)))",
+    indent level "(local.set $pf_output_length (i64.const 0))",
+    indent level "(i64.store8 (local.get $pf_output_ptr) (i64.const 34))",
+    indent level "(local.set $pf_output_length (i64.const 1))"
+  ] ++ appendBase64Hash32At "(local.get $pf_output_ptr)" "$pf_output_length" words level ++ #[
+    indent level "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.wrap_i64 (local.get $pf_output_length))) (i64.const 34))",
+    indent level "(local.set $pf_output_length (i64.add (local.get $pf_output_length) (i64.const 1)))",
+    indent level "(call $pf_value_return (local.get $pf_output_length) (i64.extend_i32_u (local.get $pf_output_ptr)))"]
+
+private def metadataPackedByte (words : Array String) (index : Nat) : String :=
+  "(i64.and (i64.shr_u " ++ words[index / 8]! ++ " (i64.const " ++
+    toString ((index % 8) * 8) ++ ")) (i64.const 255))"
+
+private def appendMetadataByte (value : String) (level : Nat) : Array String := #[
+  indent level ("(i64.store8 (i32.add (local.get $pf_output_ptr) " ++
+    "(i32.wrap_i64 (local.get $pf_output_length))) " ++ value ++ ")"),
+  indent level "(local.set $pf_output_length (i64.add (local.get $pf_output_length) (i64.const 1)))"]
+
+private def appendMetadataLiteral (literal : String) (level : Nat) : Array String :=
+  literal.toUTF8.data.foldl (init := #[]) fun lines byte =>
+    lines ++ appendMetadataByte ("(i64.const " ++ toString byte.toNat ++ ")") level
+
+/-- Validate one packed metadata UTF-8 frame using the final output arena as temporary raw-byte
+scratch. This retains one exact 2929-byte allocation and rejects every inactive/partial word byte. -/
+private def validateMetadataPacked (frame : Array String) (capacity level : Nat) :
+    Except String (Array String) := do
+  unless frame.size == capacity / 8 + 1 do
+    throw "near/codec: bounded FT metadata packed frame geometry"
+  let length := frame[0]!
+  let words := frame.extract 1 frame.size
+  let mut lines := #[indent level ("(if (i64.gt_u " ++ length ++ " (i64.const " ++
+    toString capacity ++ ")) (then unreachable))")]
+  for index in [0:capacity] do
+    let byte := metadataPackedByte words index
+    lines := lines.push (indent level ("(call $pf_metadata_stage_byte (i64.const " ++
+      toString index ++ ") " ++ length ++ " " ++ byte ++ " (local.get $pf_output_ptr))"))
+  return lines ++ #[indent level ("(if (i32.eqz (call $pf_utf8_valid " ++
+    "(local.get $pf_output_ptr) (i32.wrap_i64 " ++ length ++ "))) (then unreachable))")]
+
+private def appendMetadataPacked (frame : Array String) (capacity level : Nat) :
+    Except String (Array String) := do
+  unless frame.size == capacity / 8 + 1 do
+    throw "near/codec: bounded FT metadata packed frame geometry"
+  let length := frame[0]!
+  let words := frame.extract 1 frame.size
+  let mut lines := #[]
+  for index in [0:capacity] do
+    let byte := metadataPackedByte words index
+    lines := lines.push (indent level ("(local.set $pf_output_length " ++
+      "(call $pf_metadata_append_byte (i64.const " ++ toString index ++ ") " ++ length ++
+      " " ++ byte ++ " (local.get $pf_output_ptr) (local.get $pf_output_length)))"))
   return lines
+
+private def appendMetadataOptionalString (present : String) (frame : Array String)
+    (capacity level : Nat) : Except String (Array String) := do
+  let content ← appendMetadataPacked frame capacity (level + 4)
+  return #[
+    indent level ("(if (i64.eqz " ++ present ++ ")"),
+    indent (level + 2) "(then"] ++ appendMetadataLiteral "null" (level + 4) ++ #[
+    indent (level + 2) ")",
+    indent (level + 2) "(else"] ++ appendMetadataByte "(i64.const 34)" (level + 4) ++ content ++
+    appendMetadataByte "(i64.const 34)" (level + 4) ++ #[indent (level + 2) "))"]
+
+private def appendMetadataDecimals (decimals : String) (level : Nat) : Array String :=
+  let digit (value : String) := appendMetadataByte
+    ("(i64.add " ++ value ++ " (i64.const 48))")
+  #[
+    indent level ("(if (i64.lt_u " ++ decimals ++ " (i64.const 10))"),
+    indent (level + 2) "(then"] ++ digit decimals (level + 4) ++ #[
+    indent (level + 2) ")",
+    indent (level + 2) "(else",
+    indent (level + 4) ("(if (i64.lt_u " ++ decimals ++ " (i64.const 100))"),
+    indent (level + 6) "(then"] ++ digit ("(i64.div_u " ++ decimals ++ " (i64.const 10))")
+      (level + 8) ++ digit ("(i64.rem_u " ++ decimals ++ " (i64.const 10))") (level + 8) ++ #[
+    indent (level + 6) ")",
+    indent (level + 6) "(else"] ++ digit ("(i64.div_u " ++ decimals ++ " (i64.const 100))")
+      (level + 8) ++ digit ("(i64.rem_u (i64.div_u " ++ decimals ++
+        " (i64.const 10)) (i64.const 10))") (level + 8) ++
+      digit ("(i64.rem_u " ++ decimals ++ " (i64.const 10))") (level + 8) ++ #[
+    indent (level + 6) "))",
+    indent (level + 2) "))"]
+
+/-- Closed bounded metadata object serializer. Capacities are product policy, not NEP-148 bounds;
+the fixed field order and explicit nulls match near-contract-standards' derived serializer. -/
+private def returnJsonFungibleTokenMetadataInstr (st : EState)
+    (values : Array (Val ValKind)) (level : Nat) : Except String (Array String) := do
+  unless values.size == 70 do
+    throw "near/codec: bounded FT metadata output plan does not match result leaves"
+  let rendered ← values.mapM (renderVal st)
+  let name := rendered.extract 0 9
+  let symbol := rendered.extract 9 12
+  let iconPresent := rendered[12]!
+  let icon := rendered.extract 13 46
+  let referencePresent := rendered[46]!
+  let reference := rendered.extract 47 64
+  let hashPresent := rendered[64]!
+  let hashWords := rendered.extract 65 69
+  let decimals := rendered[69]!
+  let nameValidation ← validateMetadataPacked name 64 level
+  let symbolValidation ← validateMetadataPacked symbol 16 level
+  let iconValidation ← validateMetadataPacked icon 256 level
+  let referenceValidation ← validateMetadataPacked reference 128 level
+  let nameOutput ← appendMetadataPacked name 64 level
+  let symbolOutput ← appendMetadataPacked symbol 16 level
+  let iconOutput ← appendMetadataOptionalString iconPresent icon 256 level
+  let referenceOutput ← appendMetadataOptionalString referencePresent reference 128 level
+  let mut hashNoneGuard := #[]
+  for word in hashWords do
+    hashNoneGuard := hashNoneGuard.push (indent (level + 4)
+      ("(if (i64.ne " ++ word ++ " (i64.const 0)) (then unreachable))"))
+  return #[
+    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 2929) (i64.const 1)))"
+  ] ++ nameValidation ++ symbolValidation ++ iconValidation ++ referenceValidation ++ #[
+    indent level ("(if (i64.gt_u " ++ iconPresent ++ " (i64.const 1)) (then unreachable))"),
+    indent level ("(if (i64.gt_u " ++ referencePresent ++ " (i64.const 1)) (then unreachable))"),
+    indent level ("(if (i64.gt_u " ++ hashPresent ++ " (i64.const 1)) (then unreachable))"),
+    indent level ("(if (i64.gt_u " ++ decimals ++ " (i64.const 255)) (then unreachable))"),
+    indent level ("(if (i32.and (i64.eqz " ++ iconPresent ++ ") (i64.ne " ++ icon[0]! ++
+      " (i64.const 0))) (then unreachable))"),
+    indent level ("(if (i32.and (i64.eqz " ++ referencePresent ++ ") (i64.ne " ++
+      reference[0]! ++ " (i64.const 0))) (then unreachable))"),
+    indent level ("(if (i64.eqz " ++ hashPresent ++ ")"),
+    indent (level + 2) "(then"] ++ hashNoneGuard ++ #[
+    indent (level + 2) "))",
+    indent level "(local.set $pf_output_length (i64.const 0))"] ++
+    appendMetadataLiteral "{\"spec\":\"ft-1.0.0\",\"name\":\"" level ++ nameOutput ++
+    appendMetadataLiteral "\",\"symbol\":\"" level ++ symbolOutput ++
+    appendMetadataLiteral "\",\"icon\":" level ++ iconOutput ++
+    appendMetadataLiteral ",\"reference\":" level ++ referenceOutput ++
+    appendMetadataLiteral ",\"reference_hash\":" level ++ #[
+    indent level ("(if (i64.eqz " ++ hashPresent ++ ")"),
+    indent (level + 2) "(then"] ++ appendMetadataLiteral "null" (level + 4) ++ #[
+    indent (level + 2) ")",
+    indent (level + 2) "(else"] ++ appendMetadataByte "(i64.const 34)" (level + 4) ++
+    appendBase64Hash32At "(local.get $pf_output_ptr)" "$pf_output_length" hashWords (level + 4) ++
+    appendMetadataByte "(i64.const 34)" (level + 4) ++ #[
+    indent (level + 2) "))"] ++ appendMetadataLiteral ",\"decimals\":" level ++
+    appendMetadataDecimals decimals level ++ appendMetadataLiteral "}" level ++ #[
+    indent level "(if (i64.gt_u (local.get $pf_output_length) (i64.const 2929)) (then unreachable))",
+    indent level "(call $pf_value_return (local.get $pf_output_length) (i64.extend_i32_u (local.get $pf_output_ptr)))"]
 
 private def outputPlanOf (method : Method ValKind OpExt) :
     Except String (Option Codec.OutputPlan) := do
@@ -2224,6 +2359,11 @@ private partial def emitRegion (p : Program ValKind OpExt)
             if st.pendingPromiseReturn.isSome then
               throw "extract/unsupported: Base64 hash output cannot also return a promise"
             return { lines := ← returnJsonBase64Hash32Instr st values level, st, terminal := true }
+        | some .jsonFungibleTokenMetadata =>
+            if st.pendingPromiseReturn.isSome then
+              throw "extract/unsupported: bounded FT metadata output cannot also return a promise"
+            return {
+              lines := ← returnJsonFungibleTokenMetadataInstr st values level, st, terminal := true }
         | some .jsonBoolean =>
             if st.pendingPromiseReturn.isSome then
               throw "extract/unsupported: JSON Boolean output cannot also return a promise"
@@ -3641,6 +3781,21 @@ private def jsonEscapeHelper : Array String := #[
   "    (i64.add (local.get $len) (i64.const 1)))"
 ]
 
+/-- Keep the large bounded metadata carrier's generated method below nearcore's control-block
+limit: scalar leaves stay compiler-owned while these two fixed helpers own the repeated branch. -/
+private def metadataOutputHelpers : Array String := #[
+  "  (func $pf_metadata_stage_byte (param $index i64) (param $len i64) (param $byte i64) (param $ptr i32)",
+  "    (if (i64.lt_u (local.get $index) (local.get $len))",
+  "      (then (i64.store8 (i32.add (local.get $ptr) (i32.wrap_i64 (local.get $index))) (local.get $byte)))",
+  "      (else (if (i64.ne (local.get $byte) (i64.const 0)) (then unreachable)))))",
+  "  (func $pf_metadata_append_byte (param $index i64) (param $source_len i64) (param $byte i64)",
+  "      (param $ptr i32) (param $out_len i64) (result i64)",
+  "    (if (result i64) (i64.lt_u (local.get $index) (local.get $source_len))",
+  "      (then (call $pf_json_escape_byte (local.get $byte) (local.get $ptr) (local.get $out_len)))",
+  "      (else (local.get $out_len))))",
+  ""
+]
+
 /-- Shared NEP-141 event and quoted-u128 output routine. It keeps 39 little-endian base-10 digits,
 consumes source bits 127 down to 0, feeds each bit into digit zero, updates digits 0 through 38,
 then emits digits 38 down to 0 (including one zero digit). -/
@@ -3702,7 +3857,7 @@ private def methodUsesUtf8Codec (method : Method ValKind OpExt) : Bool :=
   method.inputSchema == some Codec.storageUnregisterArgsSchema ||
   (match method.outputSchema with
     | some (.boundedString _) => true
-    | _ => false)
+    | _ => false) || method.outputSchema == some Codec.fungibleTokenMetadataResultSchema
 
 private def programUsesUtf8Codec (p : Program ValKind OpExt) : Bool :=
   methodUsesUtf8Codec p.initializer || p.entries.any methodUsesUtf8Codec
@@ -3714,6 +3869,12 @@ private def methodUsesJsonU128Output (method : Method ValKind OpExt) : Bool :=
 
 private def programUsesJsonU128Output (p : Program ValKind OpExt) : Bool :=
   methodUsesJsonU128Output p.initializer || p.entries.any methodUsesJsonU128Output
+
+private def methodUsesMetadataOutput (method : Method ValKind OpExt) : Bool :=
+  method.outputSchema == some Codec.fungibleTokenMetadataResultSchema
+
+private def programUsesMetadataOutput (p : Program ValKind OpExt) : Bool :=
+  methodUsesMetadataOutput p.initializer || p.entries.any methodUsesMetadataOutput
 
 /-- Strict Unicode-scalar UTF-8 validation over one already bounded memory span. Explicit Borsh
 lengths are always used; no NUL-terminated nearcore sentinel semantics enter this helper. -/
@@ -5047,6 +5208,10 @@ def emit (p : IR.Program) : Except String String := do
     lines := lines ++ ftEventHelpers
   else if programUsesJsonU128Output p then
     lines := lines ++ u128DecimalHelper
+  if programUsesMetadataOutput p && !(programHasFtEvent p || programCallsWeightedPromiseFunction p) then
+    lines := lines ++ jsonEscapeHelper
+  if programUsesMetadataOutput p then
+    lines := lines ++ metadataOutputHelpers
   if #[ValKind.nearTokenMulU64Ok, .nearTokenMulU64W0, .nearTokenMulU64W1].any
       (programUses · p) then
     lines := lines ++ mul64Helpers

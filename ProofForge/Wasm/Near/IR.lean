@@ -1012,6 +1012,18 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       retSchema := .scalar .uint64
       retCount := 1 }, some {
         ixName := method.ixName, schema := Codec.base64Hash32ResultSchema, plan })
+  if method.retSchema == Codec.fungibleTokenMetadataResultSchema then
+    unless method.kind == .get do
+      throw s!"near/codec: {method.ixName} bounded FT metadata output currently requires a view"
+    let plan := Codec.OutputPlan.jsonFungibleTokenMetadata
+    unless method.retCount == plan.sourceValueCount do
+      throw s!"near/codec: {method.ixName} output frame does not match its bounded FT metadata plan"
+    return ({ method with
+      retWidths := #[8]
+      retTypes := #[.uint64]
+      retSchema := .scalar .uint64
+      retCount := 1 }, some {
+        ixName := method.ixName, schema := Codec.fungibleTokenMetadataResultSchema, plan })
   if method.retSchema == Codec.jsonBooleanResultSchema then
     unless method.kind == .increment do
       throw s!"near/codec: {method.ixName} JSON Boolean output requires a mutating entry"
