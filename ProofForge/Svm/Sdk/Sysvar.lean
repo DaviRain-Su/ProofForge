@@ -62,4 +62,17 @@ namespace Rent
 
 end Rent
 
+/-!
+### sf-014：Sysvar L1 形状
+
+本 facade 仅转发 Runtime 叶；无账户持久状态、无可证 L2 字代数。矩阵标 **n/a-L2**。
+下列钉死 API 仍绑定到既有 Runtime 叶（定义等式）。
+-/
+
+theorem Clock.slot_def : Clock.slot = ProofForge.Svm.Runtime.clockSlot := rfl
+theorem Clock.epoch_def : Clock.epoch = ProofForge.Svm.Runtime.clockEpoch := rfl
+theorem Rent.minimumBalance_def (dataLen : Nat) :
+    Rent.minimumBalance dataLen =
+      ProofForge.Svm.Runtime.rentExemption (UInt64.ofNat dataLen) := rfl
+
 end ProofForge.Svm.Sdk.Sysvar

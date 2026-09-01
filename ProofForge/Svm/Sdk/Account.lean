@@ -147,6 +147,40 @@ abbrev View := ProofForge.Svm.AccountView.View
 @[pf_inline] def View.ownedBySelf (view : View) (index : UInt64) : UInt64 :=
   viewOwnerIsSelf (UInt64.ofNat view.base) (UInt64.ofNat view.capacity) index
 
+/-! ### sf-014：L1 形状 / 界定理 -/
+
+theorem Handle.wellFormed_iff (handle : Handle) (accountLimit : Nat) :
+    handle.wellFormed accountLimit = true ↔ handle.index < accountLimit := by
+  simp [Handle.wellFormed]
+
+theorem Handle.wordWellFormed_implies_wellFormed
+    (handle : Handle) (word accountLimit : Nat)
+    (h : handle.wordWellFormed word accountLimit = true) :
+    handle.wellFormed accountLimit = true := by
+  simp [Handle.wordWellFormed] at h
+  exact h.1
+
+theorem Handle.wordWellFormed_bound
+    (handle : Handle) (word accountLimit : Nat)
+    (h : handle.wordWellFormed word accountLimit = true) :
+    word ≤ ProofForge.Svm.AccountView.maxKeyWord := by
+  simp [Handle.wordWellFormed] at h
+  exact h.2
+
+theorem Handle.dataWordWellFormed_implies_wellFormed
+    (handle : Handle) (word accountLimit : Nat)
+    (h : handle.dataWordWellFormed word accountLimit = true) :
+    handle.wellFormed accountLimit = true := by
+  simp [Handle.dataWordWellFormed] at h
+  exact h.1
+
+theorem Handle.dataWordWellFormed_bound
+    (handle : Handle) (word accountLimit : Nat)
+    (h : handle.dataWordWellFormed word accountLimit = true) :
+    word < ProofForge.Svm.AccountView.maxDataWord := by
+  simp [Handle.dataWordWellFormed] at h
+  exact h.2
+
 end Account
 
 namespace CpiAccount
