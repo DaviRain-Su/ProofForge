@@ -88,6 +88,8 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-030](tasks/svm-sem-030.md) | E∞ Loader account-3 signer/writable after skip chain | **done** |
 | [svm-sem-031](tasks/svm-sem-031.md) | E∞ Loader account-3 lamports/data_len after skip chain | **done** |
 | [svm-sem-032](tasks/svm-sem-032.md) | E∞ Loader account-3 owner limbs 0/1 after skip chain | **done** |
+| [svm-sem-033](tasks/svm-sem-033.md) | E∞ Loader account-3 owner limbs 2/3 after skip chain | **done** |
+| [svm-sem-034](tasks/svm-sem-034.md) | E∞ Loader account-3 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -100,7 +102,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[032](tasks/svm-sem-032.md) | walked `r7` + account-0/1/2 host knives + account-3 field walks | **done** — account-3 through owner0/1 |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[034](tasks/svm-sem-034.md) | walked `r7` + account-0/1/2/3 host knives | **done** — account-0/1/2 full walks; account-3 full field walk |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
