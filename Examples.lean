@@ -64,6 +64,7 @@ import Examples.EvmCheckpointBook
 import Examples.EvmCheckpointTrace
 import Examples.EvmSafeCastAccumulator
 import Examples.EvmSafeCastConfig
+import Examples.EvmTypedErrors
 import Examples.BatchSizer
 import Examples.EvmPriceBand
 import Examples.GuardedPayout

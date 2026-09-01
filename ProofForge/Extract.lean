@@ -681,6 +681,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .evmComponent call => .evmComponent (call.mapValues (flipVal fuel'))
       | .errorOverflow => .errorOverflow
       | .errorNamed n => .errorNamed n
+      | .errorTyped frame => .errorTyped (frame.mapValues (flipVal fuel'))
   let ops := ops0.map (flipOp 128)
   let expandWide (ops : Array Ops.Op) (limbCount : Nat) : Array Ops.Op :=
     match ops.toList with
@@ -1113,6 +1114,7 @@ private def opFields : Ops.Op → Array FieldUse
   | .okState v => valFields v
   | .errorOverflow => #[]
   | .errorNamed _ => #[]
+  | .errorTyped frame => frame.values.flatMap valFields
   | .returnU64 v => valFields v
   | .returnState v => valFields v
 
@@ -1185,6 +1187,7 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
       | .okState v => return .okState (← normalizeVal v)
       | .errorOverflow => pure .errorOverflow
       | .errorNamed n => pure (.errorNamed n)
+      | .errorTyped frame => return .errorTyped (← frame.mapValuesM normalizeVal)
       | .returnU64 v => return .returnU64 (← normalizeVal v)
       | .returnState v => return .returnState (← normalizeVal v)
       | .invoke programIx metas data seed bump =>
@@ -1426,6 +1429,7 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
   | .evmComponent call => call.values.findSome? (valEscapedArg limit)
   | .storeField _ v | .okState v | .returnU64 v | .returnState v => valEscapedArg limit v
   | .errorOverflow | .errorNamed _ => none
+  | .errorTyped frame => frame.values.findSome? (valEscapedArg limit)
 
 /-- Reject decoder binder leaks before a backend can mistake one for calldata or state. -/
 private def checkArgBounds (p : IR.Program) : Except String Unit := do

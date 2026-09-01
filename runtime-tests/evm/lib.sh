@@ -307,6 +307,48 @@ if len(blob) < 8 or not blob.startswith(sel):
 "
 }
 
+# eth_call must revert with the exact selector and ordered ABI uint words supplied after message.
+solana_lean_require_word_revert() {
+  local addr="$1" from="$2" data="$3" signature="$4" message="$5"
+  shift 5
+  local sel
+  sel="$("$cast" keccak "$signature")"
+  sel="${sel#0x}"
+  sel="$(printf '%s' "$sel" | cut -c1-8 | tr 'A-Z' 'a-z')"
+  "$python" -I -S - "$rpc" "$addr" "$from" "$data" "$sel" "$signature" "$message" "$@" <<'PY'
+import json, sys, urllib.error, urllib.request
+
+rpc, addr, sender, data, selector, signature, message, *words = sys.argv[1:]
+payload = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "eth_call",
+    "params": [{"to": addr, "from": sender, "data": data}, "latest"],
+}
+request = urllib.request.Request(
+    rpc,
+    data=json.dumps(payload).encode(),
+    headers={"Content-Type": "application/json"},
+)
+try:
+    raw = urllib.request.urlopen(request).read().decode()
+except urllib.error.HTTPError as error:
+    raw = error.read().decode()
+response = json.loads(raw)
+failure = response.get("error") or {}
+blob = failure.get("data") or ""
+if isinstance(blob, dict):
+    blob = blob.get("data") or blob.get("raw") or ""
+blob = str(blob).lower().removeprefix("0x")
+expected = selector + "".join(f"{int(word, 0):064x}" for word in words)
+if blob != expected:
+    raise SystemExit(
+        f"FAIL: {message}: {signature} returndata {blob!r} != {expected!r} "
+        f"(error={failure!r})"
+    )
+PY
+}
+
 # eth_call must revert with ABI error CapExceeded().
 solana_lean_require_cap_exceeded() {
   local addr="$1" from="$2" data="$3" message="$4"

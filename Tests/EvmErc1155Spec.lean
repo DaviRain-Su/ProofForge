@@ -117,6 +117,7 @@ private def opValues : ProofForge.Extract.IR.Op → Array ProofForge.Extract.IR.
   | .ite _ lhs rhs _ _ => #[lhs, rhs]
   | .indexSetLeaf _ idx value _ _ | .indexSet _ idx value _ _ => #[idx, value]
   | .ext payload => ProofForge.Extract.IR.OpExt.values payload
+  | .errorTyped frame => frame.values
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => #[]
 
 private partial def opsContainBalanceRead (ops : Array ProofForge.Extract.IR.Op) : Bool :=

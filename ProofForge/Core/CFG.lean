@@ -19,6 +19,7 @@ inductive Exit (ValExt : Type) where
   | okState (value : Val ValExt)
   | errorOverflow
   | errorNamed (name : String)
+  | errorTyped (frame : Core.Ops.ErrorFrame (Val ValExt))
   | returnU64 (value : Val ValExt)
   | returnU64s (values : Array (Val ValExt))
   | returnState (value : Val ValExt)
@@ -100,6 +101,7 @@ private partial def opLocalIds (dialect : Dialect ValExt OpExt) :
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       valueLocalIds value
   | .errorOverflow | .errorNamed _ => #[]
+  | .errorTyped frame => frame.values.flatMap valueLocalIds
   | .ext payload => (dialect.values payload).flatMap valueLocalIds
 
 private def firstFreshLocal (dialect : Dialect ValExt OpExt)
@@ -155,6 +157,7 @@ private partial def mapOpValues (dialect : Dialect ValExt OpExt)
   | .okState value => .okState (mapValue value)
   | .errorOverflow => .errorOverflow
   | .errorNamed name => .errorNamed name
+  | .errorTyped frame => .errorTyped (frame.mapValues mapValue)
   | .returnU64 value => .returnU64 (mapValue value)
   | .returnState value => .returnState (mapValue value)
   | .ext payload => .ext (dialect.mapValues mapValue payload)
@@ -254,6 +257,7 @@ mutual
     | .okState value :: rest => finishExit id instructions (.okState value) rest builder
     | .errorOverflow :: rest => finishExit id instructions .errorOverflow rest builder
     | .errorNamed name :: rest => finishExit id instructions (.errorNamed name) rest builder
+    | .errorTyped frame :: rest => finishExit id instructions (.errorTyped frame) rest builder
     | .returnU64 value :: rest =>
         let values := #[value] ++ rest.toArray.filterMap fun
           | .returnU64 next => some next
@@ -277,7 +281,8 @@ mutual
       (remaining : List (Op ValExt OpExt)) (builder : Builder ValExt OpExt) :
       Except String (Builder ValExt OpExt) := do
     unless remaining.all fun
-        | .okState _ | .errorOverflow | .errorNamed _ | .returnU64 _ | .returnState _ => true
+        | .okState _ | .errorOverflow | .errorNamed _ | .errorTyped _
+        | .returnU64 _ | .returnState _ => true
         | _ => false do
       throw s!"cfg/invalid: instructions follow terminal operation in block {id}"
     setBlock builder { id, instructions, terminator := .exit result }
@@ -286,7 +291,7 @@ end
 private def instructionAllowed : Op ValExt OpExt → Bool
   | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
   | .checkedDivU64 .. | .checkedModU64 .. | .forAccum ..
-  | .ite .. | .forBody .. | .okState _ | .errorOverflow | .errorNamed _
+  | .ite .. | .forBody .. | .okState _ | .errorOverflow | .errorNamed _ | .errorTyped _
   | .returnU64 _ | .returnState _ => false
   | _ => true
 
@@ -433,6 +438,7 @@ private def rewriteExit (rewrite : Val ValExt → Val ValExt) : Exit ValExt → 
   | .returnState value => .returnState (rewrite value)
   | .errorOverflow => .errorOverflow
   | .errorNamed name => .errorNamed name
+  | .errorTyped frame => .errorTyped (frame.mapValues rewrite)
 
 private def rewriteTerminator (rewrite : Val ValExt → Val ValExt) :
     Terminator ValExt → Terminator ValExt
@@ -464,6 +470,7 @@ private def exitLocalIds : Exit ValExt → Array Nat
   | .okState value | .returnU64 value | .returnState value => valueLocalIds value
   | .returnU64s values => values.flatMap valueLocalIds
   | .errorOverflow | .errorNamed _ => #[]
+  | .errorTyped frame => frame.values.flatMap valueLocalIds
 
 private def terminatorLocalIds : Terminator ValExt → Array Nat
   | .jump next => next.args.flatMap valueLocalIds
@@ -658,6 +665,12 @@ private partial def fingerprintValue (state : UInt64) : Val ValExt → UInt64
 private def fingerprintValues (state : UInt64) (values : Array (Val ValExt)) : UInt64 :=
   values.foldl (init := fingerprintNat state values.size) fingerprintValue
 
+private def fingerprintErrorFrame (state : UInt64)
+    (frame : Core.Ops.ErrorFrame (Val ValExt)) : UInt64 :=
+  frame.args.foldl (init := fingerprintString state frame.constructor) fun state arg =>
+    fingerprintValues
+      (fingerprintString (fingerprintString state arg.name) (toString (repr arg.type))) arg.parts
+
 private def fingerprintEdge (state : UInt64) (next : Edge ValExt) : UInt64 :=
   fingerprintValues (fingerprintNat state next.target) next.args
 
@@ -669,6 +682,7 @@ private def fingerprintExit (state : UInt64) : Exit ValExt → UInt64
   | .returnU64 value => fingerprintValue (fingerprintNat state 4) value
   | .returnU64s values => fingerprintValues (fingerprintNat state 5) values
   | .returnState value => fingerprintValue (fingerprintNat state 6) value
+  | .errorTyped frame => fingerprintErrorFrame (fingerprintNat state 7) frame
 
 private def fingerprintChecked (state : UInt64) : Checked ValExt → UInt64
   | .addU64 lhs rhs =>
@@ -719,7 +733,7 @@ private def fingerprintInstruction (dialect : Dialect ValExt OpExt) (state : UIn
       fingerprintValue (fingerprintValue (fingerprintNat state 6) lhs) rhs
   | .checkedModU64 lhs rhs =>
       fingerprintValue (fingerprintValue (fingerprintNat state 7) lhs) rhs
-  | .ite .. | .forBody .. | .okState _ | .errorOverflow | .errorNamed _
+  | .ite .. | .forBody .. | .okState _ | .errorOverflow | .errorNamed _ | .errorTyped _
   | .returnU64 _ | .returnState _ => fingerprintNat state 8
   | .forAccum bound addend resultLocal =>
       fingerprintNat

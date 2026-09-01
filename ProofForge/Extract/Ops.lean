@@ -324,6 +324,7 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
   | .evmComponent call => call.anyValue predicate
+  | .errorTyped frame => frame.values.any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
 
 private partial def isEvmContext : Val → Bool

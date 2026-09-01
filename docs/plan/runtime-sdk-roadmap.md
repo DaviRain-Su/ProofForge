@@ -724,8 +724,11 @@ EvmCtx/TipJar 不再直接 import Runtime，Anvil 门与 block JSON 精确对照
 R4-007 已完成 source zero-argument custom-error ABI metadata：ABI emitter 从完整 structured
 op tree 收集 `.errorNamed`，与 Yul emitter 一样递归 `ite`/bounded `forBody`，按首次出现顺序
 去重并生成 `error Name()` JSON。应用新增 enum error 不再改 Emit 的 hard-coded error list；
-EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；
-parameterized source errors 仍需未来 typed IR contract。详见 [R4-007](tasks/r4-007.md)。
+EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；详见
+[R4-007](tasks/r4-007.md)。R4-016 在 Core 增加 target-neutral fixed error frame：普通 Lean
+constructor 的 1..4 个显式唯一 UInt64 字段贯穿 CFG/EVM，selector、ABI 和 revert words 从同一
+descriptor 派生并复用既有 LogError interpreter；SVM 则显式保留当前 named-code 语义。其余
+payload shapes fail closed。详见 [R4-016](tasks/r4-016.md)。
 
 R4-008 已把 R4-006 的 production full-width environment lowering 从 top-level value recipe
 迁到 `Evm.Environment.Query` + generic Component bridge。唯一 component interpreter 继续对每个
@@ -771,6 +774,11 @@ R4-015 增加 Cancun `Context.blobBaseFee : UInt256` 与
 source-order fixed-bytes 语义，每个四-limb 结果只观察一次 opcode；普通非 blob 调用的 absent
 index 精确返回零。不开放 blob payload、allocation 或新主 Emit case；详见
 [R4-015](tasks/r4-015.md)。
+
+R4-016 增加 target-neutral typed source-error frame。EVM 支持 1..4 个显式唯一 UInt64 字段，
+从同一 frame 派生 Solidity selector、ordered ABI words 与 JSON metadata，不再为每个应用 error
+增加 Runtime/Component/Emit recipe；SVM 有意擦除 payload 到既有 named program error。更宽、
+匿名、隐式、递归、多态和超限 payload 均 fail closed；详见 [R4-016](tasks/r4-016.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical

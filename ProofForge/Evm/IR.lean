@@ -28,6 +28,7 @@ inductive Op where
   | okState (value : Ops.Val)
   | errorOverflow
   | errorNamed (name : String)
+  | errorTyped (frame : Core.Ops.ErrorFrame Ops.Val)
   | returnU64 (value : Ops.Val)
   | returnState (value : Ops.Val)
   deriving BEq, Repr, Inhabited
@@ -52,6 +53,7 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .okState value => pure (.okState value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped frame => pure (.errorTyped frame)
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
   | .ext (.component call) => pure (.component call)
@@ -82,6 +84,7 @@ private partial def Op.toSource : Op → Ops.Op
   | .okState value => .okState value
   | .errorOverflow => .errorOverflow
   | .errorNamed name => .errorNamed name
+  | .errorTyped frame => .errorTyped frame
   | .returnU64 value => .returnU64 value
   | .returnState value => .returnState value
 
@@ -187,6 +190,7 @@ def hasImmutable (ops : Array Op) : Bool :=
     | .letLocal _ v | .setLocal _ v | .storeField _ v | .okState v
     | .returnU64 v | .returnState v | .forAccum _ v _ =>
         valMentionsImm v
+    | .errorTyped frame => frame.values.any valMentionsImm
     | .component call => call.anyValue valMentionsImm
     | .checkedAddU64 l r | .checkedSubU64 l r | .checkedMulU64 l r
     | .checkedDivU64 l r | .checkedModU64 l r | .indexSet _ l r _ _ =>
@@ -714,6 +718,10 @@ private partial def opsCanon (ops : Array Op) : String :=
     | .okState v => s!"ok({valCanon v})"
     | .errorOverflow => "ovf"
     | .errorNamed n => s!"err.{n}"
+    | .errorTyped frame =>
+        let args := frame.args.toList.map fun arg =>
+          s!"{arg.name}:{repr arg.type}({String.intercalate "," (arg.parts.map valCanon).toList})"
+        s!"err.{frame.constructor}({String.intercalate "," args})"
     | .returnU64 v => s!"retu({valCanon v})"
     | .returnState v => s!"rets({valCanon v})"
   String.intercalate ";" (ops.toList.map one)

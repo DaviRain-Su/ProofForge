@@ -4776,6 +4776,13 @@ private def makeCFGNode (p : IR.Program) (marker handler : String)
             | "selfTrade" => "0x1004"
             | _ => "0x1"
           template := template ++ s!"  ; named error {name}\n  lddw r0, {code}\n  exit\n"
+      | .errorTyped frame =>
+          let code := match frame.constructor with
+            | "unauthorized" => "0x1002"
+            | "full" => "0x1003"
+            | "selfTrade" => "0x1004"
+            | _ => "0x1"
+          template := template ++ s!"  ; named error {frame.constructor}\n  lddw r0, {code}\n  exit\n"
       | .returnU64 value =>
           template := template ++
             (← emitCFGReturnValues p scope optionalReturnData packedReturnWidths borshReturnPlan

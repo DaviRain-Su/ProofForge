@@ -56,7 +56,8 @@ STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed 
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
 UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R4-006 已补齐 full-width
 gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R4-007 已让所有 source
-`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R4-008 已把 production
+`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R4-016 又以
+target-neutral typed frame 支持 1..4 个显式 `UInt64` 字段的 source custom error；R4-008 已把 production
 full-width environment lowering 收口到 generic Component bridge；R5-009 已在其上组合
 reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
@@ -1137,6 +1138,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Ops/IR/main Emit recipe。EvmCtx digest `b4a1d16740330566`、bytecode 3,802 B；Anvil 核对
   positive base fee 与普通非 blob 调用 index 0 的 exact zero hash。详见
   `docs/plan/tasks/r4-015.md`。
+
+- R4-016 EVM parameterized source custom errors 已完成：Extract 将普通 Lean error constructor
+  的 1..4 个显式、唯一 `UInt64` 字段保存为 Core typed frame，CFG 与 EVM IR 不丢失字段顺序；
+  EVM 从同一 descriptor 派生 selector、ABI JSON 与 bounded revert words，并复用既有
+  `LogError.ErrorPlan` interpreter。SVM 显式擦除 payload 到当前 named program error；zero-field
+  constructor 保持既有 selector-only 行为。更宽、匿名、隐式、多态、递归和超限字段 fail
+  closed。详见 `docs/plan/tasks/r4-016.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

@@ -96,6 +96,8 @@ partial def projectOp
   | .okState value => return .okState (← projectVal registration value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped frame =>
+      return .errorTyped (← frame.mapValuesM (projectVal registration))
   | .returnU64 value => return .returnU64 (← projectVal registration value)
   | .returnState value => return .returnState (← projectVal registration value)
   | .ext payload =>
@@ -196,6 +198,8 @@ partial def rewriteOpValues
   | .okState value => return .okState (← rewriteValRoots rewriteRoot value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped frame =>
+      return .errorTyped (← frame.mapValuesM (rewriteValRoots rewriteRoot))
   | .returnU64 value => return .returnU64 (← rewriteValRoots rewriteRoot value)
   | .returnState value => return .returnState (← rewriteValRoots rewriteRoot value)
   | .ext payload =>

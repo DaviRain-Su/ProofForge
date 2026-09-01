@@ -2772,19 +2772,69 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
     else none
   else none
 
-private def errorCtorName (e : Expr) : Option String :=
+private inductive DecodedError where
+  | notError
+  | overflow
+  | named (name : String)
+  | typed (frame : Core.Ops.ErrorFrame Ops.Val)
+  | unsupported (reason : String)
+
+/-- Preserve direct parameterized source-error constructors as one target-neutral fixed frame.
+The first safe slice accepts one through four explicitly named UInt64 fields. Unsupported payloads
+must not silently degrade to selector-only errors. -/
+private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
   let e := peelControl 8 e
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
-      let ctor := strip args[args.size - 1]
-      match ctor.getAppFn.constName? with
-      | some n =>
-        let last := Core.IR.lastName n.toString
-        if last == "overflow" then none else some last
-      | none => none
-    else none
-  else none
+      let applied := strip args[args.size - 1]
+      match applied.getAppFn.constName? with
+      | none => .notError
+      | some ctorName =>
+        let name := Core.IR.lastName ctorName.toString
+        match env.find? ctorName with
+        | some (.ctorInfo ctor) =>
+          if ctor.numFields == 0 then
+            if name == "overflow" then .overflow else .named name
+          else if name == "overflow" then
+            .unsupported "overflow error constructor cannot carry fields"
+          else if ctor.numFields > 4 then
+            .unsupported "parameterized source error supports at most four UInt64 fields"
+          else
+            match env.find? ctor.induct with
+            | some (.inductInfo info) =>
+              if info.numParams != 0 || info.numIndices != 0 || info.isRec then
+                .unsupported "parameterized source error must be a nonrecursive monomorphic enum"
+              else if applied.getAppArgs.size < ctor.numFields then
+                .unsupported "parameterized source error lost constructor fields"
+              else Id.run do
+                let mut type := ctor.type
+                let mut errorArgs : Array (Core.Ops.ErrorArg Ops.Val) := #[]
+                let mut names : Array String := #[]
+                for fieldIndex in [:ctor.numFields] do
+                  let .forallE fieldName domain body binderInfo := strip type
+                    | return .unsupported "parameterized source error lost field metadata"
+                  if fieldName.isAnonymous || binderInfo != .default then
+                    return .unsupported "parameterized source error fields must be explicitly named"
+                  if domain.consumeMData.getAppFn.constName? != some ``UInt64 then
+                    return .unsupported "parameterized source error currently supports only UInt64 fields"
+                  let fieldName := fieldName.toString
+                  if fieldName.isEmpty || names.contains fieldName then
+                    return .unsupported "parameterized source error field names must be unique"
+                  let some fieldExpr := applied.getAppArgs[applied.getAppArgs.size - ctor.numFields + fieldIndex]?
+                    | return .unsupported "parameterized source error lost field value"
+                  let some value := val env fieldExpr
+                    | return .unsupported "parameterized source error field is not a scalar value"
+                  names := names.push fieldName
+                  errorArgs := errorArgs.push { name := fieldName, type := .uint64, parts := #[value] }
+                  type := body
+                let frame : Core.Ops.ErrorFrame Ops.Val := { constructor := name, args := errorArgs }
+                if frame.wellFormed (·.wellFormed IR.ValKind.arity) then .typed frame
+                else .unsupported "parameterized source error frame is malformed"
+            | _ => .unsupported "parameterized source error has no enum metadata"
+        | _ => if name == "overflow" then .overflow else .named name
+    else .notError
+  else .notError
 
 private def isErrorOverflow (e : Expr) : Bool :=
   let e := peelControl 8 e
@@ -6141,11 +6191,16 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | _ => .ok #[op]
   else
   let optionResult? := asConstructedOptionResult env 8 e
+  let decodedError := decodeErrorCtor env e
   let e := peelControl 8 e
-  if isErrorOverflow e then
+  if let .overflow := decodedError then
     .ok #[.errorOverflow]
-  else if let some name := errorCtorName e then
+  else if let .named name := decodedError then
     .ok #[.errorNamed name]
+  else if let .typed frame := decodedError then
+    .ok #[.errorTyped frame]
+  else if let .unsupported reason := decodedError then
+    .error s!"extract/unsupported: {reason}"
   else if let some (tag, payload) := optionResult? then
     -- A constructed Option is already a fixed logical frame. Target codecs retain ownership of
     -- the tag width and wire layout; extraction only preserves both source leaves through joins.

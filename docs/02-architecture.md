@@ -44,7 +44,7 @@ sBPF/.so   Yul/.bin             ← Mollusk / Anvil 工程门
 | `ProofForge.Attr` | `@[pf_entry]` / `@[pf_inline]` 标记 | `program … where` 新语法 |
 | `ProofForge.Profile` | 传递闭包准入规则 | 业务类型检查（Lean 已做） |
 | `ProofForge.Extract` / `Extract.IR` | `Expr` → parameterized Core；在唯一边界组合 typed target extensions | target 物理布局 |
-| `ProofForge.Core.IR` / `Core.Ops` | target-neutral schema、control、checked arithmetic | SVM syscall / EVM opcode |
+| `ProofForge.Core.IR` / `Core.Ops` | target-neutral schema、control、checked arithmetic、typed fixed error frame | SVM syscall / EVM opcode / target error wire geometry |
 | `ProofForge.Core.Target` | 公共 Val/Op/Program 递归投影；静态 target registration 合同 | 具体 target extension case |
 | `ProofForge.Crypto` | 本机 SHA-256 / Keccak-256 | 链上 syscall |
 | `ProofForge.Svm.Runtime` / `Svm.Ops` / `Svm.IR` | Solana runtime surface、CPI/sysvar op、SVM projection registration、账户布局 | EVM storage/opcode |
@@ -126,7 +126,9 @@ EVM 与 SVM 共享普通 Lean、Profile、Extract 和 Core CFG，但不共享物
 ```
 
 SDK 不包装 `.ok` / `.error` 或改变 Lean 控制流；这些形状仍由合同函数显式表达并由 Extract
-fail closed 处理。这样抽象 storage/effect vocabulary，而不让 facade 隐藏状态写入或改变 IR。
+fail closed 处理。Extract 只把 bounded parameterized constructor 保存为 Core typed error frame；
+EVM 从同一 frame 派生 selector/ABI/revert words，SVM 则擦除为既有 named program error。这样
+抽象 storage/effect vocabulary，而不让 facade 隐藏状态写入或为每个应用 error 增加 Emit recipe。
 
 ## 信任边界
 
