@@ -42,6 +42,10 @@ def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (Sta
 
 @[pf_inline] private def joinedChildGas : UInt64 := 8_000_000_000_000
 
+/-- Zero-cost root handle for extracted entries; real scheduling happens in `thenReturned` / `and3Returned`. -/
+@[pf_inline] private def promiseRoot : Promises.PromiseHandle :=
+  { id := 0, depth := 0, fanIn := 0 }
+
 /-- Pure child used by join fixtures to observe echoed UInt64 results. -/
 @[pf_entry]
 def echo (_state : State) (value : UInt64) : UInt64 :=
@@ -101,5 +105,16 @@ def handleFanInSmoke : Bool :=
   root.withinCompileCeiling && joined.withinCompileCeiling && joined.fanInOk && joined.fanIn.toNat == 6
 
 #guard handleFanInSmoke
+
+-- and3Returned ladder smoke (SDK-only until Extract offsets for handle-prefixed joins land).
+def handleAnd3Smoke : Bool :=
+  let joined := promiseRoot.and3Returned
+    receiver "echo" (borshUInt64 1) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 2) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 3) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 0) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  joined.fanInOk && joined.fanIn.toNat == 3
+
+#guard handleAnd3Smoke
 
 end Examples.NearPromiseHandle

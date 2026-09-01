@@ -395,7 +395,7 @@ namespace PromiseHandle
     depth := 0, fanIn := 0 }
 
 /-- Attach one self callback edge; increments tracked depth. Callers must check `depthOk`. -/
-@[pf_inline] def thenReturned {maxFanIn : Nat}
+def thenReturned {maxFanIn : Nat}
     {childArgsCapacity callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
     (receiver childMethod : String)
@@ -407,6 +407,28 @@ namespace PromiseHandle
   { id := callThenReturned receiver childMethod childArguments childDeposit childGas
       callbackMethod callbackArguments callbackDeposit callbackGas
     depth := handle.depth + 1, fanIn := handle.fanIn }
+
+/-- Join three static child edges through one internal join and self callback; sets tracked fan-in to 3. -/
+def and3Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd3ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 3 }
 
 /-- Join four static child edges through one internal join and self callback; sets tracked fan-in to 4. -/
 @[pf_inline] def and4Returned {maxFanIn : Nat}

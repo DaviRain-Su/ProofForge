@@ -22,6 +22,8 @@ run_gate smoke "./scripts/smoke_yulc_counter.sh"
 run_gate anvil-counter "$here/anvil_yulc_counter.sh"
 run_gate anvil-capped "$here/anvil_yulc_capped.sh"
 run_gate anvil-const "$here/anvil_yulc_const.sh"
+run_gate anvil-flag "$here/anvil_yulc_flag.sh"
+run_gate anvil-phase "$here/anvil_yulc_phase.sh"
 
 if [[ "$failed" -ne 0 ]]; then
   echo "evm-yulc: FAIL ($failed failed)" >&2
