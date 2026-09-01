@@ -527,6 +527,131 @@ theorem mBvPush_get (mem : AccountWords) (v : UInt64)
     · exact hlt2 hlt)]
   exact htwo.2
 
+/-! ### BoundedVec pop / setAt 闭环（sf-003） -/
+
+private theorem u64_toNat_sub_one {a : UInt64} (h : 0 < a.toNat) :
+    (a - 1).toNat = a.toNat - 1 := by
+  have hone : UInt64.toNat 1 = 1 := rfl
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  have hlt : a.toNat < 4294967296 * 4294967296 := by
+    obtain ⟨w⟩ := a
+    have := w.isLt
+    simpa [h2] using this
+  rw [UInt64.toNat_sub, hone, h2]
+  omega
+
+/-- **合法 setAt 不改 count header**（slots ≠ count）。 -/
+theorem mBvSetAt_size (mem : AccountWords) (pos v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hpos1 : (1 : Nat) ≤ pos.toNat)
+    (hpos2 : pos.toNat ≤ (mBvSize mem vec).toNat)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvSetAt mem vec pos v) vec = mBvSize mem vec := by
+  have hbound : ¬ (pos = 0 ∨ mReadField mem vec.count 0 < pos) := by
+    intro h
+    rcases h with hz | hlt
+    · have : pos.toNat = 0 := by rw [hz]; rfl
+      omega
+    · have : (mReadField mem vec.count 0).toNat < pos.toNat :=
+        (UInt64.lt_iff_toNat_lt).mp hlt
+      have : (mBvSize mem vec).toNat < pos.toNat := this
+      omega
+  have hws : mFieldWord vec.slots pos
+      = some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf pos hpos1 (by omega)
+  have hwc := mFieldWord_bv_count vec hwf
+  have hne : vec.count.firstWord
+      ≠ vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords := by
+    intro heq
+    have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+      (boundedVec_wf_header_before_slots vec hwf).1
+    omega
+  simp only [mBvSetAt, mBvSize]
+  rw [if_neg hbound]
+  exact mReadField_write_other mem vec.count vec.slots 0 pos v hwc hws hne
+
+/-- **合法 setAt 后同位置 getAt 读回写入值**。 -/
+theorem mBvSetAt_get (mem : AccountWords) (pos v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hpos1 : (1 : Nat) ≤ pos.toNat)
+    (hpos2 : pos.toNat ≤ (mBvSize mem vec).toNat)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvGetAt (mBvSetAt mem vec pos v) vec pos = v := by
+  have hbound : ¬ (pos = 0 ∨ mReadField mem vec.count 0 < pos) := by
+    intro h
+    rcases h with hz | hlt
+    · have : pos.toNat = 0 := by rw [hz]; rfl
+      omega
+    · have : (mReadField mem vec.count 0).toNat < pos.toNat :=
+        (UInt64.lt_iff_toNat_lt).mp hlt
+      have : (mBvSize mem vec).toNat < pos.toNat := this
+      omega
+  have hws : mFieldWord vec.slots pos
+      = some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf pos hpos1 (by omega)
+  have hwc := mFieldWord_bv_count vec hwf
+  have hne : vec.count.firstWord
+      ≠ vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords := by
+    intro heq
+    have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+      (boundedVec_wf_header_before_slots vec hwf).1
+    omega
+  -- setAt 后 count 不变，getAt 守卫仍开
+  have hsize' : mReadField (mWriteField mem vec.slots pos v) vec.count 0
+      = mReadField mem vec.count 0 :=
+    mReadField_write_other mem vec.count vec.slots 0 pos v hwc hws hne
+  have hbound' : ¬ (pos = 0 ∨ mReadField (mWriteField mem vec.slots pos v) vec.count 0 < pos) := by
+    intro h
+    rw [hsize'] at h
+    exact hbound h
+  simp only [mBvSetAt, mBvGetAt, mBvSize]
+  rw [if_neg hbound, if_neg hbound']
+  exact mReadField_write_same mem vec.slots pos v _ hws
+
+/-- **非空 pop 后 count = size - 1**。 -/
+theorem mBvPop_size (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvPop mem vec).1 vec = mBvSize mem vec - 1 := by
+  have hne' : mReadField mem vec.count 0 ≠ 0 := hne
+  simp only [mBvPop, mBvSize]
+  rw [if_neg hne']
+  exact mReadField_write_same mem vec.count 0 (mReadField mem vec.count 0 - 1)
+    vec.count.firstWord (mFieldWord_bv_count vec hwf)
+
+/-- **非空 pop 返回值 = 原末槽**。 -/
+theorem mBvPop_ret (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    (mBvPop mem vec).2 = mReadField mem vec.slots (mBvSize mem vec) := by
+  have hne' : mReadField mem vec.count 0 ≠ 0 := hne
+  simp only [mBvPop, mBvSize]
+  rw [if_neg hne']
+
+/-- **非空 pop 后读旧末槽越界得哨兵 0**。 -/
+theorem mBvPop_oldTail_oob (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvGetAt (mBvPop mem vec).1 vec (mBvSize mem vec) = 0 := by
+  have hsize := mBvPop_size vec mem hwf hne hcap
+  have hpos : (0 : Nat) < (mBvSize mem vec).toNat := by
+    have : (mBvSize mem vec).toNat ≠ 0 := by
+      intro hz
+      exact hne (UInt64.toNat_inj.1 (by simpa using hz))
+    omega
+  have hsub : (mBvSize mem vec - 1).toNat = (mBvSize mem vec).toNat - 1 :=
+    u64_toNat_sub_one hpos
+  have hlt : mBvSize (mBvPop mem vec).1 vec < mBvSize mem vec := by
+    have : (mBvSize (mBvPop mem vec).1 vec).toNat < (mBvSize mem vec).toNat := by
+      rw [hsize, hsub]; omega
+    exact (UInt64.lt_iff_toNat_lt).2 this
+  exact mBvGetAt_oob (mBvPop mem vec).1 vec (mBvSize mem vec) (Or.inr hlt)
+
+/-- sf-003：BoundedVec push/pop/setAt 读回闭环（`mBvPush_*` / `mBvPop_*` / `mBvSetAt_*`）。 -/
+
 end BvWfAlgebra
 
 section QueueProofs
