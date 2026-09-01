@@ -19,5 +19,5 @@ depends-on: []
 ## Follow-up
 
 - Optional `do` notation guide in docs
-- Structure-valued `Except.ok` Decode for inline `NearToken.addChecked` (explicit `if canAdd / ofLimbs` path works)
+- Structure-valued `Except.ok` Decode for inline `NearToken.addChecked` — **done** via `ofLimbs (addW0 …) (addW1 …)` SDK spelling + producer unfold in fixed-limb bind
 - Extract `PromiseHandle`-typed entry bodies for NEAR N13
