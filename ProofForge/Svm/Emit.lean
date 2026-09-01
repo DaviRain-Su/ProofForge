@@ -10,7 +10,7 @@ def overflowCode : String := "0x1001"
 
 /-- Heterogeneous PDA discovery may need 480 seed bytes, 15 descriptors, and a 32-byte result.
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
-PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
+PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2112`. -/
 private def pdaSeedsScratch : Nat := 4096
 /-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
 headers. Bounded components publish one shared fixed-scratch boundary. -/
@@ -101,9 +101,9 @@ private def originalDataLenStack (accountCount account : Nat) : Nat :=
   headerStack (accountCount + 1 + account)
 
 /-- Scalar locals start after both the static account-header prefix and component scratch.
-The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/component
-scratch owns 2048..4096. This single frame contract prevents composed target effects from
-clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
+The entire bank stays below offset 1088; CPI owns offsets 1088..2112 and deep PDA/sysvar/component
+scratch owns 2112..4096. The seam was moved from 1024→1088 so nested CancelMultiple withdraw
+folds can retain a few more join locals under Solana's 9-account frame without overlapping CPI. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
   let walkEnd :=
     if IR.requiresOriginalAccountDataLengths p then
@@ -113,7 +113,7 @@ private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
   let base := max (IR.componentStackScratchEnd p + 8)
     walkEnd
   let offset := base + i * 8
-  if offset < 1024 then some offset else none
+  if offset < Scratch.scalarBank.baseStackOffset then some offset else none
 
 private def emitWalkAccounts (n : Nat) (captureOriginal : Bool) (tag err : String) : String :=
   Id.run do
@@ -711,7 +711,7 @@ ois_done_{scope}_{acc}_{stackOff}:
 
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
-scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 sysvar 的 `r10-3072`。
+scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2112` 和 sysvar 的 `r10-3072`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
 private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat)

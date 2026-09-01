@@ -2678,6 +2678,13 @@ def finishCancelMultipleWithdraw512At (layout : Examples.PhoenixV1.Layout)
   else
     .error .overflow
 
+/-- Fold released lots into a quote or base accumulator (`isQuote = 1` → quote). -/
+def addReleasedAcc512At (acc side released isQuote : UInt64) : Except Error UInt64 :=
+  let add :=
+    if isQuote = 0 then (if side = 0 then (0 : UInt64) else released)
+    else (if side = 0 then released else 0)
+  if acc > u64Max - add then .error .overflow else .ok (acc + add)
+
 /--
 Official Phoenix `CancelMultipleOrdersByIdWithFreeFunds` tag 11 wire:
 `0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **eight** order ids
@@ -2799,13 +2806,14 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
         .ok (_s, 0)
 
 /--
-Official Phoenix `CancelMultipleOrdersById` tag 10 wire uses a five-id vector, claims any
+Official Phoenix `CancelMultipleOrdersById` tag 10 wire uses a six-id vector, claims any
 released collateral, and withdraws through the shared nine-account classic Token context. Quote and
-base lots from all ids are aggregated before claim/withdraw (`BoundedVec` capacity = 5; max wire 90).
+base lots from all ids are aggregated before claim/withdraw (`BoundedVec` capacity = 6; max wire 107).
+The scalar/CPI seam at 1088 leaves enough join locals for the sixth nest under a 9-account frame.
 -/
 @[pf_entry, pf_svm_raw 10 9 0]
 def cancelMultipleOrdersById (_s : State)
-    (orders : BoundedVec CancelOrderParams 5) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 6) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if cancelWithdrawContextValid = 0 then
       .error .overflow
@@ -2831,7 +2839,11 @@ def cancelMultipleOrdersById (_s : State)
       orders.length ≤ 4 ||
         orders.values[4]!.side.toUInt64 = 0 ||
         orders.values[4]!.side.toUInt64 = 1
-    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok || !side4ok then
+    let side5ok :=
+      orders.length ≤ 5 ||
+        orders.values[5]!.side.toUInt64 = 0 ||
+        orders.values[5]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok || !side4ok || !side5ok then
       .error .overflow
     else
       let layout := Examples.PhoenixV1.small 2
@@ -2844,70 +2856,62 @@ def cancelMultipleOrdersById (_s : State)
       let o0 := orders.values[0]!
       let released0 ←
         cancelOneReleased512At layout traderKey0 traderIndex side0 o0.price o0.sequence
-      let quote0 := if side0 = 0 then released0 else 0
-      let base0 := if side0 = 0 then 0 else released0
+      let quote0 ← addReleasedAcc512At 0 side0 released0 1
+      let base0 ← addReleasedAcc512At 0 side0 released0 0
       if orders.length ≥ 2 then
         let o1 := orders.values[1]!
         let side1 := o1.side.toUInt64
         let released1 ←
           cancelOneReleased512At layout traderKey0 traderIndex side1 o1.price o1.sequence
-        let quote1 := if side1 = 0 then released1 else 0
-        let base1 := if side1 = 0 then 0 else released1
-        if quote0 > u64Max - quote1 || base0 > u64Max - base1 then
-          .error .overflow
-        else
-          let quote01 := quote0 + quote1
-          let base01 := base0 + base1
-          if orders.length ≥ 3 then
-            let o2 := orders.values[2]!
-            let side2 := o2.side.toUInt64
-            let released2 ←
-              cancelOneReleased512At layout traderKey0 traderIndex side2 o2.price o2.sequence
-            let quote2 := if side2 = 0 then released2 else 0
-            let base2 := if side2 = 0 then 0 else released2
-            if quote01 > u64Max - quote2 || base01 > u64Max - base2 then
-              .error .overflow
-            else
-              let quote012 := quote01 + quote2
-              let base012 := base01 + base2
-              if orders.length ≥ 4 then
-                let o3 := orders.values[3]!
-                let side3 := o3.side.toUInt64
-                let released3 ←
-                  cancelOneReleased512At layout traderKey0 traderIndex side3 o3.price o3.sequence
-                let quote3 := if side3 = 0 then released3 else 0
-                let base3 := if side3 = 0 then 0 else released3
-                if quote012 > u64Max - quote3 || base012 > u64Max - base3 then
-                  .error .overflow
-                else
-                  let quote0123 := quote012 + quote3
-                  let base0123 := base012 + base3
-                  if orders.length ≥ 5 then
-                    let o4 := orders.values[4]!
-                    let side4 := o4.side.toUInt64
-                    let released4 ←
-                      cancelOneReleased512At layout traderKey0 traderIndex side4 o4.price o4.sequence
-                    let quote4 := if side4 = 0 then released4 else 0
-                    let base4 := if side4 = 0 then 0 else released4
-                    if quote0123 > u64Max - quote4 || base0123 > u64Max - base4 then
-                      .error .overflow
-                    else
-                      let _ ←
-                        finishCancelMultipleWithdraw512At layout traderIndex
-                          (quote0123 + quote4) (base0123 + base4)
-                      .ok (_s, 0)
-                  else
-                    let _ ←
-                      finishCancelMultipleWithdraw512At layout traderIndex quote0123 base0123
-                    .ok (_s, 0)
+        let quote01 ← addReleasedAcc512At quote0 side1 released1 1
+        let base01 ← addReleasedAcc512At base0 side1 released1 0
+        if orders.length ≥ 3 then
+          let o2 := orders.values[2]!
+          let side2 := o2.side.toUInt64
+          let released2 ←
+            cancelOneReleased512At layout traderKey0 traderIndex side2 o2.price o2.sequence
+          let quote012 ← addReleasedAcc512At quote01 side2 released2 1
+          let base012 ← addReleasedAcc512At base01 side2 released2 0
+          if orders.length ≥ 4 then
+            let o3 := orders.values[3]!
+            let side3 := o3.side.toUInt64
+            let released3 ←
+              cancelOneReleased512At layout traderKey0 traderIndex side3 o3.price o3.sequence
+            let quote0123 ← addReleasedAcc512At quote012 side3 released3 1
+            let base0123 ← addReleasedAcc512At base012 side3 released3 0
+            if orders.length ≥ 5 then
+              let o4 := orders.values[4]!
+              let side4 := o4.side.toUInt64
+              let released4 ←
+                cancelOneReleased512At layout traderKey0 traderIndex side4 o4.price o4.sequence
+              let quote01234 ← addReleasedAcc512At quote0123 side4 released4 1
+              let base01234 ← addReleasedAcc512At base0123 side4 released4 0
+              if orders.length ≥ 6 then
+                let o5 := orders.values[5]!
+                let side5 := o5.side.toUInt64
+                let released5 ←
+                  cancelOneReleased512At layout traderKey0 traderIndex side5 o5.price o5.sequence
+                let quoteAll ← addReleasedAcc512At quote01234 side5 released5 1
+                let baseAll ← addReleasedAcc512At base01234 side5 released5 0
+                let _ ←
+                  finishCancelMultipleWithdraw512At layout traderIndex quoteAll baseAll
+                .ok (_s, 0)
               else
                 let _ ←
-                  finishCancelMultipleWithdraw512At layout traderIndex quote012 base012
+                  finishCancelMultipleWithdraw512At layout traderIndex quote01234 base01234
                 .ok (_s, 0)
+            else
+              let _ ←
+                finishCancelMultipleWithdraw512At layout traderIndex quote0123 base0123
+              .ok (_s, 0)
           else
             let _ ←
-              finishCancelMultipleWithdraw512At layout traderIndex quote01 base01
+              finishCancelMultipleWithdraw512At layout traderIndex quote012 base012
             .ok (_s, 0)
+        else
+          let _ ←
+            finishCancelMultipleWithdraw512At layout traderIndex quote01 base01
+          .ok (_s, 0)
       else
         let _ ←
           finishCancelMultipleWithdraw512At layout traderIndex quote0 base0
@@ -2939,5 +2943,6 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelOneByIdFreeFunds512At releasedLotsForCancel512At
   cancelOneReleased512At
   finishCancelMultipleWithdraw512At
+  addReleasedAcc512At
 
 end Examples.PhoenixV1Profile

@@ -234,6 +234,7 @@ Phase 7   收口
 | [svm-app-006](tasks/svm-app-006.md) | Phoenix CancelMultipleById tag-10 four-id withdraw | **done** — Mollusk aggregate quote claim |
 | [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141 |
 | [svm-app-008](tasks/svm-app-008.md) | Phoenix CancelMultipleById tag-10 capacity 4→5 | **done** — maxDataLen 90; digest `5fddbc7822acef7e` |
+| [svm-app-009](tasks/svm-app-009.md) | Phoenix CancelMultipleById tag-10 capacity 5→6 | **done** — seam 1088; maxDataLen 107; digest `b88c8a2247d2c28e` |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）

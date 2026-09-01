@@ -47,17 +47,19 @@ def Bank.wellFormed (bank : Bank) : Bool :=
 def Bank.disjoint (a b : Bank) : Bool :=
   a.baseStackOffset ≤ b.lowWater || b.baseStackOffset ≤ a.lowWater
 
-/-- CPI descriptors grow from `r10-2048` through the disjoint `[1024, 2048)` depth bank. -/
+/-- CPI descriptors grow from `r10-2112` through the disjoint `[1088, 2112)` depth bank.
+The scalar/CPI seam sits at 1088 (was 1024) so 9-account withdraw entries can hold a few more
+join locals without overlapping invoke scratch. -/
 def cpiBank : Bank :=
-  { name := "cpi", baseStackOffset := 2048, capacityBytes := 1024, alignment := 8 }
+  { name := "cpi", baseStackOffset := 2112, capacityBytes := 1024, alignment := 8 }
 
-/-- Existing expression, account-header, component, and scalar-local depths. -/
+/-- Expression, account-header, component, and scalar-local depths (`[0, 1088)`). -/
 def scalarBank : Bank :=
-  { name := "scalar", baseStackOffset := 1024, capacityBytes := 1024, alignment := 8 }
+  { name := "scalar", baseStackOffset := 1088, capacityBytes := 1088, alignment := 8 }
 
-/-- Existing sysvar, PDA-seed, and bounded component depths. -/
+/-- Sysvar, PDA-seed, and bounded component depths (`[2112, 4096)`). -/
 def deepBank : Bank :=
-  { name := "deep", baseStackOffset := 4096, capacityBytes := 2048, alignment := 8 }
+  { name := "deep", baseStackOffset := 4096, capacityBytes := 1984, alignment := 8 }
 
 structure Plan where
   bank : Bank
