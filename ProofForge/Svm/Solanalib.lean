@@ -1288,4 +1288,77 @@ theorem walkAccount0Meta_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 4 - Loader account-0 signer/writable flags (`svm-sem-009`)
+
+Emit gates account-0 with `ldxb` of `ACC0_HEADER+1` (signer) and `+2` (writable). This knife
+walks those two flag bytes through the same `r8` header cursor and proves agreement with absolute
+`r6`-relative loads. Still not owner/lamports/data_len, full account vector, syscalls, or ELF accept.
+-/
+
+/-- Absolute VAs for account-0 signer and writable flag bytes. -/
+def account0SignerAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account0HeaderOffset + 1)
+def account0WritableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account0HeaderOffset + 2)
+
+/-- Seed Loader input with account-0 non-dup header, signer/writable flags, and key limb. -/
+def account0FlagsInputMem (value arg0 keyLimb : U64) (signer writable : U8) : Option Mem := do
+  let m₁ ← account0MetaInputMem value arg0 keyLimb
+  let m₂ ← storev .m8 m₁ account0SignerAddr (.vbyte signer)
+  storev .m8 m₂ account0WritableAddr (.vbyte writable)
+
+/-- Typed walk: ldxb r1,[r8+1]; ldxb r2,[r8+2]; stxdw [r10+stackOff],r1. -/
+def walkAccount0Flags? (stackOff : U16) : Option EbpfAsm := do
+  let signerOff ← positiveOffset? 1
+  let writableOff ← positiveOffset? 2
+  return [
+    .ldx .m8 .br1 .br8 signerOff,
+    .ldx .m8 .br2 .br8 writableOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run the walked account-0 flag load against seeded input memory. -/
+def evalWalkAccount0FlagsToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0Flags? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-0 signer and writable flag bytes. -/
+def evalAbsAccount0Flags? (memory : Mem) : Option (U8 × U8) := do
+  let signer ← loadv .m8 memory account0SignerAddr
+  let writable ← loadv .m8 memory account0WritableAddr
+  match signer, writable with
+  | .vbyte s, .vbyte w => some (s, w)
+  | _, _ => none
+
+/-- Walked account-0 flag assembly is well-formed. -/
+theorem walkAccount0Flags_verified :
+    (walkAccount0Flags? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walk: signer=`1`, writable=`1`, signer staged at `[r10-16]`. -/
+theorem evalWalkAccount0_signer_writable_1 :
+    (do
+      let mem ← account0FlagsInputMem 7 5 0x42 1 1
+      let (regs, finalMem) ← evalWalkAccount0FlagsToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-0 flags agree with absolute `r6`-relative header loads. -/
+theorem walkAccount0Flags_eq_absLoad :
+    (do
+      let mem ← account0FlagsInputMem 7 5 0x42 1 0
+      let (regs, _) ← evalWalkAccount0FlagsToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount0Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

@@ -53,9 +53,11 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-app-002](tasks/svm-app-002.md) | Matching / fee / remainder | **done** |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id + mixed bid/ask |
 | [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id + reject len=5 |
+| [svm-app-006](tasks/svm-app-006.md) | Phoenix CancelMultipleById tag-10 four-id withdraw | **done** — Mollusk aggregate quote claim |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
+| [svm-sem-009](tasks/svm-sem-009.md) | E∞ Loader account-0 signer/writable flags | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -68,7 +70,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md) / [007](tasks/svm-sem-007.md) / [008](tasks/svm-sem-008.md) | walked `r7` + account-0 host knives | **done** — single/two-arg `r7` + account-0 header/key |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[009](tasks/svm-sem-009.md) | walked `r7` + account-0 host knives | **done** — `r7` + account-0 header/key/flags |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)

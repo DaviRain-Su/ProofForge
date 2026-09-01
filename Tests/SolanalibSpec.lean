@@ -332,4 +332,24 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 4: Loader account-0 signer/writable flags (`svm-sem-009`)
+#guard (walkAccount0Flags? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account0FlagsInputMem 7 5 0x42 1 1
+      let (regs, finalMem) ← evalWalkAccount0FlagsToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account0FlagsInputMem 7 5 0x42 1 0
+      let (regs, _) ← evalWalkAccount0FlagsToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount0Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec

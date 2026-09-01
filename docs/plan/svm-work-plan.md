@@ -231,6 +231,7 @@ Phase 7   收口
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | **done** — tag 3 matching/fee/remainder |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id |
 | [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id |
+| [svm-app-006](tasks/svm-app-006.md) | Phoenix CancelMultipleById tag-10 four-id withdraw | **done** — Mollusk aggregate quote claim |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -248,6 +249,7 @@ Phase 7   收口
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ knife | walked `r7` arg cursor ↔ E1 absolute `.arg` | **done** — first host knife |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ knife 2 | two consecutive walked `r7` u64 args ↔ E1 | **done** — multi-field cursor |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ knife 3 | Loader account-0 header/key walk ↔ abs load | **done** — non-dup + key limb |
+| [svm-sem-009](tasks/svm-sem-009.md) | E∞ knife 4 | Loader account-0 signer/writable flags ↔ abs load | **done** — Emit gate bytes |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

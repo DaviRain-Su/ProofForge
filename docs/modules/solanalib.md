@@ -88,6 +88,7 @@ Solanalib 当前没有为本仓提供：
 E∞ 第一刀（`svm-sem-006`）：walked `r7` Counter arg0 cursor ↔ E1 绝对 `.arg` staged word。
 E∞ 第二刀（`svm-sem-007`）：同一 `r7` 连续 walk 两个 u64 ↔ 两个绝对 `.arg` staged word。
 E∞ 第三刀（`svm-sem-008`）：Loader account-0 header/key walk（non-dup `0xff` + key limb）↔ 绝对 `r6` 输入区加载。
+E∞ 第四刀（`svm-sem-009`）：account-0 signer/writable 标志字节 walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_HEADER+1/+2` 门控）。
 仍不覆盖：Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests
