@@ -2405,7 +2405,7 @@ private theorem insertAt_bump_linked_wf (s : State)
   have hparent0N : (1 : Nat) ≤ parentAddress.toNat := hparent.1
   have hparentBN : parentAddress.toNat < s.bumpIndex.toNat := hparent.2
   have hbi : (s.bumpIndex + 1).toNat = s.bumpIndex.toNat + 1 :=
-    u64_toNat_add_one (by omega)
+    u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)
   have hbumpNew : s.bumpIndex ≤ s.bumpIndex + 1 := by
     show s.bumpIndex.toNat ≤ (s.bumpIndex + 1).toNat
     rw [hbi]
@@ -2427,7 +2427,7 @@ private theorem insertAt_bump_linked_wf (s : State)
     s.nodes[parentIndex]!.color ≤ 1 at hparentPtr
   refine ⟨?_, ?_, ?_, ?_, Nat.le_refl _, ?_⟩
   · show (s.size + 1).toNat ≤ 4
-    rw [u64_toNat_add_one (by omega)]
+    rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]
     omega
   · show (1 : Nat) ≤ (s.bumpIndex + 1).toNat
     rw [hbi]
@@ -2558,10 +2558,11 @@ private theorem insertAt_free_linked_wf (s : State)
   refine ⟨?_, hb1, hb5, ?_, ?_, ?_⟩
   · show (s.size + 1).toNat ≤ 4
     have hsizeN : s.size.toNat < 4 := hsize
-    rw [u64_toNat_add_one (by omega)]
+    rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]
     omega
   · show s.nodes[freeIndex]!.left.toNat ≤ 5
     have : s.nodes[freeIndex]!.left.toNat ≤ s.bumpIndex.toNat := hfreePtr.1
+    have hb5N : s.bumpIndex.toNat ≤ 5 := hb5
     omega
   · show s.nodes[freeIndex]!.left ≤ s.bumpIndex
     exact hfreePtr.1
