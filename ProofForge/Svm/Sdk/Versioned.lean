@@ -161,4 +161,87 @@ repairs malformed state, accepts a foreign discriminator, or upgrades an unliste
       TransitionResult.transitioned
     else TransitionResult.rejected
 
+
+/-! ## L1 / pure classify 代数（sf-004） -/
+
+/-- `Header.wellFormed` 的结构化分解。 -/
+theorem Header.wellFormed_parts {header : Header} {accountLimit : Nat}
+    (h : header.wellFormed accountLimit = true) :
+    scalarHeaderWellFormed header.discriminatorField
+        header.discriminatorField.region.account accountLimit = true ∧
+    scalarHeaderWellFormed header.versionField
+        header.discriminatorField.region.account accountLimit = true ∧
+    header.discriminatorField.firstWord + 1 = header.versionField.firstWord ∧
+    header.expectedDiscriminator ≠ 0 ∧
+    header.supportedVersion ≠ 0 := by
+  simp only [Header.wellFormed, Bool.and_eq_true, bne_iff_ne, beq_iff_eq] at h
+  exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+
+/-- `Transition.wellFormed` 的结构化分解。 -/
+theorem Transition.wellFormed_parts {transition : Transition} {accountLimit : Nat}
+    (h : transition.wellFormed accountLimit = true) :
+    transition.header.wellFormed accountLimit = true ∧
+    transition.fromVersion ≠ 0 ∧
+    transition.fromVersion ≠ transition.header.supportedVersion := by
+  simp only [Transition.wellFormed, Bool.and_eq_true, bne_iff_ne] at h
+  exact ⟨h.1.1, h.1.2, h.2⟩
+
+/-- 全零物理字 → uninitialized（codec 身份非零）。 -/
+theorem Header.classify_uninitialized (header : Header)
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0) :
+    header.classify 0 0 = Status.uninitialized := by
+  unfold Header.classify
+  simp [hd, hv]
+
+/-- 精确匹配 → ready。 -/
+theorem Header.classify_ready (header : Header)
+    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0) :
+    header.classify header.expectedDiscriminator header.supportedVersion = Status.ready := by
+  unfold Header.classify
+  simp [hd0, hv0]
+
+/-- 混零（disc=0, ver≠0）→ malformed。 -/
+theorem Header.classify_malformed_discZero (header : Header) (actualVersion : UInt64)
+    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
+    (hver : actualVersion ≠ 0) :
+    header.classify 0 actualVersion = Status.malformed := by
+  unfold Header.classify
+  simp [hd0, hv0, hver]
+
+/-- 混零（disc≠0, ver=0）→ malformed。 -/
+theorem Header.classify_malformed_verZero (header : Header) (actualDiscriminator : UInt64)
+    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
+    (hdisc : actualDiscriminator ≠ 0) :
+    header.classify actualDiscriminator 0 = Status.malformed := by
+  unfold Header.classify
+  simp [hd0, hv0, hdisc]
+
+/-- 外源 discriminator → wrongDiscriminator。 -/
+theorem Header.classify_wrongDiscriminator (header : Header)
+    (actualDiscriminator actualVersion : UInt64)
+    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
+    (hdisc : actualDiscriminator ≠ 0) (hver : actualVersion ≠ 0)
+    (hne : actualDiscriminator ≠ header.expectedDiscriminator) :
+    header.classify actualDiscriminator actualVersion = Status.wrongDiscriminator := by
+  unfold Header.classify
+  simp [hd0, hv0, hdisc, hver, hne]
+
+/-- 同 disc、错 version → unsupportedVersion。 -/
+theorem Header.classify_unsupportedVersion (header : Header) (actualVersion : UInt64)
+    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
+    (hver : actualVersion ≠ 0)
+    (hne : actualVersion ≠ header.supportedVersion) :
+    header.classify header.expectedDiscriminator actualVersion = Status.unsupportedVersion := by
+  unfold Header.classify
+  simp [hd0, hv0, hver, hne]
+
+/-- codec 身份含零 → malformed。 -/
+theorem Header.classify_malformed_identity (header : Header)
+    (hbad : header.expectedDiscriminator = 0 ∨ header.supportedVersion = 0)
+    (d v : UInt64) :
+    header.classify d v = Status.malformed := by
+  unfold Header.classify
+  rcases hbad with h | h <;> simp [h]
+
+
 end ProofForge.Svm.Sdk.Versioned
