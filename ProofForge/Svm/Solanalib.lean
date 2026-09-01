@@ -1678,4 +1678,94 @@ theorem walkAccount0ExecRent_eq_absLoad :
       some true := by
   native_decide
 
+
+/-!
+## E-infinity knife 9 - Loader account-0 → next-account marker skip (`svm-sem-014`)
+
+Emit's account walk advances past account-0 with the PF caller geometry
+`r5 = header+88+data_len+MAX_PERMITTED_DATA_INCREASE(+align8)` then reads rent and adds 8 to
+reach the next dup marker (`Emit.emitSkipAccount`). For the zero-`EXACT_DATA_LEN` layout used
+here that next marker sits at absolute `0x2868` (`0x8 + ABI.accountSpan 0`). This knife walks
+that skip from the same `r8` header cursor and proves the loaded marker matches an absolute
+`r6`-relative load. Still not full multi-account vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offset of the next-account dup marker after zero-dataLen rent (`0x2860+8`). -/
+def account1HeaderOffset : Nat := account0RentEpochOffset + 8
+/-- `Emit` `.equ MAX_PERMITTED_DATA_INCREASE`. -/
+def maxPermittedDataIncrease : Nat := 0x2800
+/-- Bytes from account header to the serialized data region (`Emit` add 88). -/
+def accountHeaderToDataBytes : Nat := 88
+/-- `ACC0_DATA_LEN` relative to `ACC0_HEADER`. -/
+def account0DataLenHeaderOff : Nat := account0DataLenOffset - account0HeaderOffset
+
+/-- Absolute VA of the next-account dup marker after a zero-dataLen account-0. -/
+def account1HeaderAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1HeaderOffset
+
+/-- Seed Loader input with account-0 meta, zero data_len, rent_epoch, and next-account marker. -/
+def account0SkipNextInputMem (value arg0 keyLimb : U64) (nextMarker : U8) (rentEpoch : U64) :
+    Option Mem := do
+  let m₁ ← account0ExecRentInputMem value arg0 keyLimb 0 rentEpoch
+  let m₂ ← storev .m64 m₁ account0DataLenAddr (.vlong 0)
+  storev .m8 m₂ account1HeaderAddr (.vbyte nextMarker)
+
+/-- Typed skip: load data_len; advance like `emitSkipAccount` (no align branch at len=0);
+load next marker; stage it. -/
+def walkAccount0SkipNext? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run the walked account-0→next-marker skip against seeded input memory. -/
+def evalWalkAccount0SkipNextToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0SkipNext? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative load of the next-account dup marker. -/
+def evalAbsAccount1Marker? (memory : Mem) : Option U8 := do
+  let marker ← loadv .m8 memory account1HeaderAddr
+  match marker with
+  | .vbyte m => some m
+  | _ => none
+
+/-- Walked account-0 skip-to-next assembly is well-formed. -/
+theorem walkAccount0SkipNext_verified :
+    (walkAccount0SkipNext? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete skip: next marker=`0xff`, staged at `[r10-16]`. -/
+theorem evalWalkAccount0_skip_next_marker_0xff :
+    (do
+      let mem ← account0SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE
+      let (regs, finalMem) ← evalWalkAccount0SkipNextToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) =
+      some true := by
+  native_decide
+
+/-- Walked next-account marker agrees with absolute `r6`-relative load after the skip. -/
+theorem walkAccount0SkipNext_eq_absLoad :
+    (do
+      let mem ← account0SkipNextInputMem 7 5 0x42 0xAB 0xEE
+      let (regs, _) ← evalWalkAccount0SkipNextToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount1Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xAB)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
