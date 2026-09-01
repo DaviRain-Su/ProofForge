@@ -50,10 +50,17 @@ jobs:
       - name: Check kernel proofs have no placeholders
         run: python3 scripts/check_no_sorry.py
 
-      - name: Build Lean libraries and guards
+      - name: Build Lean libraries
+        run: lake build
+
+      - name: Build formalization gate modules
         run: |
-          lake build
-          lake build Tests
+          # Named Track A / L3 bridge targets (svm-eng-001). Failures name the
+          # module instead of only surfacing inside the aggregate Tests build.
+          lake build Tests.ProofSpec Tests.SolanalibSpec Tests.SemanticsSpec
+
+      - name: Build Lean test suite
+        run: lake build Tests
 
   svm:
     name: SVM
@@ -88,6 +95,12 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Check Runtime / SDK ownership boundaries
+        run: python3 scripts/check_ownership.py
+
+      - name: Check kernel proofs have no placeholders
+        run: python3 scripts/check_no_sorry.py
 
       - name: Build program source modules
         run: lake build Examples

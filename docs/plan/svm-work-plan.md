@@ -146,7 +146,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
             （nowrap push / pop clear·advance 已在 main，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（可并行）
           · B: svm-rt-001 signed Clock（可并行）
-          · F: svm-eng-001 形式化 CI 门（可并行）
+          · F: svm-eng-001 形式化 CI 门（**done**）
           · D 侧注：fee/matching 直接组合 `Core.Math` / `FixedPoint`，勿再开共享算术片
 
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
@@ -246,7 +246,7 @@ Phase 7   收口
 
 | ID | 内容 | 验收 |
 |---|---|---|
-| [svm-eng-001](tasks/svm-eng-001.md) | CI：`check_no_sorry` + 形式化相关 lake 目标进 SVM/Lean lane | PR 门绿 |
+| [svm-eng-001](tasks/svm-eng-001.md) | CI：`check_no_sorry` + 形式化相关 lake 目标进 SVM/Lean lane | **done**；Lean 具名 Proof/Solanalib/Semantics；SVM 同步 ownership+no-sorry |
 | [svm-eng-002](tasks/svm-eng-002.md) | 双矩阵收口：能力矩阵 + 形式化矩阵同一声明页 | 文档 + CI 摘要 |
 
 ---
@@ -262,7 +262,7 @@ Phase 7   收口
 | C | svm-sdk-001 … 007 | svm-sdk-001/002/003/004/005 **done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed）；其余 todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
-| F | svm-eng-001 … 002 | todo |
+| F | svm-eng-001 … 002 | svm-eng-001 **done**；002 todo |
 
 ---
 
@@ -296,8 +296,8 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` done → 下一刀 **`svm-sdk-006` Memo/migration**（或 `svm-rt-004` sliced sysvar / `svm-sdk-007` iteration）
-2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` + `svm-eng-001` done → 下一刀 **`svm-sdk-006` Memo/migration**（或 `svm-rt-004` sliced sysvar / `svm-sdk-007` iteration）
+2. **并行**：`svm-sem-001`（E1）/ `svm-eng-002`（双矩阵收口）
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。

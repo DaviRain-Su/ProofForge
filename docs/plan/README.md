@@ -237,10 +237,10 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sem-003](tasks/svm-sem-003.md) | todo | L3/E3 Counter 整函数 CFG correspondence |
 | [svm-sem-004](tasks/svm-sem-004.md) | todo | L3/E4 AccountWords ↔ storev 桥 |
 | [svm-sem-005](tasks/svm-sem-005.md) | todo | L3/E5 选定容器全函数有界证明 |
-| [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
+| [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` **done** → 下一刀 **`svm-sdk-006`**（Memo/migration）或并行 `svm-sem-001` / `svm-eng-001`。
+本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` + `svm-eng-001` **done** → 下一刀 **`svm-sdk-006`**（Memo/migration）或并行 `svm-sem-001` / `svm-eng-002`。
 WASM PR #4/#5 仍开着不阻塞。
 
 
