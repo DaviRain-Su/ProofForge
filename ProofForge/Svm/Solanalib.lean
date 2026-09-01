@@ -2124,4 +2124,98 @@ theorem walkAccount1OwnerAfterSkip_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 14 - Loader account-1 owner limbs 2/3 after skip (`svm-sem-019`)
+
+Knife 13 covers account-1 owner limbs 0/1 after the zero-`EXACT_DATA_LEN` skip. Emit then
+reads account-1 owner limbs 2/3 from the same advanced header cursor (`+0x38` / `+0x40`),
+matching account-0 high-owner geometry. This knife composes that skip with those word loads and
+proves agreement with absolute `r6`-relative loads. Still not executable/rent for account-1, full
+vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets/VAs for account-1 owner limbs 2 and 3 (header-relative `+0x38` / `+0x40`). -/
+def account1Owner2Offset : Nat :=
+  account1HeaderOffset + (account0Owner2Offset - account0HeaderOffset)
+def account1Owner3Offset : Nat :=
+  account1HeaderOffset + (account0Owner3Offset - account0HeaderOffset)
+def account1Owner2Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1Owner2Offset
+def account1Owner3Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1Owner3Offset
+
+/-- Seed skip+account-1 owner layout plus owner limbs 2 and 3. -/
+def account1OwnerHiInputMem (value arg0 key0Limb : U64) (nextMarker : U8)
+    (rentEpoch key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) : Option Mem := do
+  let m₁ ← account1OwnerInputMem value arg0 key0Limb nextMarker rentEpoch key1Limb
+      signer writable lamports dataLen owner0 owner1
+  let m₂ ← storev .m64 m₁ account1Owner2Addr (.vlong owner2)
+  storev .m64 m₂ account1Owner3Addr (.vlong owner3)
+
+/-- Typed skip then account-1 high owner: after knife-9 skip, `r2` is the account-1 header;
+`ldxdw r1,[r2+0x38]`; `ldxdw r2,[r2+0x40]`; stage owner2. -/
+def walkAccount1OwnerHiAfterSkip? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let owner2Off ← positiveOffset? (account0Owner2Offset - account0HeaderOffset)
+  let owner3Off ← positiveOffset? (account0Owner3Offset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 owner2Off,
+    .ldx .m64 .br4 .br2 owner3Off,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run skip+account-1 high-owner walk against seeded input memory. -/
+def evalWalkAccount1OwnerHiAfterSkipToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount1OwnerHiAfterSkip? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-1 owner limbs 2 and 3. -/
+def evalAbsAccount1OwnerHi? (memory : Mem) : Option (U64 × U64) := do
+  let owner2 ← loadv .m64 memory account1Owner2Addr
+  let owner3 ← loadv .m64 memory account1Owner3Addr
+  match owner2, owner3 with
+  | .vlong a, .vlong b => some (a, b)
+  | _, _ => none
+
+/-- Walked account-1-high-owner-after-skip assembly is well-formed. -/
+theorem walkAccount1OwnerHiAfterSkip_verified :
+    (walkAccount1OwnerHiAfterSkip? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete skip+high-owner: owner2=`0xC3`, owner3=`0xD4`, owner2 staged at `[r10-16]`. -/
+theorem evalWalkAccount1_after_skip_owner2_0xC3_owner3_0xD4 :
+    (do
+      let mem ← account1OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4
+      let (regs, finalMem) ← evalWalkAccount1OwnerHiAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xC3 && regs .br2 == 0xD4 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xC3))) =
+      some true := by
+  native_decide
+
+/-- Walked account-1 high owner limbs after skip agree with absolute `r6`-relative loads. -/
+theorem walkAccount1OwnerHiAfterSkip_eq_absLoad :
+    (do
+      let mem ← account1OwnerHiInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0 1000 128 0xA1 0xB2 0xC3 0xD4
+      let (regs, _) ← evalWalkAccount1OwnerHiAfterSkipToStack? rhsStackOffset mem
+      let (owner2, owner3) ← evalAbsAccount1OwnerHi? mem
+      pure (regs .br1 == owner2 && regs .br2 == owner3 &&
+        owner2 == 0xC3 && owner3 == 0xD4)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

@@ -537,5 +537,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 14: Loader account-1 owner limbs 2/3 after skip (`svm-sem-019`)
+#guard (walkAccount1OwnerHiAfterSkip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4
+      let (regs, finalMem) ← evalWalkAccount1OwnerHiAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xC3 && regs .br2 == 0xD4 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xC3))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1OwnerHiInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0 1000 128 0xA1 0xB2 0xC3 0xD4
+      let (regs, _) ← evalWalkAccount1OwnerHiAfterSkipToStack? rhsStackOffset mem
+      let (owner2, owner3) ← evalAbsAccount1OwnerHi? mem
+      pure (regs .br1 == owner2 && regs .br2 == owner3 &&
+        owner2 == 0xC3 && owner3 == 0xD4)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
