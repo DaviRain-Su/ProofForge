@@ -716,6 +716,8 @@ def decode (annotations : Array String) (paramCount : Nat)
     (paramSchemas : Array Core.Codec.Schema := #[])
     (retSchema : Core.Codec.Schema := .unit) : Except String MethodEntry := do
   let raw := annotations.filter (·.startsWith "svm.raw.")
+  unless raw.size == annotations.size do
+    throw "extract/unsupported: svm cannot consume foreign target annotations"
   if raw.isEmpty then
     return .generated
   unless raw.size == 1 do

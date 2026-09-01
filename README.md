@@ -12,7 +12,8 @@
 
 It is **not** a new contract language. There is no `program … where`. Mark callable roots with `@[pf_entry]`. The CLI is `pf`.
 
-Current targets: **Solana sBPF** (`.so` / IDL) and **EVM Yul** (`.bin` / ABI).
+Current targets: **Solana sBPF** (`.so` / IDL), **EVM Yul** (`.bin` / ABI),
+**XRPL Bedrock WASM**, and **NEAR Protocol WASM** (`.wat` / `.wasm`).
 
 - Website: [https://davirain-su.github.io/ProofForge/](https://davirain-su.github.io/ProofForge/)
 - Docs index: [docs/INDEX.md](docs/INDEX.md)
@@ -87,14 +88,25 @@ lake exe pf -- build --target svm --out build/sbpf Counter
 
 # EVM: Counter.bin / Counter.yul / Counter.abi.json
 lake exe pf -- build --target evm --out build/evm Counter
+
+# WASM family members
+lake exe pf -- build --target xrpl --out build/xrpl Counter
+lake exe pf -- build --target near --out build/near Counter
 ```
 
 `--target svm` also accepts `solana` or `sbpf`. Omit the program name to build every registered module for that target. See `lake exe pf -- --help`.
+
+WASM is a chain family: each chain owns its host imports and storage layout. XRPL uses its
+Bedrock/XLS-0102 boundaries; NEAR uses chain-owned `env` imports and a fail-closed bounded ABI.
+See [docs/modules/xrpl.md](docs/modules/xrpl.md) and [docs/modules/near.md](docs/modules/near.md).
+Neither target name is a blanket public-deployment or standard-ABI compatibility claim.
 
 | Target | Artifacts | Layout |
 | --- | --- | --- |
 | SVM | `.so` / `.s` / `.idl.json` | Solana IDL spec 0.1.0, Loader V3 |
 | EVM | `.bin` / `.yul` / `.abi.json` | Selector / storage slots / ABI |
+| XRPL | `.wat` / `.wasm` | Chain-owned Bedrock/XLS-0102 host boundaries |
+| NEAR | `.wat` / `.wasm` | `env` imports, bounded chain-owned ABI |
 
 ## Write a contract
 

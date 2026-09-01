@@ -30,5 +30,11 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
+| [modules/wasm.md](modules/wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
+| [modules/xrpl.md](modules/xrpl.md) | WASM 家族成员：XRPL Bedrock Lean → WAT → `.wasm` |
+| [plan/analysis/xrpl-runtime.md](plan/analysis/xrpl-runtime.md) | XRPL Runtime 排期：向 EVM/SVM 学分层，不学物理模型 |
+| [plan/analysis/xrpl-model.md](plan/analysis/xrpl-model.md) | XRPL WASM 账本模型 vs EVM / SVM / NEAR；为什么生态不像 NEAR |
+| [plan/analysis/xrpl-xls.md](plan/analysis/xrpl-xls.md) | XLS-30 等协议对象 vs WASM：不要用合约重写主网 amendment |
+| [modules/near.md](modules/near.md) | WASM 家族成员：NEAR Protocol Lean → WAT → `.wasm`（raw-u64） |
 
 当前阶段：**SVM 全面收口**（见 [plan/svm-work-plan.md](plan/svm-work-plan.md)）；形式化是其中 Track A。Runtime/SDK 主体已落地，剩余缺口与证明/应用并行推进；WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。

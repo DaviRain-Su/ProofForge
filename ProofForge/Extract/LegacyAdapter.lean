@@ -320,6 +320,10 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
         seed (← bump.mapM toLegacyVal)
   | .ext (.svm (.component ..)) =>
       throw "extract/unsupported: legacy adapter cannot represent bounded SVM components"
+  | .ext (.xrpl _) =>
+      throw "extract/unsupported: legacy adapter cannot represent XRPL runtime leaves"
+  | .ext (.near _) =>
+      throw "extract/unsupported: legacy adapter cannot represent NEAR host leaves"
   | .ext (.evm (.component (.nativeFx (.deposit amount)))) =>
       return .evmDeposit (← toLegacyVal amount)
   | .ext (.evm (.component (.nativeFx (.deposit256 ..)))) =>

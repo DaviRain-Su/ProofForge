@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when build artifacts drift from SVM/EVM registry names, kinds, or digests."""
+"""Fail when build artifacts drift from target registry names, kinds, or digests."""
 
 from __future__ import annotations
 
@@ -21,10 +21,12 @@ HEX_RE = re.compile(r"^[0-9a-f]+$")
 DIGEST_LINE = {
     "svm": re.compile(r"^;\s*digest=([0-9a-f]+)\s*$"),
     "evm": re.compile(r"^//\s*digest=([0-9a-f]+)\s*$"),
+    "xrpl": re.compile(r"^;;\s*digest=([0-9a-f]+)\s*$"),
+    "near": re.compile(r"^;;\s*digest=([0-9a-f]+)\s*$"),
 }
 
 # `.so` must win over `.s`; `Name.so`.endswith(".s") is true.
-SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".s")
+SUFFIXES_BY_SPECIFICITY = (".idl.json", ".abi.json", ".so", ".bin", ".yul", ".wasm", ".wat", ".rs", ".s")
 
 
 @dataclass(frozen=True)
@@ -50,7 +52,21 @@ EVM = TargetSpec(
     suffixes=(".bin", ".yul", ".abi.json"),
     digest_suffix=".yul",
 )
-SPECS = {"svm": SVM, "evm": EVM}
+XRPL = TargetSpec(
+    key="xrpl",
+    registry_rel=Path("ProofForge/Wasm/Xrpl/Registry.lean"),
+    expected_count=23,
+    suffixes=(".wasm", ".wat"),
+    digest_suffix=".wat",
+)
+NEAR = TargetSpec(
+    key="near",
+    registry_rel=Path("ProofForge/Wasm/Near/Registry.lean"),
+    expected_count=38,
+    suffixes=(".wasm", ".wat"),
+    digest_suffix=".wat",
+)
+SPECS = {"svm": SVM, "evm": EVM, "xrpl": XRPL, "near": NEAR}
 ELF_MAGIC = b"\x7fELF"
 ELF64_CLASS = 2
 ELF64_DATA_LSB = 1
@@ -165,6 +181,16 @@ def check_elf64(path: Path, rel: str, diags: list[str]) -> None:
         diags.append(f"not elf64: {rel}: bad version/ehsize")
 
 
+def check_wasm(path: Path, rel: str, diags: list[str]) -> None:
+    try:
+        header = path.read_bytes()[:4]
+    except OSError:
+        diags.append(f"malformed file: {rel}: unreadable")
+        return
+    if header != b"\x00asm":
+        diags.append(f"not wasm: {rel}")
+
+
 def check_bin_hex(path: Path, rel: str, diags: list[str]) -> None:
     try:
         text = path.read_text(encoding="utf-8").strip()
@@ -197,29 +223,28 @@ def check_expected_file(path: Path, spec: TargetSpec, suffix: str, diags: list[s
         check_elf64(path, rel, diags)
     elif suffix == ".bin":
         check_bin_hex(path, rel, diags)
+    elif suffix == ".wasm":
+        check_wasm(path, rel, diags)
 
 
 def check_target(
     spec: TargetSpec,
     entries: dict[str, str],
     out_dir: Path,
-    *,
-    allow_other_kinds: bool,
 ) -> list[str]:
     diags: list[str] = []
     if not out_dir.is_dir():
         return [f"missing out dir: {out_dir}"]
 
     other_suffixes = set()
-    if not allow_other_kinds:
-        for other in SPECS.values():
-            if other.key != spec.key:
-                other_suffixes.update(other.suffixes)
+    for other in SPECS.values():
+        if other.key != spec.key:
+            other_suffixes.update(other.suffixes)
 
     owned_stems: set[str] = set()
     for path, stem, suffix in iter_artifacts(out_dir):
         rel = rel_to(path, out_dir)
-        if suffix in other_suffixes:
+        if suffix in other_suffixes and suffix not in spec.suffixes:
             diags.append(f"unexpected kind: {rel}")
             continue
         if suffix not in spec.suffixes:
@@ -256,9 +281,12 @@ def diagnostics(
     entries_by_target: dict[str, dict[str, str]] | None = None,
     pin_count: bool = True,
 ) -> list[str]:
-    specs = [SVM, EVM] if target == "all" else [SPECS[target]]
-    allow_other = target == "all"
+    if target == "all":
+        specs = [SVM, EVM, XRPL, NEAR]
+    else:
+        specs = [SPECS[target]]
     diags: list[str] = []
+    loaded: list[tuple[TargetSpec, dict[str, str]]] = []
     for spec in specs:
         if entries_by_target is not None:
             entries = entries_by_target[spec.key]
@@ -266,10 +294,19 @@ def diagnostics(
         else:
             entries, load_diags = load_entries(root, spec, pin_count=pin_count)
         diags.extend(load_diags)
-        if entries or entries_by_target is not None:
-            diags.extend(check_target(spec, entries, out_dir, allow_other_kinds=allow_other))
-        elif not load_diags:
+        loaded.append((spec, entries))
+        if not entries and entries_by_target is None and not load_diags:
             diags.append(f"empty registry: {spec.key}")
+    for spec, entries in loaded:
+        if entries or entries_by_target is not None:
+            target_out_dir = out_dir / spec.key if target == "all" else out_dir
+            diags.extend(
+                check_target(
+                    spec,
+                    entries,
+                    target_out_dir,
+                )
+            )
     return sorted(set(diags))
 
 
@@ -329,6 +366,24 @@ def _write_evm(out: Path, name: str, digest: str, *, bin_hex: str = "deadbeef") 
     (out / f"{name}.abi.json").write_text("[]\n", encoding="utf-8")
 
 
+def _write_xrpl(out: Path, name: str, digest: str, *, wasm: bytes | None = b"\x00asm") -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    if wasm is not None:
+        (out / f"{name}.wasm").write_bytes(wasm)
+    (out / f"{name}.wat").write_text(
+        f";; PROOF-FORGE-XRPL-BEDROCK v0\n;; digest={digest}\n(module)\n", encoding="utf-8"
+    )
+
+
+def _write_near(out: Path, name: str, digest: str, *, wasm: bytes | None = b"\x00asm") -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    if wasm is not None:
+        (out / f"{name}.wasm").write_bytes(wasm)
+    (out / f"{name}.wat").write_text(
+        f";; PROOF-FORGE-NEAR-RAW-U64 v0\n;; digest={digest}\n(module)\n", encoding="utf-8"
+    )
+
+
 def _require(diags: list[str], needle: str, label: str) -> None:
     if not any(needle in item for item in diags):
         raise AssertionError(f"{label}: expected {needle!r} in {diags}")
@@ -348,25 +403,39 @@ def self_test() -> int:
 
     svm_entries = {"Prog": "abc123"}
     evm_entries = {"Tok": "def456"}
-    injected = {"svm": svm_entries, "evm": evm_entries}
+    xrpl_entries = {"Counter": "fed789"}
+    near_entries = {"Counter": "ba9876"}
+    injected = {"svm": svm_entries, "evm": evm_entries, "xrpl": xrpl_entries, "near": near_entries}
 
     def parse_real() -> None:
         svm = parse_registry(ROOT / SVM.registry_rel)
         evm = parse_registry(ROOT / EVM.registry_rel)
+        xrpl = parse_registry(ROOT / XRPL.registry_rel)
+        near = parse_registry(ROOT / NEAR.registry_rel)
         if len(svm) != SVM.expected_count:
             raise AssertionError(f"svm count {len(svm)}")
         if len(evm) != EVM.expected_count:
             raise AssertionError(f"evm count {len(evm)}")
+        if len(xrpl) != XRPL.expected_count:
+            raise AssertionError(f"xrpl count {len(xrpl)}")
+        if len(near) != NEAR.expected_count:
+            raise AssertionError(f"near count {len(near)}")
         if svm["Counter"] != "3382e308fa0843e9":
             raise AssertionError("svm Counter digest")
         if evm["Counter"] != "254202356ee921d6":
             raise AssertionError("evm Counter digest")
+        if xrpl["Counter"] != "e029f72296e320be":
+            raise AssertionError("xrpl Counter digest")
+        if near["Counter"] != "121a0c8f7e697642":
+            raise AssertionError("near Counter digest")
 
     def happy() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            _write_svm(out, "Prog", "abc123")
-            _write_evm(out, "Tok", "def456")
+            _write_svm(out / "svm", "Prog", "abc123")
+            _write_evm(out / "evm", "Tok", "def456")
+            _write_xrpl(out / "xrpl", "Counter", "fed789")
+            _write_near(out / "near", "Counter", "ba9876")
             diags = diagnostics("all", out, entries_by_target=injected, pin_count=False)
             if diags:
                 raise AssertionError(diags)
@@ -513,7 +582,7 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--target", choices=("svm", "evm", "all"))
+    parser.add_argument("--target", choices=("svm", "evm", "xrpl", "near", "all"))
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     if args.self_test:
@@ -523,7 +592,7 @@ def main() -> int:
         return self_test()
     if args.target is None or args.out is None:
         print(
-            "usage: check_artifact_manifest.py --target svm|evm|all --out DIR",
+            "usage: check_artifact_manifest.py --target svm|evm|xrpl|near|all --out DIR",
             file=sys.stderr,
         )
         return 2

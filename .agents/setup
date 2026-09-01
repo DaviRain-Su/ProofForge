@@ -42,7 +42,7 @@ run_parallel() {
 }
 
 install_system_packages() {
-packages=(build-essential curl elan jq openssl python3)
+packages=(build-essential curl elan jq openssl python3 python3-venv)
 missing_packages=()
 for package in "${packages[@]}"; do
   if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq "install ok installed"; then
@@ -141,6 +141,60 @@ else
   echo "Surfpool $surfpool_version is already installed."
 fi
 surfpool --version
+
+wabt_version="1.0.41"
+wabt_archive="wabt-${wabt_version}-linux-x64.tar.gz"
+wabt_url="https://github.com/WebAssembly/wabt/releases/download/${wabt_version}/${wabt_archive}"
+wabt_sha256="83f8122e924745fcd70636e3594bc01c4c47f2d4c8f3c63b5d70d3f83a482677"
+if [[ "$(wat2wasm --version 2>/dev/null || true)" != "${wabt_version}" ]]; then
+  wabt_download="$(mktemp)"
+  wabt_unpack="$(mktemp -d)"
+  trap 'rm -f "$wabt_download"; rm -rf "$wabt_unpack"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$wabt_url" -o "$wabt_download"
+  echo "$wabt_sha256  $wabt_download" | sha256sum --check --status
+  tar -xzf "$wabt_download" -C "$wabt_unpack"
+  install -m 0755 "$wabt_unpack/wabt-${wabt_version}/bin/wat2wasm" "$HOME/.local/bin/wat2wasm"
+  rm -f "$wabt_download"
+  rm -rf "$wabt_unpack"
+  trap - EXIT
+else
+  echo "wat2wasm ${wabt_version} is already installed."
+fi
+wat2wasm --version
+
+near_sandbox_version="2.13.0"
+near_sandbox_archive="near-sandbox.tar.gz"
+near_sandbox_url="https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/${near_sandbox_version}/${near_sandbox_archive}"
+near_sandbox_sha256="522f9877c1abd42b8e065d9f0248223c8b7327a359996de8150723e8d7b289de"
+if ! near-sandbox --version 2>/dev/null | grep -Fq "release ${near_sandbox_version}"; then
+  near_sandbox_download="$(mktemp)"
+  near_sandbox_unpack="$(mktemp -d)"
+  trap 'rm -f "$near_sandbox_download"; rm -rf "$near_sandbox_unpack"' EXIT
+  curl --proto '=https' --tlsv1.2 -fsSL "$near_sandbox_url" -o "$near_sandbox_download"
+  echo "$near_sandbox_sha256  $near_sandbox_download" | sha256sum --check --status
+  tar -xzf "$near_sandbox_download" -C "$near_sandbox_unpack"
+  install -m 0755 "$near_sandbox_unpack/Linux-x86_64/near-sandbox" "$HOME/.local/bin/near-sandbox"
+  rm -f "$near_sandbox_download"
+  rm -rf "$near_sandbox_unpack"
+  trap - EXIT
+else
+  echo "near-sandbox ${near_sandbox_version} is already installed."
+fi
+near-sandbox --version
+
+near_venv="runtime-tests/near/.venv"
+if [[ ! -x "$near_venv/bin/python" ]] || ! "$near_venv/bin/python" - <<'PY'
+from importlib.metadata import version
+assert version("cryptography") == "47.0.0"
+assert version("base58") == "2.1.1"
+PY
+then
+  rm -rf "$near_venv"
+  python3 -m venv "$near_venv"
+  "$near_venv/bin/pip" install --disable-pip-version-check -r runtime-tests/near/requirements.txt
+else
+  echo "NEAR runtime-test dependencies are already installed."
+fi
 
 solc_url="https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.34+commit.80d5c536"
 solc_sha256="d40adc6f9fdbb22a97d32a02fa05688bf2ee7886affc48c9851b0afd4a726b39"

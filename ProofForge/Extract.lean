@@ -6,6 +6,7 @@ import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Evm.Codec
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
 import ProofForge.Extract.Decode
 
@@ -24,7 +25,8 @@ def decodeBody (env : Environment) (e : Expr) (preserveLocals : Bool := false)
   -- not be substituted into that later effect and re-read after the mutation.
   let hasStructuredState := containsStructuredStateLet env 128 body
   let hasSequencedSvmEffects := mentionsSvmEffect env 128 body
-  let retainLets := hasStructuredState || hasSequencedSvmEffects
+  let hasSequencedNearEffects := mentionsNearEffect env 128 body
+  let retainLets := hasStructuredState || hasSequencedSvmEffects || hasSequencedNearEffects
   let fullySubstituted := if retainLets then body else substLets 256 body
   let body :=
     if (unfoldUserHelper env fullySubstituted).isSome then fullySubstituted
@@ -53,7 +55,7 @@ def decodeMutating (env : Environment) (e : Expr) (stateType? : Option Name := n
     Except String (Array Ops.Op) := do
   let ops ← decodeBody env e true stateType?
   if Ops.hasCheckedArith ops || writesOptionLeaf 8 ops || hasIte ops ||
-      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasLangOp ops ||
+      Ops.hasInvoke ops || Ops.hasEvmEffect ops || Ops.hasNearEffect ops || Ops.hasLangOp ops ||
         Ops.hasForAccum ops || Ops.hasIndexSet ops || Ops.hasStoreField ops then
     return ops
   else
@@ -513,7 +515,9 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       | .rentExemption _ | .cpiReturn | .sha256Lit _ | .keccak256Lit _
       | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _
       | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
-      | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ => v
+      | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _
+      | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
+      | .nearAttachedDeposit | .nearAccountBalance | .nearCurrentAccountId => v
       | .byteSwap64 word => .byteSwap64 (flipVal fuel' word)
       | .accDataWordAt a b s c i => .accDataWordAt a b s c (flipVal fuel' i)
       | .ext (.svm (.component query)) operands =>
@@ -567,6 +571,108 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
           seed (bump.map (flipVal fuel'))
       | .ext (.svm (.component call)) =>
           .ext (.svm (.component (call.mapValues (flipVal fuel'))))
+      | .ext (.xrpl payload) => .ext (.xrpl payload)
+      | .ext (.near payload) =>
+          .ext (.near (match payload with
+            | .logUtf8 message => .logUtf8 message
+            | .logUtf8Bounded capacity message =>
+                .logUtf8Bounded capacity (message.map (flipVal fuel'))
+            | .storageUnregisteredLog account =>
+                .storageUnregisteredLog (account.map (flipVal fuel'))
+            | .nep297StringData standard version event capacity data =>
+                .nep297StringData standard version event capacity (data.map (flipVal fuel'))
+            | .nep141FtMint owner amountLo amountHi =>
+                .nep141FtMint (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .nep141FtTransfer oldOwner newOwner amountLo amountHi =>
+                .nep141FtTransfer (oldOwner.map (flipVal fuel'))
+                  (newOwner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .nep141FtBurn owner amountLo amountHi =>
+                .nep141FtBurn (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .nep141FtMintMemo memoCapacity owner amountLo amountHi memo =>
+                .nep141FtMintMemo memoCapacity (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
+            | .nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo =>
+                .nep141FtTransferMemo memoCapacity (oldOwner.map (flipVal fuel'))
+                  (newOwner.map (flipVal fuel')) (flipVal fuel' amountLo)
+                  (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
+            | .nep141FtBurnMemo memoCapacity owner amountLo amountHi memo =>
+                .nep141FtBurnMemo memoCapacity (owner.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi) (memo.map (flipVal fuel'))
+            | .promiseFunctionCallDetached receiver method argsCapacity arguments
+                depositLo depositHi gas =>
+                .promiseFunctionCallDetached receiver method argsCapacity
+                  (arguments.map (flipVal fuel')) (flipVal fuel' depositLo)
+                  (flipVal fuel' depositHi) (flipVal fuel' gas)
+            | .promiseFunctionCallReturned receiver method argsCapacity arguments
+                depositLo depositHi gas =>
+                .promiseFunctionCallReturned receiver method argsCapacity
+                  (arguments.map (flipVal fuel')) (flipVal fuel' depositLo)
+                  (flipVal fuel' depositHi) (flipVal fuel' gas)
+            | .promiseTransferDetached receiver amountLo amountHi =>
+                .promiseTransferDetached receiver
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .promiseTransferReturned receiver amountLo amountHi =>
+                .promiseTransferReturned receiver
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .promiseTransferAccountDetached receiver amountLo amountHi =>
+                .promiseTransferAccountDetached (receiver.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .promiseTransferAccountReturned receiver amountLo amountHi =>
+                .promiseTransferAccountReturned (receiver.map (flipVal fuel'))
+                  (flipVal fuel' amountLo) (flipVal fuel' amountHi)
+            | .promiseFtOnTransferReturned receiver sender amountLo amountHi message =>
+                .promiseFtOnTransferReturned (receiver.map (flipVal fuel'))
+                  (sender.map (flipVal fuel')) (flipVal fuel' amountLo)
+                  (flipVal fuel' amountHi) (message.map (flipVal fuel'))
+            | .promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message =>
+                .promiseFtOnTransferThenResolveReturned (receiver.map (flipVal fuel'))
+                  (sender.map (flipVal fuel')) (flipVal fuel' amountLo)
+                  (flipVal fuel' amountHi) (message.map (flipVal fuel'))
+            | .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+                childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                childDepositLo childDepositHi childGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallThenReturned receiver childMethod callbackMethod
+                  childArgsCapacity callbackArgsCapacity (childArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel')) (flipVal fuel' childDepositLo)
+                  (flipVal fuel' childDepositHi) (flipVal fuel' childGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAndThenReturned
+                leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                leftArguments rightArguments callbackArguments
+                leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAndThenReturned
+                  leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                  leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (rightArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' rightDepositLo)
+                  (flipVal fuel' rightDepositHi) (flipVal fuel' rightGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
+            | .promiseResultRead capacity index =>
+                .promiseResultRead capacity (flipVal fuel' index)
+            | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
+            | .transientBuffer64Set capacity index value =>
+                .transientBuffer64Set capacity (flipVal fuel' index) (flipVal fuel' value)
+            | .transientBuffer64Finish capacity => .transientBuffer64Finish capacity
+            | .storageRead resultCapacity keyCapacity key =>
+                .storageRead resultCapacity keyCapacity (key.map (flipVal fuel'))
+            | .storageWrite resultCapacity keyCapacity valueCapacity key value =>
+                .storageWrite resultCapacity keyCapacity valueCapacity
+                  (key.map (flipVal fuel')) (value.map (flipVal fuel'))
+            | .storageRemove resultCapacity keyCapacity key =>
+                .storageRemove resultCapacity keyCapacity (key.map (flipVal fuel'))
+            | .storageHasKey resultCapacity keyCapacity key =>
+                .storageHasKey resultCapacity keyCapacity (key.map (flipVal fuel'))
+            | .reserved => .reserved))
       | .evmDeposit v => .evmDeposit (flipVal fuel' v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           .evmDeposit256 (flipVal fuel' a0) (flipVal fuel' a1) (flipVal fuel' a2) (flipVal fuel' a3)
@@ -703,7 +809,7 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
     | _ => ops
   let paramCount :=
     match kind with
-    | .init => if nLams = 0 then 1 else nLams
+    | .init => nLams
     | .increment | .get => if nLams ≤ 1 then 0 else nLams - 1
   let retTy := peelForalls info.type
   let paramSchemas ← inferParamSchemas env e kind
@@ -753,14 +859,17 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
         let nRet := max nRet (maxReturnCount 32 ops)
         if nRet = 0 then 1 else nRet
     | .increment =>
-      let nRet := maxReturnCount 32 ops
-      if nRet = 0 then 1 else nRet
+      if retSchema == .unit then 0
+      else
+        let nRet := maxReturnCount 32 ops
+        if nRet = 0 then 1 else nRet
     | .init => 1
   let retTypes :=
     match retSchema with
     | .scalar type => #[type]
     | _ => #[]
-  let annotations := (Attr.svmRawEntries env n).map (·.annotation)
+  let annotations :=
+    (Attr.svmRawEntries env n).map (·.annotation) ++ Attr.nearEntryAnnotations env n
   return {
     kind, name := n.toString, ixName := Core.IR.ixNameOfLean lean
     paramCount, paramWidths, paramTypes, paramSchemas, retWidths, retTypes, retSchema, retCount,
@@ -1014,6 +1123,8 @@ private def opFields : Ops.Op → Array FieldUse
       (data.flatMap fun word => word.value?.map valFields |>.getD #[]) ++
         (match bump with | some v => valFields v | none => #[])
   | .ext (.svm (.component call)) => call.values.flatMap valFields
+  | .ext (.xrpl _) => #[]
+  | .ext (.near _) => #[]
   | .evmDeposit v => valFields v
   | .evmDeposit256 a0 a1 a2 a3 =>
       valFields a0 ++ valFields a1 ++ valFields a2 ++ valFields a3
@@ -1199,6 +1310,8 @@ private def resolveVectorLeaves (p : IR.Program) : Except String IR.Program := d
             | none => pure (word.map id)) seed (← bump.mapM normalizeVal)
       | .ext (.svm (.component call)) =>
           return .ext (.svm (.component (← call.mapValuesM normalizeVal)))
+      | .ext (.xrpl payload) => pure (.ext (.xrpl payload))
+      | .ext (.near payload) => pure (.ext (.near payload))
       | .evmDeposit v => return .evmDeposit (← normalizeVal v)
       | .evmDeposit256 a0 a1 a2 a3 =>
           return .evmDeposit256 (← normalizeVal a0) (← normalizeVal a1)
@@ -1369,6 +1482,8 @@ private partial def opEscapedArg (limit : Nat) : Ops.Op → Option Nat
         bump.bind (valEscapedArg limit)
   | .ext (.svm (.component call)) =>
       call.values.findSome? (valEscapedArg limit)
+  | .ext (.xrpl _) => none
+  | .ext (.near _) => none
   | .evmDeposit v | .evmLog _ v | .forAccum _ v _ => valEscapedArg limit v
   | .evmDeposit256 a0 a1 a2 a3 => #[a0, a1, a2, a3].findSome? (valEscapedArg limit)
   | .evmSendEth a b c d => #[a, b, c, d].findSome? (valEscapedArg limit)

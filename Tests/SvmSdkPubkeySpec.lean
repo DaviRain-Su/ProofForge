@@ -61,7 +61,9 @@ partial def svmValKinds (ops : Array ProofForge.Extract.IR.Op) :
   let rec goVal (v : ProofForge.Extract.IR.Val) : Array ProofForge.Svm.Ops.ValKind :=
     match v with
     | .ext kind operands =>
-      let here := match kind with | .svm k => #[k] | .evm _ => #[]
+      let here := match kind with
+        | .svm k => #[k]
+        | .evm _ | .xrpl _ | .near _ => #[]
       here ++ operands.foldl (fun acc o => acc ++ goVal o) #[]
     | .field base _ => goVal base
     | .bitAnd l r | .bitOr l r | .bitXor l r | .shiftL l r | .shiftR l r

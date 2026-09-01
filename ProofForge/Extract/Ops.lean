@@ -16,6 +16,12 @@ private def svmLeaf (kind : Svm.Ops.ValKind) : Val :=
 private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
   .ext (.evm kind) #[]
 
+private def xrplLeaf (kind : Wasm.Xrpl.Ops.ValKind) : Val :=
+  .ext (.xrpl kind) #[]
+
+private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
+  .ext (.near kind) #[]
+
 @[match_pattern] def Val.clockSlot : Val := svmLeaf .clockSlot
 @[match_pattern] def Val.clockEpoch : Val := svmLeaf .clockEpoch
 @[match_pattern] def Val.unixTime : Val := svmLeaf .unixTime
@@ -106,6 +112,212 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.checkPdaSeeds (account : Nat) (seeds : Array PdaSeed) : Val :=
   svmLeaf (.checkPdaSeeds account seeds)
 
+@[match_pattern] def Val.nearBlockIndex : Val := nearLeaf .blockIndex
+@[match_pattern] def Val.nearBlockTimestamp : Val := nearLeaf .blockTimestamp
+@[match_pattern] def Val.nearStorageUsage : Val := nearLeaf .storageUsage
+@[match_pattern] def Val.nearPredecessor : Val := nearLeaf .predecessor
+@[match_pattern] def Val.nearPredecessorLen : Val := nearLeaf .predecessorLen
+@[match_pattern] def Val.nearPredecessorW1 : Val := nearLeaf .predecessorW1
+@[match_pattern] def Val.nearPredecessorW2 : Val := nearLeaf .predecessorW2
+@[match_pattern] def Val.nearPredecessorW3 : Val := nearLeaf .predecessorW3
+@[match_pattern] def Val.nearPredecessorW4 : Val := nearLeaf .predecessorW4
+@[match_pattern] def Val.nearPredecessorW5 : Val := nearLeaf .predecessorW5
+@[match_pattern] def Val.nearPredecessorW6 : Val := nearLeaf .predecessorW6
+@[match_pattern] def Val.nearPredecessorW7 : Val := nearLeaf .predecessorW7
+@[match_pattern] def Val.nearAttachedDeposit : Val := nearLeaf .attachedDeposit
+@[match_pattern] def Val.nearAttachedDepositW0 : Val := nearLeaf .attachedDepositW0
+@[match_pattern] def Val.nearAttachedDepositW1 : Val := nearLeaf .attachedDepositW1
+@[match_pattern] def Val.nearAccountBalance : Val := nearLeaf .accountBalance
+@[match_pattern] def Val.nearAccountBalanceW0 : Val := nearLeaf .accountBalanceW0
+@[match_pattern] def Val.nearAccountBalanceW1 : Val := nearLeaf .accountBalanceW1
+@[match_pattern] def Val.nearTokenAddOk (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddOk) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenAddW0 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddW0) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenAddW1 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenAddW1) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubOk (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubOk) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubW0 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubW0) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenSubW1 (leftLo leftHi rightLo rightHi : Val) : Val :=
+  .ext (.near .nearTokenSubW1) #[leftLo, leftHi, rightLo, rightHi]
+@[match_pattern] def Val.nearTokenMulU64Ok (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64Ok) #[valueLo, valueHi, factor]
+@[match_pattern] def Val.nearTokenMulU64W0 (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64W0) #[valueLo, valueHi, factor]
+@[match_pattern] def Val.nearTokenMulU64W1 (valueLo valueHi factor : Val) : Val :=
+  .ext (.near .nearTokenMulU64W1) #[valueLo, valueHi, factor]
+@[match_pattern] def Val.nearCurrentAccountId : Val := nearLeaf .currentAccountId
+@[match_pattern] def Val.nearCurrentAccountIdLen : Val := nearLeaf .currentAccountIdLen
+@[match_pattern] def Val.nearCurrentAccountIdW1 : Val := nearLeaf .currentAccountIdW1
+@[match_pattern] def Val.nearCurrentAccountIdW2 : Val := nearLeaf .currentAccountIdW2
+@[match_pattern] def Val.nearCurrentAccountIdW3 : Val := nearLeaf .currentAccountIdW3
+@[match_pattern] def Val.nearCurrentAccountIdW4 : Val := nearLeaf .currentAccountIdW4
+@[match_pattern] def Val.nearCurrentAccountIdW5 : Val := nearLeaf .currentAccountIdW5
+@[match_pattern] def Val.nearCurrentAccountIdW6 : Val := nearLeaf .currentAccountIdW6
+@[match_pattern] def Val.nearCurrentAccountIdW7 : Val := nearLeaf .currentAccountIdW7
+
+@[match_pattern] def Val.nearTransientBuffer64Get (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.transientBuffer64Get capacity)) #[index]
+
+@[match_pattern] def Val.nearStorageResultStatus (capacity : Nat) : Val :=
+  nearLeaf (.storageResultStatus capacity)
+@[match_pattern] def Val.nearStorageResultLength (capacity : Nat) : Val :=
+  nearLeaf (.storageResultLength capacity)
+@[match_pattern] def Val.nearStorageResultFits (capacity : Nat) : Val :=
+  nearLeaf (.storageResultFits capacity)
+@[match_pattern] def Val.nearStorageResultByte (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.storageResultByte capacity)) #[index]
+@[match_pattern] def Val.nearStorageResultNearTokenW0Strict : Val :=
+  nearLeaf .storageResultNearTokenW0Strict
+@[match_pattern] def Val.nearStorageResultNearTokenW1Strict : Val :=
+  nearLeaf .storageResultNearTokenW1Strict
+
+@[match_pattern] def Val.nearPromiseResultsCount : Val :=
+  nearLeaf .promiseResultsCount
+@[match_pattern] def Val.nearPromiseResultStatus (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultStatus capacity)
+@[match_pattern] def Val.nearPromiseResultLength (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultLength capacity)
+@[match_pattern] def Val.nearPromiseResultFits (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultFits capacity)
+@[match_pattern] def Val.nearPromiseResultByte (capacity : Nat) (index : Val) : Val :=
+  .ext (.near (.promiseResultByte capacity)) #[index]
+@[match_pattern] def Val.nearPromiseResultBorshUInt64D
+    (capacity : Nat) (fallback : Val) : Val :=
+  .ext (.near (.promiseResultBorshUInt64D capacity)) #[fallback]
+@[match_pattern] def Val.nearPromiseResultQuotedU128Valid (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128Valid capacity)
+@[match_pattern] def Val.nearPromiseResultQuotedU128W0 (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128W0 capacity)
+@[match_pattern] def Val.nearPromiseResultQuotedU128W1 (capacity : Nat) : Val :=
+  nearLeaf (.promiseResultQuotedU128W1 capacity)
+
+@[match_pattern] def Op.nearLogUtf8 (message : String) : Op :=
+  .ext (.near (.logUtf8 message))
+
+@[match_pattern] def Op.nearLogUtf8Bounded (capacity : Nat) (message : Array Val) : Op :=
+  .ext (.near (.logUtf8Bounded capacity message))
+
+@[match_pattern] def Op.nearStorageUnregisteredLog (account : Array Val) : Op :=
+  .ext (.near (.storageUnregisteredLog account))
+
+@[match_pattern] def Op.nearNep297StringData (standard version event : String)
+    (capacity : Nat) (data : Array Val) : Op :=
+  .ext (.near (.nep297StringData standard version event capacity data))
+
+@[match_pattern] def Op.nearNep141FtMint (owner : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtMint owner amountLo amountHi))
+
+@[match_pattern] def Op.nearNep141FtTransfer (oldOwner newOwner : Array Val)
+    (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtTransfer oldOwner newOwner amountLo amountHi))
+
+@[match_pattern] def Op.nearNep141FtBurn (owner : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.nep141FtBurn owner amountLo amountHi))
+
+@[match_pattern] def Op.nearNep141FtMintMemo (memoCapacity : Nat) (owner : Array Val)
+    (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtMintMemo memoCapacity owner amountLo amountHi memo))
+
+@[match_pattern] def Op.nearNep141FtTransferMemo (memoCapacity : Nat)
+    (oldOwner newOwner : Array Val) (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo))
+
+@[match_pattern] def Op.nearNep141FtBurnMemo (memoCapacity : Nat) (owner : Array Val)
+    (amountLo amountHi : Val) (memo : Array Val) : Op :=
+  .ext (.near (.nep141FtBurnMemo memoCapacity owner amountLo amountHi memo))
+
+@[match_pattern] def Op.nearPromiseFunctionCallDetached
+    (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
+    (depositLo depositHi gas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallDetached receiver method argsCapacity arguments
+    depositLo depositHi gas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallReturned
+    (receiver method : String) (argsCapacity : Nat) (arguments : Array Val)
+    (depositLo depositHi gas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallReturned receiver method argsCapacity arguments
+    depositLo depositHi gas))
+
+@[match_pattern] def Op.nearPromiseTransferDetached
+    (receiver : String) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferDetached receiver amountLo amountHi))
+
+@[match_pattern] def Op.nearPromiseTransferReturned
+    (receiver : String) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferReturned receiver amountLo amountHi))
+
+@[match_pattern] def Op.nearPromiseTransferAccountDetached
+    (receiver : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferAccountDetached receiver amountLo amountHi))
+
+@[match_pattern] def Op.nearPromiseTransferAccountReturned
+    (receiver : Array Val) (amountLo amountHi : Val) : Op :=
+  .ext (.near (.promiseTransferAccountReturned receiver amountLo amountHi))
+
+@[match_pattern] def Op.nearPromiseFtOnTransferReturned
+    (receiver sender : Array Val) (amountLo amountHi : Val) (message : Array Val) : Op :=
+  .ext (.near (.promiseFtOnTransferReturned receiver sender amountLo amountHi message))
+
+@[match_pattern] def Op.nearPromiseFtOnTransferThenResolveReturned
+    (receiver sender : Array Val) (amountLo amountHi : Val) (message : Array Val) : Op :=
+  .ext (.near (.promiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi message))
+
+@[match_pattern] def Op.nearPromiseFunctionCallThenReturned
+    (receiver childMethod callbackMethod : String)
+    (childArgsCapacity callbackArgsCapacity : Nat)
+    (childArguments callbackArguments : Array Val)
+    (childDepositLo childDepositHi childGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallThenReturned receiver childMethod callbackMethod
+    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+    childDepositLo childDepositHi childGas callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAndThenReturned
+    (leftReceiver leftMethod rightReceiver rightMethod callbackMethod : String)
+    (leftArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments rightArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAndThenReturned
+    leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+    leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftArguments rightArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
+  .ext (.near (.promiseResultRead capacity index))
+
+@[match_pattern] def Op.nearTransientBuffer64Begin (capacity : Nat) : Op :=
+  .ext (.near (.transientBuffer64Begin capacity))
+
+@[match_pattern] def Op.nearTransientBuffer64Set
+    (capacity : Nat) (index value : Val) : Op :=
+  .ext (.near (.transientBuffer64Set capacity index value))
+
+@[match_pattern] def Op.nearTransientBuffer64Finish (capacity : Nat) : Op :=
+  .ext (.near (.transientBuffer64Finish capacity))
+
+@[match_pattern] def Op.nearStorageRead
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageRead resultCapacity keyCapacity key))
+
+@[match_pattern] def Op.nearStorageWrite
+    (resultCapacity keyCapacity valueCapacity : Nat) (key value : Array Val) : Op :=
+  .ext (.near (.storageWrite resultCapacity keyCapacity valueCapacity key value))
+
+@[match_pattern] def Op.nearStorageRemove
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageRemove resultCapacity keyCapacity key))
+
+@[match_pattern] def Op.nearStorageHasKey
+    (resultCapacity keyCapacity : Nat) (key : Array Val) : Op :=
+  .ext (.near (.storageHasKey resultCapacity keyCapacity key))
+
 @[match_pattern] def Val.evmCaller : Val := evmLeaf .caller
 @[match_pattern] def Val.evmBlockNumber : Val := evmLeaf .blockNumber
 @[match_pattern] def Val.evmTimestamp : Val := evmLeaf .timestamp
@@ -116,6 +328,32 @@ private def evmLeaf (kind : Evm.Ops.ValKind) : Val :=
 @[match_pattern] def Val.evmCallerW0 : Val := evmLeaf .callerW0
 @[match_pattern] def Val.evmCallerW1 : Val := evmLeaf .callerW1
 @[match_pattern] def Val.evmCallerW2 : Val := evmLeaf .callerW2
+@[match_pattern] def Val.xrplCallerW0 : Val := xrplLeaf .callerW0
+@[match_pattern] def Val.xrplCallerW1 : Val := xrplLeaf .callerW1
+@[match_pattern] def Val.xrplCallerW2 : Val := xrplLeaf .callerW2
+@[match_pattern] def Val.xrplSelfW0 : Val := xrplLeaf .selfW0
+@[match_pattern] def Val.xrplSelfW1 : Val := xrplLeaf .selfW1
+@[match_pattern] def Val.xrplSelfW2 : Val := xrplLeaf .selfW2
+@[match_pattern] def Val.xrplLedgerSqn : Val := xrplLeaf .ledgerSqn
+@[match_pattern] def Val.xrplParentTime : Val := xrplLeaf .parentTime
+@[match_pattern] def Val.xrplParentHashW0 : Val := xrplLeaf .parentHashW0
+@[match_pattern] def Val.xrplBaseFee : Val := xrplLeaf .baseFee
+@[match_pattern] def Val.xrplSha512HalfLit (seed : String) : Val :=
+  xrplLeaf (.sha512HalfLit seed)
+@[match_pattern] def Val.xrplCallerBalanceDrops : Val := xrplLeaf .callerBalanceDrops
+@[match_pattern] def Val.xrplCallerSequence : Val := xrplLeaf .callerSequence
+@[match_pattern] def Val.xrplCallerFlags : Val := xrplLeaf .callerFlags
+@[match_pattern] def Val.xrplCallerOwnerCount : Val := xrplLeaf .callerOwnerCount
+@[match_pattern] def Val.xrplTxSequence : Val := xrplLeaf .txSequence
+@[match_pattern] def Val.xrplTxFeeDrops : Val := xrplLeaf .txFeeDrops
+@[match_pattern] def Val.xrplAccountLitW0 (hex : String) : Val := xrplLeaf (.accountLitW0 hex)
+@[match_pattern] def Val.xrplAccountLitW1 (hex : String) : Val := xrplLeaf (.accountLitW1 hex)
+@[match_pattern] def Val.xrplAccountLitW2 (hex : String) : Val := xrplLeaf (.accountLitW2 hex)
+@[match_pattern] def Val.xrplTxFlags : Val := xrplLeaf .txFlags
+@[match_pattern] def Val.xrplLitBalanceDrops (hex : String) : Val :=
+  xrplLeaf (.litBalanceDrops hex)
+@[match_pattern] def Val.xrplStoreOwner (w0 w1 w2 : Val) : Val :=
+  .ext (.xrpl .storeOwner) #[w0, w1, w2]
 @[match_pattern] def Val.evmSelfW0 : Val := evmLeaf .selfW0
 @[match_pattern] def Val.evmSelfW1 : Val := evmLeaf .selfW1
 @[match_pattern] def Val.evmSelfW2 : Val := evmLeaf .selfW2
@@ -323,6 +561,8 @@ private def opValuesAny (predicate : Val → Bool) : Op → Bool
   | .invoke _ _ data _ bump =>
       data.any (fun word => word.value?.any predicate) || bump.any predicate
   | .ext (.svm (.component call)) => call.anyValue predicate
+  | .ext (.xrpl _) => false
+  | .ext (.near _) => false
   | .evmComponent call => call.anyValue predicate
   | .errorTyped frame => frame.values.any predicate
   | .joinLocal _ | .forBody _ _ | .errorOverflow | .errorNamed _ => false
@@ -349,6 +589,21 @@ private partial def isEvmContext : Val → Bool
 def hasEvmLeaf (ops : Array Op) : Bool :=
   walk ops (opValuesAny isEvmContext)
 
+private partial def isXrplLeaf : Val → Bool
+  | .ext (.xrpl _) _ => true
+  | .field base _ | .bitNot base => isXrplLeaf base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      isXrplLeaf lhs || isXrplLeaf rhs
+  | .select _ lhs rhs thn els =>
+      isXrplLeaf lhs || isXrplLeaf rhs || isXrplLeaf thn || isXrplLeaf els
+  | .ext _ operands => operands.any isXrplLeaf
+  | _ => false
+
+def hasXrplLeaf (ops : Array Op) : Bool :=
+  walk ops (opValuesAny isXrplLeaf)
+
 def hasLangOp (ops : Array Op) : Bool :=
   walk ops fun op =>
     match op with
@@ -358,6 +613,32 @@ def hasLangOp (ops : Array Op) : Bool :=
 def hasEvmEffect (ops : Array Op) : Bool :=
   hasEvmLeaf ops || walk ops fun
     | .evmComponent .. => true
+    | _ => false
+
+def hasNearEffect (ops : Array Op) : Bool :=
+  walk ops fun
+    | .ext (.near (.logUtf8 _))
+    | .ext (.near (.logUtf8Bounded _ _))
+    | .ext (.near (.storageUnregisteredLog _))
+    | .ext (.near (.nep297StringData _ _ _ _ _))
+    | .ext (.near (.nep141FtMint _ _ _))
+    | .ext (.near (.nep141FtTransfer _ _ _ _))
+    | .ext (.near (.nep141FtBurn _ _ _))
+    | .ext (.near (.nep141FtMintMemo _ _ _ _ _))
+    | .ext (.near (.nep141FtTransferMemo _ _ _ _ _ _))
+    | .ext (.near (.nep141FtBurnMemo _ _ _ _ _))
+    | .ext (.near (.promiseFunctionCallDetached _ _ _ _ _ _ _))
+    | .ext (.near (.promiseFunctionCallReturned _ _ _ _ _ _ _))
+    | .ext (.near (.promiseFtOnTransferReturned _ _ _ _ _))
+    | .ext (.near (.promiseFtOnTransferThenResolveReturned _ _ _ _ _))
+    | .ext (.near (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _))
+    | .ext (.near (.transientBuffer64Begin _))
+    | .ext (.near (.transientBuffer64Set _ _ _))
+    | .ext (.near (.transientBuffer64Finish _))
+    | .ext (.near (.storageRead _ _ _))
+    | .ext (.near (.storageWrite _ _ _ _ _))
+    | .ext (.near (.storageRemove _ _ _))
+    | .ext (.near (.storageHasKey _ _ _)) => true
     | _ => false
 
 end ProofForge.Extract.Ops

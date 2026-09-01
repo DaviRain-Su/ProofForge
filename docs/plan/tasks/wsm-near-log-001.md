@@ -1,0 +1,50 @@
+---
+id: wsm-near-log-001
+scope: wasm
+status: done
+depends-on: [wsm-021]
+---
+
+# wsm-near-log-001 NEAR static UTF-8 logging effect
+
+> 原 NEAR 分支误用了 XRPL 的 `wsm-022` 号。rebase 到 `wasm-feature` 后改用本 id。
+
+## Objective
+
+Add the first NEAR-owned non-state effect and static UTF-8 memory span without pretending the
+raw-u64 entry ABI already supports dynamic `BoundedString` values. This wires the effect,
+canonical IR, deterministic data layout, host import, and receipt observation needed before
+bounded logs and NEP-297 events.
+
+## Delivered
+
+- `Sdk.Logs.write` lowers exact Runtime calls with a statically known `String` to
+  `OpExt.logUtf8`; logging is never represented as a pure value leaf.
+- The source stub returns zero only to support ordinary Lean sequencing. The extractor preserves
+  an ignored logging `let` before its continuation and the runtime log is the observable effect.
+- Each message is bounded to 1024 UTF-8 bytes. Unique message bytes are assigned deterministic
+  first-occurrence offsets from 4096; duplicate call sites retain separate effects but share data.
+- Aggregate embedded log data is bounded to 4096 bytes and checked against the static storage-key
+  region. These are ProofForge compile-time resource limits, not replacements for nearcore's
+  receipt-wide runtime log limits.
+- WAT hex-escapes every UTF-8 byte, imports `env.log_utf8` only when used, and emits the official
+  `(length, pointer)` argument order. Logging is admitted in views and entries.
+- The shared WASM v0 gate now admits target extension effects only after target registration has
+  checked their payload; the chain emitter still owns rendering or rejection.
+
+## Not included
+
+- No runtime `BoundedBytes` / `BoundedString`, user-input string, JSON, NEP-297 envelope, or event
+  derive support.
+- No promise, callback, arbitrary binary storage, or collection support.
+- Compile-time bounds do not statically prove total runtime logs across branches or loops;
+  nearcore still enforces protocol/runtime limits.
+
+## Verification
+
+- Focused tests pin the 1024-byte payload bound, target projection, Counter import absence,
+  `NEAR ✓` UTF-8 bytes (`4e 45 41 52 20 e2 9c 93`), static offset, host argument order, and
+  foreign-target rejection through the existing NearCtx gate.
+- WAT assembles through the pinned NEAR engineering gate.
+- near-sandbox 2.13.0 observes exactly one `NEAR ✓` receipt log, confirms the continuation
+  persists state after the host call, and observes `view ✓` plus raw-u64 result 2 from a view.

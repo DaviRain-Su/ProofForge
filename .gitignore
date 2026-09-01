@@ -9,6 +9,7 @@ dist/
 .surfpool/
 __pycache__/
 *.pyc
+.venv/
 /runtime-tests/**/target/
 phoenix-v1
 .amp/portals/

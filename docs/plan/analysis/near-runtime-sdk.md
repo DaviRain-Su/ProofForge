@@ -1,0 +1,516 @@
+# NEAR Runtime / SDK capability plan
+
+> Updated 2026-08-30. This document maps the official `nearcore` host ABI and current
+> `near-sdk-rs` architecture to ProofForge ownership boundaries. It is a dependency plan, not a
+> claim of Rust SDK compatibility or mainnet readiness.
+
+## 1. Rule: Runtime capability before SDK facade
+
+```diagram
+┌──────────────────────────────────────────────────────┐
+│ Contract source                                      │
+│ bounded business rules and explicit state changes    │
+└──────────────────────────┬───────────────────────────┘
+                           ▼
+┌──────────────────────────────────────────────────────┐
+│ Near.Sdk                                             │
+│ AccountId, codec, storage layout, lifecycle policy,  │
+│ Promise builder, callback decoding, event envelopes  │
+└──────────────────────────┬───────────────────────────┘
+                           ▼
+┌──────────────────────────────────────────────────────┐
+│ Near.Runtime / Ops / IR                              │
+│ irreducible context, byte storage, logs, promise DAG │
+└──────────────────────────┬───────────────────────────┘
+                           ▼
+┌──────────────────────────────────────────────────────┐
+│ nearcore env ABI                                     │
+│ registers, memory, storage, receipts, promise results│
+└──────────────────────────────────────────────────────┘
+```
+
+The VM does **not** provide Vector, Map, Queue, JSON, Borsh, lifecycle annotations, typed events,
+or synchronous contract calls. Those are compiler/SDK compositions over byte storage, register
+I/O, logging, and promises. A new SDK name must not pretend a missing host or emitter path exists.
+
+Authoritative source anchors:
+
+- nearcore import table: [`runtime/near-vm-runner/src/imports.rs`](https://github.com/near/nearcore/blob/master/runtime/near-vm-runner/src/imports.rs)
+- nearcore host semantics: [`runtime/near-vm-runner/src/logic/logic.rs`](https://github.com/near/nearcore/blob/master/runtime/near-vm-runner/src/logic/logic.rs)
+- near-sdk environment facade: [`near-sdk/src/environment/env.rs`](https://github.com/near/near-sdk-rs/blob/master/near-sdk/src/environment/env.rs)
+- Promise graph/builder: [`near-sdk/src/promise.rs`](https://github.com/near/near-sdk-rs/blob/master/near-sdk/src/promise.rs)
+- current persistent collections: [`near-sdk/src/store/mod.rs`](https://github.com/near/near-sdk-rs/blob/master/near-sdk/src/store/mod.rs)
+- generated entry lifecycle: [`near-sdk-macros/src/core_impl/code_generator/impl_item_method_info.rs`](https://github.com/near/near-sdk-rs/blob/master/near-sdk-macros/src/core_impl/code_generator/impl_item_method_info.rs)
+
+## 2. Audited capability matrix
+
+| Capability | Official owner | ProofForge now | Required owner here |
+|---|---|---|---|
+| guest linear-memory allocation | near-sdk-rs guest allocator over Wasm `memory.grow`; no nearcore malloc host import | **checked invocation-local arena + `Buffer64` complete** in wsm-near-memory-001 | Near Memory/Emit substrate; SDK exposes bounded consumers, never raw pointers |
+| register ABI | nearcore host | bounded reads for input/context/raw storage/callback results; exact status and stale-register rules | Runtime memory/register contract |
+| full AccountId | host bytes + SDK validation/type | **host context complete** in wsm-020; user decode absent | shared bounded bytes + Near SDK validation |
+| u128 token/gas types | host LE-u128 + SDK wrappers | **deposit/balance, checked add/sub, and exact Borsh storage values complete** in wsm-near-u128-001/u128-arithmetic-001/u128-storage-001; explicit gas and lossless Promise deposit complete | shared wide value + Near ABI binding |
+| arbitrary KV/read/remove/exists | nearcore storage | **bounded exact-key read/write/remove/has-key complete** in wsm-near-storage-001, alongside fixed scalar slots | Near Runtime storage effect |
+| Borsh/JSON method ABI | generated SDK wrapper | canonical bounded Borsh input/output, quoted-u128 output, and exact-schema bounded AccountId object view input; generic/mutating/multi-parameter JSON absent | Near entry adapter/codec |
+| contract `STATE` lifecycle | SDK Borsh convention | **one-time init, fail-closed entries, versioned schema envelope, and authenticated split-key migration complete** in wsm-near-init/uninitialized/state-envelope/migration-001 | broader state codecs/version chains explicit |
+| `store::Vector` | SDK over KV, prefix + `u32_le` index | **bounded direct UInt64 element layout foundation complete** in wsm-near-vector-001; full metadata/cache/generic API absent | Near storage binding after bytes/Borsh |
+| LookupMap/LookupSet | SDK over KV + key codec/hash policy | **direct default-Identity UInt64 layout foundation complete** in wsm-near-lookup-001; cache/custom hash/generic API absent | Near storage binding; no host Map opcode |
+| IterableMap/TreeMap | SDK composition | **bounded Identity IterableMap/IterableSet complete** in wsm-near-iterable-001; TreeMap absent | after Vector + LookupMap; TreeMap last/optional |
+| persistent Queue | no official exported Queue | **ProofForge bounded Queue64 complete** in wsm-near-queue-001 | explicit bounded Vector/LookupMap + head/length policy |
+| logs/events | `log_utf8`; NEP-297 SDK JSON | static/bounded logs, bounded string-data envelope, and exact NEP-141 mint/transfer/burn with bounded optional memos complete | standard-specific integration next; generic JSON absent |
+| cross-contract call | promise receipt/action host ABI | **detached/returned static calls, native transfers, authenticated self-callback, and closed ordered two-child join complete** in wsm-near-promise-001/002/then/private/transfer/and-001 | Runtime promise effects, then typed SDK builder |
+| native transfer | Promise batch transfer action | **static detached/returned lossless-u128 transfer complete** in wsm-near-promise-transfer-001 | Runtime batch/action; never synchronous balance mutation |
+| callback results | promise count/status/register + SDK decode | **bounded count/status/register read, strict Borsh UInt64 decode, and genuine chained success/failure/oversized scenes complete** in wsm-near-promise-result/then/codec-001 | bounded Runtime result read + SDK Result codec |
+| private/payable/init | generated entry guards | **explicit private/payable/migration metadata, generated wrapper ordering, donation-only payable, repeated-init/uninitialized/schema/migration guards complete** | entry-adapter policy over context/storage |
+
+Current NEAR therefore supports scalar state machines, context inspection, top-level bounded Borsh
+bytes/String input, bounded bytes/String/unsigned-array view output, bounded raw binary storage,
+fixed-width Vector/Identity LookupMap/LookupSet/IterableMap/IterableSet and ProofForge Queue
+foundations, explicit detached and returned static cross-contract function calls, one returned
+static self-callback edge authenticated by full AccountId equality, and bounded callback-result
+observation with strict UInt64 decode, explicit detached and returned static native transfers, and
+one closed ordered two-child join feeding a self callback.
+It is not yet a general near-sdk-rs contract model.
+
+## 3. Storage and collection contracts
+
+### Three distinct shapes
+
+1. Shared `Core.Value.BoundedVec` / `BoundedMap` / `BoundedQueue` define finite logical laws only.
+2. Current NEAR v0 persists each flattened UInt64 state leaf under an ASCII field key.
+3. Current `near-sdk-rs store::*` persists arbitrary serialized values under binary prefixes and
+   collection-specific keys, often with explicit flush/cache behavior.
+
+These cannot be called the same physical layout. In particular:
+
+- `store::Vector` uses a `u32` length and `prefix || u32_le(index)` keys through its index map.
+- `LookupMap` uses prefix + serialized/transformed key; identity/SHA-256/Keccak key policies differ.
+- wsm-near-lookup-001 implements only Identity `Prefix4 || Borsh(UInt64)`: map values are Borsh UInt64 and
+  set values are empty bytes. Map writes are immediate rather than cache/flush/Drop compatible.
+- `IterableMap` composes a Vector of keys and a LookupMap of value/index records.
+- current near-sdk-rs exports no persistent Queue. ProofForge must specify bounded capacity,
+  head/tail arithmetic, stale-slot reachability, and storage reclamation itself.
+- legacy `collections::Vector` uses a different `u64` index suffix and must never alias the current
+  `store::Vector` compatibility name.
+
+An early compile-time `field_0 … field_n` component may be useful, but it must be named
+`FixedSlots` (or equivalent), not `store::Vector`, and must document that it is ProofForge-owned.
+The wsm-near-memory-001 arena supplies only invocation-local serialized key/value buffers, codec
+scratch, and explicit caches. Every durable collection element, length, index, and lifecycle marker
+remains in NEAR KV storage; arena addresses must never become collection layout or persistent state.
+
+## 4. Promise and transfer contract
+
+The minimum safe async chain is:
+
+```diagram
+┌─────────────────────┐
+│ validated AccountId │
+│ args/deposit/gas    │
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│ promise create/batch│
+│ function-call action│
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│ promise_then        │
+│ private self callback│
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│ results_count/status│
+│ bounded register read│
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│ decode Result       │
+│ value/promise_return│
+└─────────────────────┘
+```
+
+Scheduling success is not remote execution success. `promise_result` status 1 is the only state in
+which returned bytes may be read. Parallel joins cannot receive actions or be returned directly.
+The SDK must reserve callback gas, authenticate self callbacks with full AccountId equality, and
+make detach versus return explicit; it must not copy Rust `Drop`-realization implicitly.
+The explicit returned path calls `promise_return` only after caller state persistence; this links
+the child outcome without waiting and prevents a later scalar `value_return` from replacing the
+forwarded result. Bounded callback-result inspection preserves exact status and only reads a
+successful register. The first static self-callback edge now uses `promise_batch_then`, keeps
+callback input independent, and returns the callback receipt. Strict UInt64 decoding and a full
+predecessor/current AccountId guard now run before dependency-result access; broader codecs and
+general Promise handles remain absent. The closed join edge stages two concrete Promise indices in
+left/right order, immediately calls `promise_and(ptr, 2)`, uses the joint Promise only as a
+`promise_batch_then` dependency, and returns only the callback receipt. Failed children still
+release the callback and retain their ordered status-2 result slots.
+
+Native transfer now uses `promise_batch_create(receiver)` plus
+`promise_batch_action_transfer(index, amountPtr)`. Its exact 16-byte LE u128 amount frame is staged
+through the guest arena. The SDK exposes explicit detached and returned variants, and the latter
+links the transfer receipt only after caller state persistence. Static variants retain their
+compile-time validated receiver bytes. wsm-near-promise-account-transfer-001 adds closed dynamic
+variants for a complete nominal `AccountId`: exactly `length` active raw bytes (2..64) are staged,
+with no Borsh length, JSON transform, truncation, or inactive carrier padding. Both forms remain
+asynchronous; dynamic handles and multi-action builders are absent.
+
+## 5. Dependency-ordered implementation
+
+| Phase | Deliverable | Gate before advancing |
+|---|---|---|
+| N0 identity | lossless host AccountId + equality/self-call guard (**wsm-020 done**) | all eight zero-fill stores; high-word/length equality; sandbox 9-byte boundary |
+| N1 byte/wide substrate | **UInt128 token context, checked two-limb add/sub, and exact u128×u64 done** in wsm-near-u128-001/u128-arithmetic-001/u128-mul-001, static UTF-8 data spans in wsm-near-log-001, and bounded bytes/string input frames/register reads done in wsm-near-bytes-001 | resource budget; malformed length/OOB/UTF-8 failures |
+| N2 guest arena | **checked invocation-local allocation, growth, reset, zeroing, and pointer-free `Buffer64` done** in wsm-near-memory-001 | model/emitter/WAT/sandbox bounds and trap matrix |
+| N3 entry ABI | canonical bounded Borsh input/output, exact quoted-u128 output, and bounded one-field AccountId JSON view input done; general objects/mutating/multi-parameter and nested/tagged values remain | golden bytes against Rust; exact cursor/padding |
+| N4 raw storage | **done in wsm-near-storage-001:** arbitrary binary key/value, read/write/remove/exists, evicted value; allocator-backed bounded register copies and explicit prefix ownership | view write/remove rejection; storage status matrix |
+| N5 collections | **DirectVector64 done in wsm-near-vector-001, direct Identity LookupMap64/LookupSet64 done in wsm-near-lookup-001, ProofForge bounded Queue64 done in wsm-near-queue-001, and bounded Identity IterableMap64/IterableSet64 done in wsm-near-iterable-001**; full collection metadata follows N9 lifecycle; optional TreeMap last | independent consumers; layout golden tests; durable KV only; no hidden flush |
+| N6 observability | static and bounded dynamic `log_utf8` plus exact bounded NEP-297 string-data envelope done in wsm-near-log-001/log-dynamic-001/event-001 | exact standard-specific event bytes and host log limits |
+| N7 promises | **detached/returned static batch calls, static/full-AccountId native transfers, self-callback, and ordered two-child join done in wsm-near-promise-001/002/then/transfer/account-transfer/and-001**; arbitrary-N/nested joins and handles remain | receipt DAG/gas/deposit/failure sandbox scenes |
+| N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
+| N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
+| N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked ledger plus specialized bounded `ft_balance_of`/`ft_total_supply` views complete; no fully near-sdk-compatible token contract | standard-specific integration suites |
+| N11 storage economics | real invocation-dynamic `storage_usage`, caller-only lifecycle, supply-integrated force unregister, and bounded payable `storage_deposit` over the canonical map complete; byte price remains explicit trusted config | variable AccountId-key cost/reclaim, speculative rollback, exact refunds; narrower input/fixed-cost divergence means no full NEP-145 claim |
+
+## 6. Near-term task cuts
+
+1. **NEAR-F0-BYTES (wsm-near-bytes-001 done):** bounded bytes/string use a static, allocation-free NEAR
+   memory/register input plan with exact canonical Borsh input and strict String UTF-8.
+2. **NEAR-MEMORY (wsm-near-memory-001 done):** checked guest arena over Wasm linear memory, exposed only
+   through bounded pointer-free consumers; future codec/storage/promise scratch builds on it.
+3. **NEAR-LOG:** static literals, arena-backed bounded dynamic UTF-8 spans, and one exact bounded
+   NEP-297 string-data envelope are complete in wsm-near-log-001/log-dynamic-001/event-001;
+   standard-specific closed payloads follow, while generic JSON remains absent.
+4. **NEAR-NEP-141-EVENT:** exact v1.0.0 `ft_mint`, `ft_transfer`, and `ft_burn` serialization,
+   including bounded optional memo variants, is complete in wsm-near-nep141-event-001/002/003.
+   A closed balance/supply policy is complete separately; public FT methods and storage management
+   remain later slices.
+   The ledger dependency chain now has checked NearToken add/sub, exact Borsh-u128 values, and a
+   specialized raw-Identity Prefix4 AccountId-to-NearToken map in
+   wsm-near-u128-arithmetic-001/u128-storage-001/account-token-map-001. The internal raw-key budget is independently
+   widened to the exact 72-byte `Prefix4 || Borsh(AccountId)` maximum in
+   wsm-near-storage-key-001. wsm-near-fungible-ledger-001 composes those prerequisites with
+   prechecked mint/burn/transfer and lossless total supply, but remains separate from public ABI,
+   registration/storage management, resolver, deposits, and events.
+   wsm-near-storage-economics-001 adds the real nearcore `storage_usage` context leaf and measured
+   storage deltas. It intentionally does not guess `storage_amount_per_byte`: current near-sdk-rs
+   and nearcore expose no guest `storage_byte_cost`, so registration charging still needs an
+   explicit trusted network/config boundary.
+   wsm-near-u128-mul-001 supplies the checked full-width `NearToken × UInt64` operation needed to
+   turn measured bytes into a configured cost. wsm-near-promise-account-transfer-001 now supplies
+   detached/returned native transfer to a complete dynamic AccountId; closed registration policy
+   composes this refund edge in wsm-near-storage-registration-001 without pretending the public
+   NEP-145 ABI already exists. It registers only `Context.caller` as a present-zero balance,
+   measures that caller's actual variable key delta, and relies on nearcore receipt rollback after
+   the speculative write for insufficient-deposit or arithmetic failures.
+   wsm-near-storage-unregister-001 separately requires exactly one attached yocto, removes only an
+   exact present-zero caller key, measures the live reclaim, and refunds `reclaim × trustedPrice + 1`.
+   Missing returns false and retains the yocto as current near-sdk-rs does; current near-sdk-rs
+   otherwise refunds a configured fixed maximum, whereas this closed policy deliberately prices
+   the live variable key. A synchronous post-remove panic rolls storage back, but later detached
+   refund receipt failure does not restore the committed key.
+   wsm-near-storage-force-unregister-001 reuses that exact map namespace as the balance ledger:
+   force=false rejects positive balance before writes, while force=true prechecks and subtracts the
+   full balance from two-limb supply before entering the same live reclaim/refund sequence. Current
+   near-contract-standards removes first, directly subtracts supply, and emits no `ft_burn` event;
+   this slice likewise leaves event compliance explicit rather than inventing a log.
+   **NEAR-STORAGE-BALANCE-OUTPUT (wsm-near-storage-balance-output-001 done):** the exact nominal
+   five-leaf view frame emits current near-sdk `Option<StorageBalance>` bytes: absent `null` or a
+   declaration-order object with independent quoted-u128 `total` and `available`. It remains an
+   output-only prerequisite and does not select a fixed minimum, reuse one short-account
+   measurement for all callers, or expose a public NEP-145 method.
+   **NEAR-STORAGE-BALANCE-OF (wsm-near-storage-balance-of-001 done):** the official-shaped export
+   composes that serializer with the bounded AccountId object parser and one canonical `BAL2` read.
+   A present exact-16 entry reports checked `(AccountId.length + 64) × trustedPerByteCost` and zero
+   available; 64 is current nearcore Prefix4/Borsh/value/record overhead, while active AccountId
+   bytes remain variable. Missing returns `null`, malformed storage and arithmetic/config failures
+   trap without writes. This deliberately differs from near-contract-standards' constructor-time
+   maximum-account measurement and retains ProofForge's narrower JSON input subset, so exact method
+   naming/output does not imply complete NEP-145 compatibility.
+   **NEAR-STORAGE-BOUNDS-OUTPUT (wsm-near-storage-balance-bounds-output-001 done):** the distinct
+   exact nominal five-leaf frame emits declaration-order quoted-u128 `min` and nullable
+   quoted-u128 `max`. Presence and inactive limbs are checked, and the maximum bounded wire is 97
+   bytes with one shared decimal helper. This remains output-only: the standard API exposes global
+   bounds, whereas ProofForge's current economics vary by 2..64-byte AccountId length, so a later
+   policy must choose truthful global extrema rather than claim the stock fixed-cost FT behavior.
+   **NEAR-STORAGE-BOUNDS (wsm-near-storage-balance-bounds-001 done):** the closed exact export now
+   chooses those extrema consistently with authoritative near-account-id and ProofForge's existing
+   parsers: `(2 + 64) × trustedPrice` minimum and `(64 + 64) × trustedPrice` maximum. Both full-u128
+   products are checked; invalid config/overflow traps without map or effects. This differs from the
+   stock FT's fixed equal bounds. The later explicit no-args policy matches near-sdk request-ignore
+   behavior for this method without changing other zero-parameter entries, so method/output shape
+   is not a complete NEP-145 ABI claim.
+   **NEAR-STORAGE-DEPOSIT-INPUT (wsm-near-json-storage-deposit-input-001 done):** an exact
+   compiler-owned eleven-leaf frame now decodes optional `account_id` and `registration_only` in
+   either field order. Missing/null, false, and true remain distinct; account values reuse the
+   2..64-byte decoder and inactive words are zero. The exact wire cap is 459 with ws32. Duplicate,
+   unknown, escaped keys and malformed/trailing input fail closed. This is parser-only and narrower
+   than near-sdk serde's default unknown-field behavior.
+   **NEAR-STORAGE-DEPOSIT (wsm-near-storage-deposit-001 done):** the payable exact export now
+   defaults missing/null accounts to predecessor, accepts/ignores `registration_only`, and registers
+   the explicit or default account as present zero in `BAL2`. New keys use speculative live-delta
+   measurement, checked full-u128 variable cost, exact retention and positive excess refund;
+   duplicates refund the full deposit. Refunds always target predecessor. The exact StorageBalance
+   result persists independent state fields first. The bounded parser and variable-cost economics
+   remain deliberately narrower/different from stock near-contract-standards, so this is not a full
+   NEP-145 compatibility claim.
+   **NEAR-STORAGE-UNREGISTER (wsm-near-storage-unregister-integration-001 done):** the exact payable
+   export combines bounded optional force, JSON Boolean output, and the integrated `BAL2` ledger.
+   Missing callers now receive near-contract-standards 5.29's exact ordinary
+   `The account <id> is not registered` log before `false`; zero and forced-positive removals keep
+   the measured dynamic refund/supply rules. The bounded input, variable economics, and checked
+   rather than saturating refund addition remain explicit compatibility differences.
+   **NEAR-STORAGE-WITHDRAW (wsm-near-storage-withdraw-001 done):** the exact payable export accepts
+   missing/null/zero amount for a registered caller and returns its variable total with zero
+   available. Positive amounts, missing/malformed registration, and arithmetic failure reject
+   without map, supply, log, refund, or transfer effects; the security yocto remains attached.
+   **NEAR-FT-LEDGER-STORAGE-UNREGISTER (wsm-near-ft-ledger-storage-unregister-001 done):** the
+   integrated BAL2 artifact now composes the same bounded optional-force/Boolean boundary with
+   predecessor-only removal. Missing returns false with the stock informational log; zero removes
+   without supply change; forced-positive removal prechecks and burns exact supply. Success refunds
+   variable `(caller.length + 64) × 1 + 1` to predecessor and emits no FT event. Bounded input,
+   immutable fixture pricing, and checked rather than saturating refund addition remain explicit
+   non-compatibility boundaries.
+5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
+   output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
+   remain later.
+   **NEAR-JSON-U128-OUTPUT (wsm-near-json-u128-output-001 done):** exact `.scalar .uint128`
+   two-limb views emit one canonical quoted decimal JSON string through a pinned target policy and
+   the shared 39-digit routine. This is output-only and does not imply JSON input or object support.
+   **NEAR-JSON-U128-MUTATION-OUTPUT (wsm-near-json-u128-mutation-output-001 done):** the exact
+   `Except Error (State × UInt128)` mutation shape reuses that wire policy. The wrapper persists
+   every state leaf before one quoted result return; asymmetric result limbs remain independent of
+   terminal state destinations, and source errors trap for nearcore rollback. Ordinary records,
+   explicit Unit, omitted-return, and Promise-return shapes do not select this policy.
+   **NEAR-JSON-ACCOUNT-INPUT (wsm-near-json-account-input-001 done):** only the exact compiler-owned
+   nine-leaf `AccountId` schema on a one-parameter view selects bounded
+   `{"account_id":"..."}` parsing. Wire length is at most 433, aggregate JSON whitespace at most
+   32, and decoded canonical ASCII AccountId length is 2..64. The parser accepts standard value
+   escapes that decode to valid AccountId bytes but deliberately requires the raw canonical key,
+   rejects unknown fields, and does not claim serde_json or public NEP method compatibility.
+   **NEAR-JSON-U128-INPUT (wsm-near-json-u128-input-001 done):** one exact compiler-owned UInt128
+   parameter on view or mutating wrappers selects bounded `{"amount":"digits"}` parsing. The
+   reusable decimal-string component returns ordered `(w0,w1)`, accepts 1..39 canonical digits or
+   digit-producing Unicode escapes, and rejects overflow before multiply/add. Exact wire and
+   aggregate whitespace bounds are 279 and 32. Unlike near-sdk-rs U128 parsing, leading plus and
+   leading zeros reject, so this remains a named canonical subset rather than serde compatibility.
+   **NEAR-JSON-MEMO-INPUT (wsm-near-json-memo-input-001 done):** compiler-owned
+   `OptionalMemo16` distinguishes missing/null None from Some-empty and carries exact decoded
+   length plus two packed byte limbs. Its reusable string decoder handles raw UTF-8, all short
+   escapes, BMP escapes, and valid surrogate pairs, with exact 16 decoded-byte, 139 wire-byte, and
+   32 structural-whitespace bounds. near-sdk has no memo length bound and accepts broader object
+   grammar; this is a closed prerequisite for a later specialized transfer object.
+   **NEAR-JSON-MESSAGE-INPUT (wsm-near-json-message-input-001 done):** compiler-owned
+   `BoundedMessage64` carries exact decoded length plus eight packed little-endian words. Its
+   required `{"msg":"..."}` object accepts empty strings and reuses the memo Unicode cursor with
+   independent 64-byte decoded, 426-byte wire, and 32-whitespace bounds. Missing/null/wrong-type,
+   unknown/duplicate/escaped keys, malformed UTF-8/escapes, and overflow reject. The diagnostic
+   fixture has no Promise or standard export; dynamic function-call payload composition remains
+   the next transfer-call prerequisite.
+   **NEAR-JSON-FT-TRANSFER-INPUT (wsm-near-json-ft-transfer-input-001 done):** one compiler-owned
+   `FtTransferArgs` frame binds exactly receiver AccountId, full u128 amount, and optional memo.
+   A bounded field loop accepts every known-field permutation, enforces required/presence bits,
+   and reuses the checked value cursors. Exact geometry is 786 wire bytes and 32 aggregate
+   structural-whitespace bytes. Unknown keys reject (unlike the broader generated serde wrapper),
+   and this parser fixture intentionally has no standard `ft_transfer` export or ledger effect.
+   **NEAR-JSON-FT-TRANSFER-CALL-INPUT (wsm-near-json-ft-transfer-call-input-001 done):** one exact
+   24-leaf frame adds required bounded `msg` to receiver/amount/optional memo. The any-order loop
+   shares all existing value decoders, uses a 1179-byte exact worst-case wire budget, clears every
+   inactive frame, and deliberately has no standard export or effects.
+   **NEAR-JSON-FT-ON-TRANSFER-INPUT (wsm-near-json-ft-on-transfer-input-001 done):** the distinct
+   20-leaf receiver frame combines sender AccountId, full u128 amount, and required Message64.
+   One any-order loop reuses all established value decoders, accepts empty message, and enforces
+   independent presence bits. Exact geometry is 1071 wire bytes and 32 aggregate whitespace;
+   inactive leaves are zero. This bounded parser has no standard export or receiver behavior.
+   **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** the distinct exact
+   `FtResolveTransferArgs` schema lowers sender AccountId, receiver AccountId, and full u128 amount
+   to 20 ordered leaves. One bounded field loop accepts all six raw-key permutations with separate
+   presence bits and reuses the checked AccountId/decimal value cursors. Exact maximum wire is 1079
+   bytes with 32 aggregate structural whitespace bytes. The fixture supports view and mutation
+   diagnostics but has no Promise result, private callback, ledger reconciliation, or standard
+   resolver export.
+   **NEAR-JSON-UNIT-OUTPUT (wsm-near-json-unit-output-001 done):** an explicit logical Unit result
+   on a mutating entry selects exactly one four-byte JSON `null` return after state persistence.
+   Initializers, raw UInt64 methods, and view outputs retain their previous policies. This pins the
+   near-sdk-rs explicit-`()` result shape without introducing generic JSON serialization.
+   **NEAR-VOID-OUTPUT (wsm-near-void-output-001 done):** compiler-owned `pf_near_void` selects the
+   separate near-sdk omitted-return semantics for an exact zero-leaf Unit mutation. Successful
+   state writes complete with no `value_return` and empty SuccessValue bytes; explicit Unit still
+   returns JSON `null`, and views/scalar results/Promise return cannot select this policy.
+   **NEAR-FT-BALANCE-OF (wsm-near-ft-balance-of-001 done):** the exact snake-case
+   `ft_balance_of` export composes that bounded AccountId object policy with one strict read of the
+   existing `BAL2` ledger map and canonical quoted-u128 output. Missing and exact present-zero
+   balances both return `"0"`; malformed present 8/20-byte values fail the view instead of
+   exposing partial or stale limbs. The input subset is still narrower than near-sdk serde, so
+   this official-shaped method is not claimed as complete NEP-141 ABI compliance.
+   **NEAR-FT-TOTAL-SUPPLY (wsm-near-ft-total-supply-001 done):** the no-argument exact export reads
+   the integrated ledger state's `(supplyW0,supplyW1)` and emits one canonical quoted-u128 result,
+   with no balance-map operation or mutation. `wsm-near-no-args-input-001` opts this method into
+   current near-sdk-rs behavior: methods without regular arguments do not inspect request bytes.
+   Other zero-parameter ProofForge entries retain exact-empty input, and full public compatibility
+   is not claimed.
+   **NEAR-NEP148-HASH-OUTPUT (wsm-near-json-base64-hash32-output-001 done):** an exact nominal
+   four-word frame now serializes one 32-byte `reference_hash` as a quoted 44-character RFC 4648
+   STANDARD Base64 value with one `=` pad. This is only the hash scalar prerequisite; bounded
+   metadata strings, seven-field object composition, optional-field coupling, and `ft_metadata`
+   remain separate, and no complete NEP-148 claim is made.
+   **NEAR-NEP148-METADATA-OUTPUT (wsm-near-json-ft-metadata-output-001 done):** the exact nominal
+   70-leaf frame now serializes fixed `ft-1.0.0`, bounded UTF-8 name/symbol/icon/reference fields,
+   explicit null/Some option values, the shared exact-32-byte STANDARD Base64 hash, and bare u8
+   decimals in near-contract-standards field order. Product capacities are 64/16/256/128 decoded
+   bytes and are not authoritative NEP-148 limits. The codec deliberately does not call
+   `assert_valid` or couple reference/hash presence.
+   **NEAR-FT-METADATA (wsm-near-ft-metadata-001 done):** exact `ft_metadata` composes that bounded
+   serializer with the opt-in near-sdk no-args request-ignore wrapper. Its fixed configured value
+   has `ft-1.0.0` and matching absent reference/hash fields, so it satisfies
+   near-contract-standards' optional `assert_valid` by construction. The codec still does not
+   automatically validate arbitrary carriers; product string capacities prevent a full general
+   NEP-148 ABI claim.
+   **NEAR-FT-LEDGER-METADATA (wsm-near-ft-ledger-metadata-001 done):** the integrated `BAL2`
+   fungible-ledger artifact now exposes that same exact bounded `ft_metadata` view alongside its
+   NEP-141-shaped balance, supply, transfer, transfer-call, and resolver methods. The view ignores
+   request bytes and has no balance/supply/map/log/Promise effects; this closes artifact-level
+   composition without widening the metadata codec's product subset.
+   **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
+   fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
+   success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;
+   alias, zero amount, malformed/missing accounts, underflow, and overflow trap before writes.
+   Success writes source then receiver while preserving present zero and total supply, then emits
+   one exact no-memo or Some-memo NEP-141 event. Nearcore transaction rollback covers any
+   synchronous post-write trap. The input grammar still rejects serde-compatible forms outside
+   ProofForge's bounded canonical subset, so this does not claim full public ABI compliance.
+   **NEAR-FT-TRANSFER-CALL (wsm-near-ft-transfer-call-001 done):** exact `ft_transfer_call`
+   composes the 24-leaf bounded argument frame with the same one-yocto, positive/non-alias,
+   exact-registration, read-before-write, source-then-receiver, and initial transfer-event rules.
+   It then schedules the dynamic weighted `ft_on_transfer` child and private resolver callback,
+   persists state, and returns only the callback Promise, exposing the resolver's quoted used
+   amount. Partial/full/malformed/failed nearcore receipts pin event order, rollback, present-zero,
+   and supply conservation. The 1179-byte canonical input subset remains narrower than serde_json,
+   so this is exact operation/receipt semantics rather than a full public ABI compatibility claim.
+   **NEAR-FT-RECEIVER-VALUE (wsm-near-ft-receiver-value-001 done):** exact `ft_on_transfer`
+   composes the 20-leaf bounded receiver input with state-persisting quoted-u128 output. The closed
+   fixture returns the entire amount, matching an immediate `PromiseOrValue::Value(amount)` and
+   therefore rejecting all tokens; a real weighted child receipt observes those exact bytes.
+   Full serde input and applying the dual terminal to receiver business logic remain out of scope.
+   **NEAR-PROMISE-OR-VALUE-U128 (wsm-near-promise-or-value-u128-001 done):** the explicit
+   `pf_near_promise_or_value` boundary now grants one exact mutating U128 method a branch-local
+   immediate quoted result or returned Promise terminal. State persists first in either branch;
+   ordinary U128/Unit/view/Promise methods remain unchanged and fail closed on mixed use.
+   **NEAR-FT-RECEIVER-DUAL (wsm-near-ft-receiver-dual-001 done):** one exact non-payable
+   `ft_on_transfer` now applies that dual terminal to the bounded 20-leaf receiver frame. Its
+   invocation-time message branch returns immediate full/zero/partial unused U128 values or a
+   valid/failed/malformed child Promise after persisting independent receiver state. Real nearcore
+   `ft_transfer_call → receiver → private resolver` receipts pin outer used/refund values, event
+   order, BAL2 conservation, present-zero registration, asynchronous child-state persistence, and
+   synchronous rollback. The 1071-byte canonical input subset remains narrower than serde.
+   **NEAR-FT-RESOLVE-TRANSFER (wsm-near-ft-resolve-transfer-001 done):** exact private,
+   non-payable `ft_resolve_transfer` combines the 20-leaf callback frame, exact-one/index-zero
+   Promise-result boundary, strict quoted-u128 fallback/clamp, and the same `BAL2` balances. A
+   present sender receives the refund with one transfer event and returns `amount - refund`; a
+   deleted sender reduces supply, emits one burn event, and returns the original amount, exactly as
+   current near-contract-standards treats burned refund as used. Missing/present-zero receiver is a
+   write-free no-op. All result, storage-shape, and arithmetic checks precede writes; callback args
+   and result JSON remain bounded subsets, and no standard `ft_transfer_call` is exported yet.
+6. **NEAR-STORAGE-RAW (wsm-near-storage-001 done):** binary key/value read/write/remove/exists with exact
+   nearcore status/stale-register behavior and allocator-backed bounded register reads.
+   **NEAR-STORAGE-KEY (wsm-near-storage-key-001 done):** only internal key frames accept 1..72;
+   values/results/public Borsh frames retain 1..64, and an exact 72-byte raw key is sandbox-pinned.
+7. **NEAR-STORE-VECTOR (wsm-near-vector-001 done):** bounded direct-write UInt64 elements use exact current
+   near-sdk-rs bare-prefix keys and Borsh values. Immediate persistence is explicit; full Rust
+   metadata/cache/Drop semantics wait for the `STATE` lifecycle instead of being simulated.
+8. **NEAR-STORE-LOOKUP (wsm-near-lookup-001 done):** default Identity UInt64 map/set keys and values match
+   current near-sdk-rs durable bytes; direct map timing/raw statuses remain explicitly narrower.
+9. **NEAR-STORE-QUEUE (wsm-near-queue-001 done):** ProofForge-owned bounded FIFO slots reuse the Vector
+   key/value recipe; caller state owns canonical head/length, wraparound, and drained reset while
+   pop immediately reclaims the front key. Current near-sdk-rs exports no Queue.
+10. **NEAR-STORE-ITERABLE (wsm-near-iterable-001 done):** bounded Identity UInt64 map/set layouts derive exact
+   `P || 'v'` and `P || 'm'` namespaces, preserve replacement order, and repair moved index records
+   during fail-closed swap-remove. Immediate persistence does not claim Rust cache/`Drop` timing.
+11. **NEAR-PROMISE-1 (wsm-near-promise-001 done):** closed static receiver/method detached function call with
+    bounded arguments, explicit gas, and lossless u128 deposit. It emits batch create/action without
+    `promise_return`; chaining, callbacks, and results remain separate slices.
+12. **NEAR-PROMISE-2 (wsm-near-promise-002 done):** explicit static returned call shares Promise staging,
+    persists caller state, and then links the concrete receipt with final `promise_return`. Remote
+    success bytes and failure propagate; callback inspection and `promise_then` remain later.
+13. **NEAR-PROMISE-RESULT-1 (wsm-near-promise-result-001 done):** exact callback input count and
+    bounded status/register reads use a dedicated descriptor, inspect bytes only for status 1,
+    expose oversized lengths without copying, and reject views. Genuine callback scenes are covered
+    by the next completed slice; strict UInt64 decoding is covered by task 15.
+14. **NEAR-PROMISE-THEN-1 (wsm-near-promise-then-001 done):** one static child call creates a
+    `promise_batch_then` self callback with independent bounded input/deposit/gas, returns the
+    callback receipt after state persistence, and exercises genuine success/failure/oversized
+    dependency results.
+15. **NEAR-PROMISE-CODEC/PRIVATE-1 (wsm-near-promise-codec/private-001 done):** strict Borsh UInt64
+    decoding requires successful exact eight-byte results, and callback bodies authenticate full
+    predecessor/current AccountId equality before any dependency read or state write.
+    **NEAR-PROMISE-JSON-U128-RESULT (wsm-near-promise-json-u128-result-001 done):** a dedicated
+    four-leaf status/valid/low/high frame decodes only exact canonical quoted decimal u128 bytes
+    from an immediately active capacity-41 descriptor. Invalid status, oversize, malformed bytes,
+    noncanonical spellings, and overflow produce invalid zero limbs without trapping. The private
+    resolver owns `results_count == 1` and index zero. This is narrower than near-sdk-rs serde
+    `U128`, which also admits plus, leading zeros, escapes, and bounded surrounding whitespace.
+    **NEAR-JSON-FT-RESOLVE-INPUT (wsm-near-json-ft-resolve-input-001 done):** a separate exact
+    sender/receiver/amount object parser now provides the 20-leaf callback argument prerequisite;
+    Promise-result validation and balance reconciliation remain intentionally uncomposed.
+    **NEAR-PROMISE-FT-RESOLVE-CHAIN (wsm-near-promise-ft-resolve-chain-001 done):** the specialized
+    dynamic weighted child now composes a fixed private resolver callback with independent exact
+    JSON arenas, two zero deposits, child gas/weight 0/1, callback gas/weight 5 Tgas/0, and returns
+    only the callback after state persistence. Genuine partial/full/malformed/failed child receipts
+    reconcile the integrated BAL2 sender-present refund and sender-missing burn paths. This
+    specialized prerequisite itself has no initial transfer; wsm-near-ft-transfer-call-001 now
+    composes it behind the standard-shaped export.
+16. **NEAR-PROMISE-TRANSFER-1 (wsm-near-promise-transfer-001 done):** static detached/returned native
+    transfers stage exact lossless-u128 amounts through the arena, append the transfer action to a
+    concrete batch, distinguish return linkage explicitly, and pin exact sandbox balance deltas and
+    synchronous insufficient-balance rollback.
+17. **NEAR-PROMISE-AND-1 (wsm-near-promise-and-001 done):** two ordered static child calls stage
+    their concrete indices in one aligned arena span, immediately form `promise_and`, feed that
+    joint dependency to one authenticated self callback, and return only the callback receipt.
+    Success plus either one-sided failure pin result order and non-short-circuiting callback reads.
+18. **NEAR-INIT-1 (wsm-near-init-001 done):** generated initializers decode arguments, reject the
+    reserved `STATE` marker or any pre-marker scalar state, persist scalar fields, then write the
+    marker. Repeated sandbox initialization fails without changing the first state; Borsh state
+    layout, `ignore_state`, and migration/version policy remain absent.
+19. **NEAR-PAYABLE-1 (wsm-near-payable-001 done):** initializers and mutating entries reject either
+    nonzero attached-deposit word before decoding input, while views emit no guard and methods that
+    explicitly observe `Context.attachedDeposit` accept the full u128 value. Donation-only payable
+    methods are covered by the following explicit policy slice.
+20. **NEAR-ENTRY-POLICY-1 (wsm-near-entry-policy-001 done):** `pf_near_private` and
+    `pf_near_payable` survive extraction only as NEAR-owned metadata, participate in the canonical
+    digest, and generate wrappers in official private → non-payable → input order. Private compares
+    the full predecessor/current AccountId and panics with the exact method-specific message;
+    explicit payable admits donation-only mutators while payable views fail at lowering.
+21. **NEAR-UNINITIALIZED-1 (wsm-near-uninitialized-001 done):** every ordinary state-consuming
+    wrapper requires the canonical `STATE` marker after private/non-payable/input handling and
+    before scalar field or callback-result reads. Missing state uses exact `PanicOnDefault` text and
+    never creates implicit zero state. This is ProofForge's explicit-initializer policy: official
+    near-sdk-rs `unwrap_or_default()` also permits non-panicking `Default` implementations.
+22. **NEAR-STATE-ENVELOPE-1 (wsm-near-state-envelope-001 done):** exact
+    `PFNRST01 || fnv1a64(schema)_le` metadata binds ordered slot name/width/ABI without binding
+    executable methods. Entries distinguish missing from malformed/legacy/foreign schemas using a
+    dedicated register and fail closed before state/result reads.
+23. **NEAR-MIGRATION-1 (wsm-near-migration-001 done):** an explicitly private, non-payable,
+    zero-argument entry dispatches one declared old schema envelope, forbids implicit current-state
+    reads, converts explicit old split keys, persists transformed fields, and advances the current
+    envelope last. The sandbox gate performs a genuine Counter V1 → two-field V2 code upgrade.
+
+**NEAR-INTEGRATED-STORAGE-VIEWS (wsm-near-ft-ledger-storage-views-001 done):** the real
+`NearFungibleLedger` artifact composes `storage_balance_of` and `storage_balance_bounds` directly
+over its BAL2 balances. The immutable one-yocto-per-byte fixture profile makes 2..64-byte variable
+geometry observable (66..128 retained bytes) without pretending to source nearcore's network
+price. Bounded AccountId grammar and variable economics remain explicit compatibility differences;
+no mutation lifecycle is added by this slice.
+
+**NEAR-INTEGRATED-STORAGE-DEPOSIT (wsm-near-ft-ledger-storage-deposit-001 done):** payable bounded
+`storage_deposit` now inserts present-zero registration balances into that same BAL2 namespace,
+measures live storage delta, retains delta × the immutable fixture price, refunds predecessor
+excess, and leaves supply unchanged. Duplicate registration refunds the complete deposit. The
+bounded input and non-network fixture price remain explicit compatibility boundaries.
+
+**NEAR-INTEGRATED-STORAGE-WITHDRAW (wsm-near-ft-ledger-storage-withdraw-001 done):** the integrated
+artifact now accepts bounded missing/null/zero withdrawal under exact-one-yocto and returns the
+registered predecessor's variable total with zero available. Positive/wrong-deposit/missing paths
+reject; the operation has no map, supply, refund, log, or Promise effect. This preserves the closed
+zero-available economics rather than adding a meaningless withdrawal balance.
+
+Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
+near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.
