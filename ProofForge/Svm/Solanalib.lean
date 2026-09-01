@@ -2401,4 +2401,100 @@ theorem walkAccount1SkipNextAfterAccount0Skip_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 17 - Loader account-2 header/key after skip chain (`svm-sem-022`)
+
+Knife 16 proves the chained skip lands on the account-2 dup marker. Emit then treats that
+address as the account-2 header cursor (marker byte, key at `+8`). This knife composes the
+account-0/1 skip chain with an account-2 meta load and proves agreement with absolute
+`r6`-relative loads. Still not account-2 flags/budget/owner, full vectors, syscalls, CPI,
+or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-2 first key limb. -/
+def account2KeyOffset : Nat := account2HeaderOffset + 8
+def account2KeyAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2KeyOffset
+
+/-- Seed chained skip layout plus account-2 first key limb. -/
+def account2MetaInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) : Option Mem := do
+  let m ← account1SkipNextInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker
+  storev .m64 m account2KeyAddr (.vlong key2Word)
+
+/-- Typed double skip then account-2 meta: `ldxb r1,[r2+0]`; `ldxdw r2,[r2+8]`; stage key. -/
+def walkAccount2MetaAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let keyOff ← positiveOffset? 8
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .ldx .m64 .br4 .br2 keyOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br2) stackOff]
+
+/-- Run chained skip+account-2 meta walk against seeded input memory. -/
+def evalWalkAccount2MetaAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount2MetaAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-2 dup marker and first key limb. -/
+def evalAbsAccount2Meta? (memory : Mem) : Option (U8 × U64) := do
+  let dup ← loadv .m8 memory account2HeaderAddr
+  let key ← loadv .m64 memory account2KeyAddr
+  match dup, key with
+  | .vbyte d, .vlong k => some (d, k)
+  | _, _ => none
+
+/-- Walked account-2-meta-after-skip-chain assembly is well-formed. -/
+theorem walkAccount2MetaAfterSkipChain_verified :
+    (walkAccount2MetaAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip+meta: marker=`0xff`, key=`0x72`, key staged at `[r10-16]`. -/
+theorem evalWalkAccount2_after_skip_key_0x72 :
+    (do
+      let mem ← account2MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72
+      let (regs, finalMem) ← evalWalkAccount2MetaAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        regs .br2 == 0x72 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x72))) =
+      some true := by
+  native_decide
+
+/-- Walked account-2 meta after skip chain agrees with absolute `r6`-relative loads. -/
+theorem walkAccount2MetaAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account2MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72
+      let (regs, _) ← evalWalkAccount2MetaAfterSkipChainToStack? rhsStackOffset mem
+      let (dup, key) ← evalAbsAccount2Meta? mem
+      pure (regs .br1 == dup.setWidth 64 && regs .br2 == key &&
+        dup == 0xAC && key == 0x72)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
