@@ -1,5 +1,10 @@
 # Backlog
 
+> **SVM 后续工作总图**：[svm-work-plan.md](svm-work-plan.md)
+> （Runtime/SDK 剩余 + 应用 + 语义桥 + 工程 + 形式化）。
+> 形式化子看板：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
+> 本 backlog 继续记录工程证据；进度以总图 §6 + 形式化 §6 为准。
+
 补全依据：[analysis/authority.md](analysis/authority.md)。
 缺口阶段：[analysis/gap-vs-proofforge.md](analysis/gap-vs-proofforge.md)。
 后续权威排期：[Runtime / SDK 双目标路线图](runtime-sdk-roadmap.md)。

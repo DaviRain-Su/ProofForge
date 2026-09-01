@@ -12,6 +12,8 @@
 | [04-task-breakdown.md](04-task-breakdown.md) | 阶段与任务 |
 | [05-test-spec.md](05-test-spec.md) | 怎样算对 |
 | [plan/README.md](plan/README.md) | 交付队列 |
+| [plan/svm-work-plan.md](plan/svm-work-plan.md) | **当前主线**：SVM 全面工作计划（能力+应用+语义+工程+形式化） |
+| [plan/svm-formalization-plan.md](plan/svm-formalization-plan.md) | SVM 形式化轨道详案（sf-000..sf-016） |
 | [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
 | [plan/capability-matrix.md](plan/capability-matrix.md) | source API → owner → component → target effect → 物理状态能力矩阵 |
 | [plan/mainstream-parity.md](plan/mainstream-parity.md) | 对照 Solana Rust SDK 与 Solidity/OpenZeppelin 的双目标能力基线和 F0–F3 优先级 |
@@ -28,4 +30,4 @@
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
 
-当前阶段：**L4 + EVM**。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。E-ADDR / E-U256 已并入：`Addr20` 是 `address`，`UInt256` 是显式 `uint256`。SVM 名不翻译。
+当前阶段：**SVM 全面收口**（见 [plan/svm-work-plan.md](plan/svm-work-plan.md)）；形式化是其中 Track A。Runtime/SDK 主体已落地，剩余缺口与证明/应用并行推进；WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。
