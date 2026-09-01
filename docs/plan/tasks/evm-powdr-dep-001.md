@@ -36,6 +36,7 @@ for EVM Feature B, without pulling them into the default `ProofForge` / CI build
 
 - Optional CI lane invoking `scripts/build_powdr_probe.sh [--full]`.
 - Feature B integration design (Yul backend path vs L3 refinement) — see `multi-target-strategy.md` §2.
+- **E-B1** fragment audit landed (`evm-yul-fragment-001`); E-B2 yulc backend next.
 
 ## Acceptance (remaining)
 

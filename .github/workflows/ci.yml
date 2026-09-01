@@ -55,6 +55,9 @@ jobs:
           lake build
           lake build Tests
 
+      - name: Check EVM Yul fragment audit (E-B1)
+        run: python3 scripts/check_yul_fragment.py --self-test
+
   svm:
     name: SVM
     runs-on: ubuntu-24.04
