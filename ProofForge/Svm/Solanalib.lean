@@ -6737,7 +6737,7 @@ def walkAccount7MetaAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
     .alu64 .add .br2 (.imm maxPermittedDataIncrease),
     .ldx .m64 .br3 .br2 zeroOff,
     .alu64 .add .br2 (.imm 8),
-        .ldx .m8 .br1 .br2 zeroOff,
+    .ldx .m8 .br1 .br2 zeroOff,
     .ldx .m64 .br4 .br2 keyOff,
     .alu64 .mov .br2 (.reg .br4),
     .st .m64 .br10 (.reg .br2) stackOff]
