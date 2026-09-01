@@ -17,4 +17,6 @@ depends-on: []
 ## Follow-up
 
 - Wire `NearToken.addChecked` through Extract for NEAR mutating entries
+  (2026-09-01: tried; Extract rejects `Except` + `NearToken` structure payload —
+  still needs Decode support for structure-valued `Except.ok`)
 - Refactor `NearFungibleLedger.ft_transfer` to use `addChecked` once extraction supports it

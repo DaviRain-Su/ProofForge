@@ -34,13 +34,6 @@ def addViaAndThen (state : State) (delta : UInt64) : Except Error (State × UInt
   andThen (checkedAdd state.marker delta) fun sum =>
     ok (⟨sum⟩, sum)
 
-/-- `NearToken.addChecked` on a mutating entry (explicit match; structure payload projects to `w0`). -/
-@[pf_entry]
-def addCheckedViaHelper (state : State) (delta : UInt64) : Except Error (State × UInt64) :=
-  match NearToken.addChecked ⟨state.marker, 0⟩ ⟨delta, 0⟩ Error.overflow with
-  | .ok tok => .ok (⟨tok.w0⟩, tok.w0)
-  | .error e => .error e
-
 @[pf_entry]
 def canAddViaHelper (_state : State) : UInt64 :=
   if NearToken.canAdd ⟨1, 0⟩ ⟨2, 0⟩ then 1 else 0
