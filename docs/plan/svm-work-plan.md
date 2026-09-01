@@ -258,6 +258,7 @@ Phase 7   收口
 | [svm-sem-012](tasks/svm-sem-012.md) | E∞ knife 7 | Loader account-0 owner limbs 2/3 ↔ abs load | **done** — Emit ACC0_OWNER+16/+24 |
 | [svm-sem-013](tasks/svm-sem-013.md) | E∞ knife | Loader account-0 executable + rent_epoch | **done** — knife 8; zero-dataLen rent at `0x2860` |
 | [svm-sem-014](tasks/svm-sem-014.md) | E∞ knife | Loader account-0 → next-account marker | **done** — knife 9; skip to `0x2868` |
+| [svm-sem-015](tasks/svm-sem-015.md) | E∞ knife | Loader account-1 header/key after skip | **done** — knife 10; `0x2868`/`0x2870` |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

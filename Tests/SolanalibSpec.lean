@@ -453,5 +453,27 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+
+-- E∞ knife 10: Loader account-1 header/key after skip (`svm-sem-015`)
+#guard (walkAccount1MetaAfterSkip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71
+      let (regs, finalMem) ← evalWalkAccount1MetaAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        regs .br2 == 0x71 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x71))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1MetaInputMem 7 5 0x42 0xAB 0xEE 0x71
+      let (regs, _) ← evalWalkAccount1MetaAfterSkipToStack? rhsStackOffset mem
+      let (dup, key) ← evalAbsAccount1Meta? mem
+      pure (regs .br1 == dup.setWidth 64 && regs .br2 == key &&
+        dup == 0xAB && key == 0x71)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 

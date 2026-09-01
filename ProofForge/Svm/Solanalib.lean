@@ -1768,4 +1768,89 @@ theorem walkAccount0SkipNext_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 10 - Loader account-1 header/key after skip (`svm-sem-015`)
+
+Knife 9 proves the skip lands on the next dup marker. Emit then treats that address as the
+account-1 header cursor (same layout as account-0: marker byte, then key at `+8`). This knife
+composes the zero-`EXACT_DATA_LEN` skip with an account-1 meta load from the advanced `r2`
+cursor and proves agreement with absolute `r6`-relative loads at `0x2868` / `0x2870`. Still not
+a full multi-account vector walk, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-1 first key limb (`ACC1_HEADER+8` = `0x2870`). -/
+def account1KeyOffset : Nat := account1HeaderOffset + 8
+def account1KeyAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1KeyOffset
+
+/-- Seed skip layout plus account-1 first key limb. -/
+def account1MetaInputMem (value arg0 key0Limb : U64) (nextMarker : U8)
+    (rentEpoch key1Limb : U64) : Option Mem := do
+  let m ← account0SkipNextInputMem value arg0 key0Limb nextMarker rentEpoch
+  storev .m64 m account1KeyAddr (.vlong key1Limb)
+
+/-- Typed skip then account-1 meta: after knife-9 skip, `r2` is the account-1 header;
+`ldxb r1,[r2+0]`; `ldxdw r2,[r2+8]`; stage the key. -/
+def walkAccount1MetaAfterSkip? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let keyOff ← positiveOffset? 8
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .ldx .m64 .br4 .br2 keyOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br2) stackOff]
+
+/-- Run skip+account-1 meta walk against seeded input memory. -/
+def evalWalkAccount1MetaAfterSkipToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount1MetaAfterSkip? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-1 dup marker and first key limb. -/
+def evalAbsAccount1Meta? (memory : Mem) : Option (U8 × U64) := do
+  let dup ← loadv .m8 memory account1HeaderAddr
+  let key ← loadv .m64 memory account1KeyAddr
+  match dup, key with
+  | .vbyte d, .vlong k => some (d, k)
+  | _, _ => none
+
+/-- Walked account-1-after-skip assembly is well-formed. -/
+theorem walkAccount1MetaAfterSkip_verified :
+    (walkAccount1MetaAfterSkip? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete skip+meta: marker=`0xff`, key=`0x71`, key staged at `[r10-16]`. -/
+theorem evalWalkAccount1_after_skip_key_0x71 :
+    (do
+      let mem ← account1MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71
+      let (regs, finalMem) ← evalWalkAccount1MetaAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        regs .br2 == 0x71 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x71))) =
+      some true := by
+  native_decide
+
+/-- Walked account-1 meta after skip agrees with absolute `r6`-relative loads. -/
+theorem walkAccount1MetaAfterSkip_eq_absLoad :
+    (do
+      let mem ← account1MetaInputMem 7 5 0x42 0xAB 0xEE 0x71
+      let (regs, _) ← evalWalkAccount1MetaAfterSkipToStack? rhsStackOffset mem
+      let (dup, key) ← evalAbsAccount1Meta? mem
+      pure (regs .br1 == dup.setWidth 64 && regs .br2 == key &&
+        dup == 0xAB && key == 0x71)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
