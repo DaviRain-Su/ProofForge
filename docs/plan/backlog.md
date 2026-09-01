@@ -107,6 +107,7 @@ R1-032 shared allocation-free bounded bytes/String active-prefix equality；
 R1-033 shared allocation-free bounded bytes/String unsigned lexicographic ordering；
 R1-034 shared allocation-free bounded bytes/String substring search；
 R1-035 shared allocation-free bounded bytes/String prefix/suffix matching；
+R1-036 shared allocation-free bounded bytes/String first-match position；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -490,6 +491,17 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   与 EvmSearch 的四个 ABI methods 分别绑定 dual Borsh/ABI 输入；未新增 Runtime/Ops/IR/CFG/
   Component/Extract/Emit case、allocation、pointer 或 shared wire。详见
   [R1-035](tasks/r1-035.md)。
+
+- R1-036 shared bounded bytes/String first-match position 已完成：`BoundedBytes.findIndex?`
+  返回 typed `Option UInt64`，以同一 static product scan 的 private position+1 frame 保留首个
+  overlap match；empty needle 为 `some 0`，absent/longer/malformed 为 `none`，inactive tail
+  不参与结果。`BoundedString.findIndex?` 返回 UTF-8 byte offset，不引入 normalization 或
+  scalar-index policy。Extract 只把 effect-free bounded scalar loop 放进既有 join local，并在
+  constructed Option 出口验证 exact two-leaf frame；SVM RawEntry tags 37/38 与独立
+  EvmFindIndex ABI consumer 分别绑定 canonical Borsh / `(bool,uint64)` output。EVM emitter
+  统一声明已有 4096-byte low-memory scratch contract，解除 solc bounded-loop StackTooDeep，
+  未增加 feature-specific Runtime/Ops/IR/CFG/Component/Emit case、allocation 或 pointer。详见
+  [R1-036](tasks/r1-036.md)。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

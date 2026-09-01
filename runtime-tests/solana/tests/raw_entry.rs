@@ -39,6 +39,8 @@ const BYTES_STARTS_WITH_TAG: u8 = 33;
 const STRINGS_STARTS_WITH_TAG: u8 = 34;
 const BYTES_ENDS_WITH_TAG: u8 = 35;
 const STRINGS_ENDS_WITH_TAG: u8 = 36;
+const BYTES_FIND_INDEX_TAG: u8 = 37;
+const STRINGS_FIND_INDEX_TAG: u8 = 38;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -125,6 +127,17 @@ fn bounded_bytes_pair_data(tag: u8, left: &[u8], right: &[u8]) -> Vec<u8> {
     data.extend_from_slice(&(right.len() as u32).to_le_bytes());
     data.extend_from_slice(right);
     data
+}
+
+fn borsh_option_u64(value: Option<u64>) -> Vec<u8> {
+    match value {
+        None => vec![0],
+        Some(value) => {
+            let mut data = vec![1];
+            data.extend_from_slice(&value.to_le_bytes());
+            data
+        }
+    }
 }
 
 fn bounded_u16_data(values: &[u16]) -> Vec<u8> {
@@ -673,6 +686,7 @@ fn bounded_bytes_and_strings_compare_and_search_canonical_active_prefixes() {
         STRINGS_CONTAINS_TAG,
         STRINGS_STARTS_WITH_TAG,
         STRINGS_ENDS_WITH_TAG,
+        STRINGS_FIND_INDEX_TAG,
     ] {
         for (left, right) in [
             (vec![0xc0, 0x80], b"abc".to_vec()),
@@ -687,6 +701,58 @@ fn bounded_bytes_and_strings_compare_and_search_canonical_active_prefixes() {
                 &bounded_bytes_pair_data(tag, &left, &right),
             );
         }
+    }
+}
+
+#[test]
+fn bounded_bytes_and_strings_return_first_match_as_borsh_option() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+
+    for (tag, haystack, needle, expected) in [
+        (BYTES_FIND_INDEX_TAG, vec![], vec![], Some(0u64)),
+        (BYTES_FIND_INDEX_TAG, b"abc".to_vec(), vec![], Some(0)),
+        (
+            BYTES_FIND_INDEX_TAG,
+            b"ababa".to_vec(),
+            b"aba".to_vec(),
+            Some(0),
+        ),
+        (
+            BYTES_FIND_INDEX_TAG,
+            b"zabc".to_vec(),
+            b"bc".to_vec(),
+            Some(2),
+        ),
+        (BYTES_FIND_INDEX_TAG, b"abc".to_vec(), b"ac".to_vec(), None),
+        (
+            BYTES_FIND_INDEX_TAG,
+            b"abc".to_vec(),
+            b"abcd".to_vec(),
+            None,
+        ),
+        (
+            STRINGS_FIND_INDEX_TAG,
+            vec![0xc2, 0xa2, 0xe2, 0x82, 0xac],
+            vec![0xe2, 0x82, 0xac],
+            Some(2),
+        ),
+        (
+            STRINGS_FIND_INDEX_TAG,
+            vec![0xe2, 0x82, 0xac],
+            vec![0xc2, 0xa2],
+            None,
+        ),
+    ] {
+        let data = bounded_bytes_pair_data(tag, &haystack, &needle);
+        let expected = borsh_option_u64(expected);
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&expected)],
+        );
     }
 }
 

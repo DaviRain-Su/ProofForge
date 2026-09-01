@@ -60,6 +60,12 @@ private def staticU64SlotOf (p : IR.Program) (name : String) : Except String Nat
 
 private def nl : String := "\n"
 
+/-- Generated EVM code owns only a fixed low-memory scratch window. Two maximum target-local ABI
+frames cover output headers/staging and the bounded codec frame. Advertising that derived contract
+to solc enables its stack-to-memory pass without introducing a source-level heap or allocator. -/
+private def memoryGuardBytes : Nat :=
+  2 * Codec.maxBoundedArrayLocalWords * 32
+
 private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
   else s!"0x{Core.IR.u64Hex n}"
@@ -1393,6 +1399,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  }" ++ nl ++
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
+    "      mstore(64, memoryguard(" ++ toString memoryGuardBytes ++ "))" ++ nl ++
     renderAddr20Helper ++
     renderFixedBytesHelper ++
     globalGuard ++

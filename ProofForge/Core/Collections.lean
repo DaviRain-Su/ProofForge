@@ -160,17 +160,17 @@ backing bytes are ignored, and the scan is bounded by compile-time capacity rath
       visited := visited + 1
     return equal == 1 && visited == UInt64.ofNat capacity
 
-/-- One allocation-free static product scan shared by contains/prefix/suffix. `startMode` is a
-private lowering detail: zero accepts any in-range candidate, one only start zero, and two only the
-unique final start. The public APIs expose no mode/tag representation. -/
-@[pf_inline] private def searchUnchecked {capacity needleCapacity : Nat}
+/-- One allocation-free static product scan shared by index/contains/prefix/suffix. `startMode` is
+a private lowering detail: zero accepts any in-range candidate, one only start zero, and two only
+the unique final start. The result uses private position+1 encoding so zero remains "not found". -/
+@[pf_inline] private def searchIndexUnchecked {capacity needleCapacity : Nat}
     (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity)
-    (startMode : UInt64) : Bool := Id.run do
+    (startMode : UInt64) : UInt64 := Id.run do
   let haystackLength := haystack.length.toUInt64
   let needleLength := needle.length.toUInt64
   let lastStart := haystackLength - needleLength
-  -- Bit zero records a completed match; bit one records the current candidate.
-  let mut scanState : UInt64 := 2
+  -- Bit zero records the current candidate; higher bits hold the first matched position+1.
+  let mut scanState : UInt64 := 1
   let mut visited : UInt64 := 0
   for flat in [0:capacity * needleCapacity] do
     let start := flat / needleCapacity
@@ -184,16 +184,24 @@ unique final start. The public APIs expose no mode/tag representation. -/
       if activeStart && activeOffset then
         if haystack.values[start + offset]! == needle.values[offset]! then 1 else 0
       else 1
-    let found := scanState &&& 1
-    let candidate := (scanState >>> 1) &&& 1
+    let found := scanState >>> 1
+    let candidate := scanState &&& 1
     let matched := candidate &&& byteEqual
     let candidateComplete := offset + 1 == needleCapacity
     let nextFound :=
-      found ||| if candidateComplete && activeStart && matched == 1 then 1 else 0
+      if found == 0 && candidateComplete && activeStart && matched == 1 then
+        UInt64.ofNat start + 1
+      else found
     let nextCandidate := if candidateComplete then 1 else matched
-    scanState := nextFound ||| (nextCandidate <<< 1)
+    scanState := nextCandidate ||| (nextFound <<< 1)
     visited := visited + 1
-  return (scanState &&& 1) == 1 && visited == UInt64.ofNat (capacity * needleCapacity)
+  return if visited == UInt64.ofNat (capacity * needleCapacity) then scanState >>> 1 else 0
+
+@[pf_inline] private def searchUnchecked {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity)
+    (startMode : UInt64) : Bool :=
+  let position := searchIndexUnchecked haystack needle startMode
+  position != 0
 
 /-- Allocation-free active-prefix substring search. Both frames must be canonical. Empty needles
 match every canonical haystack; otherwise neither inactive tail can affect the shared static scan. -/
@@ -206,6 +214,20 @@ match every canonical haystack; otherwise neither inactive tail can affect the s
   else if needleLength == 0 then true
   else if haystackLength < needleLength then false
   else searchUnchecked haystack needle 0
+
+/-- Return the first zero-based active-prefix byte position of a canonical needle. Empty needles
+match at zero, invalid frames and longer needles return `none`, and inactive tails are ignored. -/
+@[pf_inline] def findIndex? {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Option UInt64 :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then none
+  else if UInt64.ofNat needleCapacity < needleLength then none
+  else if needleLength == 0 then some 0
+  else if haystackLength < needleLength then none
+  else
+    let position := searchIndexUnchecked haystack needle 0
+    if position == 0 then none else some (position - 1)
 
 /-- Rust-style active-prefix test with independent fixed carrier capacities. Invalid frames and a
 needle longer than the haystack fail closed; an empty canonical needle is a prefix. -/
@@ -347,6 +369,11 @@ performs no allocation. -/
 @[pf_inline] def contains {capacity needleCapacity : Nat}
     (text : BoundedString capacity) (needle : BoundedString needleCapacity) : Bool :=
   text.asBytes.contains needle.asBytes
+
+/-- First UTF-8 byte offset of an exact validated String needle. -/
+@[pf_inline] def findIndex? {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (needle : BoundedString needleCapacity) : Option UInt64 :=
+  text.asBytes.findIndex? needle.asBytes
 
 /-- Exact UTF-8 byte-prefix policy over the validated String carrier. -/
 @[pf_inline] def startsWith {capacity needleCapacity : Nat}

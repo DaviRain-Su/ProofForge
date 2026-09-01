@@ -135,6 +135,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing bounded-bytes suffix source method"
   let some sourceStringsEnds := source.methods.find? (·.ixName == "stringsEndsWith")
     | throwError "missing bounded-string suffix source method"
+  let some sourceBytesFind := source.methods.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing bounded-bytes first-position source method"
+  let some sourceStringsFind := source.methods.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing bounded-string first-position source method"
   let pubkeySchema := .record "ProofForge.Svm.Sdk.Pubkey" #[
     ("word0", .scalar .uint64), ("word1", .scalar .uint64),
     ("word2", .scalar .uint64), ("word3", .scalar .uint64)]
@@ -188,7 +192,14 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceBytesEnds.retSchema == .scalar .boolean && sourceBytesEnds.retCount == 1 &&
       sourceStringsEnds.annotations == #["svm.raw.v1:36:2:0"] &&
       sourceStringsEnds.paramSchemas == #[.boundedString 8, .boundedString 8] &&
-      sourceStringsEnds.retSchema == .scalar .boolean && sourceStringsEnds.retCount == 1 do
+      sourceStringsEnds.retSchema == .scalar .boolean && sourceStringsEnds.retCount == 1 &&
+      sourceBytesFind.annotations == #["svm.raw.v1:37:2:0"] &&
+      sourceBytesFind.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesFind.retSchema == .option (.scalar .uint64) && sourceBytesFind.retCount == 2 &&
+      sourceStringsFind.annotations == #["svm.raw.v1:38:2:0"] &&
+      sourceStringsFind.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsFind.retSchema == .option (.scalar .uint64) &&
+      sourceStringsFind.retCount == 2 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
   let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
     match fuel with
@@ -199,7 +210,8 @@ elab "#pf_guard_entry_adapter" : command => do
         | .ite _ _ _ yes no => bounds ++ loopBounds fuel' yes ++ loopBounds fuel' no
         | _ => bounds
   for method in #[sourceBytesContains, sourceStringsContains, sourceBytesStarts,
-      sourceStringsStarts, sourceBytesEnds, sourceStringsEnds] do
+      sourceStringsStarts, sourceBytesEnds, sourceStringsEnds, sourceBytesFind,
+      sourceStringsFind] do
     unless loopBounds 8 method.ops == #[64] do
       throwError s!"{method.ixName} lost its static SVM product loop: {loopBounds 8 method.ops}"
   let program ←
@@ -456,6 +468,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected bounded-bytes suffix method"
   let some stringsEnds := program.methods.find? (·.ixName == "stringsEndsWith")
     | throwError "missing projected bounded-string suffix method"
+  let some bytesFind := program.methods.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing projected bounded-bytes first-position method"
+  let some stringsFind := program.methods.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing projected bounded-string first-position method"
   for (method, tag, marker) in [
       (bytesEqual, 27, "borsh-schema.[4-12:b"),
       (stringsEqual, 28, "borsh-schema.[4-12:t"),
@@ -488,6 +504,34 @@ elab "#pf_guard_entry_adapter" : command => do
         | .exit (.returnU64 _) => true
         | _ => false do
       throwError s!"{method.ixName} lost its scalar Bool return"
+  for (method, tag, marker) in [
+      (bytesFind, 37, "borsh-schema.[4-12:b"),
+      (stringsFind, 38, "borsh-schema.[4-12:t")
+    ] do
+    match method.entry with
+    | .raw entry =>
+        unless entry.tag == tag && entry.paramCount == 2 &&
+            entry.paramBorshPlans.size == 2 &&
+            entry.paramLeafWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1,
+              4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+            entry.paramLeafCounts == #[9, 9] && entry.minDataLen == 9 &&
+            entry.maxDataLen == 25 && entry.inferredReturnWidths.isEmpty &&
+            entry.returnBorshPlan == some (.option #[8]) && entry.returnDataLen == 9 &&
+            entry.returnScratchBytes == 17 &&
+            entry.canonical.contains marker &&
+            entry.canonical.contains "borsh-return-schema.option.[8]" do
+          throwError s!"wrong bounded first-position Borsh plan: {repr entry}"
+    | .generated => throwError "bounded first-position method lost its raw adapter"
+    let graph ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError s!"bounded first-position did not reach CFG: {reason}"
+    unless graph.blocks.all fun block =>
+        match block.terminator with
+        | .exit (.returnU64s values) => values.size == 2
+        | .exit (.returnU64 _) | .exit (.returnState _) | .exit (.okState _) => false
+        | _ => true do
+      throwError s!"{method.ixName} lost its complete Option return frame"
   for (method, count) in [
       (echoBoundedValues, 5), (echoBoundedBytes, 9),
       (echoBoundedString, 9), (makeBoundedString, 9),
@@ -525,14 +569,20 @@ elab "#pf_guard_entry_adapter" : command => do
       "call echoPubkey", "jne r1, 33, err_raw_echoPubkey", "call bytesEqual",
       "call stringsEqual", "call bytesLess", "call stringsLess", "call bytesContains",
       "call stringsContains", "call bytesStartsWith", "call stringsStartsWith",
-      "call bytesEndsWith", "call stringsEndsWith", "borsh_schema_utf8_loop_stringsEqual_0",
+      "call bytesEndsWith", "call stringsEndsWith", "call bytesFindIndex",
+      "call stringsFindIndex", "borsh_schema_utf8_loop_stringsEqual_0",
       "borsh_schema_utf8_loop_stringsEqual_9", "borsh_schema_utf8_loop_stringsLess_0",
       "borsh_schema_utf8_loop_stringsLess_9", "borsh_schema_utf8_loop_stringsContains_0",
       "borsh_schema_utf8_loop_stringsContains_9",
       "borsh_schema_utf8_loop_stringsStartsWith_0",
       "borsh_schema_utf8_loop_stringsStartsWith_9",
       "borsh_schema_utf8_loop_stringsEndsWith_0",
-      "borsh_schema_utf8_loop_stringsEndsWith_9", "borsh_return_invalid_echoBoundedValues_",
+      "borsh_schema_utf8_loop_stringsEndsWith_9",
+      "borsh_schema_utf8_loop_stringsFindIndex_0",
+      "borsh_schema_utf8_loop_stringsFindIndex_9",
+      "borsh_return_option_present_bytesFindIndex_",
+      "borsh_return_option_present_stringsFindIndex_",
+      "borsh_return_invalid_echoBoundedValues_",
       "borsh_return_invalid_echoBoundedBytes_", "borsh_return_invalid_echoBoundedString_",
       "borsh_schema_utf8_loop_echoBoundedString_b0_return_",
       "borsh_return_invalid_makeBoundedString_",

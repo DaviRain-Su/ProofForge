@@ -934,6 +934,19 @@ elab "#pf_guard_conditional_local" : command => do
 
 #pf_guard_conditional_local
 
+elab "#pf_guard_scalar_loop_helper_join" : command => do
+  let env ← getEnv
+  let method ←
+    match ProofForge.Extract.extractMethod env .get ``Tests.Fixtures.hasBoundedLoopPosition with
+    | .ok method => pure method
+    | .error reason => throwError reason
+  unless method.ops.any (· matches .joinLocal 0) &&
+      method.ops.any (fun op => match op with | .forBody 3 _ => true | _ => false) &&
+      method.ops.any (fun op => match op with | .returnU64 (.select .ne (.local 0) (.lit 0) ..) => true | _ => false) do
+    throwError "scalar loop helper was not joined before caller control"
+
+#pf_guard_scalar_loop_helper_join
+
 elab "#pf_guard_except_bind_join" : command => do
   let env ← getEnv
   let program ←

@@ -1,4 +1,5 @@
 import Examples.EvmSearch
+import Examples.EvmFindIndex
 import ProofForge
 
 namespace Tests.EvmSearchSpec
@@ -33,10 +34,18 @@ elab "#pf_guard_evm_search" : command => do
     match ProofForge.Extract.extractModuleIR env `Examples.EvmSearch with
     | .ok source => pure source
     | .error reason => throwError reason
+  let findSource ←
+    match ProofForge.Extract.extractModuleIR env `Examples.EvmFindIndex with
+    | .ok source => pure source
+    | .error reason => throwError reason
   let some sourceBytes := source.methods.find? (·.ixName == "bytesContains")
     | throwError "missing source bytes substring method"
   let some sourceStrings := source.methods.find? (·.ixName == "stringsContains")
     | throwError "missing source string substring method"
+  let some sourceBytesFind := findSource.methods.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing source bytes first-position method"
+  let some sourceStringsFind := findSource.methods.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing source string first-position method"
   let some sourceBytesStarts := source.methods.find? (·.ixName == "bytesStartsWith")
     | throwError "missing source bytes prefix method"
   let some sourceStringsStarts := source.methods.find? (·.ixName == "stringsStartsWith")
@@ -53,6 +62,12 @@ elab "#pf_guard_evm_search" : command => do
     unless method.paramSchemas == #[.boundedString 3, .boundedString 3] &&
         method.retSchema == .scalar .boolean do
       throwError s!"{method.ixName} lost its bounded string schema"
+  unless sourceBytesFind.paramSchemas == #[.boundedBytes 3, .boundedBytes 3] &&
+      sourceBytesFind.retSchema == .option (.scalar .uint64) && sourceBytesFind.retCount == 2 &&
+      sourceStringsFind.paramSchemas == #[.boundedString 3, .boundedString 3] &&
+      sourceStringsFind.retSchema == .option (.scalar .uint64) &&
+      sourceStringsFind.retCount == 2 do
+    throwError "typed first-position methods lost their fixed Option frame"
   let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
     match fuel with
     | 0 => #[]
@@ -62,17 +77,25 @@ elab "#pf_guard_evm_search" : command => do
         | .ite _ _ _ yes no => bounds ++ loopBounds fuel' yes ++ loopBounds fuel' no
         | _ => bounds
   for method in #[sourceBytes, sourceStrings, sourceBytesStarts, sourceStringsStarts,
-      sourceBytesEnds, sourceStringsEnds] do
+      sourceBytesEnds, sourceStringsEnds, sourceBytesFind, sourceStringsFind] do
     unless loopBounds 8 method.ops == #[9] do
       throwError s!"{method.ixName} lost the shared static product scan"
   let program ←
     match ProofForge.Evm.IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
+  let findProgram ←
+    match ProofForge.Evm.IR.fromExtracted findSource with
+    | .ok program => pure program
+    | .error reason => throwError reason
   let some bytesMethod := program.entries.find? (·.ixName == "bytesContains")
     | throwError "missing EVM bytes substring method"
   let some stringsMethod := program.entries.find? (·.ixName == "stringsContains")
     | throwError "missing EVM string substring method"
+  let some bytesFind := findProgram.entries.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing EVM bytes first-position method"
+  let some stringsFind := findProgram.entries.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing EVM string first-position method"
   let some bytesStarts := program.entries.find? (·.ixName == "bytesStartsWith")
     | throwError "missing EVM bytes prefix method"
   let some stringsStarts := program.entries.find? (·.ixName == "stringsStartsWith")
@@ -99,16 +122,42 @@ elab "#pf_guard_evm_search" : command => do
         method.selector == ProofForge.Crypto.Keccak.selector name #["string", "string"] &&
         method.inputPolicy == stringsPolicy do
       throwError s!"{name} ABI lost an independent canonical dynamic tail"
+  let optionPlan : ProofForge.Evm.Codec.OutputPlan := .taggedTuple {
+    typeName := "(bool,uint64)"
+    words := #[.boolean, .uint64]
+    activePayloadWords := #[0, 1]
+  }
+  for (method, name, policy) in #[(bytesFind, "bytesFindIndex", bytesPolicy),
+      (stringsFind, "stringsFindIndex", stringsPolicy)] do
+    unless method.logicalParamCount == 2 && method.paramCount == 8 &&
+        method.selector == ProofForge.Crypto.Keccak.selector name
+          (if name == "bytesFindIndex" then #["bytes", "bytes"] else #["string", "string"]) &&
+        method.inputPolicy == policy && method.retTypes == #[.boolean, .uint64] &&
+        method.outputPlan == some optionPlan &&
+        method.outputPolicy == "tagged-tuple-return-v1((bool,uint64);active=[0,1])" do
+      throwError s!"{name} lost its canonical Option result binding"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
+    | .ok yul => pure yul
+    | .error reason => throwError reason
+  let findYul ←
+    match ProofForge.Evm.Emit.emitYul findProgram with
     | .ok yul => pure yul
     | .error reason => throwError reason
   let abi ←
     match ProofForge.Evm.Emit.emitAbiChecked program with
     | .ok abi => pure abi
     | .error reason => throwError reason
-  unless !yul.isEmpty && abi.contains "\"name\":\"bytesContains\"" &&
+  let findAbi ←
+    match ProofForge.Evm.Emit.emitAbiChecked findProgram with
+    | .ok abi => pure abi
+    | .error reason => throwError reason
+  unless yul.contains "mstore(64, memoryguard(4096))" &&
+      findYul.contains "mstore(64, memoryguard(4096))" &&
+      abi.contains "\"name\":\"bytesContains\"" &&
       abi.contains "\"name\":\"stringsContains\"" &&
+      findAbi.contains "\"name\":\"bytesFindIndex\"" &&
+      findAbi.contains "\"name\":\"stringsFindIndex\"" &&
       abi.contains "\"name\":\"bytesStartsWith\"" &&
       abi.contains "\"name\":\"stringsStartsWith\"" &&
       abi.contains "\"name\":\"bytesEndsWith\"" &&

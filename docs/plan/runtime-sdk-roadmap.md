@@ -132,6 +132,7 @@ R1-032 shared bounded bytes/String active-prefix equality、
 R1-033 shared bounded bytes/String unsigned lexicographic ordering、
 R1-034 shared bounded bytes/String substring search、
 R1-035 shared bounded bytes/String prefix/suffix matching、
+R1-036 shared bounded bytes/String first-match position、
 R3-026 persistent SVM BitSet、
 R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
 transient wide vectors，以及 R2-010 checked
@@ -168,7 +169,7 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R1-026](tasks/r1-026.md)、[R1-027](tasks/r1-027.md)、[R1-028](tasks/r1-028.md)、
 [R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md)、[R1-031](tasks/r1-031.md)、
 [R1-032](tasks/r1-032.md)、[R1-033](tasks/r1-033.md)、[R1-034](tasks/r1-034.md)、
-[R1-035](tasks/r1-035.md)。
+[R1-035](tasks/r1-035.md)、[R1-036](tasks/r1-036.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -373,6 +374,15 @@ R1-035 已完成 shared bounded bytes/String prefix/suffix matching：`startsWit
 byte view，UTF-8 由 target codec gate 持有；RawEntry tags 33–36 与 EvmSearch 分别验证 dual
 Borsh/ABI inputs。未增加 Runtime/Ops/IR/CFG/Component/Extract/Emit case。详见
 [R1-035](tasks/r1-035.md)。
+
+R1-036 已完成 shared bounded bytes/String first-match position：`findIndex?` 复用同一 static
+product scan，并以 private position+1 scalar 保留第一个 overlap match，public API 返回 typed
+`Option UInt64`；empty needle 是 `some 0`，absent/longer/malformed 是 `none`。String 结果是
+validated UTF-8 byte offset。Extract 以既有 join local 顺序化 effect-free bounded scalar loop，
+并 fail-closed 验证 constructed Option 的 exact two-leaf frame；RawEntry tags 37/38 与
+EvmFindIndex 分别绑定 Borsh Option 和 ABI `(bool,uint64)`。EVM runtime Yul 统一声明 fixed
+4096-byte low-memory scratch contract，使 solc 可进行 stack-to-memory lowering；没有新增
+search-specific Runtime/Ops/IR/CFG/Component/Emit case。详见 [R1-036](tasks/r1-036.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

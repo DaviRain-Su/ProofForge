@@ -46,7 +46,7 @@ SVM = TargetSpec(
 EVM = TargetSpec(
     key="evm",
     registry_rel=Path("ProofForge/Evm/Registry.lean"),
-    expected_count=42,
+    expected_count=43,
     suffixes=(".bin", ".yul", ".abi.json"),
     digest_suffix=".yul",
 )

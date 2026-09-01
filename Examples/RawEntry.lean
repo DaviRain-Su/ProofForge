@@ -233,4 +233,14 @@ def bytesEndsWith (_s : State) (value suffix : BoundedBytes 8) : Bool :=
 def stringsEndsWith (_s : State) (value suffix : BoundedString 8) : Bool :=
   value.endsWith suffix
 
+/-- First-match search exposes typed Option policy while the raw adapter independently owns its
+canonical Borsh option return frame. -/
+@[pf_entry, pf_svm_raw 37 2 0]
+def bytesFindIndex (_s : State) (haystack needle : BoundedBytes 8) : Option UInt64 :=
+  haystack.findIndex? needle
+
+@[pf_entry, pf_svm_raw 38 2 0]
+def stringsFindIndex (_s : State) (text needle : BoundedString 8) : Option UInt64 :=
+  text.findIndex? needle
+
 end Examples.RawEntry

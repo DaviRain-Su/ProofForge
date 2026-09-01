@@ -280,6 +280,29 @@ private def enumReturnPayloadWords : Core.Codec.Schema → Except String Nat
       pure items.size
   | _ => throw "extract/unsupported: tagged enum result fields must be UInt64"
 
+/-- Verify that control-owning construction preserved an exact logical result frame on every
+successful path. Error exits are intentionally frame-free; nearby locals are never inferred as
+missing leaves. -/
+private def validateConstructedReturnFrame (ops : Array Ops.Op) (expected : Nat) :
+    Except String Unit := do
+  let graph ← IR.toCFG ops
+  let mut sawSuccess := false
+  for block in graph.blocks do
+    match block.terminator with
+    | .exit (.returnU64 _) =>
+        sawSuccess := true
+        unless expected == 1 do
+          throw s!"extract/unsupported: constructed result block {block.id} returns 1 of {expected} leaves"
+    | .exit (.returnU64s values) =>
+        sawSuccess := true
+        unless values.size == expected do
+          throw s!"extract/unsupported: constructed result returns {values.size} of {expected} leaves"
+    | .exit (.returnState _) | .exit (.okState _) | .exit (.initialize _) =>
+        throw "extract/unsupported: constructed result lost its explicit fixed frame"
+    | _ => pure ()
+  unless sawSuccess do
+    throw "extract/unsupported: constructed result has no successful fixed frame"
+
 /-- Project a top-level tagged result into a fixed source frame before either target selects its
 wire policy. Option uses `slot_tag, slot_p0`; enums use `variant_tag, variant_p0, ...`, matching the
 existing input-side source names without importing Borsh or ABI geometry into shared extraction. -/
@@ -298,6 +321,13 @@ private def expandTaggedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.
       ]
   | .option _, some _ =>
       throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+  | .option (.scalar type), none => do
+      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
+        throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+      validateConstructedReturnFrame ops 2
+      pure ops
+  | .option _, none =>
+      throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
   | .enumeration _ tagBits variants, some root => do
       unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
         throw "extract/unsupported: tagged enum result requires a nonempty u8 tag space"
@@ -307,7 +337,7 @@ private def expandTaggedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.
       for i in [0:payloadWords] do
         result := result.push (.returnU64 (.field root ("variant_p" ++ toString i)))
       pure result
-  | .option _, none | .enumeration .., none =>
+  | .enumeration .., none =>
       throw "extract/unsupported: constructed tagged results are not yet represented as a fixed source frame"
   | _, _ => pure ops
 

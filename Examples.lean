@@ -46,6 +46,7 @@ import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.EvmBounded
 import Examples.EvmSearch
+import Examples.EvmFindIndex
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage

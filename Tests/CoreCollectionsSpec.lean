@@ -301,6 +301,13 @@ private def emptyText : BoundedString 2 :=
 #guard !cent.contains middle
 #guard !ascii.contains malformedNeedle
 #guard !malformedLength.contains emptyNeedle
+#guard ascii.findIndex? middle == some 1
+#guard ascii.findIndex? suffix == some 1
+#guard ascii.findIndex? emptyNeedle == some 0
+#guard asciiWithDirtyTail.findIndex? suffix == some 1
+#guard cent.findIndex? middle == none
+#guard ascii.findIndex? malformedNeedle == none
+#guard malformedLength.findIndex? emptyNeedle == none
 #guard ascii.startsWith emptyNeedle
 #guard ascii.startsWith middle == false
 #guard ascii.startsWith ({ length := 2, values := #v[0x61, 0x62] } : BoundedBytes 2)
@@ -321,6 +328,9 @@ private def emptyText : BoundedString 2 :=
 #guard asciiText.contains middleText
 #guard asciiText.contains emptyText
 #guard dirtyAsciiText.contains middleText
+#guard asciiText.findIndex? middleText == some 1
+#guard asciiText.findIndex? emptyText == some 0
+#guard dirtyAsciiText.findIndex? middleText == some 1
 #guard asciiText.startsWith emptyText
 #guard asciiText.endsWith middleText == false
 #guard dirtyAsciiText.endsWith ({ length := 2, values := #v[0x62, 0x63] } : BoundedString 2)
