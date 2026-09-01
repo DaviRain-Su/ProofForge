@@ -210,7 +210,7 @@ Phase 7   收口
 | ID | 内容 | 优先级 | 验收 |
 |---|---|---|---|
 | [svm-sdk-001](tasks/svm-sdk-001.md) | resize **rent top-up** 显式政策（组合 Rent sysvar + lamports） | F1 | **done**；`topUpRentExempt`/`resizeDataWithRentTopUp`；digests `389be3285e53c93d` / `754ab90d0d3145ae`；Mollusk 4+2 |
-| [svm-sdk-002](tasks/svm-sdk-002.md) | **owner-reassign** 生命周期（或书面永久 fail-closed + 矩阵 n/a） | F1 | 政策二选一，禁止半开 |
+| [svm-sdk-002](tasks/svm-sdk-002.md) | **owner-reassign** 生命周期（或书面永久 fail-closed + 矩阵 n/a） | F1 | **done (n/a)**；永久 fail-closed；Lean policy guard + Mollusk foreign-owner reject |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | generic POD transient shapes（超出 Record64/Vector128/256 的下一形状） | F1 | 同 slot 生命周期复用；双 consumer |
 | [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | manifest 先行；默认仍 2 |
 | [svm-sdk-005](tasks/svm-sdk-005.md) | Token-2022 extension 的 **Sdk facade**（对接 rt-002） | F2 | **done**；`Sdk.Token2022` mint-close view/CPI；不把 extension 名写进 Emit |
@@ -258,7 +258,7 @@ Phase 7   收口
 |---|---|---|
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
 | B | svm-rt-001 … 005 | svm-rt-001/002/003 **done**；004–005 todo |
-| C | svm-sdk-001 … 007 | svm-sdk-001/005 **done**；其余 todo |
+| C | svm-sdk-001 … 007 | svm-sdk-001/002/005 **done**（002 = n/a fail-closed）；其余 todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
 | F | svm-eng-001 … 002 | todo |
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`005` done → 下一刀 **`svm-sdk-002` owner-reassign**（或 `svm-rt-004` sliced sysvar / `svm-sdk-003` transient）
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`005` done → 下一刀 **`svm-sdk-003` transient shapes**（或 `svm-rt-004` sliced sysvar / `svm-sdk-006` Memo）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

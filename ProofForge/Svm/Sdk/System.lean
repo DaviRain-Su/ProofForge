@@ -30,7 +30,11 @@ a runtime-selected allocation geometry from entering the SDK. -/
 
 /-- Closed `system.assign`: re-points account 0 (signer + writable) at the current program id.
 Fixed geometry: outer account 0 is the signer/writable target, outer account 1 is the System
-program. -/
+program.
+
+This is **inbound acquisition only** (system-owned → current program). It is not an
+owner-reassign lifecycle for already program-owned accounts (`svm-sdk-002` permanently
+fail-closed); foreign-owned targets fail at the System Program boundary. -/
 @[pf_inline] def assign : UInt64 :=
   ProofForge.Svm.Runtime.systemAssign
 

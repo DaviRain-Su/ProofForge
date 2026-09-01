@@ -123,6 +123,18 @@ introduced.
   balance
 
 /-!
+## Owner-reassign policy (`svm-sdk-002`) — permanently unavailable
+
+ProofForge does **not** expose a facade that reassigns the owner of an already program-owned
+account to another program (or back to System) while the account remains live. Solana's System
+`Assign` only re-points **system-owned** accounts; once this program owns an account, the
+supported lifecycle exit is `Handle.closeTo` (resize-to-zero + full lamport refund), optionally
+followed by a fresh System create/assign. There is intentionally no
+`Handle.reassignOwner` / arbitrary-owner CPI helper — half-open owner mutation is forbidden.
+Capability matrix status: **n/a** (permanent fail-closed).
+-/
+
+/-!
 Ensure one fixed program-owned account holds at least `Rent.minimumBalance dataLen` lamports by
 debiting an explicit program-owned `payer`. This is ordinary SDK composition over the existing
 `Sysvar.Rent.minimumBalance` query and checked `transferLamports` — no new Runtime leaf, Emit
