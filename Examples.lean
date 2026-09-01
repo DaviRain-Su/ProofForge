@@ -84,6 +84,7 @@ import Examples.NearJsonFtOnTransferInput
 import Examples.NearJsonFtResolveInput
 import Examples.NearJsonStorageDepositInput
 import Examples.NearJsonStorageUnregisterInput
+import Examples.NearJsonStorageWithdrawInput
 import Examples.NearJsonBooleanMutation
 import Examples.NearFtReceiverValue
 import Examples.NearPromiseOrValue

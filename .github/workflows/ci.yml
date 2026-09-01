@@ -284,6 +284,9 @@ jobs:
       - name: Run NEAR sandbox bounded storage-unregister argument gate
         run: runtime-tests/near/json_storage_unregister_input.sh
 
+      - name: Run NEAR sandbox bounded storage-withdraw argument gate
+        run: runtime-tests/near/json_storage_withdraw_input.sh
+
       - name: Run NEAR sandbox mutating JSON Boolean output gate
         run: runtime-tests/near/json_boolean_mutation.sh
 

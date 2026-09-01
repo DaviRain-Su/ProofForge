@@ -112,6 +112,15 @@ it neither removes an account nor performs a refund. -/
   force : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for bounded canonical `storage_withdraw`-shaped JSON.
+`amountPresent = 0` represents a missing or explicit-null amount and requires both inactive limbs
+to be zero; `amountPresent = 1` carries one canonical quoted-decimal full-width amount. This
+carrier only decodes arguments and performs no storage or refund effect. -/
+@[pf_boundary] structure StorageWithdrawArgs where
+  amountPresent : UInt64
+  amount : ProofForge.Core.Value.UInt128
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned exact output frame for a mutating JSON Boolean result. It is intentionally
 nominal so ordinary Bool or one-field record returns retain their existing target behavior. -/
 @[pf_boundary] structure JsonBooleanResult where

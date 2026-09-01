@@ -150,6 +150,13 @@ def maxJsonStorageUnregisterWhitespace : Nat := 32
 def maxJsonStorageUnregisterInputBytes : Nat :=
   15 + maxJsonStorageUnregisterWhitespace
 
+/-- Optional quoted-u128 storage-withdraw input has the same exact maximum string geometry as the
+required amount object: `{"amount":""}` is 13 structural bytes, each of 39 decoded digits may be
+one six-byte Unicode escape, and structural whitespace is independently bounded at 32 bytes. -/
+def maxJsonStorageWithdrawWhitespace : Nat := 32
+def maxJsonStorageWithdrawInputBytes : Nat :=
+  13 + 39 * 6 + maxJsonStorageWithdrawWhitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -200,6 +207,10 @@ def storageUnregisterArgsSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs" #[
     ("force", .scalar .uint64)]
 
+def storageWithdrawArgsSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.StorageWithdrawArgs" #[
+    ("amountPresent", .scalar .uint64), ("amount", .scalar .uint128)]
+
 def jsonBooleanResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.JsonBooleanResult" #[
     ("value", .scalar .uint64)]
@@ -228,6 +239,7 @@ inductive InputPlan where
   | jsonFtResolveTransferArgs
   | jsonStorageDepositArgs
   | jsonStorageUnregisterArgs
+  | jsonStorageWithdrawArgs
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
@@ -242,6 +254,7 @@ def InputPlan.localCount : InputPlan → Nat
   | .jsonFtResolveTransferArgs => 20
   | .jsonStorageDepositArgs => 11
   | .jsonStorageUnregisterArgs => 1
+  | .jsonStorageWithdrawArgs => 3
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
@@ -275,6 +288,9 @@ def InputPlan.canonical : InputPlan → String
   | .jsonStorageUnregisterArgs =>
       s!"near-json-storage-unregister-args-bounded-v1(max-wire={maxJsonStorageUnregisterInputBytes}," ++
         s!"ws={maxJsonStorageUnregisterWhitespace},keys=raw,unknown=reject)"
+  | .jsonStorageWithdrawArgs =>
+      s!"near-json-storage-withdraw-args-bounded-v1(max-wire={maxJsonStorageWithdrawInputBytes}," ++
+        s!"ws={maxJsonStorageWithdrawWhitespace},digits=1..39,keys=raw,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
@@ -287,6 +303,7 @@ def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == ftResolveTransferArgsSchema then return .jsonFtResolveTransferArgs
   if schema == storageDepositArgsSchema then return .jsonStorageDepositArgs
   if schema == storageUnregisterArgsSchema then return .jsonStorageUnregisterArgs
+  if schema == storageWithdrawArgsSchema then return .jsonStorageWithdrawArgs
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)

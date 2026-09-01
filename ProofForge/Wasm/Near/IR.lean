@@ -818,6 +818,23 @@ private partial def rewriteJsonStorageUnregisterInputRoot
       else pure none
   | _ => pure none
 
+private partial def rewriteJsonStorageWithdrawInputRoot
+    (method : Core.IR.Method Ops.ValKind Ops.OpExt) : Ops.Val → Except String (Option Ops.Val)
+  | .field (.arg 0) "amountPresent" => pure (some (.arg 0))
+  | .field (.field (.arg 0) "amount") "w0" => pure (some (.arg 1))
+  | .field (.field (.arg 0) "amount") "w1" => pure (some (.arg 2))
+  | .field (.arg 0) "amount_w0" => pure (some (.arg 1))
+  | .field (.arg 0) "amount_w1" => pure (some (.arg 2))
+  | .field (.arg 0) name =>
+      throw s!"near/codec: unsupported StorageWithdrawArgs projection {name}"
+  | .arg index =>
+      if index == 0 then
+        throw "near/codec: StorageWithdrawArgs input requires a scalar leaf projection"
+      else if method.kind != .init && index == method.paramCount then
+        pure (some (.arg 3))
+      else pure none
+  | _ => pure none
+
 private structure BoundInput where
   ixName : String
   schema : Core.Codec.Schema
@@ -846,6 +863,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     | .jsonFtResolveTransferArgs => rewriteJsonFtResolveInputRoot method
     | .jsonStorageDepositArgs => rewriteJsonStorageDepositInputRoot method
     | .jsonStorageUnregisterArgs => rewriteJsonStorageUnregisterInputRoot method
+    | .jsonStorageWithdrawArgs => rewriteJsonStorageWithdrawInputRoot method
   let ops ← Core.Target.rewriteOpsValues rewriteRoot rewritePayload method.ops
   let localCount := plan.localCount
   let scalarSchemas := Array.replicate localCount (.scalar .uint64)

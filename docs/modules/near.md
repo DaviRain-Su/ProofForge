@@ -66,6 +66,12 @@ the standard method: exact compiler-owned `StorageUnregisterArgs` maps missing/n
 to one `0/1/2` leaf. The raw-key object parser has an exact 47-byte bound including 32 whitespace
 bytes and rejects unknown/duplicate/escaped keys. Stock serde accepts unknown fields, so this is a
 bounded canonical subset rather than a complete NEP-145 wrapper.
+wsm-near-json-storage-withdraw-input-001 adds the independent optional-amount prerequisite without
+exporting `storage_withdraw`: exact compiler-owned `StorageWithdrawArgs` preserves None versus Some
+with two full u128 limbs. Missing and null clear inactive limbs; canonical quoted decimals reuse the
+checked amount decoder. The exact 279-byte bound covers 39 worst-case escaped digits and 32
+whitespace bytes. Unknown/duplicate/escaped keys and broader serde forms reject, so this remains a
+diagnostic bounded subset with no storage or Promise effect.
 wsm-near-json-boolean-mutation-output-001 adds the paired output prerequisite. Only nominal
 `JsonBooleanResult` mutations bind exact unquoted `false`/`true`; the target validates its 0/1
 discriminant after state persistence, and a trap rolls all writes back. Ordinary scalar/record,
