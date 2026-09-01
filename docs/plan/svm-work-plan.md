@@ -70,7 +70,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | E2 | `.s` golden ↔ `sbpfSemantics` 解析/步进 | **done**（Counter+Window + named parse） | `svm-sem-002` |
 | E3 | 整函数 CFG（有界 block）end-to-end correspondence | **done**（Counter increment 三块 CFG） | `svm-sem-003` |
 | E4 | 账户字模型（Track A）与 sBPF 内存 store 的桥 | **done**（Counter value word ↔ storev/loadv） | `svm-sem-004` |
-| E5 | 多入口程序 / 简单容器例（Queue push 空路径） | 选定 Examples 全函数有界证明 | `svm-sem-005` |
+| E5 | 多入口程序 / 简单容器例（Queue push 空路径） | **done**（Queue empty-push L3） | `svm-sem-005` |
 | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | Agave 忠实全程序 | **不承诺为本轨完成条件** |
 
 **E0–E5 要规划、要做完。** E∞ 留作远景：缺主机模型就无法诚实声称；不挡 E0–E5 收口。
@@ -152,7 +152,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门（**done**）
-          · C: svm-sdk-001..007 + svm-rt-004/`005` + svm-sem-001/`002`/`003`/`004` **done** → next: svm-sem-005 / svm-app-*
+          · C: svm-sdk-001..007 + svm-rt-004/`005` + svm-sem-001..`005` **done** → next: svm-app-002 / closeout audit
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
           · F: svm-eng-002 **done** (status matrix + `scripts/svm_status_summary.py`)
@@ -172,7 +172,7 @@ Phase 4   Map/Tree 证明 + Token-2022 + 内存桥
 
 Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
           · A: sf-012..sf-013（FifoCancel / BatchRecorder）
-          · E: svm-sem-005 Queue empty-push（或选定容器）全函数有界证明
+          · E: svm-sem-005 Queue empty-push L3 **done**
           · D: svm-app-001 Phoenix-v1 下一指令族（**done**：tags 10/11 CancelMultipleById cap=1）
           · D: svm-app-002 matching/fee 缺口补片（仍只在 Examples）
 
@@ -241,7 +241,7 @@ Phase 7   收口
 | [svm-sem-002](tasks/svm-sem-002.md) | E2 | `.s` golden ↔ `sbpfSemantics` 解析/步进差分门 | **done** — Counter+Window；named parse；`Tests.SemanticsSpec` |
 | [svm-sem-003](tasks/svm-sem-003.md) | E3 | 整函数有界 CFG end-to-end（Counter increment） | **done** — 三块 CFG；7+5/max+1；≤3 blocks/≤64 instr |
 | [svm-sem-004](tasks/svm-sem-004.md) | E4 | Track A `AccountWords` ↔ typed `storev` 内存桥 | **done** — Counter value word；roundtrip/OOB/`evalStaticStore` |
-| [svm-sem-005](tasks/svm-sem-005.md) | E5 | 选定容器例全函数（建议 Queue empty-push） | 与 sf-001/002 同一主语；有界证明 |
+| [svm-sem-005](tasks/svm-sem-005.md) | E5 | 选定容器例全函数（Queue empty-push） | **done** — TicketLine 布局；三写 storev 投影 |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
@@ -298,7 +298,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`004`** + **`svm-app-001`** done → 下一刀 **`svm-sem-005`**（或 `svm-app-002`）
+1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`** done → 下一刀 **`svm-app-002`**（matching/fee）或 closeout audit
 2. **并行**：`svm-app-002` matching/fee 宣称面；`svm-app-003` 非 Phoenix 小例子
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

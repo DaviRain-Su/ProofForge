@@ -83,7 +83,9 @@ Solanalib 当前没有为本仓提供：
 已覆盖 E4（`svm-sem-004`）：Counter `value` 字 ↔ typed `storev`/`loadv` /
 `AccountWords` field write 投影；静态位移 OOB / 未映射 load fail-closed。
 
-仍不覆盖：walked `r7` args、多入口整程序（E5）、whole-program / Agave ELF execution。
+已覆盖 E5（`svm-sem-005`）：BoundedQueue empty-push 三写 ↔ typed `storev`/`loadv` 投影。
+
+仍不覆盖：walked `r7` args、Queue 非空/绕回/pop 分支、whole-program / Agave ELF execution。
 
 ## Tests
 

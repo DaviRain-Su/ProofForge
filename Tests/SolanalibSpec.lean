@@ -234,4 +234,35 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
         loadAccountWord? b counterValueWord == some 42
   | _, _ => false
 
+
+-- E5: BoundedQueue empty-push L3 (`svm-sem-005`)
+#guard demoQueue.wellFormed
+#guard demoQueueHeadWord? == some demoQueueHeadWord
+#guard demoQueueCountWord? == some demoQueueCountWord
+#guard demoQueueSlot1Word? == some demoQueueSlot1Word
+#guard accountWordInStaticRange demoQueueHeadWord
+#guard accountWordInStaticRange demoQueueCountWord
+#guard accountWordInStaticRange demoQueueSlot1Word
+
+#guard
+  demoEmptyPushCount (accountWordOfU64 42) == 1 &&
+    demoEmptyPushHead (accountWordOfU64 42) == 1 &&
+      demoEmptyPushSlot1 (accountWordOfU64 42) == accountWordOfU64 42
+
+#guard
+  match projectDemoEmptyPush? 42 with
+  | some mem =>
+      loadAccountWord? mem demoQueueSlot1Word == some 42 &&
+        loadAccountWord? mem demoQueueHeadWord == some 1 &&
+          loadAccountWord? mem demoQueueCountWord == some 1
+  | none => false
+
+#guard
+  match demoEmptyPushStores? 42, projectDemoEmptyPush? 42 with
+  | some a, some b =>
+      loadAccountWord? a demoQueueSlot1Word == loadAccountWord? b demoQueueSlot1Word &&
+        loadAccountWord? a demoQueueHeadWord == loadAccountWord? b demoQueueHeadWord &&
+          loadAccountWord? a demoQueueCountWord == loadAccountWord? b demoQueueCountWord
+  | _, _ => false
+
 end Tests.SolanalibSpec

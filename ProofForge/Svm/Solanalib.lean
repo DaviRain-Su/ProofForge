@@ -946,4 +946,118 @@ theorem storeAccountWord_eq_evalStaticStore :
       pure (a == b && a == 42)) = some true := by
   native_decide
 
+
+/-! ## E5 — BoundedQueue empty-push L3 correspondence (`svm-sem-005`)
+
+Same Track A subject as `sf-001`/`sf-002`: `BoundedQueue` / `mQueuePush`.
+Covers the **empty-push** path only (head = 0, count = 0 → three account-word
+writes) projected through the E4 `storev`/`loadv` bridge. Layout knife matches
+`Examples.TicketLine` (head@2, count@3, slots@4, capacity 16).
+
+Still out of L3: full / nowrap / wrap push; all pop / peek / initialize branches;
+walked `r7` args; Agave/ELF.
+-/
+
+open ProofForge.Svm.Sdk.Queue
+
+/-- TicketLine-shaped queue on account 1: head@2, count@3, slots@4..19. -/
+def demoQueue : BoundedQueue :=
+  BoundedQueue.oneBased 1 2 4 16
+
+def demoQueueHeadWord : Nat := 2
+def demoQueueCountWord : Nat := 3
+def demoQueueSlot1Word : Nat := 4
+
+theorem demoQueue_wellFormed :
+    demoQueue.wellFormed = true := by
+  native_decide
+
+theorem demoQueue_fieldWords :
+    mFieldWord demoQueue.head 0 = some demoQueueHeadWord ∧
+      mFieldWord demoQueue.count 0 = some demoQueueCountWord ∧
+        mFieldWord demoQueue.slots 1 = some demoQueueSlot1Word := by
+  native_decide
+
+/-- Spec-facing field-word projections for the demo queue. -/
+def demoQueueHeadWord? : Option Nat := mFieldWord demoQueue.head 0
+def demoQueueCountWord? : Option Nat := mFieldWord demoQueue.count 0
+def demoQueueSlot1Word? : Option Nat := mFieldWord demoQueue.slots 1
+
+theorem demoQueue_words_in_static_range :
+    accountWordInStaticRange demoQueueHeadWord = true ∧
+      accountWordInStaticRange demoQueueCountWord = true ∧
+        accountWordInStaticRange demoQueueSlot1Word = true := by
+  native_decide
+
+/-- Zeroed AccountWords: empty queue headers and empty slots. -/
+def emptyAccountWords : AccountWords := fun _ => 0
+
+/-- Model memory after empty-push of `value`. -/
+def demoEmptyPushAw (value : UInt64) : AccountWords :=
+  (mQueuePush emptyAccountWords demoQueue value).1
+
+/-- Spec-facing model readbacks after empty-push of `value`. -/
+def demoEmptyPushCount (value : UInt64) : UInt64 :=
+  mReadField (demoEmptyPushAw value) demoQueue.count 0
+def demoEmptyPushHead (value : UInt64) : UInt64 :=
+  mReadField (demoEmptyPushAw value) demoQueue.head 0
+def demoEmptyPushSlot1 (value : UInt64) : UInt64 :=
+  mReadField (demoEmptyPushAw value) demoQueue.slots 1
+
+/-- Project the three empty-push writes into Solanalib Mem via the E4 bridge. -/
+def projectDemoEmptyPush? (value : U64) : Option Mem := do
+  let aw := demoEmptyPushAw (accountWordOfU64 value)
+  let m0 ← projectAccountWord? aw demoQueueSlot1Word initMem
+  let m1 ← projectAccountWord? aw demoQueueHeadWord m0
+  projectAccountWord? aw demoQueueCountWord m1
+
+/-- Typed three-store sequence with the same write set as empty-push. -/
+def demoEmptyPushStores? (value : U64) : Option Mem := do
+  let m0 ← storeAccountWord? initMem demoQueueSlot1Word value
+  let m1 ← storeAccountWord? m0 demoQueueHeadWord 1
+  storeAccountWord? m1 demoQueueCountWord 1
+
+/-- L2 empty-push readback on the demo layout (count/head/slot1). -/
+theorem demoEmptyPush_model_readback :
+    (let aw := demoEmptyPushAw (accountWordOfU64 42);
+      mReadField aw demoQueue.count 0 == (1 : UInt64) &&
+        mReadField aw demoQueue.head 0 == (1 : UInt64) &&
+          mReadField aw demoQueue.slots 1 == accountWordOfU64 42) = true := by
+  native_decide
+
+/-- Projected Solanalib loads match the empty-push model write set. -/
+theorem projectDemoEmptyPush_loads :
+    (do
+      let mem ← projectDemoEmptyPush? 42
+      let slot ← loadAccountWord? mem demoQueueSlot1Word
+      let head ← loadAccountWord? mem demoQueueHeadWord
+      let count ← loadAccountWord? mem demoQueueCountWord
+      pure (slot == 42 && head == 1 && count == 1)) = some true := by
+  native_decide
+
+/-- Direct typed stores of the empty-push write set load back the same words. -/
+theorem demoEmptyPushStores_loads :
+    (do
+      let mem ← demoEmptyPushStores? 42
+      let slot ← loadAccountWord? mem demoQueueSlot1Word
+      let head ← loadAccountWord? mem demoQueueHeadWord
+      let count ← loadAccountWord? mem demoQueueCountWord
+      pure (slot == 42 && head == 1 && count == 1)) = some true := by
+  native_decide
+
+/-- Model projection and typed three-store path agree on the empty-push write set. -/
+theorem projectDemoEmptyPush_eq_stores :
+    (do
+      let viaModel ← projectDemoEmptyPush? 42
+      let viaStores ← demoEmptyPushStores? 42
+      let s1 ← loadAccountWord? viaModel demoQueueSlot1Word
+      let s2 ← loadAccountWord? viaStores demoQueueSlot1Word
+      let h1 ← loadAccountWord? viaModel demoQueueHeadWord
+      let h2 ← loadAccountWord? viaStores demoQueueHeadWord
+      let c1 ← loadAccountWord? viaModel demoQueueCountWord
+      let c2 ← loadAccountWord? viaStores demoQueueCountWord
+      pure (s1 == s2 && h1 == h2 && c1 == c2 &&
+        s1 == 42 && h1 == 1 && c1 == 1)) = some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
