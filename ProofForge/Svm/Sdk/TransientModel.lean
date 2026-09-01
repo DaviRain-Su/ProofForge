@@ -331,6 +331,151 @@ theorem mBytesAppendLe64_stale (bw : BytesWords) (slot : Fin 2) (cap : Nat)
     mBytesAppendLe64 bw slot cap value = (bw, bytesStateCode) := by
   simp [mBytesAppendLe64, h]
 
+/-! ## Bytes get / set / pop (sf-007) -/
+
+def mBytesGet (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat) : UInt64 :=
+  if !requireBytesActive bw slot cap then bytesStateCode
+  else
+    let b := bw.bank slot
+    if index ≥ b.length then bytesBoundsCode
+    else UInt64.ofNat (bw.bytes slot index).toNat
+
+def mBytesSet (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat) (byte : UInt64) :
+    BytesWords × UInt64 :=
+  if !requireBytesActive bw slot cap then (bw, bytesStateCode)
+  else if byte > 255 then (bw, bytesRangeCode)
+  else
+    let b := bw.bank slot
+    if index ≥ b.length then (bw, bytesBoundsCode)
+    else
+      (setByte bw slot index (UInt8.ofNat byte.toNat), okCode)
+
+def mBytesPop (bw : BytesWords) (slot : Fin 2) (cap : Nat) : BytesWords × UInt64 :=
+  if !requireBytesActive bw slot cap then (bw, bytesStateCode)
+  else
+    let b := bw.bank slot
+    if b.length = 0 then (bw, bytesBoundsCode)
+    else
+      let i := b.length - 1
+      let v := UInt64.ofNat (bw.bytes slot i).toNat
+      (setBytesBank bw slot { b with length := i }, v)
+
+theorem mBytesPop_empty (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (hact : requireBytesActive bw slot cap = true)
+    (hempty : (bw.bank slot).length = 0) :
+    mBytesPop bw slot cap = (bw, bytesBoundsCode) := by
+  simp [mBytesPop, hact, hempty]
+
+theorem mBytesSet_range (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true) (hoob : byte > 255) :
+    mBytesSet bw slot cap index byte = (bw, bytesRangeCode) := by
+  simp [mBytesSet, hact, hoob]
+
+theorem mBytesSet_oob (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hoob : index ≥ (bw.bank slot).length) :
+    mBytesSet bw slot cap index byte = (bw, bytesBoundsCode) := by
+  simp [mBytesSet, hact, hin, hoob]
+
+private theorem mBytesPush_eq (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hroom : (bw.bank slot).length < cap) :
+    mBytesPush bw slot cap byte =
+      (setBytesBank (setByte bw slot (bw.bank slot).length (UInt8.ofNat byte.toNat))
+        slot { bw.bank slot with length := (bw.bank slot).length + 1 }, okCode) := by
+  have hge : ¬((bw.bank slot).length ≥ cap) := Nat.not_le_of_gt hroom
+  simp [mBytesPush, hact, hin, hge]
+
+/-- Push stores the byte at the old length and advances length by one. -/
+theorem mBytesPush_readback (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hroom : (bw.bank slot).length < cap) :
+    let r := mBytesPush bw slot cap byte
+    r.2 = okCode ∧
+    r.1.bytes slot (bw.bank slot).length = UInt8.ofNat byte.toNat ∧
+    (r.1.bank slot).length = (bw.bank slot).length + 1 ∧
+    requireBytesActive r.1 slot cap = true := by
+  have hr := mBytesPush_eq bw slot cap byte hact hin hroom
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp [hr]
+  · simp [hr, setBytesBank, setByte, upd_same]
+  · simp [hr, setBytesBank, upd_same]
+  · have := hact
+    simp [requireBytesActive] at this ⊢
+    simp [hr, setBytesBank, setByte, upd_same, this]
+
+private theorem mBytesSet_eq (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hidx : index < (bw.bank slot).length) :
+    mBytesSet bw slot cap index byte =
+      (setByte bw slot index (UInt8.ofNat byte.toNat), okCode) := by
+  have hoob : ¬(index ≥ (bw.bank slot).length) := Nat.not_le_of_gt hidx
+  simp [mBytesSet, hact, hin, hoob]
+
+/-- In-bounds set updates one live byte; length and active state unchanged. -/
+theorem mBytesSet_readback (bw : BytesWords) (slot : Fin 2) (cap : Nat) (index : Nat)
+    (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hidx : index < (bw.bank slot).length) :
+    let r := mBytesSet bw slot cap index byte
+    r.2 = okCode ∧
+    r.1.bytes slot index = UInt8.ofNat byte.toNat ∧
+    (r.1.bank slot).length = (bw.bank slot).length ∧
+    requireBytesActive r.1 slot cap = true := by
+  have hr := mBytesSet_eq bw slot cap index byte hact hin hidx
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp [hr]
+  · simp [hr, setByte, upd_same]
+  · simp [hr, setByte]
+  · have := hact
+    simp [requireBytesActive] at this ⊢
+    simp [hr, setByte, this]
+
+/-- Pop returns the last live byte and shortens length by one. -/
+theorem mBytesPop_readback (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (hact : requireBytesActive bw slot cap = true)
+    (hnempty : (bw.bank slot).length ≠ 0) :
+    let r := mBytesPop bw slot cap
+    let i := (bw.bank slot).length - 1
+    r.2 = UInt64.ofNat (bw.bytes slot i).toNat ∧
+    (r.1.bank slot).length = i ∧
+    requireBytesActive r.1 slot cap = true := by
+  have hpos : (bw.bank slot).length > 0 := Nat.pos_of_ne_zero hnempty
+  have hr :
+      mBytesPop bw slot cap =
+        (setBytesBank bw slot { bw.bank slot with length := (bw.bank slot).length - 1 },
+          UInt64.ofNat (bw.bytes slot ((bw.bank slot).length - 1)).toNat) := by
+    simp [mBytesPop, hact, hnempty]
+  refine ⟨?_, ?_, ?_⟩
+  · simp [hr]
+  · simp [hr, setBytesBank, upd_same]
+  · have := hact
+    simp [requireBytesActive] at this ⊢
+    simp [hr, setBytesBank, upd_same, this]
+
+/-- After a successful push, `mBytesGet` returns the stored byte. -/
+theorem mBytesPush_get (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt64)
+    (hact : requireBytesActive bw slot cap = true)
+    (hin : ¬(byte > 255))
+    (hroom : (bw.bank slot).length < cap) :
+    mBytesGet (mBytesPush bw slot cap byte).1 slot cap (bw.bank slot).length =
+      UInt64.ofNat (UInt8.ofNat byte.toNat).toNat := by
+  have hr := mBytesPush_readback bw slot cap byte hact hin hroom
+  have hact' : requireBytesActive (mBytesPush bw slot cap byte).1 slot cap = true := hr.2.2.2
+  have hlen :
+      ¬((bw.bank slot).length ≥ ((mBytesPush bw slot cap byte).1.bank slot).length) := by
+    have := hr.2.2.1
+    omega
+  simp [mBytesGet, hact', hlen, hr.2.1]
+
 /-! ## Combined invocation scratch: vec slots ⟂ bytes slots -/
 
 structure InvocationScratch where
@@ -599,5 +744,65 @@ theorem mVec128Set_limb_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat
   have hbase : recIdx * 2 + limbIdx < (tw.bank slot).length := by omega
   have h := mVec64Set_readback tw slot cap (recIdx * 2 + limbIdx) new hact hbase
   exact ⟨h.1, mVec64Set_get tw slot cap (recIdx * 2 + limbIdx) new hact hbase, h.2.2.1⟩
+
+/-- A later successful push leaves earlier word indices unchanged. -/
+theorem mVec64Push_preserves_prior (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (value : UInt64) (index : Nat)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length < cap)
+    (hprior : index < (tw.bank slot).length) :
+    (mVec64Push tw slot cap value).1.words slot index = tw.words slot index := by
+  have hr := mVec64Push_eq tw slot cap value hact hroom
+  have hne : index ≠ (tw.bank slot).length := Nat.ne_of_lt hprior
+  simp [hr, setBank, setWord, upd_same, upd_ne _ hne]
+
+/-- After a successful Vector128 push, both limbs are readable via `mVec64Get`. -/
+theorem mVec128Push_get (tw : TransientWords) (slot : Fin 2) (cap : Nat) (w0 w1 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 2 ≤ cap) :
+    mVec64Get (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap
+        (tw.bank slot).length = w0 ∧
+    mVec64Get (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap
+        ((tw.bank slot).length + 1) = w1 := by
+  have hroom0 : (tw.bank slot).length < cap := by omega
+  have h0 := mVec64Push_readback tw slot cap w0 hact hroom0
+  have hact1 : requireActive (mVec64Push tw slot cap w0).1 slot cap = true := h0.2.2.2
+  have hroom1 : ((mVec64Push tw slot cap w0).1.bank slot).length < cap := by
+    have := h0.2.2.1; omega
+  have h1 := mVec64Push_readback (mVec64Push tw slot cap w0).1 slot cap w1 hact1 hroom1
+  have hact' : requireActive (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap = true :=
+    h1.2.2.2
+  have hlen0 := h0.2.2.1
+  have hlen1 := h1.2.2.1
+  have hin0 :
+      (tw.bank slot).length <
+        ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length := by omega
+  have hin1 :
+      (tw.bank slot).length + 1 <
+        ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length := by omega
+  have hpres :=
+    mVec64Push_preserves_prior (mVec64Push tw slot cap w0).1 slot cap w1
+      (tw.bank slot).length hact1 hroom1 (by omega)
+  have hn0 :
+      ¬((tw.bank slot).length ≥
+          ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length) := by
+    omega
+  have hn1 :
+      ¬((tw.bank slot).length + 1 ≥
+          ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length) := by
+    omega
+  constructor
+  · have hw0 : (mVec64Push tw slot cap w0).1.words slot (tw.bank slot).length = w0 := h0.2.1
+    have : (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot (tw.bank slot).length =
+        w0 := by
+      rw [hpres, hw0]
+    simp [mVec64Get, hact', hn0, this]
+  · have hidx : ((mVec64Push tw slot cap w0).1.bank slot).length = (tw.bank slot).length + 1 := hlen0
+    have hw1 : (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot
+        ((mVec64Push tw slot cap w0).1.bank slot).length = w1 := h1.2.1
+    have : (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot
+        ((tw.bank slot).length + 1) = w1 := by
+      simpa [hidx] using hw1
+    simp [mVec64Get, hact', hn1, this]
 
 end ProofForge.Svm.Sdk.TransientModel
