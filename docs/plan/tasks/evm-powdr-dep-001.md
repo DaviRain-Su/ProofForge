@@ -10,7 +10,7 @@ updated: 2026-09-01
 
 ## Objective
 
-Add optional Lake git dependencies on [powdr-labs/evm-semantics](https://github.com/powdr-labs/evm-semantics),
+Add optional Lake git dependencies on [evm-semantics](https://github.com/powdr-labs/evm-semantics),
 [yul-semantics](https://github.com/powdr-labs/yul-semantics), and [yul-compiler](https://github.com/powdr-labs/yul-compiler)
 for EVM Feature B, without pulling them into the default `ProofForge` / CI build graph.
 
@@ -22,17 +22,21 @@ for EVM Feature B, without pulling them into the default `ProofForge` / CI build
 
 ## Isolated probe (landed)
 
-- `powdr-probe/` — separate Lake package on Lean v4.33, `require evm_semantics` @ pin above.
-- `scripts/build_powdr_probe.sh` → `lake build ProofForgePowdrProbe` (does not build root `ProofForge`).
-- Smoke: `ProofForgePowdrProbe.Basic` imports `EvmSemantics.EVM.State` + `EvmSemantics.Operation`.
+| Repo | Pin | Smoke module |
+|---|---|---|
+| evm-semantics | `2f8714d6…` | `ProofForgePowdrProbe.Basic` |
+| yul-semantics | `c9914c13…` | `ProofForgePowdrProbe.YulSemanticsSmoke` |
+| yul-compiler | `c2e44cd2…` | `ProofForgePowdrProbe.YulCompilerSmoke` (optional `--full`) |
+
+- `powdr-probe/` — separate Lake package on Lean v4.33.
+- `scripts/build_powdr_probe.sh` — fast: evm + yul-semantics; `--full` adds yul-compiler (+ Mathlib v4.33).
+- Does **not** build root `ProofForge`.
 
 ## Still open
 
-- Pin `yul-semantics` + `yul-compiler` in the same isolated package (or sibling).
-- Optional CI lane invoking `scripts/build_powdr_probe.sh`.
+- Optional CI lane invoking `scripts/build_powdr_probe.sh [--full]`.
 - Feature B integration design (Yul backend path vs L3 refinement) — see `multi-target-strategy.md` §2.
 
 ## Acceptance (remaining)
 
-- `yul-semantics` + `yul-compiler` build in isolated probe without main-graph regression.
-- CI optional lane documented; default lanes unchanged.
+- CI optional lane documented and wired; default lanes unchanged.

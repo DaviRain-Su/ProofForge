@@ -3,3 +3,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT/powdr-probe"
 lake build ProofForgePowdrProbe
+if [[ "${1:-}" == "--full" ]]; then
+  lake build ProofForgePowdrProbeFull
+fi
