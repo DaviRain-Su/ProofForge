@@ -42,17 +42,13 @@
 |---|---|---|
 | 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue：**empty/nowrap/wrap push 链接+读回**、**pop clear/advance/wrap + 读回**、**peek / initialize / 空往返**（2026-09-01 Phase 1） |
 | L1 几何包 | `ProofForge/Svm/Sdk/Storage.lean` | scalarHeader / BoundedVec / RbTree 等一批 wf 定理 |
-| Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / OrderedMap 委托 | 有定理但不齐 |
-| RB 结构 | `Examples/Tree.lean`（p-003/p-004） | size / 局部 wf；**全树保持未完** |
+| Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / Account / Memory | **SF-9 done** |
+| RB 结构 | `Examples/Tree.lean`（p-003/p-004 + sf-011） | **几何全树 wf done**；可达/父子互逆操作保持可选 |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
-**Queue 收口（Phase 1，2026-09-01）**：
+**Queue 收口（Phase 1，2026-09-01）**：已完成（见 §6 SF-1）。
 
-已完成：`mQueuePush_empty_*` / `mQueuePush_nowrap_*` / `mQueuePush_wrap_*`（链接+读回）、
-`mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
-`mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
-
-下一形式化刀：SF-8a FifoCancel 有界折料（`sf-012`，**doing**：纯 L2 cancel 折料骨架已开）。SF-7 Tree 几何 wf（`sf-011`）insert/remove/rotate 已收口；可达/父子互逆操作保持仍可选。
+**Track A 收口（2026-09-01）**：§6 SF-0..SF-10 全部 **done**；详见 §7。后续能力/语义见总计划 Track B–F（`svm-*`）。
 ---
 
 ## 4. 组件清单
@@ -62,12 +58,12 @@
 | 组件 | 文件 | L1 | L2 | 备注 |
 |---|---|---|---|---|
 | Field / Region / scalarHeader | `Sdk/Storage.lean` | 部分 done | 字段代数 done | 收成标准引理包 |
-| BoundedVec | `Sdk/Storage.lean` | done | push done；**pop/setAt 待补** | 底座 |
+| BoundedVec | `Sdk/Storage.lean` | done | push/pop/setAt **done** | 底座 |
 | BoundedQueue | `Sdk/Queue.lean` | wf parts done | push/pop 全分支链接+读回、peek、initialize、空往返 **done** | **已收口** |
 | BitSet | `Sdk/StorageBitSet.lean` + `StorageBitSetModel.lean` | wf parts done | mask 代数 + OOB 无写 + insert/remove 读回 **done** | **SF-3 已收口** |
-| EnumerableSet | `Sdk/StorageEnumerableSet.lean` | wf 待 | 依赖 map + values 槽 | 后置 |
-| OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | Allocator L2 **done**（sf-008）；Map/Tree 模型仍空白 | 对齐 `Examples/Tree.lean` |
-| Versioned | `Sdk/Versioned.lean` | wf 待 | classify / initialize / apply | 宜早做 |
+| EnumerableSet | `Sdk/StorageEnumerableSet.lean` + `StorageEnumerableSetModel.lean` | 索引层 | 索引/前缀层 **done**（sf-010） | **SF-6 已收口** |
+| OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` + `*Model.lean` | 部分委托 done | Allocator/Map 索引层 **done**；Tree 几何 **done** | SF-5/7 |
+| Versioned | `Sdk/Versioned.lean` + model | done | classify / initialize / apply **done** | **SF-2b 已收口** |
 
 ### 4.2 薄 facade（几乎只要 L1）
 
@@ -79,9 +75,9 @@
 | Memo | `Sdk/Memo.lean` | 1 定理 | bound；非特判 writeOk |
 | Token | `Sdk/Token.lean` | wf parts | state/tag 守卫完备；CPI 体不进 L2 |
 | AssociatedToken | `Sdk/AssociatedToken.lean` | role index | Create + RecoverNested 全 `< L` |
-| Account.Handle / View | `Sdk/Account.lean` | **无定理** | wellFormed / word 界 |
-| Memory.Span | `Sdk/Memory.lean` | **无定理** | span 几何与非重叠前置 |
-| Sysvar / Telemetry | `Sdk/Sysvar.lean` / `Sdk/Telemetry.lean` | **无定理** | L1 API 形状；L2 标 `n/a` |
+| Account.Handle / View | `Sdk/Account.lean` | **done**（sf-014） | wellFormed / word 界 |
+| Memory.Span | `Sdk/Memory.lean` | **done**（sf-014） | span 几何与非重叠前置 |
+| Sysvar / Telemetry | `Sdk/Sysvar.lean` / `Sdk/Telemetry.lean` | **done** L1；L2 `n/a` | API 形状 |
 
 ### 4.3 调用期临时状态 → 新建 `TransientModel`
 
@@ -127,13 +123,13 @@ SF-0  证明基础设施（wf-parts / word 引理习惯成文）
                     ├─► SF-5b OrderedMap 索引层   ← **done**（sf-009；RB→sf-011）
                     ├─► SF-6  EnumerableSet 索引层 ← **done**（sf-010）
                     ├─► SF-7  Tree 全树 wf         ← **几何 done**（sf-011）
-                    ├─► SF-8a FifoCancel 有界折料  ← **doing**（sf-012）
-                    ├─► SF-8b BatchRecorder              ← **doing**（sf-013）
-                    └─► SF-9  薄 facade / Account / Memory 扫尾
-                          └─► SF-10 收口门
+                    ├─► SF-8a FifoCancel 有界折料  ← **done**（sf-012）
+                    ├─► SF-8b BatchRecorder              ← **done**（sf-013）
+                    └─► SF-9  薄 facade / Account / Memory 扫尾 ← **done**
+                          └─► SF-10 收口门 ← **done**（sf-016）
 ```
 
-SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.lean` 同时抢写。
+SF-9 曾可与 SF-1..4 并行；Track A 现已全部收口。
 
 ### 每片验收
 
@@ -167,11 +163,45 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-8b | BatchRecorder begin/append/finish | L2 | **done** | [sf-013](tasks/sf-013.md) |
 | SF-9a | Account / Memory / Sysvar / Telemetry L1 | L1 | **done** | [sf-014](tasks/sf-014.md) |
 | SF-9b | Token / ATA / Pda / System / Memo 扫尾 | L1 | **done** | [sf-015](tasks/sf-015.md) |
-| SF-10 | 收口审计 | gate | **doing** | [sf-016](tasks/sf-016.md) |
+| SF-10 | 收口审计 | gate | **done** | [sf-016](tasks/sf-016.md) |
 
 ---
 
-## 7. 实施约定
+## 7. 收口记录（sf-016，2026-09-01）
+
+### 验证
+
+* `lake build`（全包，186 jobs）绿
+* `python3 scripts/check_no_sorry.py` 绿
+* `python3 scripts/check_ownership.py` 绿
+* WASM PR #4 / #5：**仍开放**；本轨未改动、不要求先合
+
+### §6 矩阵
+
+SF-0..SF-10 全部 **done**（SF-7 几何 done；可达/父子互逆操作保持仍为可选加厚，不阻塞收口）。
+
+### 定理 / 文件抽样（非全量）
+
+| 区域 | 约定理数 | 备注 |
+|---|---:|---|
+| `Examples/Tree.lean` | 84 | SF-7 几何 wf |
+| `Sdk/StorageModel.lean` | 65 | Queue/BoundedVec 等 L2 |
+| `Sdk/TransientModel.lean` | 21 | SF-4 |
+| `Sdk/*Model.lean`（BitSet/Map/Alloc/…） | ≥80 | SF-3/5/6/8 |
+| `Sdk/FifoCancelModel` / `BatchRecorderModel` | 17+15 | SF-8a/8b |
+| Account/Token/ATA/Pda/… L1 | ≥40 | SF-9 |
+
+Facade 壳文件（`Sdk/Queue.lean`、`Sdk/Transient*.lean`、`Sdk/Versioned.lean`、`Sdk/StorageBitSet.lean`、`Sdk/StorageEnumerableSet.lean`、`Sdk/Memory.lean`）的 L1/L2 落在对应 `*Model.lean` 或 `ProofForge.Svm.Memory`；收口审计认可为「定义在 facade、证明在模型」分工，不视为缺口。
+
+### 抽查结论
+
+* 每个持久容器：有 L2 模型或书面几何豁免（Tree 几何已证）
+* 每个薄 facade：有 L1 界/形状定理或显式 n/a-L2（Sysvar/Telemetry）
+* 不合并 WASM；仅重申其仍开放
+
+---
+
+## 8. 实施约定
 
 1. **词级引理优先**：`mWriteWord_self` / `mWriteWord_other` 串联；少展开 `UInt64` `ite`（见 p-005 记录）。
 2. **wf 先拆 parts**：统一 `*_wf_parts`，禁止脆弱深投影。
@@ -179,25 +209,18 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 4. **持久 vs 临时分文件**：持久继续 `StorageModel.lean`（可拆子模块）；临时新建 `TransientModel.lean`。
 5. **禁止**为证明去改 Emit / Ops / IR 主路径；SDK 只允许证明友好的等价抽出。
 6. **单 PR 粒度**：一个操作族（如「Queue pop 全行为」），2–6 个定理。
+7. Runtime/SDK 能力切片已实现；本计划是 **形式化债务清零**，不新开 Runtime 能力。
+8. capability matrix 的 Available 不变；本计划把 Available 升级为 **Available + kernel L1/L2**。
+9. backlog 继续记工程证据；形式化进度以 **§6 矩阵** 为准。
+10. p-001..p-005 保持历史 done；新片只用 **`sf-*`**。Track B–F 用 **`svm-*`**（见总计划）。
 
 ---
 
-## 8. 与既有文档关系
+## 9. 与既有文档关系
 
-- Runtime/SDK 能力切片已实现；本计划是 **形式化债务清零**，不新开 Runtime 能力。
-- capability matrix 的 Available 不变；本计划把 Available 升级为 **Available + kernel L1/L2**。
-- backlog 继续记工程证据；形式化进度以 **§6 矩阵** 为准。
-- p-001..p-005 保持历史 done；新片只用 **`sf-*`**。
+1. 读 §2 与 [p-005](tasks/p-005.md)；收口证据见 **§7**  
+2. [sf-000](tasks/sf-000.md) … [sf-016](tasks/sf-016.md) → **全部 done**（Track A 收口）  
+3. 下一轨：总计划 Track B–F（`svm-rt-*` / `svm-sdk-*` / `svm-app-*` / `svm-sem-*` / `svm-eng-*`）  
+4. WASM PR #4 / #5：继续开着；本轨不要求它们先合  
 
----
-
-## 9. 开工 checklist
-
-1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
-2. [sf-000](tasks/sf-000.md) → **done**  
-3. [sf-001](tasks/sf-001.md) / [sf-002](tasks/sf-002.md) → **done**（Queue 收口）  
-4. 继续 [sf-012](tasks/sf-012.md)（FifoCancel 折料）；`sf-011` Tree 几何 wf 已收口；按波次向下，每片更新矩阵  
-5. [sf-016](tasks/sf-016.md) 收口  
-
-WASM PR #4 / #5：继续开着；本轨不要求它们先合。
 外分支对 SVM 的真实重叠仅 `Svm/IR` reject 臂 / EntryAdapter 拒 foreign annotation / README 任务表——见 [svm-work-plan.md §3.2](svm-work-plan.md)；**不改** L3 阶梯。

@@ -206,12 +206,12 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-008](tasks/sf-008.md) | done | Allocator alloc/free 往返 |
 | [sf-009](tasks/sf-009.md) | done | OrderedMap 索引层 find/insert/remove |
 | [sf-010](tasks/sf-010.md) | done | StorageEnumerableSet 索引/前缀层 |
-| [sf-011](tasks/sf-011.md) | doing | Tree 全树 wf 保持（几何 done；可达/互逆可选） |
+| [sf-011](tasks/sf-011.md) | done | Tree 全树 wf 保持（几何 done；可达/互逆可选） |
 | [sf-012](tasks/sf-012.md) | done | FifoCancel 有界折料 |
 | [sf-013](tasks/sf-013.md) | done | BatchRecorder begin/append/finish |
 | [sf-014](tasks/sf-014.md) | done | Account / Memory / Sysvar / Telemetry L1 |
 | [sf-015](tasks/sf-015.md) | done | Token / ATA / Pda / System / Memo 扫尾 |
-| [sf-016](tasks/sf-016.md) | doing | SVM 形式化收口审计 |
+| [sf-016](tasks/sf-016.md) | done | SVM 形式化收口审计（L1/L2 已收口；WASM #4/#5 仍开放） |
 
 ### Track B–F — 能力 / 应用 / 语义 / 工程
 
@@ -240,8 +240,8 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：`sf-001`（wrap/读回）→`sf-002`（wrap/peek/往返）；并行 `svm-sem-001`；可选 `svm-rt-001`/`svm-sdk-001`；顺手 `svm-eng-001`。
-已 merge 当日 main（Queue nowrap/pop 链接 + Core.Math）；WASM PR 仍开着不阻塞。
+本周默认：Track A（`sf-*`）**已收口** → 下一刀 **`svm-rt-001`**（signed Clock）；并行 `svm-sem-001` / `svm-sdk-001` / `svm-eng-001`。
+WASM PR #4/#5 仍开着不阻塞。
 
 
 积压：[backlog.md](backlog.md)

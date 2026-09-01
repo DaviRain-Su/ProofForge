@@ -91,7 +91,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | Runtime (R2) | remaining-account view、scratch/CPI plan、signer tail、Token-2022 TLV envelope、program-memory、telemetry、Clock/EpochSchedule/Rent unsigned、checked lamports、resize | **signed Clock**、**Instructions/sliced sysvar**、**AccountView+direct mutation 的 alias-aware variable walk**、**nested/wide dynamic return**、**Token-2022 各 extension 完整语义** |
 | SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund | **rent top-up / owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**Token-2022 extension facade** |
 | Shared math（新） | `Core.Math.UInt64` + `Core.FixedPoint.UInt64` + SafeCast→UInt8/16；SVM Mollusk `core_math` + EVM Anvil 双 consumer（R1-024…031 / R5-022/023） | signed / 更宽 root·sat / typed fixed-point — **不挡 SVM 主线**；Phoenix fee 可直接组合 |
-| 形式化 (A) | StorageModel；Queue：**push/pop 全分支链接+读回、peek、initialize、空往返** 已收口 | Vec pop/setAt **done**；下 → Transient/Map/Tree/Component（BitSet done） |
+| 形式化 (A) | SF-0..SF-10 **done**（Queue/Vec/BitSet/Transient/Alloc/Map/Set/Tree几何/FifoCancel/BatchRecorder/facade L1） | 可选加厚（Tree 可达/互逆）；L3 见 Track E |
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
 | 语义桥 / L3 | checked arith / CFG branch correspondence；assembler-semantics golden（E0） | E1–E5 ladder |
 | 工程 | 三 lane CI、Lean/SVM/EVM 门 | 形式化门进 CI、artifact/digest 漂移说明 |
@@ -101,7 +101,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 
 | 来源 | 变更 | 对本轨影响 |
 |---|---|---|
-| **Phase 1** Queue 收口 | wrap push/pop + 读回 + peek/initialize/空往返 | **SF-0/1a/1b done**；`sf-008`..`sf-011` 几何 **done**；`sf-012` / `sf-013` **doing**；勿重证已落定理 |
+| **Phase 1–7 Track A** | SF-0..SF-10 形式化收口 | **全部 done**（sf-016）；勿重证 Queue nowrap/pop 已落定理；下一主刀 Track B `svm-rt-*` |
 | **main** R1-024…031 | shared UInt64 math + fixed-point | Track D fee/matching **少造轮子**；不新增 Runtime leaf |
 | **main** R5-022/023 | SafeCast→UInt8/16 | 共享层；非 blocker |
 | **main** docs | backlog / roadmap / capability / parity 刷新 | 本分支已 merge；总图入口保留 |
@@ -256,8 +256,8 @@ Phase 7   收口
 
 | 轨道 | 片 | 状态 |
 |---|---|---|
-| A | sf-000 … sf-016 | SF-0..SF-7 几何 = **done**；SF-8a（sf-012）/ SF-8b（sf-013）**doing**；其余 todo |
-| B | svm-rt-001 … 005 | todo |
+| A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
+| B | svm-rt-001 … 005 | todo（下一主刀） |
 | C | svm-sdk-001 … 007 | todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
