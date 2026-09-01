@@ -338,6 +338,13 @@ Phase 7   收口
 | [svm-sem-088](tasks/svm-sem-088.md) | E∞ knife | Loader account-11 owner limbs 0/1 after skip chain | **done** — knife 83; acc11 owner lo |
 | [svm-sem-089](tasks/svm-sem-089.md) | E∞ knife | Loader account-11 owner limbs 2/3 after skip chain | **done** — knife 84; acc11 owner hi |
 | [svm-sem-090](tasks/svm-sem-090.md) | E∞ knife | Loader account-11 executable/rent after skip chain | **done** — knife 85; acc11 exec/rent |
+| [svm-sem-091](tasks/svm-sem-091.md) | E∞ knife | Loader account-11 → account-12 skip chain | **done** — knife 86; acc12 skip |
+| [svm-sem-092](tasks/svm-sem-092.md) | E∞ knife | Loader account-12 header/key after skip chain | **done** — knife 87; acc12 header/key |
+| [svm-sem-093](tasks/svm-sem-093.md) | E∞ knife | Loader account-12 signer/writable after skip chain | **done** — knife 88; acc12 flags |
+| [svm-sem-094](tasks/svm-sem-094.md) | E∞ knife | Loader account-12 lamports/data_len after skip chain | **done** — knife 89; acc12 budget |
+| [svm-sem-095](tasks/svm-sem-095.md) | E∞ knife | Loader account-12 owner limbs 0/1 after skip chain | **done** — knife 90; acc12 owner lo |
+| [svm-sem-096](tasks/svm-sem-096.md) | E∞ knife | Loader account-12 owner limbs 2/3 after skip chain | **done** — knife 91; acc12 owner hi |
+| [svm-sem-097](tasks/svm-sem-097.md) | E∞ knife | Loader account-12 executable/rent after skip chain | **done** — knife 92; acc12 exec/rent |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
