@@ -45,6 +45,9 @@ elab "#pf_near_storage_registration_check" : command => do
   let deposit ← match source.methods.find? (·.ixName == "storage_deposit") with
     | some method => pure method
     | none => throwError "missing storage_deposit"
+  let publicUnregister ← match source.methods.find? (·.ixName == "storage_unregister") with
+    | some method => pure method
+    | none => throwError "missing storage_unregister"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
@@ -65,6 +68,11 @@ elab "#pf_near_storage_registration_check" : command => do
       deposit.paramSchemas == #[Codec.storageDepositArgsSchema] &&
       deposit.retSchema == Codec.storageBalanceResultSchema && deposit.retCount == 5 do
     throwError "storage_deposit lost its parser/map/refund/StorageBalance source contract"
+  unless registrationSteps publicUnregister.ops == #["read", "usage", "remove", "usage", "refund"] &&
+      publicUnregister.paramSchemas == #[Codec.storageUnregisterArgsSchema] &&
+      publicUnregister.retSchema == Codec.jsonBooleanResultSchema &&
+      publicUnregister.retCount == 1 do
+    throwError "storage_unregister lost its parser/map/refund/Boolean source contract"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -98,6 +106,17 @@ elab "#pf_near_storage_registration_check" : command => do
       targetDeposit.entryPolicy == "near.entry.v1:payable" &&
       targetDeposit.tupleArity == some 5 do
     throwError "storage_deposit lost its exact mutating input/output/payable target policies"
+  let targetPublicUnregister ← match program.entries.find? (·.ixName == "storage_unregister") with
+    | some method => pure method
+    | none => throwError "missing target storage_unregister"
+  unless targetPublicUnregister.inputSchema == some Codec.storageUnregisterArgsSchema &&
+      targetPublicUnregister.inputPolicy ==
+        "near-json-storage-unregister-args-bounded-v1(max-wire=47,ws=32,keys=raw,unknown=reject)" &&
+      targetPublicUnregister.outputSchema == some Codec.jsonBooleanResultSchema &&
+      targetPublicUnregister.outputPolicy == "near-json-boolean-v1" &&
+      targetPublicUnregister.entryPolicy == "near.entry.v1:payable" &&
+      targetPublicUnregister.tupleArity == some 1 do
+    throwError "storage_unregister lost its exact mutating input/output/payable target policies"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat
@@ -109,6 +128,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(func (export \"storage_balance_of\")",
       "(func (export \"storage_balance_bounds\")",
       "(func (export \"storage_deposit\")",
+      "(func (export \"storage_unregister\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
       "(func (export \"fixtureSeedCallerMixedSupply\")",
       "(func (export \"fixtureSeedCallerMaxSupply\")",
@@ -170,6 +190,27 @@ elab "#pf_near_storage_registration_check" : command => do
       "(call $pf_storage_write (i64.const 8) (i64.const 1105)"] do
     unless beforeFirstReturn.contains stateStore do
       throwError s!"storage_deposit state persistence was not before its JSON terminal: {stateStore}"
+  let unregisterParts := wat.splitOn "(func (export \"storage_unregister\")"
+  unless unregisterParts.length == 2 do
+    throwError "missing unique storage_unregister export body"
+  let unregisterBody := (unregisterParts[1]!).splitOn "(func (export \"" |>.head!
+  unless unregisterBody.contains "(i64.const 47)" &&
+      unregisterBody.contains "(call $pf_json_storage_unregister_args" &&
+      unregisterBody.contains "(call $pf_attached_deposit" &&
+      unregisterBody.contains "(call $pf_storage_read" &&
+      unregisterBody.contains "(call $pf_storage_remove" &&
+      unregisterBody.contains "(call $pf_storage_usage" &&
+      unregisterBody.contains "(call $pf_promise_batch_action_transfer" &&
+      unregisterBody.contains "(call $pf_value_return (local.get $pf_output_length)" &&
+      !unregisterBody.contains "(call $pf_log_utf8" do
+    throwError "storage_unregister lost bounded parse/guard/read-remove/refund/Boolean structure"
+  let beforeRemove := unregisterBody.splitOn "(call $pf_storage_remove" |>.head!
+  unless beforeRemove.contains "(call $pf_storage_read" &&
+      !beforeRemove.contains "(call $pf_promise_batch_action_transfer" do
+    throwError "storage_unregister must validate its balance/supply before removal/refund"
+  let beforeFirstUnregisterReturn := unregisterBody.splitOn "(call $pf_value_return" |>.head!
+  unless beforeFirstUnregisterReturn.contains "(call $pf_storage_write" do
+    throwError "storage_unregister state persistence was not before its Boolean terminal"
   logInfo m!"proofforge-near-storage-registration: digest = {IR.digestHex program}"
 
 #pf_near_storage_registration_check
@@ -182,6 +223,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "5ef5aae5a559d252"
+  some "7aca1e32e7be4d2b"
 
 end Tests.NearStorageRegistrationSpec

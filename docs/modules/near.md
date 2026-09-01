@@ -176,6 +176,16 @@ wsm-near-storage-deposit-001 now exposes payable caller-default or explicit-acco
 over that same map, still with immediate excess refund and zero available balance. It accepts but
 ignores `registration_only` like the stock FT; malformed entries and arithmetic/config failures
 panic before success, while asynchronous refund failure cannot roll back a completed receipt.
+wsm-near-storage-unregister-integration-001 composes the bounded optional-force parser and JSON
+Boolean terminal into exact export `storage_unregister` over that same map. Exact one yocto is
+checked before storage effects; predecessor is always the target/refund recipient; missing returns
+`false`; zero removes without changing supply; positive requires force and burns exact supply;
+successful live reclaim refunds `(caller.length + 64) × trustedPrice + 1`, with no FT event.
+The operation remains narrower than near-contract-standards 5.29: bounded input rejects unknown
+fields/escaped keys/excess whitespace, missing emits no informational log, and refund addition
+fails closed on non-decreasing usage, cost multiplication overflow, or u128 addition overflow
+rather than returning zero/saturating. It therefore does not claim complete NEP-145 ABI
+compatibility, and asynchronous refund failure still cannot roll back the successful receipt.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

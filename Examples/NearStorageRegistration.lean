@@ -340,6 +340,67 @@ def forceUnregisterCaller (state : State) (force : UInt64) : Except Error (State
     else .error .overflow
   else .error .overflow
 
+/-- Public-shaped bounded storage unregister operation over the integrated `BAL2` balance map.
+
+The input and output wires match the specialized bounded JSON policies, but the input grammar is
+intentionally narrower than near-sdk serde. Missing/null/false `force` reject a positive balance;
+true burns it from total supply before removing the account. Like near-contract-standards, a
+missing account returns `false` and retains the attached yocto, while successful removal returns
+the live reclaimed storage cost plus that yocto through an asynchronous transfer. Synchronous
+failures after removal rely on nearcore receipt rollback; asynchronous refund failure does not.
+Unlike near-contract-standards 5.29, the missing path emits no informational log and refund
+addition is checked rather than saturating, so this exact export is not a full NEP-145 ABI claim. -/
+@[pf_entry, pf_near_payable]
+def storage_unregister (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.JsonBooleanResult) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit && args.force ≤ 2 then
+    let caller := Context.caller
+    if DirectAccountNearTokenMap.accountLengthValid caller then
+      let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+      if Registration.trustedCostValid perByteCost then
+        let _ := registrations.read caller
+        if Registration.readWasMissing then
+          .ok (⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
+            state.lastCostW0, state.lastCostW1,
+            state.totalSupplyW0, state.totalSupplyW1, 0⟩, { value := 0 })
+        else if Registration.readWasValidPresent then
+          let balance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
+          if Registration.tokenIsZero balance || args.force = 2 then
+            let supply : NearToken := ⟨state.totalSupplyW0, state.totalSupplyW1⟩
+            if NearToken.canSub supply balance then
+              let nextSupply : NearToken :=
+                ⟨NearToken.subW0 supply balance, NearToken.subW1 supply balance⟩
+              let before := ProofForge.Wasm.Near.Runtime.storageUsage
+              let removeStatus := registrations.remove caller
+              if removeStatus = 1 then
+                let after := ProofForge.Wasm.Near.Runtime.storageUsage
+                if after < before then
+                  let reclaimed := before - after
+                  if NearToken.canMulUInt64 perByteCost reclaimed then
+                    let cost : NearToken :=
+                      ⟨NearToken.mulUInt64W0 perByteCost reclaimed,
+                        NearToken.mulUInt64W1 perByteCost reclaimed⟩
+                    let one : NearToken := ⟨1, 0⟩
+                    if NearToken.canAdd cost one then
+                      let refund : NearToken :=
+                        ⟨NearToken.addW0 cost one, NearToken.addW1 cost one⟩
+                      let _ := Promises.transferAccountDetached caller refund
+                      .ok (⟨state.perByteCostW0, state.perByteCostW1,
+                        reclaimed, cost.w0, cost.w1,
+                        nextSupply.w0, nextSupply.w1, 1⟩, { value := 1 })
+                    else .error .overflow
+                  else .error .overflow
+                else .error .overflow
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-! Fixture-only malformed-value seed/removal paths. They expose fail-closed descriptor behavior
 without extending the SDK registration contract. -/
 

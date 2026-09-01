@@ -143,6 +143,30 @@ def _force_unregister(client: NearClient, contract: str, caller: str, force: int
     )
 
 
+def _storage_unregister(
+    client: NearClient, contract: str, caller: str, wire: bytes,
+    *, deposit: int = 1, success: bool = True,
+) -> dict:
+    return client.call_on(
+        contract, "storage_unregister", wire, signer=caller, deposit=deposit,
+        expect_success=success,
+    )
+
+
+def _assert_json_boolean(outcome: dict, expected: bool, scene: str) -> None:
+    got = NearClient.success_value_bytes(outcome)
+    wire = b"true" if expected else b"false"
+    if got != wire:
+        raise AssertionError(f"{scene}: expected {wire!r}, got {got!r}")
+
+
+def _outcome_logs(outcome: dict) -> list[str]:
+    logs = list(outcome.get("transaction_outcome", {}).get("outcome", {}).get("logs", ()))
+    for receipt in outcome.get("receipts_outcome", ()):
+        logs.extend(receipt.get("outcome", {}).get("logs", ()))
+    return logs
+
+
 def _assert_transfer_receipt(
     client: NearClient, outcome: dict, receiver: str, amount: int
 ) -> None:
@@ -274,11 +298,117 @@ def _run_storage_deposit_scenes(
         raise AssertionError("storage_deposit malformed target rejection changed storage/state")
 
 
+def _run_public_storage_unregister_scenes(
+    client: NearClient, wasm: Path, contract: str, caller: str, malformed: str,
+    per_byte: int,
+) -> None:
+    client.deploy_to(contract, wasm)
+    client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
+
+    missing = _storage_unregister(client, contract, caller, b"{}")
+    _assert_json_boolean(missing, False, "missing public storage_unregister")
+    if _outcome_logs(missing):
+        raise AssertionError("missing public storage_unregister unexpectedly emitted a log")
+    if _key(caller) in client.view_state_values(contract):
+        raise AssertionError("missing public storage_unregister created a balance key")
+    forced_missing = _storage_unregister(client, contract, caller, b'{"force":true}')
+    _assert_json_boolean(forced_missing, False, "forced missing public storage_unregister")
+    if _outcome_logs(forced_missing) or _key(caller) in client.view_state_values(contract):
+        raise AssertionError("forced missing public storage_unregister had effects")
+
+    for deposit in (0, 2):
+        before = client.view_state_values(contract)
+        _storage_unregister(
+            client, contract, caller, b'{"force":true}', deposit=deposit, success=False
+        )
+        if client.view_state_values(contract) != before:
+            raise AssertionError("public storage_unregister one-yocto guard changed state")
+
+    generous = 10**24
+    zero_delta = _result_u64(_register(client, contract, caller, generous))
+    zero_supply = (
+        client.view_u64_on(contract, "totalSupplyW0"),
+        client.view_u64_on(contract, "totalSupplyW1"),
+    )
+    zero = _storage_unregister(client, contract, caller, b'{"force":false}')
+    _assert_json_boolean(zero, True, "zero-balance public storage_unregister")
+    if _outcome_logs(zero):
+        raise AssertionError("zero-balance public storage_unregister emitted an event/log")
+    _assert_transfer_receipt(client, zero, caller, zero_delta * per_byte + 1)
+    if _key(caller) in client.view_state_values(contract):
+        raise AssertionError("zero-balance public storage_unregister retained its key")
+    if zero_supply != (
+        client.view_u64_on(contract, "totalSupplyW0"),
+        client.view_u64_on(contract, "totalSupplyW1"),
+    ):
+        raise AssertionError("zero-balance public storage_unregister changed supply")
+
+    zero_forced_delta = _result_u64(_register(client, contract, caller, generous))
+    zero_forced = _storage_unregister(client, contract, caller, b'{"force":true}')
+    _assert_json_boolean(zero_forced, True, "forced zero-balance storage_unregister")
+    _assert_transfer_receipt(
+        client, zero_forced, caller, zero_forced_delta * per_byte + 1
+    )
+    if _outcome_logs(zero_forced) or _key(caller) in client.view_state_values(contract):
+        raise AssertionError("forced zero-balance storage_unregister had wrong effects")
+
+    forced_delta = _result_u64(_register(client, contract, caller, generous))
+    client.call_on(contract, "fixtureSeedCallerMixedSupply", b"", signer=caller)
+    nonforce_before = client.view_state_values(contract)
+    _storage_unregister(client, contract, caller, b'{"force":null}', success=False)
+    if client.view_state_values(contract) != nonforce_before:
+        raise AssertionError("public non-force positive balance rejection changed state")
+    forced = _storage_unregister(client, contract, caller, b'{"force":true}')
+    _assert_json_boolean(forced, True, "forced public storage_unregister")
+    if _outcome_logs(forced):
+        raise AssertionError("forced public storage_unregister emitted an FT event/log")
+    _assert_transfer_receipt(client, forced, caller, forced_delta * per_byte + 1)
+    if _key(caller) in client.view_state_values(contract):
+        raise AssertionError("forced public storage_unregister retained its key")
+    if client.view_u64_on(contract, "totalSupplyW0") != 0 or client.view_u64_on(
+        contract, "totalSupplyW1"
+    ) != 0:
+        raise AssertionError("forced public storage_unregister did not burn exact mixed supply")
+
+    parser_before = client.view_state_values(contract)
+    _storage_unregister(
+        client, contract, caller, b'{"force":true,"unknown":null}', success=False
+    )
+    if client.view_state_values(contract) != parser_before:
+        raise AssertionError("late public storage_unregister parse failure changed state")
+    _assert_json_boolean(
+        _storage_unregister(client, contract, caller, b'{"force":null}'),
+        False,
+        "repeated missing public storage_unregister",
+    )
+
+    client.call_on(contract, "seedCallerOne", b"", signer=caller)
+    underflow_before = client.view_state_values(contract)
+    _storage_unregister(client, contract, caller, b'{"force":true}', success=False)
+    if client.view_state_values(contract) != underflow_before:
+        raise AssertionError("public supply underflow did not fail before removal/state changes")
+    client.call_on(contract, "fixtureRemoveCaller", b"", signer=caller)
+
+    client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
+    malformed_before = client.view_state_values(contract)
+    _storage_unregister(client, contract, malformed, b'{"force":true}', success=False)
+    if client.view_state_values(contract) != malformed_before:
+        raise AssertionError("public malformed balance rejection changed state")
+
+    client.call_on(contract, "fixtureSetCostMax", b"", signer=contract)
+    client.call_on(contract, "seedCallerZero", b"", signer=caller)
+    overflow_before = client.view_state_values(contract)
+    _storage_unregister(client, contract, caller, b'{"force":true}', success=False)
+    if client.view_state_values(contract) != overflow_before:
+        raise AssertionError("public post-remove cost overflow did not roll back map/state")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
     contract = "reg.test.near"
     deposit_contract = "deposit-reg.test.near"
+    unregister_contract = "unregister-reg.test.near"
     short = "a.test.near"
     long = "x" * (64 - len(".test.near")) + ".test.near"
     malformed = "bad.test.near"
@@ -289,7 +419,7 @@ def main() -> None:
     zero_cost = "zero.test.near"
 
     for account in (
-        contract, deposit_contract, short, long, malformed, nonzero, forced, overflow,
+        contract, deposit_contract, unregister_contract, short, long, malformed, nonzero, forced, overflow,
         add_overflow, zero_cost
     ):
         client.create_subaccount_with_key(account, 10**27)
@@ -298,6 +428,9 @@ def main() -> None:
     client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
     _run_storage_deposit_scenes(
         client, wasm, deposit_contract, short, long, malformed, per_byte
+    )
+    _run_public_storage_unregister_scenes(
+        client, wasm, unregister_contract, short, malformed, per_byte
     )
 
     baseline_state = client.view_state_values(contract)
@@ -500,6 +633,11 @@ def main() -> None:
     _force_unregister(client, add_overflow, add_overflow, 1, success=False)
     if client.view_state_values(add_overflow) != add_overflow_before:
         raise AssertionError("refund addition overflow did not roll back speculative removal")
+    _storage_unregister(
+        client, add_overflow, add_overflow, b'{"force":true}', success=False
+    )
+    if client.view_state_values(add_overflow) != add_overflow_before:
+        raise AssertionError("public refund addition overflow did not roll back removal/state")
 
     client.deploy_to(zero_cost, wasm)
     client.call_on(zero_cost, "initialize", NearClient.encode_u64_le(0), signer=zero_cost)
