@@ -220,7 +220,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-rt-001](tasks/svm-rt-001.md) | done | Clock signed timestamp |
 | [svm-rt-002](tasks/svm-rt-002.md) | done | Token-2022 第一个 typed extension（MintCloseAuthority） |
 | [svm-rt-003](tasks/svm-rt-003.md) | done | AccountView+mutation alias-aware walk |
-| [svm-rt-004](tasks/svm-rt-004.md) | todo | Instructions / sliced sysvar |
+| [svm-rt-004](tasks/svm-rt-004.md) | done | Instructions / sliced sysvar |
 | [svm-rt-005](tasks/svm-rt-005.md) | todo | nested/wide dynamic return 政策 |
 | [svm-sdk-001](tasks/svm-sdk-001.md) | done | resize rent top-up |
 | [svm-sdk-002](tasks/svm-sdk-002.md) | done (n/a) | owner-reassign 永久 fail-closed |
@@ -240,7 +240,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` **done** → 下一刀 **`svm-rt-004`**（sliced sysvar）或并行 `svm-sem-001` / `svm-app-*` / `svm-eng-002`。
+本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` **done** → 下一刀 **`svm-rt-005` / `svm-sem-001` / `svm-app-*` / `svm-eng-002`**（`svm-rt-004` done）。
 WASM PR #4/#5 仍开着不阻塞。
 
 

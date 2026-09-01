@@ -76,6 +76,11 @@ namespace Rent
 end Rent
 
 /-!
+Bounded Instructions / fixed-offset sliced sysvar views live in `ProofForge.Svm.Sdk.SysvarSlice`
+(svm-rt-004), keeping this Clock/Epoch/Rent facade free of the Account import cycle.
+-/
+
+/-!
 ### sf-014：Sysvar L1 形状
 
 本 facade 仅转发 Runtime 叶；无账户持久状态、无可证 L2 字代数。矩阵标 **n/a-L2**。

@@ -7,6 +7,7 @@ import Examples.Book
 import Examples.Phase
 import Examples.Choice
 import Examples.Clock
+import Examples.InstructionsSlice
 import Examples.Transfer
 import Examples.Ping
 import Examples.Call

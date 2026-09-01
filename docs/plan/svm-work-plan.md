@@ -152,7 +152,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001/002/003/004/005/006 **done** → next iteration / sliced sysvar / app slices
+          · C: svm-sdk-001..007 + svm-rt-004 **done** → next: svm-rt-005 / svm-sem-001 / svm-app-* / svm-eng-002
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
 
@@ -296,7 +296,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` done → 下一刀 **`svm-rt-004` sliced sysvar**（或 `svm-sem-001` / `svm-app-*` / `svm-eng-002`）
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` done → 下一刀 **`svm-rt-004` sliced sysvar **done****（或 `svm-sem-001` / `svm-app-*` / `svm-eng-002`）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-002`（双矩阵收口）
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

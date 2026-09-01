@@ -117,6 +117,7 @@ import Tests.SvmSdkTokenSpec
 import Tests.SvmSdkTokenStateSpec
 import Tests.SvmSdkProgramSpec
 import Tests.SvmSdkSysvarSpec
+import Tests.InstructionsSliceSpec
 import Tests.EntryAdapterSpec
 import Tests.AccountViewSpec
 import Tests.AccountViewMutationSpec

@@ -20,6 +20,7 @@ import ProofForge.Svm.Sdk.Token2022
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Sysvar
+import ProofForge.Svm.Sdk.SysvarSlice
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
 import ProofForge.Svm.Sdk.TransientModel
