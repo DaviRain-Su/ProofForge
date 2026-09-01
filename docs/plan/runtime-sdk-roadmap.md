@@ -491,8 +491,8 @@ pointer 进入 source/account state；详见 [R3-012](tasks/r3-012.md)。R3-013 
 固定 `appendLe64`，并允许一个 Bytes 与一个 Vector64 以不相交 metadata 同时 active；四类
 terminal error 和 32 KiB exhaustion 都由真实 Mollusk 路径覆盖，详见
 [R3-013](tasks/r3-013.md)。R3 尚未完成；generic POD vector/record writer、更多 bounded handle、
-resize rent top-up/owner reassignment、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension
-semantics 仍待完成。R3-014 又以纯 `pf_inline` `Svm.Sdk.Sysvar` facade 收口已有 Clock、
+owner reassignment、runtime-selected ATA/Memo geometry、UTF-8 Memo 与更多 Token-2022 extension
+semantics 仍待完成（resize rent top-up 已由 `svm-sdk-001` 收口）。R3-014 又以纯 `pf_inline` `Svm.Sdk.Sysvar` facade 收口已有 Clock、
 EpochSchedule 和 compile-time Rent Runtime leaves；Clock/Epoch/Rent 的 IR digest 与 target
 syscall 路径不变，没有形成第二套 syscall backend，详见 [R3-014](tasks/r3-014.md)。
 R3-015 又把两种 transient emitter 重复的 allocation、metadata、
@@ -570,9 +570,9 @@ preflight，drop/truncate 保持 element alignment；full/OOB/stale/OOM 与两�
 继续复用现有 Vector64 lifecycle。两个独立 consumer 的 Mollusk 8/8 同时钉住完整 16-/32-byte
 result frame；没有 Runtime/Ops/IR/Component/Emit、allocator 或 pointer 新增。详见
 [R3-029](tasks/r3-029.md)。
-R3 尚未完成；generic POD transient shapes、更多 manifest-bounded handle、resize rent top-up/owner reassignment、
+R3 尚未完成；generic POD transient shapes、更多 manifest-bounded handle、owner reassignment、
 runtime-selected ATA/Memo geometry、UTF-8 Memo、richer persistent key/value/payload migration shapes 与
-Token-2022 extension semantics 仍待完成。
+更多 Token-2022 extension semantics 仍待完成（resize rent top-up 已由 `svm-sdk-001` 收口）。
 
 ### R4 — EVM Runtime
 
