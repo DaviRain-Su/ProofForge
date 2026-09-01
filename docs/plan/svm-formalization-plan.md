@@ -40,16 +40,21 @@
 
 | 资产 | 位置 | 状态 |
 |---|---|---|
-| 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue 几何 + **空队列 push 读回** |
+| 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue 几何 + **空 push 读回** + **非空 nowrap push 链接** + **pop clear/advance(head≠cap) 链接**（2026-09-01 main） |
 | L1 几何包 | `ProofForge/Svm/Sdk/Storage.lean` | scalarHeader / BoundedVec / RbTree 等一批 wf 定理 |
 | Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / OrderedMap 委托 | 有定理但不齐 |
 | RB 结构 | `Examples/Tree.lean`（p-003/p-004） | size / 局部 wf；**全树保持未完** |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
-**Queue 下一刀（已在 main 刀口上）**：
+**Queue 下一刀（main 已推进，2026-09-01）**：
 
-1. 非空 `mQueuePush`（环绕 / 非环绕）读回
-2. `mQueuePop`（单元素清空 + 多元素 head 前进）
+已落 main：`mQueuePush_empty_*`、`mQueuePush_nowrap_links`、`mQueuePop_clear_links`、
+`mQueuePop_advance_links`（head≠cap）+ 通用 `u64toNatAdd/Sub` 无回绕桥。
+
+仍缺：
+
+1. 非空 **wrap** push 链接 + 非空 push **读回**（SF-1a 余量）
+2. pop **wrap** 推进（head=cap→1）+ pop **读回** / size 效应（SF-1b 余量）
 3. `peek` / `initialize` 模型对应
 4. push-then-pop 往返（容量允许）
 
@@ -63,7 +68,7 @@
 |---|---|---|---|---|
 | Field / Region / scalarHeader | `Sdk/Storage.lean` | 部分 done | 字段代数 done | 收成标准引理包 |
 | BoundedVec | `Sdk/Storage.lean` | done | push done；**pop/setAt 待补** | 底座 |
-| BoundedQueue | `Sdk/Queue.lean` | wf parts done | **空 push done；其余待补** | **当前主线** |
+| BoundedQueue | `Sdk/Queue.lean` | wf parts done | 空 push + nowrap push 链接 + pop clear/advance(非 wrap) **done**；wrap / 读回 / peek / 往返 **待补** | **当前主线** |
 | BitSet | `Sdk/StorageBitSet.lean` | wf 待定理化 | 单字 mask 代数待建 | 可先纯函数后桥账户 |
 | EnumerableSet | `Sdk/StorageEnumerableSet.lean` | wf 待 | 依赖 map + values 槽 | 后置 |
 | OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | **模型层几乎空白** | 最大块；对齐 `Examples/Tree.lean` |
@@ -149,8 +154,8 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | ID | 对象 | 层 | 状态 | task |
 |---|---|---|---|---|
 | SF-0 | wf-parts / word 引理习惯成文 | infra | todo | [sf-000](tasks/sf-000.md) |
-| SF-1a | Queue 非空 push 读回 | L2 | todo | [sf-001](tasks/sf-001.md) |
-| SF-1b | Queue pop / peek / initialize / 往返 | L2 | todo | [sf-002](tasks/sf-002.md) |
+| SF-1a | Queue 非空 push（wrap + 读回） | L2 | doing（nowrap 链接已在 main） | [sf-001](tasks/sf-001.md) |
+| SF-1b | Queue pop / peek / initialize / 往返 | L2 | doing（clear/advance 链接已在 main） | [sf-002](tasks/sf-002.md) |
 | SF-2a | BoundedVec pop + setAt | L2 | todo | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned 状态机 | L1+L2 | todo | [sf-004](tasks/sf-004.md) |
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | todo | [sf-005](tasks/sf-005.md) |

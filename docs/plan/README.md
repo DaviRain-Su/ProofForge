@@ -196,8 +196,8 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | ID | 状态 | 内容 |
 |---|---|---|
 | [sf-000](tasks/sf-000.md) | todo | 证明基础设施成文 |
-| [sf-001](tasks/sf-001.md) | todo | Queue 非空 push 读回 |
-| [sf-002](tasks/sf-002.md) | todo | Queue pop / peek / initialize / 往返 |
+| [sf-001](tasks/sf-001.md) | doing | Queue wrap push + 读回（nowrap 已在 main） |
+| [sf-002](tasks/sf-002.md) | doing | Queue wrap pop / peek / 往返（clear/advance 已在 main） |
 | [sf-003](tasks/sf-003.md) | todo | BoundedVec pop + setAt 读回 |
 | [sf-004](tasks/sf-004.md) | todo | Versioned 状态机 |
 | [sf-005](tasks/sf-005.md) | todo | StorageBitSet mask 代数 + 账户桥 |
@@ -240,7 +240,8 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：`sf-000`→`sf-001`；并行可选 `svm-rt-001` 或 `svm-sdk-001`；顺手 `svm-eng-001`。
+本周默认：`sf-001`（wrap/读回）→`sf-002`（wrap/peek/往返）；并行 `svm-sem-001`；可选 `svm-rt-001`/`svm-sdk-001`；顺手 `svm-eng-001`。
+已 merge 当日 main（Queue nowrap/pop 链接 + Core.Math）；WASM PR 仍开着不阻塞。
 
 
 积压：[backlog.md](backlog.md)
