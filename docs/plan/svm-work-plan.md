@@ -89,7 +89,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | 面 | 已有 | 主要剩余 |
 |---|---|---|
 | Runtime (R2) | remaining-account view、scratch/CPI plan、signer tail、Token-2022 TLV envelope、program-memory、telemetry、Clock/EpochSchedule/Rent unsigned、checked lamports、resize | **signed Clock**、**Instructions/sliced sysvar**、**AccountView+direct mutation 的 alias-aware variable walk**、**nested/wide dynamic return**、**Token-2022 各 extension 完整语义** |
-| SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund、**rent top-up**、Token-2022 mint-close facade | **owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**更多 Token-2022 extension** |
+| SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund、**rent top-up**、Token-2022 mint-close facade；**owner-reassign = n/a fail-closed** | **runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**更多 Token-2022 extension** |
 | Shared math（新） | `Core.Math.UInt64` + `Core.FixedPoint.UInt64` + SafeCast→UInt8/16；SVM Mollusk `core_math` + EVM Anvil 双 consumer（R1-024…031 / R5-022/023） | signed / 更宽 root·sat / typed fixed-point — **不挡 SVM 主线**；Phoenix fee 可直接组合 |
 | 形式化 (A) | SF-0..SF-10 **done**（Queue/Vec/BitSet/Transient/Alloc/Map/Set/Tree几何/FifoCancel/BatchRecorder/facade L1） | 可选加厚（Tree 可达/互逆）；L3 见 Track E |
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
@@ -152,8 +152,8 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001 **done** → next owner-reassign / transient / Memo
-          · C: svm-sdk-002 owner-reassign 显式政策（fail-closed 边界写清）
+          · C: svm-sdk-001/002/005 **done** → next transient / Memo / sliced sysvar
+          · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
 
 Phase 3   Transient 证明 + SDK 形状加宽 + Counter 全函数 L3
           · A: sf-006..sf-007（TransientModel）
