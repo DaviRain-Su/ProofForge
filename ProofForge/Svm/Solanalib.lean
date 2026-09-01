@@ -1940,4 +1940,95 @@ theorem walkAccount1FlagsAfterSkip_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 12 - Loader account-1 lamports/data_len after skip (`svm-sem-017`)
+
+Knife 11 covers account-1 signer/writable after the zero-`EXACT_DATA_LEN` skip. Emit then
+reads account-1 lamports and data_len from the same advanced header cursor (`+0x48` / `+0x50`),
+matching account-0 budget geometry. This knife composes that skip with those word loads and
+proves agreement with absolute `r6`-relative loads at `account1Header+0x48` / `+0x50`. Still not
+owner/executable/rent for account-1, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets/VAs for account-1 lamports and data_len (header-relative `+0x48` / `+0x50`). -/
+def account1LamportsOffset : Nat :=
+  account1HeaderOffset + (account0LamportsOffset - account0HeaderOffset)
+def account1DataLenOffset : Nat :=
+  account1HeaderOffset + (account0DataLenOffset - account0HeaderOffset)
+def account1LamportsAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1LamportsOffset
+def account1DataLenAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account1DataLenOffset
+
+/-- Seed skip+account-1 flags layout plus lamports and data_len words. -/
+def account1BudgetInputMem (value arg0 key0Limb : U64) (nextMarker : U8)
+    (rentEpoch key1Limb : U64) (signer writable : U8) (lamports dataLen : U64) : Option Mem := do
+  let m₁ ← account1FlagsInputMem value arg0 key0Limb nextMarker rentEpoch key1Limb signer writable
+  let m₂ ← storev .m64 m₁ account1LamportsAddr (.vlong lamports)
+  storev .m64 m₂ account1DataLenAddr (.vlong dataLen)
+
+/-- Typed skip then account-1 budget: after knife-9 skip, `r2` is the account-1 header;
+`ldxdw r1,[r2+0x48]`; `ldxdw r2,[r2+0x50]`; stage lamports. -/
+def walkAccount1BudgetAfterSkip? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let lamportsOff ← positiveOffset? (account0LamportsOffset - account0HeaderOffset)
+  let accDataLenOff ← positiveOffset? (account0DataLenOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 lamportsOff,
+    .ldx .m64 .br4 .br2 accDataLenOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run skip+account-1 budget walk against seeded input memory. -/
+def evalWalkAccount1BudgetAfterSkipToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount1BudgetAfterSkip? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-1 lamports and data_len. -/
+def evalAbsAccount1Budget? (memory : Mem) : Option (U64 × U64) := do
+  let lamports ← loadv .m64 memory account1LamportsAddr
+  let dataLen ← loadv .m64 memory account1DataLenAddr
+  match lamports, dataLen with
+  | .vlong l, .vlong d => some (l, d)
+  | _, _ => none
+
+/-- Walked account-1-budget-after-skip assembly is well-formed. -/
+theorem walkAccount1BudgetAfterSkip_verified :
+    (walkAccount1BudgetAfterSkip? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete skip+budget: lamports=`1000`, data_len=`128`, lamports staged at `[r10-16]`. -/
+theorem evalWalkAccount1_after_skip_lamports_1000_dataLen_128 :
+    (do
+      let mem ← account1BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+      let (regs, finalMem) ← evalWalkAccount1BudgetAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 1000 && regs .br2 == 128 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1000))) =
+      some true := by
+  native_decide
+
+/-- Walked account-1 budget after skip agrees with absolute `r6`-relative loads. -/
+theorem walkAccount1BudgetAfterSkip_eq_absLoad :
+    (do
+      let mem ← account1BudgetInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0 1000 128
+      let (regs, _) ← evalWalkAccount1BudgetAfterSkipToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount1Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 1000 && dataLen == 128)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

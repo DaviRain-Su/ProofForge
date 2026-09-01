@@ -2806,14 +2806,14 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
         .ok (_s, 0)
 
 /--
-Official Phoenix `CancelMultipleOrdersById` tag 10 wire uses a seven-id vector, claims any
+Official Phoenix `CancelMultipleOrdersById` tag 10 wire uses a eight-id vector, claims any
 released collateral, and withdraws through the shared nine-account classic Token context. Quote and
-base lots from all ids are aggregated before claim/withdraw (`BoundedVec` capacity = 7; max wire 124).
-The scalar/CPI seam at 1152 covers the seventh densified nest under a 9-account frame.
+base lots from all ids are aggregated before claim/withdraw (`BoundedVec` capacity = 8; max wire 141).
+The scalar/CPI seam at 1216 covers the eighth densified nest under a 9-account frame.
 -/
 @[pf_entry, pf_svm_raw 10 9 0]
 def cancelMultipleOrdersById (_s : State)
-    (orders : BoundedVec CancelOrderParams 7) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 8) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if cancelWithdrawContextValid = 0 then
       .error .overflow
@@ -2847,8 +2847,12 @@ def cancelMultipleOrdersById (_s : State)
       orders.length ≤ 6 ||
         orders.values[6]!.side.toUInt64 = 0 ||
         orders.values[6]!.side.toUInt64 = 1
+    let side7ok :=
+      orders.length ≤ 7 ||
+        orders.values[7]!.side.toUInt64 = 0 ||
+        orders.values[7]!.side.toUInt64 = 1
     if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok || !side4ok || !side5ok ||
-        !side6ok then
+        !side6ok || !side7ok then
       .error .overflow
     else
       let layout := Examples.PhoenixV1.small 2
@@ -2903,11 +2907,22 @@ def cancelMultipleOrdersById (_s : State)
                   let side6 := o6.side.toUInt64
                   let released6 ←
                     cancelOneReleased512At layout traderKey0 traderIndex side6 o6.price o6.sequence
-                  let quoteAll ← addReleasedAcc512At quote012345 side6 released6 1
-                  let baseAll ← addReleasedAcc512At base012345 side6 released6 0
-                  let _ ←
-                    finishCancelMultipleWithdraw512At layout traderIndex quoteAll baseAll
-                  .ok (_s, 0)
+                  let quote0123456 ← addReleasedAcc512At quote012345 side6 released6 1
+                  let base0123456 ← addReleasedAcc512At base012345 side6 released6 0
+                  if orders.length ≥ 8 then
+                    let o7 := orders.values[7]!
+                    let side7 := o7.side.toUInt64
+                    let released7 ←
+                      cancelOneReleased512At layout traderKey0 traderIndex side7 o7.price o7.sequence
+                    let quoteAll ← addReleasedAcc512At quote0123456 side7 released7 1
+                    let baseAll ← addReleasedAcc512At base0123456 side7 released7 0
+                    let _ ←
+                      finishCancelMultipleWithdraw512At layout traderIndex quoteAll baseAll
+                    .ok (_s, 0)
+                  else
+                    let _ ←
+                      finishCancelMultipleWithdraw512At layout traderIndex quote0123456 base0123456
+                    .ok (_s, 0)
                 else
                   let _ ←
                     finishCancelMultipleWithdraw512At layout traderIndex quote012345 base012345

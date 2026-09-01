@@ -496,5 +496,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+
+-- E∞ knife 12: Loader account-1 lamports/data_len after skip (`svm-sem-017`)
+#guard (walkAccount1BudgetAfterSkip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+      let (regs, finalMem) ← evalWalkAccount1BudgetAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 1000 && regs .br2 == 128 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1000))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1BudgetInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0 1000 128
+      let (regs, _) ← evalWalkAccount1BudgetAfterSkipToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount1Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 1000 && dataLen == 128)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
