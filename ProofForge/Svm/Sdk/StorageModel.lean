@@ -2025,6 +2025,17 @@ theorem mFindKey4_after_remove_fifo (mem : AccountWords) (rootWord : Nat) (tree 
     mFindKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 :=
   mFindKey4_fifo_miss mem rootWord tree k0 k1 k2 k3
 
+/-- Under the current remove/find stubs, delete preserves the miss invariant (sf-011 will
+strengthen this with real RB traversal and memory write-back). -/
+theorem mFindKey4_after_remove (mem : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
+    (_hrem : mRemoveKey4 mem map k0 k1 k2 k3 = 0) :
+    mFindKey4 mem map k0 k1 k2 k3 = 0 := by
+  cases map
+  case fifo => rfl
+  case key4 =>
+    unfold mFindKey4 mAccDataRbTreeKey4Find
+    simp
+
 /-- On miss, allocate a fresh one-based slot; on hit return the existing slot without touching
 the allocator. RB tree linking deferred to sf-011 — this layer models slot acquisition only. -/
 def mInsertKey4Alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
