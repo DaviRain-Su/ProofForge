@@ -379,6 +379,13 @@ json_storage_deposit_input_anchors = (
     '(func (export "inspectAccountPresent")',
     '(func (export "commitRegistrationOnly")',
 )
+json_storage_unregister_input_anchors = (
+    '(func $pf_json_storage_unregister_args',
+    '(call $pf_arena_alloc (i64.const 47) (i64.const 1))',
+    '(call $pf_arena_alloc (i64.const 8) (i64.const 8))',
+    '(func (export "inspectForce")',
+    '(func (export "commitForce")',
+)
 vector_anchors = (
     '(func (export "push")',
     '(func (export "setFirst")',
@@ -592,6 +599,8 @@ for wat in wats:
         extra = json_ft_resolve_input_anchors
     elif wat.stem == "NearJsonStorageDepositInput":
         extra = json_storage_deposit_input_anchors
+    elif wat.stem == "NearJsonStorageUnregisterInput":
+        extra = json_storage_unregister_input_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

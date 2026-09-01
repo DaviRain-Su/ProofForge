@@ -62,7 +62,7 @@ XRPL = TargetSpec(
 NEAR = TargetSpec(
     key="near",
     registry_rel=Path("ProofForge/Wasm/Near/Registry.lean"),
-    expected_count=35,
+    expected_count=36,
     suffixes=(".wasm", ".wat"),
     digest_suffix=".wat",
 )

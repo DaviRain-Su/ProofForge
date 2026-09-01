@@ -61,6 +61,11 @@ own exact variable geometry, while every duplicate/excess refund targets the pre
 insertion is speculative and all synchronous post-write failures rely on receipt rollback. The
 stock FT instead uses one configured fixed cost, and its serde wrapper is broader, so this exact
 export is not claimed as complete NEP-145 ABI/economic compatibility.
+wsm-near-json-storage-unregister-input-001 adds the next lifecycle prerequisite without exporting
+the standard method: exact compiler-owned `StorageUnregisterArgs` maps missing/null, false, and true
+to one `0/1/2` leaf. The raw-key object parser has an exact 47-byte bound including 32 whitespace
+bytes and rejects unknown/duplicate/escaped keys. Stock serde accepts unknown fields, so this is a
+bounded canonical subset rather than a complete NEP-145 wrapper.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.

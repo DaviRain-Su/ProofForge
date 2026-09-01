@@ -144,6 +144,12 @@ def maxJsonStorageDepositWhitespace : Nat := 32
 def maxJsonStorageDepositInputBytes : Nat :=
   43 + 64 * 6 + maxJsonStorageDepositWhitespace
 
+/-- Exact largest storage-unregister-shaped wire: `{"force":false}` is 15 bytes, plus the
+established aggregate structural-whitespace budget. -/
+def maxJsonStorageUnregisterWhitespace : Nat := 32
+def maxJsonStorageUnregisterInputBytes : Nat :=
+  15 + maxJsonStorageUnregisterWhitespace
+
 def accountIdSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.AccountId" #[
     ("length", .scalar .uint64),
@@ -190,6 +196,10 @@ def storageDepositArgsSchema : Core.Codec.Schema :=
     ("accountPresent", .scalar .uint64), ("accountId", accountIdSchema),
     ("registrationOnly", .scalar .uint64)]
 
+def storageUnregisterArgsSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs" #[
+    ("force", .scalar .uint64)]
+
 def storageBalanceResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageBalanceResult" #[
     ("registered", .scalar .uint64), ("total", .scalar .uint128),
@@ -213,6 +223,7 @@ inductive InputPlan where
   | jsonFtOnTransferArgs
   | jsonFtResolveTransferArgs
   | jsonStorageDepositArgs
+  | jsonStorageUnregisterArgs
   deriving Repr, BEq, Inhabited
 
 def InputPlan.localCount : InputPlan → Nat
@@ -226,6 +237,7 @@ def InputPlan.localCount : InputPlan → Nat
   | .jsonFtOnTransferArgs => 20
   | .jsonFtResolveTransferArgs => 20
   | .jsonStorageDepositArgs => 11
+  | .jsonStorageUnregisterArgs => 1
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
@@ -256,6 +268,9 @@ def InputPlan.canonical : InputPlan → String
   | .jsonStorageDepositArgs =>
       s!"near-json-storage-deposit-args-bounded-v1(max-wire={maxJsonStorageDepositInputBytes}," ++
         s!"ws={maxJsonStorageDepositWhitespace},order=any,keys=raw,unknown=reject)"
+  | .jsonStorageUnregisterArgs =>
+      s!"near-json-storage-unregister-args-bounded-v1(max-wire={maxJsonStorageUnregisterInputBytes}," ++
+        s!"ws={maxJsonStorageUnregisterWhitespace},keys=raw,unknown=reject)"
 
 def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == accountIdSchema then return .jsonAccountId
@@ -267,6 +282,7 @@ def targetInputPlan (schema : Core.Codec.Schema) : Except String InputPlan := do
   if schema == ftOnTransferArgsSchema then return .jsonFtOnTransferArgs
   if schema == ftResolveTransferArgsSchema then return .jsonFtResolveTransferArgs
   if schema == storageDepositArgsSchema then return .jsonStorageDepositArgs
+  if schema == storageUnregisterArgsSchema then return .jsonStorageUnregisterArgs
   match schema with
   | .boundedBytes capacity => .borsh <$> inputPlan (.boundedBytes capacity)
   | .boundedString capacity => .borsh <$> inputPlan (.boundedString capacity)

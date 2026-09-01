@@ -105,6 +105,13 @@ arguments; it neither registers an account nor handles an attached deposit. -/
   registrationOnly : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact frame for bounded canonical `storage_unregister`-shaped JSON.
+`force = 0/1/2` represents `None`/`Some false`/`Some true`. This carrier only decodes arguments;
+it neither removes an account nor performs a refund. -/
+@[pf_boundary] structure StorageUnregisterArgs where
+  force : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
 `registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
 serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record
