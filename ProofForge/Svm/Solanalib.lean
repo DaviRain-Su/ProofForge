@@ -1,5 +1,6 @@
 import ProofForge.Svm.IR
 import ProofForge.Svm.ABI
+import ProofForge.Svm.Sdk.StorageModel
 import Solanalib.SBPF.Interpreter
 import Solanalib.SBPF.Verifier
 
@@ -494,7 +495,7 @@ Counter-shaped emit prefix matching `Emit.checkedCFGTemplate`:
 `load field|arg|lit → [r10-8]/[r10-16] → ldxdw r1/r2 → guard → success body/store`.
 
 Covered: field+arg, field+lit, and the composed straightline under Solanalib `step`.
-Still out of scope: walked `r7` args, whole-function CFG (E3), AccountWords bridge (E4).
+Still out of scope at E1: walked `r7` args, whole-function CFG (E3). AccountWords bridge is E4.
 -/
 
 /-- Emitter stack offsets relative to `r10` (negative displacements as unsigned 16-bit). -/
@@ -650,7 +651,7 @@ Whole-function bounded CFG for Counter `increment` matching the emit layout:
 
 E1 inlines the store into the guard fallthrough; E3 restores the CFG split used by
 `Emit.checkedCFGTemplate` + success/overflow exits. Bounds: ≤ 3 blocks, ≤ 64 entry+exit
-instructions, fuel 64. Still out of scope: walked `r7` args, AccountWords (E4), Agave/ELF.
+instructions, fuel 64. Still out of scope at E3: walked `r7` args, Agave/ELF. AccountWords bridge is E4.
 -/
 
 /-- Official SVM overflow exit code used by `Emit.emitOverflowReturn` (`0x1001`). -/
@@ -804,6 +805,145 @@ theorem evalCounterIncrementCFG_overflow_max :
           pure (target == 12 && r0 == BitVec.ofNat 64 overflowReturnCode.toNat &&
             loadv .m64 finalMem (mmInputStart + 104) == before)
       | .success _ _ _ => pure false) = some true := by
+  native_decide
+
+
+/-! ## E4 — AccountWords ↔ typed storev/loadv (`svm-sem-004`)
+
+Bridge Track A `AccountWords` field writes to Solanalib `storev`/`loadv` on **bounded
+account-data slots only**. Knife layout: Counter `value` = account-data word 1
+(`ACC0_DATA + 8` = 104). Arbitrary VAs, heap bump, and CPI visibility stay out of scope.
+-/
+
+open ProofForge.Svm.Sdk.StorageModel
+open ProofForge.Svm.AccountStorage
+
+/-- Byte offset of account-data word `w` from the Loader input base. -/
+def accountWordByteOffset (w : Nat) : Nat :=
+  ABI.acc0Data + w * 8
+
+/-- Absolute Solanalib address of account-data word `w`. -/
+def accountWordAddr (w : Nat) : U64 :=
+  mmInputStart + BitVec.ofNat 64 (accountWordByteOffset w)
+
+/-- Emitter static-offset budget: `stxdw [r6 + off]` uses a signed 16-bit displacement. -/
+def accountWordInStaticRange (w : Nat) : Bool :=
+  decide (accountWordByteOffset w < 2 ^ 15)
+
+/-- Counter `value` occupies account-data word 1 (discriminator at word 0). -/
+def counterValueWord : Nat := 1
+
+/-- Track A scalar field for Counter `value` on account 0. -/
+def counterValueField : Field :=
+  Field.scalar 0 counterValueWord
+
+/-- Spec-facing projection of `mFieldWord counterValueField 0`. -/
+def counterValueFieldWord? : Option Nat :=
+  mFieldWord counterValueField 0
+
+/-- `AccountWords` uses `UInt64`; Solanalib memory uses `U64`. -/
+def u64OfAccountWord (v : UInt64) : U64 :=
+  BitVec.ofNat 64 v.toNat
+
+def accountWordOfU64 (v : U64) : UInt64 :=
+  UInt64.ofNat v.toNat
+
+/-- Typed store of one aligned account word; fail-closed outside the static offset budget. -/
+def storeAccountWord? (memory : Mem) (w : Nat) (v : U64) : Option Mem :=
+  if accountWordInStaticRange w then
+    storev .m64 memory (accountWordAddr w) (.vlong v)
+  else
+    none
+
+/-- Typed load of one aligned account word; fail-closed on OOB range or unmapped bytes. -/
+def loadAccountWord? (memory : Mem) (w : Nat) : Option U64 :=
+  if !accountWordInStaticRange w then none
+  else
+    match loadv .m64 memory (accountWordAddr w) with
+    | some (.vlong v) => some v
+    | _ => none
+
+/-- Project one `AccountWords` slot into Solanalib memory. -/
+def projectAccountWord? (aw : AccountWords) (w : Nat) (memory : Mem := initMem) :
+    Option Mem :=
+  storeAccountWord? memory w (u64OfAccountWord (aw w))
+
+/-- Model field write then project the target word (fail-closed when the field index is OOB). -/
+def projectFieldWrite? (aw : AccountWords) (f : Field) (index : UInt64) (v : UInt64)
+    (memory : Mem := initMem) : Option Mem :=
+  match mFieldWord f index with
+  | none => none
+  | some w => projectAccountWord? (mWriteField aw f index v) w memory
+
+/-- Counter value word maps to the same absolute offset used by E0–E3. -/
+theorem counterValueWord_offset :
+    accountWordByteOffset counterValueWord = counterValueOffset ∧
+      counterValueOffset = 104 := by
+  native_decide
+
+/-- Track A resolves Counter `value` to account-data word 1. -/
+theorem mFieldWord_counterValue :
+    mFieldWord counterValueField 0 = some counterValueWord := by
+  native_decide
+
+/-- Typed store then load round-trips on the Counter value word. -/
+theorem storeAccountWord_load_roundtrip :
+    (do
+      let m ← storeAccountWord? initMem counterValueWord 42
+      loadAccountWord? m counterValueWord) = some 42 := by
+  native_decide
+
+/-- Unmapped Counter value word fails closed under typed load. -/
+theorem loadAccountWord_unmapped :
+    (loadAccountWord? initMem counterValueWord).isNone = true := by
+  native_decide
+
+/-- Word indexes whose byte offset exits the signed-16 static budget fail closed. -/
+theorem storeAccountWord_oob_static :
+    (storeAccountWord? initMem 4084 1).isNone = true ∧
+      (loadAccountWord? initMem 4084).isNone = true := by
+  native_decide
+
+/-- OOB scalar field index fails closed at the bridge (model write is a no-op). -/
+theorem projectFieldWrite_oob_index :
+    (projectFieldWrite? (fun _ => 0) counterValueField 1 (accountWordOfU64 7)).isNone =
+      true := by
+  native_decide
+
+/-- Model field write + project equals a direct typed `storev` of the same word
+(observable at the Counter value slot). -/
+theorem projectFieldWrite_eq_storeAccountWord :
+    (do
+      let viaModel ←
+        projectFieldWrite? (fun _ => 0) counterValueField 0 (accountWordOfU64 42)
+      let viaStore ← storeAccountWord? initMem counterValueWord 42
+      let a ← loadAccountWord? viaModel counterValueWord
+      let b ← loadAccountWord? viaStore counterValueWord
+      pure (a == b && a == 42)) = some true := by
+  native_decide
+
+/-- After a model write, `mReadField` agrees with typed `loadv` on the projected memory. -/
+theorem mReadField_matches_loadAccountWord :
+    (do
+      let aw0 : AccountWords := fun _ => 0
+      let aw1 := mWriteField aw0 counterValueField 0 (accountWordOfU64 42)
+      let mem ← projectAccountWord? aw1 counterValueWord
+      let loaded ← loadAccountWord? mem counterValueWord
+      pure (loaded == u64OfAccountWord (mReadField aw1 counterValueField 0) &&
+        loaded == 42)) = some true := by
+  native_decide
+
+/-- Emitter-shaped static store through `evalStaticStore?` matches the AccountWords bridge
+(observable at the Counter value slot). -/
+theorem storeAccountWord_eq_evalStaticStore :
+    (do
+      let regs := setReg (setReg initRegMap .br6 mmInputStart) .br1 42
+      let viaStatic ← evalStaticStore?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" } regs initMem
+      let viaBridge ← storeAccountWord? initMem counterValueWord 42
+      let a ← loadAccountWord? viaStatic counterValueWord
+      let b ← loadAccountWord? viaBridge counterValueWord
+      pure (a == b && a == 42)) = some true := by
   native_decide
 
 end ProofForge.Svm.Solanalib

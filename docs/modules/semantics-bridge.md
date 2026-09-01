@@ -45,7 +45,7 @@ CI already builds `Tests.SemanticsSpec` in the Lean lane (`svm-eng-001`).
 ## Non-goals
 
 - Solanalib CFG correspondence (`svm-sem-003`)
-- `AccountWords` ↔ `storev` (`svm-sem-004`)
+- `AccountWords` ↔ `storev` (`svm-sem-004`) — **done** (Counter value word; see `Solanalib` E4)
 - Full container proofs (`svm-sem-005`)
 - ELF / Loader / CPI / host adequacy
 - Dumping every Registry program as a step golden

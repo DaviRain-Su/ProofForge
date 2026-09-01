@@ -236,12 +236,12 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sem-001](tasks/svm-sem-001.md) | done | L3/E1 operand materialization + straightline |
 | [svm-sem-002](tasks/svm-sem-002.md) | done | L3/E2 assembler-semantics golden 差分门 |
 | [svm-sem-003](tasks/svm-sem-003.md) | done | L3/E3 Counter 三块有界 CFG（7+5 / max+1） |
-| [svm-sem-004](tasks/svm-sem-004.md) | todo | L3/E4 AccountWords ↔ storev 桥 |
+| [svm-sem-004](tasks/svm-sem-004.md) | done | L3/E4 AccountWords ↔ storev 桥（Counter value word） |
 | [svm-sem-005](tasks/svm-sem-005.md) | todo | L3/E5 选定容器全函数有界证明 |
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | done | 能力+证明双矩阵收口页（[svm-status-matrix.md](svm-status-matrix.md)） |
 
-本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`/`002`/`003`** + **`svm-app-001`** done → 下一刀 **`svm-sem-004` / `svm-app-002`**。
+本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`..`004`** + **`svm-app-001`** done → 下一刀 **`svm-sem-005` / `svm-app-002`**。
 WASM PR #4/#5 仍开着不阻塞。
 
 

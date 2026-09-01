@@ -203,4 +203,35 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
       | _ => false
   | _, _ => false
 
+
+-- E4: AccountWords ↔ typed storev/loadv (`svm-sem-004`)
+#guard accountWordByteOffset counterValueWord == counterValueOffset
+#guard counterValueOffset == 104
+#guard counterValueFieldWord? == some counterValueWord
+#guard accountWordInStaticRange counterValueWord
+#guard !accountWordInStaticRange 4084
+
+#guard
+  match storeAccountWord? initMem counterValueWord 42 with
+  | some mem => loadAccountWord? mem counterValueWord == some 42
+  | none => false
+
+#guard (loadAccountWord? initMem counterValueWord).isNone
+
+#guard
+  match projectFieldWrite? (fun _ => 0) counterValueField 0 (accountWordOfU64 42) with
+  | some mem => loadAccountWord? mem counterValueWord == some 42
+  | none => false
+
+#guard (projectFieldWrite? (fun _ => 0) counterValueField 1 (accountWordOfU64 7)).isNone
+
+#guard
+  let regs := setReg (setReg initRegMap .br6 mmInputStart) .br1 42
+  match evalStaticStore? valueSlot regs initMem,
+        storeAccountWord? initMem counterValueWord 42 with
+  | some a, some b =>
+      loadAccountWord? a counterValueWord == some 42 &&
+        loadAccountWord? b counterValueWord == some 42
+  | _, _ => false
+
 end Tests.SolanalibSpec

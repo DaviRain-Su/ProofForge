@@ -61,7 +61,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E1 | [svm-sem-001](tasks/svm-sem-001.md) | Operand materialization + straightline | **done** |
 | E2 | [svm-sem-002](tasks/svm-sem-002.md) | `.s` golden ↔ sbpfSemantics | **done** |
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
-| E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | todo |
+| E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Container example full-function | todo |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
