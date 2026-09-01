@@ -97,6 +97,7 @@ R1-027 shared allocation-free UInt64 floor integer sqrt、
 R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
 R1-029 shared allocation-free full-precision UInt64 mulDiv；
 R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
+R1-031 shared allocation-free scaled UInt64 fixed-point policy；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -441,6 +442,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   暴露 `prorateUp`/`weightedUp`，没有复制除法循环或新增 target effect、allocation、pointer、
   layout。signed/fixed-point 与 wider returned quotient 继续 fail closed。详见
   `docs/plan/tasks/r1-030.md`。
+
+- R1-031 shared scaled UInt64 fixed-point policy 已完成：`Core.FixedPoint.UInt64` 提供
+  `mulDown`/`mulUp`/`divDown`/`divUp`，显式检查 nonzero application-selected scale，区分
+  zero divisor 和 overflow，并完整复用 R1-029/030 的 exact product 与唯一 bounded division
+  kernel。BatchSizer/EvmPriceBand 分别拥有 scale/divisor/error/persistence policy；没有新增
+  target effect、allocation、pointer 或 physical layout。typed fixed-point value、scale type、
+  cast/conversion、signed/wider fixed point 继续 fail closed。详见 `docs/plan/tasks/r1-031.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

@@ -16,6 +16,7 @@ structure State where
 inductive Error where
   | zeroCapacity
   | ratioOverflow
+  | zeroRate
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_entry]
@@ -115,5 +116,35 @@ def prorateUp (state : State) (items weight totalWeight : UInt64) :
     Except Error (State × UInt64) := do
   let batches ← Math.UInt64.mulDivCeil items weight totalWeight .zeroCapacity .ratioOverflow
   .ok ({ state with lastBatchCount := batches }, batches)
+
+/-- Multiply two scaled capacity values and retain the lower representable fixed-point value. -/
+@[pf_entry]
+def fixedMulDown (state : State) (left right scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.mulDown left right scale .zeroCapacity .ratioOverflow
+  .ok ({ state with lastBatchCount := result }, result)
+
+/-- Multiply two scaled capacity values and cover every nonzero fractional remainder. -/
+@[pf_entry]
+def fixedMulUp (state : State) (left right scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.mulUp left right scale .zeroCapacity .ratioOverflow
+  .ok ({ state with lastBatchCount := result }, result)
+
+/-- Divide one scaled capacity by another with floor rounding. -/
+@[pf_entry]
+def fixedDivDown (state : State) (value divisor scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.divDown value divisor scale
+    .zeroCapacity .zeroRate .ratioOverflow
+  .ok ({ state with lastBatchCount := result }, result)
+
+/-- Divide one scaled capacity by another with ceiling rounding. -/
+@[pf_entry]
+def fixedDivUp (state : State) (value divisor scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.divUp value divisor scale
+    .zeroCapacity .zeroRate .ratioOverflow
+  .ok ({ state with lastBatchCount := result }, result)
 
 end Examples.BatchSizer

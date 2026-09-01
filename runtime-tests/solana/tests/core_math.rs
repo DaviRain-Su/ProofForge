@@ -322,6 +322,63 @@ fn full_precision_mul_div_handles_wide_product_and_atomic_errors() {
 }
 
 #[test]
+fn fixed_point_policy_reuses_full_precision_rounding_and_keeps_failures_atomic() {
+    let (program_id, fixture, account) = initialized(7);
+    let mut account = account;
+    for (method, params, expected) in [
+        ("fixedMulDown", [150, 25, 100], 37u64),
+        ("fixedMulUp", [150, 25, 100], 38u64),
+        ("fixedDivDown", [101, 30, 100], 336u64),
+        ("fixedDivUp", [101, 30, 100], 337u64),
+    ] {
+        let result = fixture.call(
+            program_id,
+            account,
+            method,
+            &params,
+            true,
+            &[
+                Check::success(),
+                Check::return_data(&expected.to_le_bytes()),
+            ],
+        );
+        account = result
+            .get_account(&fixture.state_key)
+            .unwrap_or_else(|| panic!("state after {method}"))
+            .clone();
+        assert_eq!(slot(&account, 0), expected);
+    }
+
+    for (method, params) in [
+        ("fixedMulDown", [150, 25, 0]),
+        ("fixedDivDown", [101, 0, 0]),
+        ("fixedDivDown", [101, 0, 100]),
+        ("fixedMulDown", [u64::MAX, u64::MAX, 1]),
+        ("fixedDivUp", [1u64 << 63, 1, 2]),
+    ] {
+        let before = account.data.clone();
+        let rejected = fixture.call(
+            program_id,
+            account.clone(),
+            method,
+            &params,
+            true,
+            &[
+                Check::err(ProgramError::Custom(1)),
+                Check::account(&fixture.state_key).data(&before).build(),
+            ],
+        );
+        assert_eq!(
+            rejected
+                .get_account(&fixture.state_key)
+                .expect("state after rejected fixed-point operation")
+                .data,
+            before
+        );
+    }
+}
+
+#[test]
 fn saturating_mutations_clamp_both_bounds_and_preserve_exact_products() {
     let (program_id, fixture, account) = initialized(u64::MAX - 2);
     let reserved = fixture.call(

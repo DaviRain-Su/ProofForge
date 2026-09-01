@@ -16,6 +16,7 @@ structure State where
 inductive Error where
   | zeroTick
   | quoteOverflow
+  | zeroRate
   deriving Repr, DecidableEq, Inhabited, BEq
 
 @[pf_entry]
@@ -114,6 +115,34 @@ def weighted (state : State) (quote numerator denominator : UInt64) :
 def weightedUp (state : State) (quote numerator denominator : UInt64) :
     Except Error (State × UInt64) := do
   let result ← Math.UInt64.mulDivCeil quote numerator denominator .zeroTick .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
+
+/-- Multiply scaled quotes with floor rounding. -/
+@[pf_entry]
+def fixedMulDown (state : State) (left right scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.mulDown left right scale .zeroTick .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
+
+/-- Multiply scaled quotes with ceiling rounding. -/
+@[pf_entry]
+def fixedMulUp (state : State) (left right scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.mulUp left right scale .zeroTick .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
+
+/-- Divide scaled quotes with floor rounding. -/
+@[pf_entry]
+def fixedDivDown (state : State) (value divisor scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.divDown value divisor scale .zeroTick .zeroRate .quoteOverflow
+  .ok ({ state with lastQuote := result }, result)
+
+/-- Divide scaled quotes with ceiling rounding. -/
+@[pf_entry]
+def fixedDivUp (state : State) (value divisor scale : UInt64) :
+    Except Error (State × UInt64) := do
+  let result ← FixedPoint.UInt64.divUp value divisor scale .zeroTick .zeroRate .quoteOverflow
   .ok ({ state with lastQuote := result }, result)
 
 end Examples.EvmPriceBand

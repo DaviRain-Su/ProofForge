@@ -6,6 +6,7 @@ import ProofForge.Core.Codec
 import ProofForge.Core.Value
 import ProofForge.Core.SafeCast
 import ProofForge.Core.Math
+import ProofForge.Core.FixedPoint
 import ProofForge.Core.Collections
 import ProofForge.Core.IR
 import ProofForge.Core.Target

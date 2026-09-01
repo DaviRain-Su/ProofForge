@@ -136,6 +136,27 @@ def u64Max : UInt64 := ~~~(0 : UInt64)
 #guard match Math.UInt64.mulDivCeil 7 9 0 false true with
   | .error false => true
   | _ => false
+#guard match FixedPoint.UInt64.mulDown 150 25 100 1 2 with
+  | .ok value => value == 37
+  | _ => false
+#guard match FixedPoint.UInt64.mulUp 150 25 100 1 2 with
+  | .ok value => value == 38
+  | _ => false
+#guard match FixedPoint.UInt64.divDown 101 30 100 1 2 3 with
+  | .ok value => value == 336
+  | _ => false
+#guard match FixedPoint.UInt64.divUp 101 30 100 1 2 3 with
+  | .ok value => value == 337
+  | _ => false
+#guard match FixedPoint.UInt64.divDown 101 0 0 1 2 3 with
+  | .error 1 => true
+  | _ => false
+#guard match FixedPoint.UInt64.divDown 101 0 100 1 2 3 with
+  | .error 2 => true
+  | _ => false
+#guard match FixedPoint.UInt64.mulDown u64Max u64Max 1 1 2 with
+  | .error 2 => true
+  | _ => false
 
 private def mulDivSamples : List UInt64 :=
   [0, 1, 2, 3, 7, 31, 0xffffffff, 0x100000000,
@@ -240,6 +261,21 @@ open Examples.BatchSizer in
   | _ => false) &&
   (match prorateUp (init 8) 6 15372286728091293013 5 with
   | .error .ratioOverflow => true
+  | _ => false) &&
+  (match fixedMulDown (init 8) 150 25 100 with
+  | .ok (state, result) => state.lastBatchCount == 37 && result == 37
+  | _ => false) &&
+  (match fixedMulUp (init 8) 150 25 100 with
+  | .ok (state, result) => state.lastBatchCount == 38 && result == 38
+  | _ => false) &&
+  (match fixedDivDown (init 8) 101 30 100 with
+  | .ok (state, result) => state.lastBatchCount == 336 && result == 336
+  | _ => false) &&
+  (match fixedDivUp (init 8) 101 30 100 with
+  | .ok (state, result) => state.lastBatchCount == 337 && result == 337
+  | _ => false) &&
+  (match fixedDivDown (init 8) 101 0 100 with
+  | .error .zeroRate => true
   | _ => false)
 
 open Examples.EvmPriceBand in
@@ -275,6 +311,21 @@ open Examples.EvmPriceBand in
   | _ => false) &&
   (match weightedUp (init 9) 6 15372286728091293013 5 with
   | .error .quoteOverflow => true
+  | _ => false) &&
+  (match fixedMulDown (init 9) 150 25 100 with
+  | .ok (state, result) => state.lastQuote == 37 && result == 37
+  | _ => false) &&
+  (match fixedMulUp (init 9) 150 25 100 with
+  | .ok (state, result) => state.lastQuote == 38 && result == 38
+  | _ => false) &&
+  (match fixedDivDown (init 9) 101 30 100 with
+  | .ok (state, result) => state.lastQuote == 336 && result == 336
+  | _ => false) &&
+  (match fixedDivUp (init 9) 101 30 100 with
+  | .ok (state, result) => state.lastQuote == 337 && result == 337
+  | _ => false) &&
+  (match fixedDivDown (init 9) 101 0 100 with
+  | .error .zeroRate => true
   | _ => false)
 
 /-- Pure shared math stays in ordinary target-neutral scalar Ops. -/
@@ -373,8 +424,10 @@ elab "#pf_guard_core_math_no_effects" : command => do
       unless noAccumLoop root.ops do
         throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
     let mulDivNames : Array String :=
-      if module == `Examples.BatchSizer then #["prorate", "prorateUp"]
-      else #["weighted", "weightedUp"]
+      if module == `Examples.BatchSizer then
+        #["prorate", "prorateUp", "fixedMulDown", "fixedMulUp", "fixedDivDown", "fixedDivUp"]
+      else
+        #["weighted", "weightedUp", "fixedMulDown", "fixedMulUp", "fixedDivDown", "fixedDivUp"]
     for mulDivName in mulDivNames do
       let some mulDiv := source.methods.find? (·.ixName == mulDivName)
         | throwError s!"{module}.{mulDivName}: missing full-precision multiply/divide consumer"

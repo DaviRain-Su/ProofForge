@@ -140,6 +140,48 @@ fi
 solana_lean_require_storage "$addr" 0 "$max" "full-precision ceiling failure is atomic"
 
 solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'fixedMulDown(uint64,uint64,uint64)(uint64)' 150 25 100)" 37 \
+  "fixed-point multiply floor"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'fixedMulUp(uint64,uint64,uint64)(uint64)' 150 25 100)" 38 \
+  "fixed-point multiply ceiling"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'fixedDivDown(uint64,uint64,uint64)(uint64)' 101 30 100)" 336 \
+  "fixed-point divide floor"
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
+  'fixedDivUp(uint64,uint64,uint64)(uint64)' 101 30 100)" 337 \
+  "fixed-point divide ceiling"
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'fixedDivUp(uint64,uint64,uint64)' 101 30 100 >/dev/null
+solana_lean_require_storage "$addr" 0 337 "fixed-point result persists"
+
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'fixedMulDown(uint64,uint64,uint64)' 150 25 0)" 'zeroTick()' \
+  "fixed-point zero scale"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'fixedDivDown(uint64,uint64,uint64)' 101 0 0)" 'zeroTick()' \
+  "fixed-point scale validation precedes divisor"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'fixedDivDown(uint64,uint64,uint64)' 101 0 100)" 'zeroRate()' \
+  "fixed-point zero divisor"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'fixedMulDown(uint64,uint64,uint64)' "$max" "$max" 1)" \
+  'quoteOverflow()' "fixed-point multiply overflow"
+solana_lean_require_named_revert "$addr" "$sender" \
+  "$("$cast" calldata 'fixedDivUp(uint64,uint64,uint64)' "$half_up" 1 2)" \
+  'quoteOverflow()' "fixed-point divide overflow"
+if "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+    "$addr" 'fixedDivUp(uint64,uint64,uint64)' "$half_up" 1 2 >/dev/null 2>&1; then
+  echo "FAIL: overflowing fixed-point division unexpectedly succeeded" >&2
+  exit 1
+fi
+solana_lean_require_storage "$addr" 0 337 "fixed-point failure is atomic"
+
+"$cast" send --rpc-url "$rpc" --private-key "$private_key" \
+  "$addr" 'fixedMulDown(uint64,uint64,uint64)' "$max" 1 1 >/dev/null
+solana_lean_require_storage "$addr" 0 "$max" "exact fixed-point maximum persists"
+
+solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   'increase(uint64)(uint64)' 1)" "$max" "saturating increase at maximum"
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
   "$addr" 'discount(uint64)' "$max" >/dev/null
@@ -156,4 +198,4 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" \
   "$addr" 'scale(uint64)' 2 >/dev/null
 solana_lean_require_storage "$addr" 0 "$max" "saturating scale persists"
 
-echo "evm-anvil-math-price-band: ok (bounded/saturating/rounded/full-precision UInt64 math; engineering only)"
+echo "evm-anvil-math-price-band: ok (bounded/saturating/full-precision/fixed-point UInt64 math; engineering only)"
