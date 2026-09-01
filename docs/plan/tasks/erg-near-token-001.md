@@ -1,0 +1,20 @@
+---
+id: erg-near-token-001
+scope: wasm
+status: done
+depends-on: []
+---
+
+# erg-near-token-001 — NearToken high-level SDK surface
+
+## Delivered
+
+- `NearToken.isZero`, `le`, `lt`, `ofLimbs`
+- Checked helpers: `add?`, `sub?`, `mulUInt64?`, `addChecked`, `subChecked`, `mulUInt64Checked` (source/proof layer; NEAR Extract for `addChecked`/`andThen` chains remains follow-up)
+- Legacy limb API (`addW0`, `canAdd`, …) preserved
+- Example `Examples.NearTokenErgonomics` + registry digest `227ff6cdb05af2b9`
+
+## Follow-up
+
+- Wire `Core.Except.andThen` and `NearToken.addChecked` through Extract for NEAR mutating entries
+- Refactor `NearFungibleLedger.ft_transfer` to use `addChecked` once extraction supports it

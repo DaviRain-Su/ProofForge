@@ -97,6 +97,7 @@ import Examples.NearLookup
 import Examples.NearFungibleTokenEvent
 import Examples.NearFungibleLedger
 import Examples.NearTokenArithmetic
+import Examples.NearTokenErgonomics
 import Examples.NearTokenStorage
 import Examples.EvmBounded
 import Examples.EvmSearch

@@ -165,12 +165,15 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 ### 4.2 剩余工作（按依赖排序）
 
+**N12 公开 FT 面（2026-09-01 状态：已在 `Examples.NearFungibleLedger` 落地）**
+
+- `ft_transfer` / `ft_transfer_call` / `ft_resolve_transfer` + storage 全套 + NEP-141 events
+- near-sandbox 矩阵见 `runtime-tests/near/ledger.py`
+- **剩余**：Promise 泛化（N13）、collection metadata（N14）、三 target conformance（N15）
+
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
-| **N12a** | `wsm-near-ft-transfer-export-001` | 公开 `ft_transfer`：parser + BAL2 效应 + NEP-141 event | `wsm-near-json-ft-transfer-input-001` ✓ | sandbox 场景矩阵 |
-| **N12b** | `wsm-near-ft-transfer-call-001` | `ft_transfer_call` + 静态 msg payload + Promise 边 | message/transfer_call parser ✓ | 链式 sandbox |
-| **N12c** | `wsm-near-ft-on-transfer-001` | receiver `ft_on_transfer` + resolve 链 | resolve parser ✓ | 双合约 fixture |
-| **N12d** | `wsm-near-ft-public-001` | 完整 `NearFungibleToken` example（非 parser fixture） | N12a–c | 文档化 compatibility diff |
+| ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
 | **N13** | `wsm-near-promise-general-001` | 有界 Promise handle、N 路 join（仍 fail-closed 上限） | N12 | DAG sandbox |
 | **N14** | `wsm-near-store-meta-001` | collection prefix/metadata（仍 **不** 冒充 near-sdk `Drop`/cache） | N5 基础 ✓ | layout golden |
 | **N15** | `wsm-near-conformance-001` | Counter/Token 形 cross-target 示例（SVM/EVM 已有对照） | N12d | 三 target digest 表 |
@@ -206,12 +209,8 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 | ID | 交付 | 范围 | 原则 |
 |---|---|---|---|
-| **erg-do-001** | 共享 `Except`/`Option` 的 `do` notation 与 `bind` 组合子，文档化 entry 内用法 | Core + Examples | 不新增 Ops；纯 surface |
-| **erg-state-001** | 可选 `@[pf_state]` 单态 state ref：Extract 仍 lower 为显式 `State` 参数 | Profile + Extract | 单 contract 单 state；fail-closed 多 state |
-| **erg-wide-001** | `UInt128`/`NearToken`/`UInt256` 统一运算符块（`+`、`≤`、饱和）经 `@[pf_inline]` 到已有 checked op | Core.Value + 三 Sdk | 不新增 limb runtime leaf |
-| **erg-sdk-facade-001** | `ProofForge.Contract` umbrella：按 target 重 export Sdk；禁止 app 直引 `Runtime` | 三 Sdk.lean | CI import guard 扩展 |
-| **erg-error-001** | typed error 模板 + `def err (e : Error) : Except Error α` 糖 | Examples 迁移 Counter/Capped | 保持 kernel 可证 |
-| **erg-near-token-001** | `NearToken` 隐藏 w0/w1；暴露 `zero`、`+`、`≤`、`toNearToken(u128)` | Near.Sdk only | 现有 arithmetic 证明复用 |
+| **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | 不新增 Ops；`andThen` 在 NEAR Extract 仍待接线 |
+| **erg-near-token-001** | `NearToken` 高层 API：`isZero`/`le`/`lt`/`add?`/`sub?`/`mulUInt64?`/`addChecked` 等 | Near.Sdk + `NearTokenErgonomics` | limb 级 op 复用既有 Runtime |
 | **erg-evm-effect-001** | `Evm.CallResult` / `Effect.then` 链式文档 + Token 示例改写 | Evm.Sdk | 已有 R5-012 能力，只改 surface |
 | **erg-svm-account-001** | `Account.Handle` 方法链（`.transferLamports`、`.resizeData`、`.closeTo`）示例化 | Svm.Sdk | 已有 R2/R3，补 cookbook |
 

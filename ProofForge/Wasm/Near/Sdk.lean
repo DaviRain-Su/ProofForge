@@ -18,8 +18,8 @@ namespace ProofForge.Wasm.Near.Sdk
 Source-facing NEAR SDK. Names erase through `@[pf_inline]` to Runtime stubs;
 they do not add Ops, IR nodes, or emitter cases unless explicitly documented as event effects.
 Bounded Promise-result observation, strict Borsh UInt64 result decoding, full-AccountId
-self-callback authentication, and exact NEP-141 mint/transfer/burn event serialization with
-optional bounded memos are available; a fungible-token contract remains absent.
+self-callback authentication, exact NEP-141 mint/transfer/burn event serialization with
+optional bounded memos, and the integrated `NearFungibleLedger` public FT surface are available.
 -/
 
 notation "AccountId" => Runtime.AccountId
@@ -29,9 +29,42 @@ namespace «NearToken»
 
 @[pf_inline] def zero : NearToken := ⟨0, 0⟩
 
+/-- True when both limbs are zero. -/
+@[pf_inline] def isZero (value : NearToken) : Bool :=
+  value.w0 = 0 && value.w1 = 0
+
+/-- Unsigned 128-bit less-or-equal comparison. -/
+@[pf_inline] def le (left right : NearToken) : Bool :=
+  if left.w1 < right.w1 then true
+  else if left.w1 > right.w1 then false
+  else left.w0 ≤ right.w0
+
+/-- Unsigned 128-bit less-than comparison. -/
+@[pf_inline] def lt (left right : NearToken) : Bool :=
+  le left right && !(left.w0 = right.w0 && left.w1 = right.w1)
+
+/-- Construct a token from explicit low/high limbs. -/
+@[pf_inline] def ofLimbs (w0 w1 : UInt64) : NearToken := ⟨w0, w1⟩
+
 /-- True exactly when unsigned 128-bit addition is representable. -/
 @[pf_inline] def canAdd (left right : NearToken) : Bool :=
   Runtime.nearTokenAddOk left.w0 left.w1 right.w0 right.w1 != 0
+
+/-- Checked addition. Returns `none` on overflow instead of exposing limb helpers. -/
+@[pf_inline] def add? (left right : NearToken) : Option NearToken :=
+  if canAdd left right then
+    some ⟨Runtime.nearTokenAddW0 left.w0 left.w1 right.w0 right.w1,
+      Runtime.nearTokenAddW1 left.w0 left.w1 right.w0 right.w1⟩
+  else
+    none
+
+/-- Checked addition with an explicit typed error for `Except` chains. -/
+@[pf_inline] def addChecked (left right : NearToken) (error : ε) : Except ε NearToken :=
+  if canAdd left right then
+    .ok ⟨Runtime.nearTokenAddW0 left.w0 left.w1 right.w0 right.w1,
+      Runtime.nearTokenAddW1 left.w0 left.w1 right.w0 right.w1⟩
+  else
+    .error error
 
 /-- Low modular result limb. Precondition: `canAdd left right`. -/
 @[pf_inline] def addW0 (left right : NearToken) : UInt64 :=
@@ -45,6 +78,22 @@ namespace «NearToken»
 @[pf_inline] def canSub (left right : NearToken) : Bool :=
   Runtime.nearTokenSubOk left.w0 left.w1 right.w0 right.w1 != 0
 
+/-- Checked subtraction. Returns `none` on underflow. -/
+@[pf_inline] def sub? (left right : NearToken) : Option NearToken :=
+  if canSub left right then
+    some ⟨Runtime.nearTokenSubW0 left.w0 left.w1 right.w0 right.w1,
+      Runtime.nearTokenSubW1 left.w0 left.w1 right.w0 right.w1⟩
+  else
+    none
+
+/-- Checked subtraction with an explicit typed error for `Except` chains. -/
+@[pf_inline] def subChecked (left right : NearToken) (error : ε) : Except ε NearToken :=
+  if canSub left right then
+    .ok ⟨Runtime.nearTokenSubW0 left.w0 left.w1 right.w0 right.w1,
+      Runtime.nearTokenSubW1 left.w0 left.w1 right.w0 right.w1⟩
+  else
+    .error error
+
 /-- Low modular result limb. Precondition: `canSub left right`. -/
 @[pf_inline] def subW0 (left right : NearToken) : UInt64 :=
   Runtime.nearTokenSubW0 left.w0 left.w1 right.w0 right.w1
@@ -56,6 +105,23 @@ namespace «NearToken»
 /-- True exactly when `value * factor` is representable as an unsigned 128-bit value. -/
 @[pf_inline] def canMulUInt64 (value : NearToken) (factor : UInt64) : Bool :=
   Runtime.nearTokenMulU64Ok value.w0 value.w1 factor != 0
+
+/-- Checked full-width multiply by one `UInt64` factor. -/
+@[pf_inline] def mulUInt64? (value : NearToken) (factor : UInt64) : Option NearToken :=
+  if canMulUInt64 value factor then
+    some ⟨Runtime.nearTokenMulU64W0 value.w0 value.w1 factor,
+      Runtime.nearTokenMulU64W1 value.w0 value.w1 factor⟩
+  else
+    none
+
+/-- Checked multiply with an explicit typed error for `Except` chains. -/
+@[pf_inline] def mulUInt64Checked (value : NearToken) (factor : UInt64) (error : ε) :
+    Except ε NearToken :=
+  if canMulUInt64 value factor then
+    .ok ⟨Runtime.nearTokenMulU64W0 value.w0 value.w1 factor,
+      Runtime.nearTokenMulU64W1 value.w0 value.w1 factor⟩
+  else
+    .error error
 
 /-- Low exact product limb. Precondition: `canMulUInt64 value factor`. -/
 @[pf_inline] def mulUInt64W0 (value : NearToken) (factor : UInt64) : UInt64 :=

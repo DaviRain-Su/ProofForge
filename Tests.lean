@@ -69,6 +69,7 @@ import Tests.NearBytesSpec
 import Tests.NearFungibleTokenEventSpec
 import Tests.NearFungibleLedgerSpec
 import Tests.NearTokenArithmeticSpec
+import Tests.NearTokenErgonomicsSpec
 import Tests.NearTokenStorageSpec
 import Tests.NearMemorySpec
 import Tests.NearOutputSpec
