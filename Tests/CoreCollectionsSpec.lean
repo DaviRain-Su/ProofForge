@@ -257,6 +257,24 @@ private def dirtyAsciiText : BoundedString 4 :=
 private def invalidText : BoundedString 4 :=
   { length := 2, values := #v[0xc0, 0x80, 0, 0] }
 
+private def middle : BoundedBytes 2 :=
+  { length := 1, values := #v[0x62, 0xff] }
+
+private def suffix : BoundedBytes 2 :=
+  { length := 2, values := #v[0x62, 0x63] }
+
+private def emptyNeedle : BoundedBytes 2 :=
+  { length := 0, values := #v[0xff, 0xff] }
+
+private def malformedNeedle : BoundedBytes 2 :=
+  { length := 3, values := #v[0x61, 0x62] }
+
+private def middleText : BoundedString 2 :=
+  { length := 1, values := #v[0x62, 0xff] }
+
+private def emptyText : BoundedString 2 :=
+  { length := 0, values := #v[0xff, 0xff] }
+
 #guard ascii.wellFormed
 #guard ascii.size == 3
 #guard ascii.get? 1 == some 0x62
@@ -276,6 +294,13 @@ private def invalidText : BoundedString 4 :=
 #guard !ascii.equals cent
 #guard !ascii.equals abd
 #guard !malformedLength.equals malformedLength
+#guard ascii.contains middle
+#guard ascii.contains suffix
+#guard ascii.contains emptyNeedle
+#guard asciiWithDirtyTail.contains suffix
+#guard !cent.contains middle
+#guard !ascii.contains malformedNeedle
+#guard !malformedLength.contains emptyNeedle
 #guard ascii.compareLex? asciiWithDirtyTail == some .equal
 #guard ascii.compareLex? abd == some .less
 #guard abd.compareLex? ascii == some .greater
@@ -285,6 +310,9 @@ private def invalidText : BoundedString 4 :=
 #guard dirtyAsciiText.equals asciiText
 #guard !asciiText.equals invalidText
 #guard invalidText.equals invalidText
+#guard asciiText.contains middleText
+#guard asciiText.contains emptyText
+#guard dirtyAsciiText.contains middleText
 #guard asciiText.compareLex? dirtyAsciiText == some .equal
 #guard invalidText.compareLex? invalidText == some .equal
 #guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true

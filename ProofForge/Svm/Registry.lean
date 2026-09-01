@@ -53,7 +53,7 @@ def entries : Array Entry := #[
   { name := "TokenMs", digest := "672b83a54f057f79" },
   { name := "TokenStateView", digest := "79e777b300b87504" },
   { name := "SelfLog", digest := "7c000e2c7844d1af" },
-  { name := "RawEntry", digest := "227aaefc7d0012e9" },
+  { name := "RawEntry", digest := "e66bb97f633514b5" },
   { name := "JobQueue", digest := "fd1403f0417085fc" },
   { name := "TicketLine", digest := "2bc374a5816f2649" },
   { name := "FeatureBits", digest := "bb35806f97c686de" },

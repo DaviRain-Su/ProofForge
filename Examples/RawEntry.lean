@@ -205,4 +205,15 @@ def bytesLess (_s : State) (left right : BoundedBytes 8) : Bool :=
 def stringsLess (_s : State) (left right : BoundedString 8) : Bool :=
   left.isLexLess right
 
+/-- Active-prefix substring search is an ordinary bounded SDK policy; the raw adapter owns only
+the two canonical Borsh frames and the Bool result. -/
+@[pf_entry, pf_svm_raw 31 2 0]
+def bytesContains (_s : State) (haystack needle : BoundedBytes 8) : Bool :=
+  haystack.contains needle
+
+/-- Strict UTF-8 decoding remains at the protocol boundary before the shared byte search runs. -/
+@[pf_entry, pf_svm_raw 32 2 0]
+def stringsContains (_s : State) (text needle : BoundedString 8) : Bool :=
+  text.contains needle
+
 end Examples.RawEntry

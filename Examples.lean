@@ -45,6 +45,7 @@ import Examples.TokenStateView
 import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.EvmBounded
+import Examples.EvmSearch
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage

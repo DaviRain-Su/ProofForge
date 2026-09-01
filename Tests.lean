@@ -64,6 +64,7 @@ import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
+import Tests.EvmSearchSpec
 import Tests.EvmStaticStorageSpec
 import Tests.EvmOrderedStorageSpec
 import Tests.EvmEffectStateSpec

@@ -123,6 +123,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing bounded-bytes ordering source method"
   let some sourceStringsLess := source.methods.find? (·.ixName == "stringsLess")
     | throwError "missing bounded-string ordering source method"
+  let some sourceBytesContains := source.methods.find? (·.ixName == "bytesContains")
+    | throwError "missing bounded-bytes substring source method"
+  let some sourceStringsContains := source.methods.find? (·.ixName == "stringsContains")
+    | throwError "missing bounded-string substring source method"
   let pubkeySchema := .record "ProofForge.Svm.Sdk.Pubkey" #[
     ("word0", .scalar .uint64), ("word1", .scalar .uint64),
     ("word2", .scalar .uint64), ("word3", .scalar .uint64)]
@@ -157,8 +161,25 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceBytesLess.retSchema == .scalar .boolean && sourceBytesLess.retCount == 1 &&
       sourceStringsLess.annotations == #["svm.raw.v1:30:2:0"] &&
       sourceStringsLess.paramSchemas == #[.boundedString 8, .boundedString 8] &&
-      sourceStringsLess.retSchema == .scalar .boolean && sourceStringsLess.retCount == 1 do
+      sourceStringsLess.retSchema == .scalar .boolean && sourceStringsLess.retCount == 1 &&
+      sourceBytesContains.annotations == #["svm.raw.v1:31:2:0"] &&
+      sourceBytesContains.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesContains.retSchema == .scalar .boolean && sourceBytesContains.retCount == 1 &&
+      sourceStringsContains.annotations == #["svm.raw.v1:32:2:0"] &&
+      sourceStringsContains.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsContains.retSchema == .scalar .boolean &&
+      sourceStringsContains.retCount == 1 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
+  let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 => ops.foldl (init := #[]) fun bounds op =>
+        match op with
+        | .forBody bound body => bounds.push bound ++ loopBounds fuel' body
+        | .ite _ _ _ yes no => bounds ++ loopBounds fuel' yes ++ loopBounds fuel' no
+        | _ => bounds
+  unless loopBounds 8 sourceBytesContains.ops == #[64] do
+    throwError s!"static SVM product loop bound was not preserved: {loopBounds 8 sourceBytesContains.ops}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -401,11 +422,17 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected bounded-bytes ordering method"
   let some stringsLess := program.methods.find? (·.ixName == "stringsLess")
     | throwError "missing projected bounded-string ordering method"
+  let some bytesContains := program.methods.find? (·.ixName == "bytesContains")
+    | throwError "missing projected bounded-bytes substring method"
+  let some stringsContains := program.methods.find? (·.ixName == "stringsContains")
+    | throwError "missing projected bounded-string substring method"
   for (method, tag, marker) in [
       (bytesEqual, 27, "borsh-schema.[4-12:b"),
       (stringsEqual, 28, "borsh-schema.[4-12:t"),
       (bytesLess, 29, "borsh-schema.[4-12:b"),
-      (stringsLess, 30, "borsh-schema.[4-12:t")
+      (stringsLess, 30, "borsh-schema.[4-12:t"),
+      (bytesContains, 31, "borsh-schema.[4-12:b"),
+      (stringsContains, 32, "borsh-schema.[4-12:t")
     ] do
     match method.entry with
     | .raw entry =>
@@ -470,10 +497,13 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call echoPubkey" && asm.contains "jne r1, 33, err_raw_echoPubkey" &&
       asm.contains "call bytesEqual" && asm.contains "call stringsEqual" &&
       asm.contains "call bytesLess" && asm.contains "call stringsLess" &&
+      asm.contains "call bytesContains" && asm.contains "call stringsContains" &&
       asm.contains "borsh_schema_utf8_loop_stringsEqual_0" &&
       asm.contains "borsh_schema_utf8_loop_stringsEqual_9" &&
       asm.contains "borsh_schema_utf8_loop_stringsLess_0" &&
       asm.contains "borsh_schema_utf8_loop_stringsLess_9" &&
+      asm.contains "borsh_schema_utf8_loop_stringsContains_0" &&
+      asm.contains "borsh_schema_utf8_loop_stringsContains_9" &&
       asm.contains "borsh_return_invalid_echoBoundedValues_" &&
       asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
       asm.contains "borsh_return_invalid_echoBoundedString_" &&

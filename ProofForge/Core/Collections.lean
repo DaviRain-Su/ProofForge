@@ -160,6 +160,43 @@ backing bytes are ignored, and the scan is bounded by compile-time capacity rath
       visited := visited + 1
     return equal == 1 && visited == UInt64.ofNat capacity
 
+/-- Allocation-free active-prefix substring search. Both frames must be canonical. Empty needles
+match every canonical haystack; otherwise one compile-time-bounded candidate scan compares one
+compile-time-bounded needle frame, so neither inactive tail can affect the result. -/
+@[pf_inline] def contains {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Bool :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then false
+  else if UInt64.ofNat needleCapacity < needleLength then false
+  else if needleLength == 0 then true
+  else if haystackLength < needleLength then false
+  else Id.run do
+    let lastStart := haystackLength - needleLength
+    -- Private scalar lowering state: bit zero records any completed match and bit one records
+    -- whether the current candidate still matches. The public API exposes neither representation.
+    let mut scanState : UInt64 := 2
+    let mut visited : UInt64 := 0
+    for flat in [0:capacity * needleCapacity] do
+      let start := flat / needleCapacity
+      let offset := flat % needleCapacity
+      let activeStart := UInt64.ofNat start ≤ lastStart
+      let activeOffset := UInt64.ofNat offset < needleLength
+      let byteEqual : UInt64 :=
+        if activeStart && activeOffset then
+          if haystack.values[start + offset]! == needle.values[offset]! then 1 else 0
+        else 1
+      let found := scanState &&& 1
+      let candidate := (scanState >>> 1) &&& 1
+      let matched := candidate &&& byteEqual
+      let candidateComplete := offset + 1 == needleCapacity
+      let nextFound :=
+        found ||| if candidateComplete && activeStart && matched == 1 then 1 else 0
+      let nextCandidate := if candidateComplete then 1 else matched
+      scanState := nextFound ||| (nextCandidate <<< 1)
+      visited := visited + 1
+    return (scanState &&& 1) == 1 && visited == UInt64.ofNat (capacity * needleCapacity)
+
 /-- One compile-time bounded unsigned-byte scan. `ordering` is a private lowering detail:
 zero remains undecided/equal, one means left is smaller, and two means right is smaller. The public
 API exposes only Bool or `LexOrder`, never this scalar state. -/
@@ -269,6 +306,13 @@ comparison. No normalization or locale policy is inferred. -/
 @[pf_inline] def equals {capacity : Nat}
     (left right : BoundedString capacity) : Bool :=
   left.asBytes.equals right.asBytes
+
+/-- Rust-style `String::contains` semantics over the validated UTF-8 byte carrier. The needle is a
+byte substring rather than a Unicode-scalar or locale-aware pattern, and the shared bounded scan
+performs no allocation. -/
+@[pf_inline] def contains {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (needle : BoundedString needleCapacity) : Bool :=
+  text.asBytes.contains needle.asBytes
 
 /-- Strict UTF-8 is a carrier/boundary invariant, so String ordering reuses the one unsigned-byte
 lexicographic policy without normalization or locale-dependent collation. -/

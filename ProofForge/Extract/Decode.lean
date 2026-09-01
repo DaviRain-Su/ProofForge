@@ -4192,7 +4192,7 @@ private def invokeOpsWithRet
     Except String (Array Ops.Op) := do
   return invokeOps inv (← invokeRet env e inv)
 
-private def forRangeEnd (e : Expr) : Option Nat :=
+private def forRangeEnd (env : Environment) (e : Expr) : Option Nat :=
   let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
     match fuel with
     | 0 => none
@@ -4201,7 +4201,7 @@ private def forRangeEnd (e : Expr) : Option Nat :=
       if endsWith e ".mk" || e.getAppFn.constName?.isSome then
         let rargs := e.getAppArgs
         if rargs.size ≥ 2 then
-          match asLit 8 rargs[1]! with
+          match asStaticLit env 16 rargs[1]! with
           | some (.lit n) => some n.toNat
           | _ => rargs.findSome? (rangeEnd fuel')
         else rargs.findSome? (rangeEnd fuel')
@@ -4330,7 +4330,7 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
         else none
       else if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then
         let args := e.getAppArgs
-        let n? := args.findSome? forRangeEnd
+        let n? := args.findSome? (forRangeEnd env)
         let rec findAdd (fuel : Nat) (e : Expr) : Option Ops.Val :=
           match fuel with
           | 0 => none
@@ -4371,7 +4371,7 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
         if (findForIn env e).isSome then none
         else
           let args := e.getAppArgs
-          let n? := args.findSome? forRangeEnd
+          let n? := args.findSome? (forRangeEnd env)
           -- `forIn xs init (fun i r => body)`：最后一个 λ 是循环体。
           let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
             match fuel with
@@ -4455,7 +4455,7 @@ private def findForStateExpr (env : Environment) (e : Expr) :
         | _ => e.getAppArgs.findSome? (findForExpr fuel')
   let loopParts? := do
     let forExpr ← findForExpr 32 e
-    let n ← forExpr.getAppArgs.findSome? forRangeEnd
+    let n ← forExpr.getAppArgs.findSome? (forRangeEnd env)
     let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
       match fuel with
       | 0 => none

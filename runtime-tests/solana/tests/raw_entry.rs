@@ -33,6 +33,8 @@ const BYTES_EQUAL_TAG: u8 = 27;
 const STRINGS_EQUAL_TAG: u8 = 28;
 const BYTES_LESS_TAG: u8 = 29;
 const STRINGS_LESS_TAG: u8 = 30;
+const BYTES_CONTAINS_TAG: u8 = 31;
+const STRINGS_CONTAINS_TAG: u8 = 32;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -556,7 +558,7 @@ fn bounded_string_enforces_strict_utf8_before_source_observation() {
 }
 
 #[test]
-fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
+fn bounded_bytes_and_strings_compare_and_search_canonical_active_prefixes() {
     let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
     let signer = Pubkey::new_unique();
     let program_account = create_program_account_loader_v3(&program_id);
@@ -594,6 +596,25 @@ fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
             vec![0xc2, 0xa2],
             0,
         ),
+        (BYTES_CONTAINS_TAG, vec![], vec![], 1),
+        (BYTES_CONTAINS_TAG, vec![], b"a".to_vec(), 0),
+        (BYTES_CONTAINS_TAG, b"abc".to_vec(), vec![], 1),
+        (BYTES_CONTAINS_TAG, b"ababa".to_vec(), b"aba".to_vec(), 1),
+        (BYTES_CONTAINS_TAG, b"abc".to_vec(), b"bc".to_vec(), 1),
+        (BYTES_CONTAINS_TAG, b"abc".to_vec(), b"ac".to_vec(), 0),
+        (BYTES_CONTAINS_TAG, b"abc".to_vec(), b"abcd".to_vec(), 0),
+        (
+            STRINGS_CONTAINS_TAG,
+            vec![0xc2, 0xa2, 0xe2, 0x82, 0xac],
+            vec![0xe2, 0x82, 0xac],
+            1,
+        ),
+        (
+            STRINGS_CONTAINS_TAG,
+            vec![0xe2, 0x82, 0xac],
+            vec![0xc2, 0xa2],
+            0,
+        ),
     ] {
         let data = bounded_bytes_pair_data(tag, &left, &right);
         let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
@@ -604,7 +625,7 @@ fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
         );
     }
 
-    for tag in [STRINGS_EQUAL_TAG, STRINGS_LESS_TAG] {
+    for tag in [STRINGS_EQUAL_TAG, STRINGS_LESS_TAG, STRINGS_CONTAINS_TAG] {
         for (left, right) in [
             (vec![0xc0, 0x80], b"abc".to_vec()),
             (b"abc".to_vec(), vec![0xed, 0xa0, 0x80]),

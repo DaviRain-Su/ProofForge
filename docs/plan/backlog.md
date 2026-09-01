@@ -105,6 +105,7 @@ R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
 R1-031 shared allocation-free scaled UInt64 fixed-point policy；
 R1-032 shared allocation-free bounded bytes/String active-prefix equality；
 R1-033 shared allocation-free bounded bytes/String unsigned lexicographic ordering；
+R1-034 shared allocation-free bounded bytes/String substring search；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -472,6 +473,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   RawEntry tags 29/30 与 EvmBounded 分别验证 canonical Borsh/ABI 双输入和 Bool policy；没有
   新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared wire。详见
   `docs/plan/tasks/r1-033.md`。
+
+- R1-034 shared bounded bytes/String substring search 已完成：`BoundedBytes.contains` 接受独立
+  compile-time capacities，以单一 static product scan 覆盖 empty/present/absent/overlap，并在
+  扫描前拒绝任一 malformed length；`BoundedString.contains` 通过 compiler-erased byte view
+  复用，UTF-8 仍由 constructor/codec gate 持有。Extract generic static Nat range evaluation
+  精确保留 `capacity * needleCapacity`，没有新增 Runtime/Ops/IR/CFG/Component/Emit case。
+  RawEntry tags 31/32 与独立 `EvmSearch` Example 分别绑定 dual Borsh/ABI 输入；详见
+  [R1-034](tasks/r1-034.md)。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
