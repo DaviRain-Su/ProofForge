@@ -895,5 +895,27 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 30: Loader account-3 → account-4 skip chain (`svm-sem-035`)
+#guard (walkAccount3SkipNextAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account3SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker
+      let (regs, finalMem) ← evalWalkAccount3SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account3SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAC
+      let (regs, _) ← evalWalkAccount3SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount4Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xAC)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
