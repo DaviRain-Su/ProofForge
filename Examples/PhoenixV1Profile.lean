@@ -12,9 +12,8 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-composed through bounded target-owned components; official instruction coverage includes tags 4–11
-plus a strict PostOnly/no-TIF/deposited-funds-only slice of tag 3, not the complete Phoenix
-instruction set.
+Official instruction coverage includes tags 4–12 plus a strict PostOnly/no-TIF/deposited-funds-only
+slice of tag 3, not the complete Phoenix instruction set.
 -/
 namespace Examples.PhoenixV1Profile
 
@@ -2947,6 +2946,52 @@ def cancelMultipleOrdersById (_s : State)
         let _ ←
           finishCancelMultipleWithdraw512At layout traderIndex quote0 base0
         .ok (_s, 0)
+
+/--
+Official Phoenix `WithdrawFunds` tag 12 wire (exact-lots slice):
+`0c || quote_lots:u64 || base_lots:u64`. Zero lots skip that side. Reuses the shared nine-account
+classic Token withdraw context and claims from free balances before vault CPI. Missing trader or
+insufficient free lots fail closed. Zero/zero is a header-only sequence bump.
+-/
+@[pf_entry, pf_svm_raw 12 9 0]
+def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
+    Except Error (State × UInt64) := do
+  if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let layout := Examples.PhoenixV1.small 2
+    let traderKey0 := signerKey 3
+    let traderIndex := layout.findTrader
+      traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+    if traderIndex = 0 then
+      .error .overflow
+    else
+      let marketSequence := layout.marketSequence
+      let _ := layout.setMarketSequence (marketSequence + 1)
+      let _ := beginMarketBatchAt 12 2 2 marketSequence
+      if quoteLots = 0 && baseLots = 0 then
+        let _ := finishMarketBatch
+        .ok (_s, 0)
+      else
+        let quoteLotSize := layout.quoteLotSize
+        let baseLotSize := layout.baseLotSize
+        let quoteDivisor := if quoteLots = 0 then 1 else quoteLots
+        let baseDivisor := if baseLots = 0 then 1 else baseLots
+        if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+          let quoteAtoms := quoteLots * quoteLotSize
+          let baseAtoms := baseLots * baseLotSize
+          let _ ←
+            if quoteLots = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 0 quoteLots
+          let _ ←
+            if baseLots = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 1 baseLots
+          let _ := withdrawReleasedAt 0 quoteAtoms
+          let _ := withdrawReleasedAt 1 baseAtoms
+          let _ := finishMarketBatch
+          .ok (_s, 0)
+        else
+          .error .overflow
 
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/

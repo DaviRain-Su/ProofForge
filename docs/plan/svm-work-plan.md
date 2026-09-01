@@ -237,6 +237,7 @@ Phase 7   收口
 | [svm-app-009](tasks/svm-app-009.md) | Phoenix CancelMultipleById tag-10 capacity 5→6 | **done** — seam 1088; maxDataLen 107; digest `b88c8a2247d2c28e` |
 | [svm-app-010](tasks/svm-app-010.md) | Phoenix CancelMultipleById tag-10 capacity 6→7 | **done** — seam 1152; maxDataLen 124; digest `31c33408a7d9dbf7` |
 | [svm-app-011](tasks/svm-app-011.md) | Phoenix CancelMultipleById tag-10 capacity 7→8 | **done** — seam 1216; maxDataLen 141; digest `6bf08db0730bf300` |
+| [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001` |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -271,6 +272,7 @@ Phase 7   收口
 | [svm-sem-023](tasks/svm-sem-023.md) | E∞ knife | Loader account-2 signer/writable after skip chain | **done** — knife 18; header+1/+2 |
 | [svm-sem-024](tasks/svm-sem-024.md) | E∞ knife | Loader account-2 lamports/data_len after skip chain | **done** — knife 19; header+0x48/+0x50 |
 | [svm-sem-025](tasks/svm-sem-025.md) | E∞ knife | Loader account-2 owner limbs 0/1 after skip chain | **done** — knife 20; header+0x28/+0x30 |
+| [svm-sem-026](tasks/svm-sem-026.md) | E∞ knife | Loader account-2 owner limbs 2/3 after skip chain | **done** — knife 21; header+0x38/+0x40 |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

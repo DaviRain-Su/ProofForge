@@ -954,6 +954,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   let some cancelByIdFreeRaw :=
       program.methods.find? (·.ixName == "cancelMultipleOrdersByIdWithFreeFunds")
     | throwError "missing raw CancelMultipleOrdersByIdWithFreeFunds"
+  let some withdrawFundsRaw := program.methods.find? (·.ixName == "withdrawFunds")
+    | throwError "missing raw WithdrawFunds"
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
@@ -1039,6 +1041,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 141 do
         throwError s!"wrong raw CancelMultipleOrdersByIdWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelMultipleOrdersByIdWithFreeFunds lost its raw adapter"
+  match withdrawFundsRaw.entry with
+  | .raw entry =>
+      unless withdrawFundsRaw.kind == .get && entry.tag == 12 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
+          entry.dataLen == 17 do
+        throwError s!"wrong raw WithdrawFunds adapter: {repr entry}"
+  | .generated => throwError "WithdrawFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
@@ -1269,6 +1278,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 10 cancelByIdRaw.ops &&
       opsHaveRawReduceFinish cancelByIdRaw.ops do
     throwError "raw CancelMultipleOrdersById composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) withdrawFundsRaw.ops &&
+      opsHaveDataWord 2 1 withdrawFundsRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds withdrawFundsRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds withdrawFundsRaw.ops &&
+      opsHaveRawReduceHeader 12 withdrawFundsRaw.ops &&
+      opsHaveRawReduceFinish withdrawFundsRaw.ops do
+    throwError "raw WithdrawFunds composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
@@ -1563,6 +1579,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jgt r2, 141, raw_route_next_" &&
       asm.contains "jeq r1, 10, raw_route_match_" &&
       asm.contains "jeq r1, 11, raw_route_match_" &&
+      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jeq r1, 12, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&

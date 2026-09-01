@@ -59,6 +59,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-app-009](tasks/svm-app-009.md) | Phoenix CancelMultipleById tag-10 capacity 5→6 | **done** — seam 1088; maxDataLen 107; digest `b88c8a2247d2c28e`; Mollusk six-id + reject len=7 |
 | [svm-app-010](tasks/svm-app-010.md) | Phoenix CancelMultipleById tag-10 capacity 6→7 | **done** — seam 1152; maxDataLen 124; digest `31c33408a7d9dbf7`; Mollusk seven-id + reject len=8 |
 | [svm-app-011](tasks/svm-app-011.md) | Phoenix CancelMultipleById tag-10 capacity 7→8 | **done** — seam 1216; maxDataLen 141; digest `6bf08db0730bf300`; Mollusk eight-id + reject len=9 |
+| [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001`; Mollusk quote+base + zero/zero + insufficient |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
@@ -79,6 +80,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-023](tasks/svm-sem-023.md) | E∞ Loader account-2 signer/writable after skip chain | **done** |
 | [svm-sem-024](tasks/svm-sem-024.md) | E∞ Loader account-2 lamports/data_len after skip chain | **done** |
 | [svm-sem-025](tasks/svm-sem-025.md) | E∞ Loader account-2 owner limbs 0/1 after skip chain | **done** |
+| [svm-sem-026](tasks/svm-sem-026.md) | E∞ Loader account-2 owner limbs 2/3 after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -91,7 +93,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[025](tasks/svm-sem-025.md) | walked `r7` + account-0/1/2 host knives | **done** — account-0/1 full + account-2 through owner0-1 |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[026](tasks/svm-sem-026.md) | walked `r7` + account-0/1/2 host knives | **done** — account-0/1 full + account-2 through owner0-3 |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
