@@ -1654,7 +1654,8 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
       have hfinal := ptr_bound_set s.bumpIndex nodes1 yi
         { nodes1[yi]! with left := xAddress, parent := 0 } hyi hn1
         hxLe hy1.2.1 (Nat.zero_le _) hy1.2.2.2
-      exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
+      refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+      simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
     · simp (config := { zetaDelta := true }) only [hparent0, if_neg] at h
       let parentIndex := (parentAddress.toNat - 1) % 4
       have hpi : parentIndex < 4 := Nat.mod_lt _ (by decide)
@@ -1669,9 +1670,8 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
       change nodes1[yi]!.left ≤ s.bumpIndex ∧
         nodes1[yi]!.right ≤ s.bumpIndex ∧
         nodes1[yi]!.parent ≤ s.bumpIndex ∧ nodes1[yi]!.color ≤ 1 at hy1
-      by_cases hleft : nodes1[parentIndex]!.left = xAddress
-      · simp (config := { zetaDelta := true }) only
-          [hleft, if_pos, Except.ok.injEq, Prod.mk.injEq] at h
+      split at h
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }
@@ -1686,9 +1686,9 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
         have hfinal := ptr_bound_set s.bumpIndex nodesP yi
           { nodes1[yi]! with left := xAddress, parent := parentAddress } hyi hnP
           hxLe hy1.2.1 hparentLe hy1.2.2.2
-        exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-      · simp (config := { zetaDelta := true }) only
-          [hleft, if_neg, Except.ok.injEq, Prod.mk.injEq] at h
+        refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+        simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }
@@ -1703,7 +1703,8 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
         have hfinal := ptr_bound_set s.bumpIndex nodesP yi
           { nodes1[yi]! with left := xAddress, parent := parentAddress } hyi hnP
           hxLe hy1.2.1 hparentLe hy1.2.2.2
-        exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
+        refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+        simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
   · simp (config := { zetaDelta := true }) only [hinner0, if_neg] at h
     have hialloc := hinnerAllocated hinner0
     let innerIndex := (innerAddress.toNat - 1) % 4
@@ -1921,7 +1922,8 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
       have hfinal := ptr_bound_set s.bumpIndex nodes1 yi
         { nodes1[yi]! with right := xAddress, parent := 0 } hyi hn1
         hy1.1 hxLe (Nat.zero_le _) hy1.2.2.2
-      exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
+      refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+      simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
     · simp (config := { zetaDelta := true }) only [hparent0, if_neg] at h
       let parentIndex := (parentAddress.toNat - 1) % 4
       have hpi : parentIndex < 4 := Nat.mod_lt _ (by decide)
@@ -1936,9 +1938,8 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
       change nodes1[yi]!.left ≤ s.bumpIndex ∧
         nodes1[yi]!.right ≤ s.bumpIndex ∧
         nodes1[yi]!.parent ≤ s.bumpIndex ∧ nodes1[yi]!.color ≤ 1 at hy1
-      by_cases hleft : nodes1[parentIndex]!.left = xAddress
-      · simp (config := { zetaDelta := true }) only
-          [hleft, if_pos, Except.ok.injEq, Prod.mk.injEq] at h
+      split at h
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }
@@ -1953,9 +1954,9 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
         have hfinal := ptr_bound_set s.bumpIndex nodesP yi
           { nodes1[yi]! with right := xAddress, parent := parentAddress } hyi hnP
           hy1.1 hxLe hparentLe hy1.2.2.2
-        exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-      · simp (config := { zetaDelta := true }) only
-          [hleft, if_neg, Except.ok.injEq, Prod.mk.injEq] at h
+        refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+        simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }
@@ -1970,7 +1971,8 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
         have hfinal := ptr_bound_set s.bumpIndex nodesP yi
           { nodes1[yi]! with right := xAddress, parent := parentAddress } hyi hnP
           hy1.1 hxLe hparentLe hy1.2.2.2
-        exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
+        refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+        simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
   · simp (config := { zetaDelta := true }) only [hinner0, if_neg] at h
     have hialloc := hinnerAllocated hinner0
     let innerIndex := (innerAddress.toNat - 1) % 4
