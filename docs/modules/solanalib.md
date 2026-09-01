@@ -76,15 +76,19 @@ Solanalib 当前没有为本仓提供：
 - E0：checked arithmetic / static write / 普通 CFG branch（假定 `r1`/`r2` 已持有操作数）
 - E1（`svm-sem-001`）：Counter 形 operand materialization + straightline
   （`field|arg|lit → [r10-8]/[r10-16] → ldxdw r1/r2 →` 既有 guard/body/store）
+- E3（`svm-sem-003`）：Counter `increment` 三块有界 CFG
+  （entry materialize+guard+ALU+scratch → success store/`r0=0` | overflow `r0=0x1001`）；
+  ≤3 blocks / ≤64 instr；concrete 7+5 / max+1 `native_decide`
 
-仍不覆盖：walked `r7` args、整函数 CFG（E3）、AccountWords 桥（E4）、whole-program execution。
+仍不覆盖：walked `r7` args、AccountWords 桥（E4）、多入口整程序（E5）、whole-program /
+Agave ELF execution。
 
 ## Tests
 
 - `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization；
   五种 checked arithmetic 的 success/overflow edge、multiply zero path、scratch handoff 与
-  state-store；六种普通比较 then/else；以及 E1 Counter field/arg/lit materialization 与
-  straightline success/overflow `#guard`。
+  state-store；六种普通比较 then/else；E1 Counter field/arg/lit materialization 与
+  straightline success/overflow；以及 E3 multi-block CFG bounds/success/overflow `#guard`。
 - `Tests/NormalizationSpec.lean`：真实抽出的 Counter increment/decrement/scale/divide/modulo
   都从 Core Place、SVM slot 和各自 target-owned CFG checked terminator 生成对应 typed
   fragment；Counter.nonzero 生成真实普通 branch fragment；任一 Core/CFG operand 不一致或

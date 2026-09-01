@@ -167,4 +167,40 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
       | _ => false
   | _, _ => false
 
+-- E3: Counter increment multi-block CFG (`svm-sem-003`)
+#guard
+  match staticStoreInstruction? valueSlot with
+  | some store =>
+      match counterIncrementCFG? 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset) with
+      | some cfg =>
+          cfg.entry.length + cfg.successBlock.length + cfg.overflowBlock.length ≤
+            counterIncrementInstrBound &&
+            counterIncrementBlockBound == 3
+      | none => false
+  | none => false
+
+#guard
+  match counterInputMem 7 5, staticStoreInstruction? valueSlot with
+  | some mem, some store =>
+      match evalCounterIncrementCFG 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset) mem with
+      | some (.success target finalMem r0) =>
+          target == 11 && r0 == 0 &&
+            loadv .m64 finalMem (mmInputStart + 104) == some (.vlong 12)
+      | _ => false
+  | _, _ => false
+
+#guard
+  match counterInputMem (~~~(0 : U64)) 1, staticStoreInstruction? valueSlot with
+  | some mem, some store =>
+      let before := loadv .m64 mem (mmInputStart + 104)
+      match evalCounterIncrementCFG 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset) mem with
+      | some (.overflow target finalMem r0) =>
+          target == 12 && r0 == BitVec.ofNat 64 overflowReturnCode.toNat &&
+            loadv .m64 finalMem (mmInputStart + 104) == before
+      | _ => false
+  | _, _ => false
+
 end Tests.SolanalibSpec

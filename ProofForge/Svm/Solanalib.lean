@@ -640,4 +640,170 @@ theorem evalCounterStraightline_add_overflow_max :
       | .success _ _ => pure false) = some true := by
   native_decide
 
+/-! ## E3 — Counter increment multi-block CFG (`svm-sem-003`)
+
+Whole-function bounded CFG for Counter `increment` matching the emit layout:
+
+* **entry** — materialize operands, checked-add guard, ALU, scratch `[r10-24]`, `ja` edge
+* **success** — reload scratch, account store, `r0 = 0`, `exit`
+* **overflow** — `r0 = 0x1001`, `exit` (no account store)
+
+E1 inlines the store into the guard fallthrough; E3 restores the CFG split used by
+`Emit.checkedCFGTemplate` + success/overflow exits. Bounds: ≤ 3 blocks, ≤ 64 entry+exit
+instructions, fuel 64. Still out of scope: walked `r7` args, AccountWords (E4), Agave/ELF.
+-/
+
+/-- Official SVM overflow exit code used by `Emit.emitOverflowReturn` (`0x1001`). -/
+def overflowReturnCode : U32 := 0x1001
+
+/-- Explicit CFG block bound for Counter `increment` (entry + success + overflow). -/
+def counterIncrementBlockBound : Nat := 3
+
+/-- Instruction budget covering entry materialize/guard/tail plus both exit blocks. -/
+def counterIncrementInstrBound : Nat := 64
+
+/-- Add guard whose overflow edge skips the 4-instruction entry tail (ALU + scratch + `ja`). -/
+def counterIncrementAddGuard : EbpfAsm :=
+  [ .ldImm .br3 0xffffffff 0xffffffff,
+    .alu64 .sub .br3 (.reg .br2),
+    .jump .gt .br1 (.reg .br3) 4 ]
+
+/-- Local PC after a successful add guard (same slot count as E0 add). -/
+def counterIncrementSuccessPC : U64 := 4
+
+/-- Local PC of the overflow edge (= success PC + 4-instruction entry tail). -/
+def counterIncrementOverflowPC : U64 := 8
+
+/-- Entry-block tail after a successful guard: ALU, scratch handoff, CFG edge. -/
+def counterIncrementEntryTail : EbpfAsm :=
+  checkedArithBody .add ++
+    [ .st .m64 .br10 (.reg .br4) checkedResultOffset,
+      .ja 0 ]
+
+/-- Success successor: reload scratch, account store, return 0, exit. -/
+def counterIncrementSuccessBlock (store : BpfInstruction) : EbpfAsm :=
+  [ .ldx .m64 .br1 .br10 checkedResultOffset,
+    store,
+    .ldImm .br0 0 0 ]
+
+/-- Overflow successor: return `0x1001`, exit. No account store. -/
+def counterIncrementOverflowBlock : EbpfAsm :=
+  [ .ldImm .br0 overflowReturnCode 0 ]
+
+/-- Typed multi-block fragment for Counter `increment`. -/
+structure CounterIncrementCFG where
+  success : Core.CFG.BlockId
+  overflow : Core.CFG.BlockId
+  entry : EbpfAsm
+  successBlock : EbpfAsm
+  overflowBlock : EbpfAsm
+  deriving Repr, BEq
+
+/-- Assemble the three-block Counter increment CFG from operand sources and a static store. -/
+def counterIncrementCFG? (success overflow : Core.CFG.BlockId) (store : BpfInstruction)
+    (lhs rhs : OperandSource) : Option CounterIncrementCFG := do
+  let left ← materializeOperand? lhs lhsStackOffset
+  let right ← materializeOperand? rhs rhsStackOffset
+  let entry :=
+    left ++ right ++ reloadOperands ++ counterIncrementAddGuard ++ counterIncrementEntryTail
+  let successBlock := counterIncrementSuccessBlock store
+  let overflowBlock := counterIncrementOverflowBlock
+  if entry.length + successBlock.length + overflowBlock.length > counterIncrementInstrBound then
+    none
+  else
+    some {
+      success
+      overflow
+      entry
+      successBlock
+      overflowBlock
+    }
+
+/-- Outcome of the multi-block Counter increment CFG, including the exit `r0` convention. -/
+inductive CounterIncrementOutcome where
+  | success (target : Core.CFG.BlockId) (memory : Mem) (r0 : U64)
+  | overflow (target : Core.CFG.BlockId) (memory : Mem) (r0 : U64)
+
+/--
+Structured E3 evaluator: materialize, run add-guard, then dispatch to entry-tail+success
+or overflow exit. Mirrors `Emit.checkedCFGTemplate` edge selection without flattening the
+account store into the guard fallthrough.
+-/
+def evalCounterIncrementCFG (success overflow : Core.CFG.BlockId) (store : BpfInstruction)
+    (lhs rhs : OperandSource) (memory : Mem) : Option CounterIncrementOutcome := do
+  let left ← materializeOperand? lhs lhsStackOffset
+  let right ← materializeOperand? rhs rhsStackOffset
+  let materializePrefix := left ++ right ++ reloadOperands
+  let state0 := initBpfState counterStraightlineRegs memory 64 version
+  match runDecodedFrom 0 materializePrefix state0 with
+  | .ok _ regs mem _ _ _ _ _ =>
+      let guardState := initBpfState regs mem 64 version
+      let guarded := runDecodedFrom 0 counterIncrementAddGuard guardState
+      match guarded with
+      | .ok pc _ _ _ _ _ _ _ =>
+          if pc == counterIncrementSuccessPC then
+            match runDecodedFrom counterIncrementSuccessPC.toNat counterIncrementEntryTail
+                guarded with
+            | .ok _ tailRegs tailMem _ _ _ _ _ =>
+                let successState := initBpfState tailRegs tailMem 64 version
+                match runDecodedFrom 0 (counterIncrementSuccessBlock store) successState with
+                | .ok _ finalRegs finalMem _ _ _ _ _ =>
+                    some (.success success finalMem (finalRegs .br0))
+                | .success _ | .eflag | .err => none
+            | .success _ | .eflag | .err => none
+          else if pc == counterIncrementOverflowPC then
+            match guarded with
+            | .ok _ ovRegs ovMem _ _ _ _ _ =>
+                let overflowState := initBpfState ovRegs ovMem 64 version
+                match runDecodedFrom 0 counterIncrementOverflowBlock overflowState with
+                | .ok _ finalRegs finalMem _ _ _ _ _ =>
+                    some (.overflow overflow finalMem (finalRegs .br0))
+                | .success _ | .eflag | .err => none
+            | _ => none
+          else none
+      | .success _ | .eflag | .err => none
+  | .success _ | .eflag | .err => none
+
+/-- The three-block Counter increment CFG stays inside the declared instruction budget. -/
+theorem counterIncrementCFG_within_bounds :
+    (do
+      let store ← staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      let cfg ← counterIncrementCFG? 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset)
+      pure (cfg.entry.length + cfg.successBlock.length + cfg.overflowBlock.length ≤
+        counterIncrementInstrBound ∧ counterIncrementBlockBound = 3)) = some true := by
+  native_decide
+
+/-- Concrete success path: 7+5 writes 12, returns `r0 = 0`, lands on the success block id. -/
+theorem evalCounterIncrementCFG_add_7_5 :
+    (do
+      let mem ← counterInputMem 7 5
+      let store ← staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      let outcome ← evalCounterIncrementCFG 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset) mem
+      match outcome with
+      | .success target finalMem r0 =>
+          pure (target == 11 && r0 == 0 &&
+            loadv .m64 finalMem (mmInputStart + 104) == some (.vlong 12))
+      | .overflow _ _ _ => pure false) = some true := by
+  native_decide
+
+/-- Concrete overflow path: max+1 leaves value unchanged and returns `r0 = 0x1001`. -/
+theorem evalCounterIncrementCFG_overflow_max :
+    (do
+      let mem ← counterInputMem (~~~(0 : U64)) 1
+      let store ← staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      let before := loadv .m64 mem (mmInputStart + 104)
+      let outcome ← evalCounterIncrementCFG 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset) mem
+      match outcome with
+      | .overflow target finalMem r0 =>
+          pure (target == 12 && r0 == BitVec.ofNat 64 overflowReturnCode.toNat &&
+            loadv .m64 finalMem (mmInputStart + 104) == before)
+      | .success _ _ _ => pure false) = some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
