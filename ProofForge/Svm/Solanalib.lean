@@ -2902,4 +2902,108 @@ theorem walkAccount2OwnerHiAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 22 - Loader account-2 executable + rent_epoch after skip chain (`svm-sem-027`)
+
+Knife 21 completes account-2 owner pubkey after the skip chain. Emit then reads account-2
+executable (`header+3`) and rent_epoch (`header+0x2858` for the zero-data layout). This knife
+composes the account-0/1 skip chain with those loads and proves agreement with absolute
+`r6`-relative loads. Still not full multi-account vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets/VAs for account-2 executable and zero-dataLen rent_epoch. -/
+def account2ExecutableOffset : Nat := account2HeaderOffset + 3
+def account2RentEpochOffset : Nat :=
+  account2HeaderOffset + (account0RentEpochOffset - account0HeaderOffset)
+def account2ExecutableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2ExecutableOffset
+def account2RentEpochAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2RentEpochOffset
+
+/-- Seed chained skip+account-2 owner layout plus executable flag and rent_epoch. -/
+def account2ExecRentInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) : Option Mem := do
+  let m₁ ← account2OwnerHiInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen
+      acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3
+  let m₂ ← storev .m8 m₁ account2ExecutableAddr (.vbyte acc2Executable)
+  storev .m64 m₂ account2RentEpochAddr (.vlong acc2Rent)
+
+/-- Typed double skip then account-2 exec/rent: `ldxb r1,[r2+3]`; `ldxdw r2,[r2+0x2858]`. -/
+def walkAccount2ExecRentAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let execOff ← positiveOffset? (account0ExecutableOffset - account0HeaderOffset)
+  let rentOff ← positiveOffset? (account0RentEpochOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 execOff,
+    .ldx .m64 .br4 .br2 rentOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained skip+account-2 exec/rent walk against seeded input memory. -/
+def evalWalkAccount2ExecRentAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount2ExecRentAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-2 executable and rent_epoch. -/
+def evalAbsAccount2ExecRent? (memory : Mem) : Option (U8 × U64) := do
+  let executable ← loadv .m8 memory account2ExecutableAddr
+  let rentEpoch ← loadv .m64 memory account2RentEpochAddr
+  match executable, rentEpoch with
+  | .vbyte e, .vlong r => some (e, r)
+  | _, _ => none
+
+/-- Walked account-2-exec-rent-after-skip-chain assembly is well-formed. -/
+theorem walkAccount2ExecRentAfterSkipChain_verified :
+    (walkAccount2ExecRentAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip+exec/rent: executable=`1`, rent=`0xEE`, executable staged at `[r10-16]`. -/
+theorem evalWalkAccount2_after_skip_executable_1_rent_0xEE :
+    (do
+      let mem ← account2ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64
+          0xE5 0xF6 0x17 0x28 1 0xEE
+      let (regs, finalMem) ← evalWalkAccount2ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xEE &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-2 exec/rent after skip chain agree with absolute `r6`-relative loads. -/
+theorem walkAccount2ExecRentAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account2ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE
+      let (regs, _) ← evalWalkAccount2ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      let (executable, rentEpoch) ← evalAbsAccount2ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rentEpoch &&
+        executable == 0 && rentEpoch == 0xEE)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

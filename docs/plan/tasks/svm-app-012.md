@@ -1,7 +1,7 @@
 ---
 id: svm-app-012
 track: D-app
-status: doing
+status: done
 plan: ../svm-work-plan.md
 depends-on: [svm-app-011]
 ---
@@ -24,8 +24,10 @@ depends-on: [svm-app-011]
 
 ## Evidence
 
-- Lean extract/emit ×3 → digest TBD
-- Mollusk: `official_raw_withdraw_funds_*`
+- Lean extract/emit ×3 稳定 → digest `c67cc383aa680001`（max scalar local 1008 < 1216）
+- Mollusk: `official_raw_withdraw_funds_claims_quote_and_base_from_free`、
+  `official_raw_withdraw_funds_zero_zero_is_header_only`、
+  `official_raw_withdraw_funds_rejects_insufficient_free_atomically`
 
 ## 仍未覆盖
 
