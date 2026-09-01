@@ -36,6 +36,14 @@ open ProofForge.Core.Value
 /-- Default compile-time fan-in capacity for bounded Promise joins (N13). -/
 def defaultMaxFanIn : Nat := 4
 
+/-- Hard ceiling on the `maxFanIn` type parameter; values above this require extending the
+fixed `andN` opcode ladder (currently through N=8). -/
+def maxFanInCompileCeiling : Nat := 8
+
+/-- Whether a compile-time `maxFanIn` literal is within the supported opcode ladder. -/
+@[pf_inline] def maxFanInWithinCeiling (n : Nat) : Bool :=
+  decide (n ≤ maxFanInCompileCeiling)
+
 /-- Hard ceiling on Promise DAG depth tracked by source handles. -/
 def maxPromiseDepth : Nat := 8
 
@@ -375,6 +383,9 @@ namespace PromiseHandle
 
 @[pf_inline] def fanInOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=
   handle.fanIn.toNat ≤ maxFanIn
+
+@[pf_inline] def withinCompileCeiling {maxFanIn : Nat} (_ : PromiseHandle maxFanIn) : Bool :=
+  maxFanInWithinCeiling maxFanIn
 
 /-- Schedule one returned child call and expose it as a root handle (`depth = 0`). -/
 @[pf_inline] def createReturned {argsCapacity : Nat}

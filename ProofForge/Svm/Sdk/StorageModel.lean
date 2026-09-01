@@ -2004,6 +2004,56 @@ theorem mRemoveKey4_after_find_miss (mem : AccountWords) (map : RbMap) (k0 k1 k2
   unfold mRemoveKey4 mAccDataRbTreeKey4Remove
   cases map <;> rfl
 
+/-- On miss, allocate a fresh one-based slot; on hit return the existing slot without touching
+the allocator. RB tree linking deferred to sf-011 — this layer models slot acquisition only. -/
+def mInsertKey4Alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (key0 key1 key2 key3 : UInt64) : AccountWords × UInt64 :=
+  let slot := mFindKey4 mem map key0 key1 key2 key3
+  if slot = 0 then mAlloc mem alloc else (mem, slot)
+
+/-- Fifo maps always miss find, so insert allocates like a fresh key. -/
+theorem mInsertKey4Alloc_fifo_alloc (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
+    (alloc : Allocator) (k0 k1 k2 k3 : UInt64) :
+    mInsertKey4Alloc mem (.fifo rootWord tree) alloc k0 k1 k2 k3 =
+      mAlloc mem alloc := by
+  unfold mInsertKey4Alloc mFindKey4
+  simp
+
+/-- Miss path delegates slot acquisition to `mAlloc`. -/
+theorem mInsertKey4Alloc_miss_alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (k0 k1 k2 k3 : UInt64) (h : mFindKey4 mem map k0 k1 k2 k3 = 0) :
+    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = mAlloc mem alloc := by
+  unfold mInsertKey4Alloc
+  simp [h]
+
+/-- Hit path is a pure read: memory unchanged, slot preserved. -/
+theorem mInsertKey4Alloc_hit (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (k0 k1 k2 k3 slot : UInt64) (hfind : mFindKey4 mem map k0 k1 k2 k3 = slot)
+    (hne : slot ≠ 0) :
+    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = (mem, slot) := by
+  unfold mInsertKey4Alloc
+  simp [hfind, hne]
+
+/-- Full allocator on miss is fail-closed like bare `mAlloc`. -/
+theorem mInsertKey4Alloc_full (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (k0 k1 k2 k3 : UInt64) (hmiss : mFindKey4 mem map k0 k1 k2 k3 = 0)
+    (hfull : UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem alloc) :
+    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = (mem, 0) := by
+  rw [mInsertKey4Alloc_miss_alloc mem map alloc k0 k1 k2 k3 hmiss, mAlloc_full_noop mem alloc hfull]
+
+/-- Returned slot is either the hit index or the allocator result. -/
+theorem mInsertKey4Alloc_slot (mem : AccountWords) (map : RbMap) (alloc : Allocator)
+    (k0 k1 k2 k3 : UInt64) :
+    (mInsertKey4Alloc mem map alloc k0 k1 k2 k3).2 =
+      if mFindKey4 mem map k0 k1 k2 k3 = 0 then
+        (mAlloc mem alloc).2
+      else
+        mFindKey4 mem map k0 k1 k2 k3 := by
+  unfold mInsertKey4Alloc
+  by_cases h : mFindKey4 mem map k0 k1 k2 k3 = 0
+  · simp [h]
+  · simp [h]
+
 end MapProofs
 
 end ProofForge.Svm.Sdk.StorageModel

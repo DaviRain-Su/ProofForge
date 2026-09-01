@@ -76,4 +76,30 @@ def handleDepthSmoke : Bool :=
 
 #guard handleDepthSmoke
 
+-- Compile-time maxFanIn ceiling: ladder supports 4..8, rejects 9+.
+#guard Promises.maxFanInWithinCeiling Promises.defaultMaxFanIn
+#guard Promises.maxFanInWithinCeiling 6
+#guard Promises.maxFanInWithinCeiling Promises.maxFanInCompileCeiling
+#guard (Promises.maxFanInWithinCeiling 9) == false
+
+-- Custom PromiseHandle 6 can join six edges and stays within the compile ceiling.
+def handleFanInSmoke : Bool :=
+  let root : Promises.PromiseHandle 6 := {
+    id := Promises.callReturned receiver "recordValue" (borshUInt64 0)
+      ({ w0 := 0, w1 := 0 } : NearToken) callGas
+    depth := 0
+    fanIn := 0
+  }
+  let joined := root.and6Returned
+    receiver "echo" (borshUInt64 1) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 2) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 3) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 4) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 5) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 6) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 0) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  root.withinCompileCeiling && joined.withinCompileCeiling && joined.fanInOk && joined.fanIn.toNat == 6
+
+#guard handleFanInSmoke
+
 end Examples.NearPromiseHandle

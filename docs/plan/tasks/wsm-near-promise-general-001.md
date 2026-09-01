@@ -59,7 +59,9 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
    `And3ThenReturned` / `And4ThenReturned` / `And5ThenReturned` / `And6ThenReturned` /
    **`And7ThenReturned`** / **`And8ThenReturned`**,
    matching SDK/Extract/Emit/fixtures through **`sendAnd8*`** / **`callbackJoined8`**;
-   registry digest updates with each N; parameterized compile-time `maxFanIn` beyond fixed N=8 remains follow-up
+   registry digest updates with each N;
+   **`maxFanInCompileCeiling := 8`** + `maxFanInWithinCeiling` / `withinCompileCeiling` smoke
+   (`Examples.NearPromiseHandle.handleFanInSmoke`); parameterized `andN` beyond fixed ladder remains follow-up
 3. ~~Sandbox DAG: create→then; create×3→and→callback~~ — **landed** in
    `runtime-tests/near/promise.py` (`sendAnd3Success` / `sendAnd3RightMissing` scenes on
    `NearPromise.wasm`); handle fixture `sendHandleAnd3` + registry digest `b6a5c316187f4df9`
@@ -68,7 +70,7 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 
 ## Still open
 
-- Parameterized compile-time `maxFanIn` `andN` beyond fixed N=8
+- Generic compile-time `andN` beyond the fixed opcode ladder (N>8 needs new ops)
 - Extract of handle-typed entry bodies
 
 ## Deliverables
