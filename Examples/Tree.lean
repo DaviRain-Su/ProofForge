@@ -2069,7 +2069,7 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
         exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
 
 /-- `wf` 只给出 `≤ bumpIndex`；fixup 还需要非哨兵树边严格落在已分配区。 -/
-private def linksAllocated (s : State) : Prop :=
+def linksAllocated (s : State) : Prop :=
   ∀ a, allocated s a →
     let n := s.nodes[slotIdx a]!
     (n.left = 0 ∨ allocated s n.left) ∧
@@ -2836,6 +2836,1227 @@ theorem insertNode_wf_update (s : State) (i : Nat) (v : UInt64) (hi : i < 4)
     wf { s with nodes := s.nodes.set i { s.nodes[i]! with value := v } } :=
   set_value_wf s i v hi hwf
 
+/-! ### sf-011：删除管线的几何保持 -/
+
+/-- 删除 fixup 所需的严格链接边界：哨兵或 bump 区内地址。 -/
+private def linkAllocated (s : State) (a : UInt64) : Prop :=
+  a = 0 ∨ allocated s a
+
+/-- 删除内部步骤同时维护基础 `wf` 与非哨兵链接已分配性。 -/
+private def deleteGeom (s : State) : Prop :=
+  wf s ∧ linksAllocated s
+
+private theorem linkAllocated_le {s : State} {a : UInt64}
+    (ha : linkAllocated s a) : a ≤ s.bumpIndex := by
+  rcases ha with hzero | halloc
+  · rw [hzero]
+    exact Nat.zero_le _
+  · exact Nat.le_of_lt halloc.2
+
+private theorem allocated_of_bump_eq {s t : State} {a : UInt64}
+    (ha : allocated s a) (hbump : t.bumpIndex = s.bumpIndex) : allocated t a := by
+  simpa only [allocated, hbump] using ha
+
+private theorem linkAllocated_of_bump_eq {s t : State} {a : UInt64}
+    (ha : linkAllocated s a) (hbump : t.bumpIndex = s.bumpIndex) :
+    linkAllocated t a := by
+  simpa only [linkAllocated, allocated, hbump] using ha
+
+private theorem transplantNode_bumpIndex (s : State) (removed replacement : UInt64) :
+    (transplantNode s removed replacement).bumpIndex = s.bumpIndex := by
+  unfold transplantNode
+  dsimp only
+  repeat (first | split | rfl)
+
+private theorem linkLeft_bumpIndex (s : State) (parent child : UInt64) :
+    (linkLeft s parent child).bumpIndex = s.bumpIndex := by
+  unfold linkLeft
+  dsimp only
+  split <;> rfl
+
+private theorem linkRight_bumpIndex (s : State) (parent child : UInt64) :
+    (linkRight s parent child).bumpIndex = s.bumpIndex := by
+  unfold linkRight
+  dsimp only
+  split <;> rfl
+
+private theorem paintNode_bumpIndex (s : State) (addr color : UInt64) :
+    (paintNode s addr color).bumpIndex = s.bumpIndex := by
+  unfold paintNode
+  split <;> rfl
+
+private theorem rotateLeftDelete_bumpIndex (s : State) (xAddress : UInt64) :
+    (rotateLeftDelete s xAddress).bumpIndex = s.bumpIndex := by
+  unfold rotateLeftDelete
+  dsimp only
+  split <;> rfl
+
+private theorem rotateRightDelete_bumpIndex (s : State) (xAddress : UInt64) :
+    (rotateRightDelete s xAddress).bumpIndex = s.bumpIndex := by
+  unfold rotateRightDelete
+  dsimp only
+  split <;> rfl
+
+/-- 对任意槽写入一个几何有界节点，同时保持删除所需的两层不变量。 -/
+private theorem deleteGeom_set (s : State) (i : Nat) (n : Node) (hi : i < 4)
+    (hg : deleteGeom s)
+    (hl : linkAllocated s n.left) (hr : linkAllocated s n.right)
+    (hp : linkAllocated s n.parent) (hc : n.color ≤ 1) :
+    deleteGeom { s with nodes := s.nodes.set i n } := by
+  obtain ⟨hwf, hlinks⟩ := hg
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  constructor
+  · exact ⟨hsz, hb1, hb5, hf5, hfb,
+      ptr_bound_set s.bumpIndex s.nodes i n hi hptr
+        (linkAllocated_le hl) (linkAllocated_le hr) (linkAllocated_le hp) hc⟩
+  · intro a ha
+    change
+      let node := (s.nodes.set i n)[slotIdx a]!
+      (node.left = 0 ∨ allocated { s with nodes := s.nodes.set i n } node.left) ∧
+      (node.right = 0 ∨ allocated { s with nodes := s.nodes.set i n } node.right) ∧
+      (node.parent = 0 ∨ allocated { s with nodes := s.nodes.set i n } node.parent)
+    dsimp only
+    have hslot : slotIdx a < 4 := Nat.mod_lt _ (by decide)
+    by_cases hia : i = slotIdx a
+    · subst hia
+      rw [vec_set_self]
+      simpa only [linkAllocated, allocated] using And.intro hl (And.intro hr hp)
+    · rw [vec_set_ne s.nodes i (slotIdx a) n hi hia hslot]
+      simpa only [allocated] using hlinks a ha
+
+/-- 改 root 不触碰 allocator 或节点槽。 -/
+private theorem deleteGeom_root (s : State) (root : UInt64)
+    (hg : deleteGeom s) : deleteGeom { s with root := root } := by
+  simpa only [deleteGeom, wf, linksAllocated, allocated] using hg
+
+/-- 染色不改变任何链接，故同时保持 `wf` 与严格链接边界。 -/
+private theorem paintNode_deleteGeom (s : State) (addr c : UInt64)
+    (hg : deleteGeom s) (hc : c ≤ 1) : deleteGeom (paintNode s addr c) := by
+  constructor
+  · exact paintNode_wf s addr c hg.1 hc
+  · unfold paintNode
+    split
+    · exact hg.2
+    · intro a ha
+      change
+        let node :=
+          (s.nodes.set ((addr.toNat - 1) % 4)
+            { s.nodes[(addr.toNat - 1) % 4]! with color := c })[slotIdx a]!
+        (node.left = 0 ∨ allocated s node.left) ∧
+        (node.right = 0 ∨ allocated s node.right) ∧
+        (node.parent = 0 ∨ allocated s node.parent)
+      dsimp only
+      have hslot : slotIdx a < 4 := Nat.mod_lt _ (by decide)
+      have hi : (addr.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+      by_cases hia : (addr.toNat - 1) % 4 = slotIdx a
+      · have hget :
+            (s.nodes.set ((addr.toNat - 1) % 4)
+              { s.nodes[(addr.toNat - 1) % 4]! with color := c })[slotIdx a]! =
+              { s.nodes[(addr.toNat - 1) % 4]! with color := c } := by
+            rw [← hia, vec_set_self]
+        rw [hget]
+        have hsame :
+            s.nodes[(addr.toNat - 1) % 4]! = s.nodes[slotIdx a]! := by
+          rw [hia]
+        rw [hsame]
+        exact hg.2 a ha
+      · rw [vec_set_ne s.nodes ((addr.toNat - 1) % 4) (slotIdx a)
+          { s.nodes[(addr.toNat - 1) % 4]! with color := c } hi hia hslot]
+        exact hg.2 a ha
+
+/-- 哨兵地址按槽读取时与地址 1 同槽；只要存在一个已分配地址，该槽也受几何约束。 -/
+private theorem treeNode_deleteGeom (s : State) (addr witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (ha : linkAllocated s addr) :
+    linkAllocated s (treeNode s addr).left ∧
+      linkAllocated s (treeNode s addr).right ∧
+      linkAllocated s (treeNode s addr).parent ∧
+      (treeNode s addr).color ≤ 1 := by
+  obtain ⟨hwf, hlinks⟩ := hg
+  obtain ⟨_, _, _, _, _, hptr⟩ := hwf
+  have hone : allocated s 1 := by
+    refine ⟨by decide, ?_⟩
+    have hw0 : (1 : Nat) ≤ witness.toNat := hwitness.1
+    have hw1 : witness.toNat < s.bumpIndex.toNat := hwitness.2
+    show (1 : Nat) < s.bumpIndex.toNat
+    omega
+  rcases ha with hzero | halloc
+  · subst addr
+    have hlink := hlinks 1 hone
+    have hbound := hptr 1 hone.1 hone.2
+    have hcolor : (s.nodes[0]!).color ≤ 1 := by simpa using hbound.2.2.2
+    simpa [linkAllocated, treeNode, linksAllocated, slotIdx, allocated] using
+      And.intro hlink.1 (And.intro hlink.2.1 (And.intro hlink.2.2 hcolor))
+  · have hlink := hlinks addr halloc
+    have hbound := hptr addr halloc.1 halloc.2
+    simpa only [linkAllocated, treeNode, linksAllocated, slotIdx] using
+      And.intro hlink.1
+        (And.intro hlink.2.1 (And.intro hlink.2.2 hbound.2.2.2))
+
+private theorem linkLeft_deleteGeom (s : State) (parent child witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hparent : allocated s parent) (hchild : linkAllocated s child) :
+    deleteGeom (linkLeft s parent child) := by
+  have hp := treeNode_deleteGeom s parent witness hg hwitness (Or.inr hparent)
+  unfold linkLeft
+  dsimp only
+  split
+  · exact deleteGeom_set s ((parent.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with left := child }
+      (Nat.mod_lt _ (by decide)) hg hchild hp.2.1 hp.2.2.1 hp.2.2.2
+  · rename_i hchild0
+    have hchildAlloc : allocated s child := hchild.resolve_left hchild0
+    let parentIndex := (parent.toNat - 1) % 4
+    let childIndex := (child.toNat - 1) % 4
+    let nodes1 :=
+      s.nodes.set parentIndex { s.nodes[parentIndex]! with left := child }
+    have hg1 : deleteGeom { s with nodes := nodes1 } :=
+      deleteGeom_set s parentIndex { s.nodes[parentIndex]! with left := child }
+        (Nat.mod_lt _ (by decide)) hg hchild hp.2.1 hp.2.2.1 hp.2.2.2
+    have hc := treeNode_deleteGeom s child witness hg hwitness (Or.inr hchildAlloc)
+    exact deleteGeom_set { s with nodes := nodes1 } childIndex
+      { s.nodes[childIndex]! with parent := parent }
+      (Nat.mod_lt _ (by decide)) hg1
+      (by simpa only [linkAllocated, allocated, treeNode, childIndex] using hc.1)
+      (by simpa only [linkAllocated, allocated, treeNode, childIndex] using hc.2.1)
+      (by simpa only [linkAllocated, allocated] using (Or.inr hparent : linkAllocated s parent))
+      (by simpa only [treeNode, childIndex] using hc.2.2.2)
+
+private theorem linkRight_deleteGeom (s : State) (parent child witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hparent : allocated s parent) (hchild : linkAllocated s child) :
+    deleteGeom (linkRight s parent child) := by
+  have hp := treeNode_deleteGeom s parent witness hg hwitness (Or.inr hparent)
+  unfold linkRight
+  dsimp only
+  split
+  · exact deleteGeom_set s ((parent.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with right := child }
+      (Nat.mod_lt _ (by decide)) hg hp.1 hchild hp.2.2.1 hp.2.2.2
+  · rename_i hchild0
+    have hchildAlloc : allocated s child := hchild.resolve_left hchild0
+    let parentIndex := (parent.toNat - 1) % 4
+    let childIndex := (child.toNat - 1) % 4
+    let nodes1 :=
+      s.nodes.set parentIndex { s.nodes[parentIndex]! with right := child }
+    have hg1 : deleteGeom { s with nodes := nodes1 } :=
+      deleteGeom_set s parentIndex { s.nodes[parentIndex]! with right := child }
+        (Nat.mod_lt _ (by decide)) hg hp.1 hchild hp.2.2.1 hp.2.2.2
+    have hc := treeNode_deleteGeom s child witness hg hwitness (Or.inr hchildAlloc)
+    exact deleteGeom_set { s with nodes := nodes1 } childIndex
+      { s.nodes[childIndex]! with parent := parent }
+      (Nat.mod_lt _ (by decide)) hg1
+      (by simpa only [linkAllocated, allocated, treeNode, childIndex] using hc.1)
+      (by simpa only [linkAllocated, allocated, treeNode, childIndex] using hc.2.1)
+      (by simpa only [linkAllocated, allocated] using (Or.inr hparent : linkAllocated s parent))
+      (by simpa only [treeNode, childIndex] using hc.2.2.2)
+
+/-- `transplantNode` 只改父链接、root 与 replacement.parent，保持删除几何。 -/
+private theorem transplantNode_deleteGeom (s : State) (removed replacement : UInt64)
+    (hg : deleteGeom s) (hremoved : allocated s removed)
+    (hreplacement : linkAllocated s replacement) :
+    deleteGeom (transplantNode s removed replacement) := by
+  let removedNode := treeNode s removed
+  let parent := removedNode.parent
+  have hr := treeNode_deleteGeom s removed removed hg hremoved (Or.inr hremoved)
+  change linkAllocated s removedNode.left ∧
+    linkAllocated s removedNode.right ∧ linkAllocated s parent ∧
+    removedNode.color ≤ 1 at hr
+  have hparent := hr.2.2.1
+  unfold transplantNode
+  dsimp only
+  by_cases hparent0raw : (treeNode s removed).parent = 0
+  · have hparent0 : parent = 0 := hparent0raw
+    simp only [hparent0raw, if_pos]
+    let parentLinked := { s with root := replacement }
+    have hgP : deleteGeom parentLinked := deleteGeom_root s replacement hg
+    by_cases hreplacement0 : replacement = 0
+    · simpa [parentLinked, hparent0raw, hreplacement0] using hgP
+    · simp only [hreplacement0, if_neg]
+      have hreplacementAlloc : allocated s replacement :=
+        hreplacement.resolve_left hreplacement0
+      have hreplacementP : allocated parentLinked replacement := by
+        simpa only [parentLinked, allocated] using hreplacementAlloc
+      have hremovedP : allocated parentLinked removed := by
+        simpa only [parentLinked, allocated] using hremoved
+      have hn := treeNode_deleteGeom parentLinked replacement removed hgP hremovedP
+        (Or.inr hreplacementP)
+      simpa [parentLinked, parent, removedNode, hparent0raw, hreplacement0] using
+        deleteGeom_set parentLinked ((replacement.toNat - 1) % 4)
+          { parentLinked.nodes[(replacement.toNat - 1) % 4]! with parent := parent }
+          (Nat.mod_lt _ (by decide)) hgP hn.1 hn.2.1
+          (by simpa only [parentLinked, linkAllocated, allocated] using hparent)
+          hn.2.2.2
+  · have hparent0 : parent ≠ 0 := hparent0raw
+    simp only [hparent0raw, if_neg]
+    have hparentAlloc : allocated s parent := hparent.resolve_left hparent0
+    have hp := treeNode_deleteGeom s parent removed hg hremoved (Or.inr hparentAlloc)
+    let parentIndex := (parent.toNat - 1) % 4
+    by_cases hleftRaw :
+        s.nodes[((treeNode s removed).parent.toNat - 1) % 4]!.left = removed
+    · have hleft : s.nodes[parentIndex]!.left = removed := hleftRaw
+      simp only [hleftRaw, if_pos]
+      let parentLinked :=
+        { s with
+          nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with left := replacement } }
+      have hgP : deleteGeom parentLinked :=
+        deleteGeom_set s parentIndex { s.nodes[parentIndex]! with left := replacement }
+          (Nat.mod_lt _ (by decide)) hg hreplacement hp.2.1 hp.2.2.1 hp.2.2.2
+      by_cases hreplacement0 : replacement = 0
+      · simpa [parentLinked, parentIndex, parent, removedNode, hparent0raw, hleftRaw,
+          hreplacement0] using hgP
+      · simp only [hreplacement0, if_neg]
+        have hreplacementAlloc : allocated s replacement :=
+          hreplacement.resolve_left hreplacement0
+        have hreplacementP : allocated parentLinked replacement := by
+          simpa only [parentLinked, allocated] using hreplacementAlloc
+        have hremovedP : allocated parentLinked removed := by
+          simpa only [parentLinked, allocated] using hremoved
+        have hn := treeNode_deleteGeom parentLinked replacement removed hgP hremovedP
+          (Or.inr hreplacementP)
+        simpa [parentLinked, parentIndex, parent, removedNode, hparent0raw, hleftRaw,
+            hreplacement0] using
+          deleteGeom_set parentLinked ((replacement.toNat - 1) % 4)
+            { parentLinked.nodes[(replacement.toNat - 1) % 4]! with parent := parent }
+            (Nat.mod_lt _ (by decide)) hgP hn.1 hn.2.1
+            (by simpa only [parentLinked, linkAllocated, allocated] using hparent)
+            hn.2.2.2
+    · have hleft : s.nodes[parentIndex]!.left ≠ removed := hleftRaw
+      simp only [hleftRaw, if_neg]
+      let parentLinked :=
+        { s with
+          nodes := s.nodes.set parentIndex { s.nodes[parentIndex]! with right := replacement } }
+      have hgP : deleteGeom parentLinked :=
+        deleteGeom_set s parentIndex { s.nodes[parentIndex]! with right := replacement }
+          (Nat.mod_lt _ (by decide)) hg hp.1 hreplacement hp.2.2.1 hp.2.2.2
+      by_cases hreplacement0 : replacement = 0
+      · simpa [parentLinked, parentIndex, parent, removedNode, hparent0raw, hleftRaw,
+          hreplacement0] using hgP
+      · simp only [hreplacement0, if_neg]
+        have hreplacementAlloc : allocated s replacement :=
+          hreplacement.resolve_left hreplacement0
+        have hreplacementP : allocated parentLinked replacement := by
+          simpa only [parentLinked, allocated] using hreplacementAlloc
+        have hremovedP : allocated parentLinked removed := by
+          simpa only [parentLinked, allocated] using hremoved
+        have hn := treeNode_deleteGeom parentLinked replacement removed hgP hremovedP
+          (Or.inr hreplacementP)
+        simpa [parentLinked, parentIndex, parent, removedNode, hparent0raw, hleftRaw,
+            hreplacement0] using
+          deleteGeom_set parentLinked ((replacement.toNat - 1) % 4)
+            { parentLinked.nodes[(replacement.toNat - 1) % 4]! with parent := parent }
+            (Nat.mod_lt _ (by decide)) hgP hn.1 hn.2.1
+            (by simpa only [parentLinked, linkAllocated, allocated] using hparent)
+            hn.2.2.2
+
+private theorem transplantNode_wf (s : State) (removed replacement : UInt64)
+    (hwf : wf s) (hlinks : linksAllocated s)
+    (hremoved : allocated s removed) (hreplacement : linkAllocated s replacement) :
+    wf (transplantNode s removed replacement) :=
+  (transplantNode_deleteGeom s removed replacement ⟨hwf, hlinks⟩
+    hremoved hreplacement).1
+
+/-- 删除专用左旋只重写哨兵或已分配地址，保持删除几何。 -/
+private theorem rotateLeftDelete_deleteGeom (s : State) (xAddress witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress) :
+    deleteGeom (rotateLeftDelete s xAddress) := by
+  let xi := (xAddress.toNat - 1) % 4
+  let x := s.nodes[xi]!
+  let yAddress := x.right
+  have hx := treeNode_deleteGeom s xAddress witness hg hwitness hxAddress
+  change linkAllocated s x.left ∧ linkAllocated s yAddress ∧
+    linkAllocated s x.parent ∧ x.color ≤ 1 at hx
+  by_cases hy0 : yAddress = 0
+  · simpa [rotateLeftDelete, xi, x, yAddress, hy0] using hg
+  · have hyAddress : allocated s yAddress := hx.2.1.resolve_left hy0
+    let yi := (yAddress.toNat - 1) % 4
+    let y := s.nodes[yi]!
+    let innerAddress := y.left
+    let parentAddress := x.parent
+    have hy := treeNode_deleteGeom s yAddress witness hg hwitness (Or.inr hyAddress)
+    change linkAllocated s innerAddress ∧ linkAllocated s y.right ∧
+      linkAllocated s y.parent ∧ y.color ≤ 1 at hy
+    let nodes1 :=
+      s.nodes.set xi { x with right := innerAddress, parent := yAddress }
+    have hg1 : deleteGeom { s with nodes := nodes1 } :=
+      deleteGeom_set s xi { x with right := innerAddress, parent := yAddress }
+        (Nat.mod_lt _ (by decide)) hg hx.1 hy.1 (Or.inr hyAddress) hx.2.2.2
+    let nodes2 :=
+      if innerAddress = 0 then nodes1
+      else
+        let innerIndex := (innerAddress.toNat - 1) % 4
+        nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+    have hg2 : deleteGeom { s with nodes := nodes2 } := by
+      by_cases hinner0 : innerAddress = 0
+      · simpa [nodes2, hinner0] using hg1
+      · have hinner : allocated s innerAddress := hy.1.resolve_left hinner0
+        have hinner1 : allocated { s with nodes := nodes1 } innerAddress := by
+          simpa only [allocated] using hinner
+        have hn := treeNode_deleteGeom { s with nodes := nodes1 } innerAddress witness
+          hg1 (by simpa only [allocated] using hwitness) (Or.inr hinner1)
+        simpa [nodes2, hinner0, treeNode] using
+          deleteGeom_set { s with nodes := nodes1 } ((innerAddress.toNat - 1) % 4)
+            { nodes1[(innerAddress.toNat - 1) % 4]! with parent := xAddress }
+            (Nat.mod_lt _ (by decide)) hg1 hn.1 hn.2.1
+            (by simpa only [linkAllocated, allocated] using hxAddress) hn.2.2.2
+    let nodes3 :=
+      if parentAddress = 0 then nodes2
+      else
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        if nodes2[parentIndex]!.left = xAddress then
+          nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }
+        else
+          nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }
+    have hg3 : deleteGeom { s with nodes := nodes3 } := by
+      by_cases hparent0 : parentAddress = 0
+      · simpa [nodes3, hparent0] using hg2
+      · have hparent : allocated s parentAddress := hx.2.2.1.resolve_left hparent0
+        have hparent2 : allocated { s with nodes := nodes2 } parentAddress := by
+          simpa only [allocated] using hparent
+        have hp := treeNode_deleteGeom { s with nodes := nodes2 } parentAddress witness
+          hg2 (by simpa only [allocated] using hwitness) (Or.inr hparent2)
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        by_cases hleft : nodes2[parentIndex]!.left = xAddress
+        · simpa [nodes3, hparent0, parentIndex, hleft, treeNode] using
+            deleteGeom_set { s with nodes := nodes2 } parentIndex
+              { nodes2[parentIndex]! with left := yAddress }
+              (Nat.mod_lt _ (by decide)) hg2
+              (by simpa only [linkAllocated, allocated] using (Or.inr hyAddress :
+                linkAllocated s yAddress))
+              hp.2.1 hp.2.2.1 hp.2.2.2
+        · simpa [nodes3, hparent0, parentIndex, hleft, treeNode] using
+            deleteGeom_set { s with nodes := nodes2 } parentIndex
+              { nodes2[parentIndex]! with right := yAddress }
+              (Nat.mod_lt _ (by decide)) hg2 hp.1
+              (by simpa only [linkAllocated, allocated] using (Or.inr hyAddress :
+                linkAllocated s yAddress))
+              hp.2.2.1 hp.2.2.2
+    let nodes4 :=
+      nodes3.set yi { nodes3[yi]! with left := xAddress, parent := parentAddress }
+    have hy3 : allocated { s with nodes := nodes3 } yAddress := by
+      simpa only [allocated] using hyAddress
+    have hyn := treeNode_deleteGeom { s with nodes := nodes3 } yAddress witness
+      hg3 (by simpa only [allocated] using hwitness) (Or.inr hy3)
+    have hg4 : deleteGeom { s with nodes := nodes4 } := by
+      exact deleteGeom_set { s with nodes := nodes3 } yi
+        { nodes3[yi]! with left := xAddress, parent := parentAddress }
+        (Nat.mod_lt _ (by decide)) hg3
+        (by simpa only [linkAllocated, allocated] using hxAddress)
+        hyn.2.1
+        (by simpa only [linkAllocated, allocated] using hx.2.2.1)
+        hyn.2.2.2
+    have hgRoot :=
+      deleteGeom_root { s with nodes := nodes4 }
+        (if parentAddress = 0 then yAddress else s.root) hg4
+    simpa [rotateLeftDelete, xi, x, yAddress, hy0, yi, y, innerAddress,
+      parentAddress, nodes1, nodes2, nodes3, nodes4] using hgRoot
+
+private theorem rotateLeftDelete_wf (s : State) (xAddress witness : UInt64)
+    (hwf : wf s) (hlinks : linksAllocated s) (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress) :
+    wf (rotateLeftDelete s xAddress) :=
+  (rotateLeftDelete_deleteGeom s xAddress witness ⟨hwf, hlinks⟩
+    hwitness hxAddress).1
+
+/-- 删除专用右旋是左旋的镜像，保持删除几何。 -/
+private theorem rotateRightDelete_deleteGeom (s : State) (xAddress witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress) :
+    deleteGeom (rotateRightDelete s xAddress) := by
+  let xi := (xAddress.toNat - 1) % 4
+  let x := s.nodes[xi]!
+  let yAddress := x.left
+  have hx := treeNode_deleteGeom s xAddress witness hg hwitness hxAddress
+  change linkAllocated s yAddress ∧ linkAllocated s x.right ∧
+    linkAllocated s x.parent ∧ x.color ≤ 1 at hx
+  by_cases hy0 : yAddress = 0
+  · simpa [rotateRightDelete, xi, x, yAddress, hy0] using hg
+  · have hyAddress : allocated s yAddress := hx.1.resolve_left hy0
+    let yi := (yAddress.toNat - 1) % 4
+    let y := s.nodes[yi]!
+    let innerAddress := y.right
+    let parentAddress := x.parent
+    have hy := treeNode_deleteGeom s yAddress witness hg hwitness (Or.inr hyAddress)
+    change linkAllocated s y.left ∧ linkAllocated s innerAddress ∧
+      linkAllocated s y.parent ∧ y.color ≤ 1 at hy
+    let nodes1 :=
+      s.nodes.set xi { x with left := innerAddress, parent := yAddress }
+    have hg1 : deleteGeom { s with nodes := nodes1 } :=
+      deleteGeom_set s xi { x with left := innerAddress, parent := yAddress }
+        (Nat.mod_lt _ (by decide)) hg hy.2.1 hx.2.1 (Or.inr hyAddress) hx.2.2.2
+    let nodes2 :=
+      if innerAddress = 0 then nodes1
+      else
+        let innerIndex := (innerAddress.toNat - 1) % 4
+        nodes1.set innerIndex { nodes1[innerIndex]! with parent := xAddress }
+    have hg2 : deleteGeom { s with nodes := nodes2 } := by
+      by_cases hinner0 : innerAddress = 0
+      · simpa [nodes2, hinner0] using hg1
+      · have hinner : allocated s innerAddress := hy.2.1.resolve_left hinner0
+        have hinner1 : allocated { s with nodes := nodes1 } innerAddress := by
+          simpa only [allocated] using hinner
+        have hn := treeNode_deleteGeom { s with nodes := nodes1 } innerAddress witness
+          hg1 (by simpa only [allocated] using hwitness) (Or.inr hinner1)
+        simpa [nodes2, hinner0, treeNode] using
+          deleteGeom_set { s with nodes := nodes1 } ((innerAddress.toNat - 1) % 4)
+            { nodes1[(innerAddress.toNat - 1) % 4]! with parent := xAddress }
+            (Nat.mod_lt _ (by decide)) hg1 hn.1 hn.2.1
+            (by simpa only [linkAllocated, allocated] using hxAddress) hn.2.2.2
+    let nodes3 :=
+      if parentAddress = 0 then nodes2
+      else
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        if nodes2[parentIndex]!.left = xAddress then
+          nodes2.set parentIndex { nodes2[parentIndex]! with left := yAddress }
+        else
+          nodes2.set parentIndex { nodes2[parentIndex]! with right := yAddress }
+    have hg3 : deleteGeom { s with nodes := nodes3 } := by
+      by_cases hparent0 : parentAddress = 0
+      · simpa [nodes3, hparent0] using hg2
+      · have hparent : allocated s parentAddress := hx.2.2.1.resolve_left hparent0
+        have hparent2 : allocated { s with nodes := nodes2 } parentAddress := by
+          simpa only [allocated] using hparent
+        have hp := treeNode_deleteGeom { s with nodes := nodes2 } parentAddress witness
+          hg2 (by simpa only [allocated] using hwitness) (Or.inr hparent2)
+        let parentIndex := (parentAddress.toNat - 1) % 4
+        by_cases hleft : nodes2[parentIndex]!.left = xAddress
+        · simpa [nodes3, hparent0, parentIndex, hleft, treeNode] using
+            deleteGeom_set { s with nodes := nodes2 } parentIndex
+              { nodes2[parentIndex]! with left := yAddress }
+              (Nat.mod_lt _ (by decide)) hg2
+              (by simpa only [linkAllocated, allocated] using (Or.inr hyAddress :
+                linkAllocated s yAddress))
+              hp.2.1 hp.2.2.1 hp.2.2.2
+        · simpa [nodes3, hparent0, parentIndex, hleft, treeNode] using
+            deleteGeom_set { s with nodes := nodes2 } parentIndex
+              { nodes2[parentIndex]! with right := yAddress }
+              (Nat.mod_lt _ (by decide)) hg2 hp.1
+              (by simpa only [linkAllocated, allocated] using (Or.inr hyAddress :
+                linkAllocated s yAddress))
+              hp.2.2.1 hp.2.2.2
+    let nodes4 :=
+      nodes3.set yi { nodes3[yi]! with right := xAddress, parent := parentAddress }
+    have hy3 : allocated { s with nodes := nodes3 } yAddress := by
+      simpa only [allocated] using hyAddress
+    have hyn := treeNode_deleteGeom { s with nodes := nodes3 } yAddress witness
+      hg3 (by simpa only [allocated] using hwitness) (Or.inr hy3)
+    have hg4 : deleteGeom { s with nodes := nodes4 } := by
+      exact deleteGeom_set { s with nodes := nodes3 } yi
+        { nodes3[yi]! with right := xAddress, parent := parentAddress }
+        (Nat.mod_lt _ (by decide)) hg3 hyn.1
+        (by simpa only [linkAllocated, allocated] using hxAddress)
+        (by simpa only [linkAllocated, allocated] using hx.2.2.1)
+        hyn.2.2.2
+    have hgRoot :=
+      deleteGeom_root { s with nodes := nodes4 }
+        (if parentAddress = 0 then yAddress else s.root) hg4
+    simpa [rotateRightDelete, xi, x, yAddress, hy0, yi, y, innerAddress,
+      parentAddress, nodes1, nodes2, nodes3, nodes4] using hgRoot
+
+private theorem rotateRightDelete_wf (s : State) (xAddress witness : UInt64)
+    (hwf : wf s) (hlinks : linksAllocated s) (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress) :
+    wf (rotateRightDelete s xAddress) :=
+  (rotateRightDelete_deleteGeom s xAddress witness ⟨hwf, hlinks⟩
+    hwitness hxAddress).1
+
+/-- successor 搬移由 transplant/link/paint 组合而成，组合保持删除几何。 -/
+private theorem moveSuccessor_deleteGeom (s : State)
+    (removed successor replacement : UInt64)
+    (hg : deleteGeom s) (hremoved : allocated s removed)
+    (hsuccessor : allocated s successor)
+    (hreplacement : linkAllocated s replacement) :
+    deleteGeom (moveSuccessor s removed successor replacement) := by
+  let removedNode := treeNode s removed
+  let successorNode := treeNode s successor
+  have hr := treeNode_deleteGeom s removed removed hg hremoved (Or.inr hremoved)
+  change linkAllocated s removedNode.left ∧ linkAllocated s removedNode.right ∧
+    linkAllocated s removedNode.parent ∧ removedNode.color ≤ 1 at hr
+  unfold moveSuccessor
+  dsimp only
+  by_cases hdirectRaw : (treeNode s successor).parent = removed
+  · simp only [hdirectRaw, if_pos]
+    let moved := transplantNode s removed successor
+    have hgMoved : deleteGeom moved :=
+      transplantNode_deleteGeom s removed successor hg hremoved (Or.inr hsuccessor)
+    have hremovedMoved : allocated moved removed := by
+      exact allocated_of_bump_eq hremoved (transplantNode_bumpIndex s removed successor)
+    have hsuccessorMoved : allocated moved successor := by
+      exact allocated_of_bump_eq hsuccessor (transplantNode_bumpIndex s removed successor)
+    have hleftMoved : linkAllocated moved removedNode.left := by
+      exact linkAllocated_of_bump_eq hr.1 (transplantNode_bumpIndex s removed successor)
+    let withLeft := linkLeft moved successor removedNode.left
+    have hgLeft : deleteGeom withLeft :=
+      linkLeft_deleteGeom moved successor removedNode.left removed hgMoved hremovedMoved
+        hsuccessorMoved hleftMoved
+    exact paintNode_deleteGeom withLeft successor removedNode.color hgLeft hr.2.2.2
+  · simp only [hdirectRaw, if_neg]
+    let detached := transplantNode s successor replacement
+    have hgDetached : deleteGeom detached :=
+      transplantNode_deleteGeom s successor replacement hg hsuccessor hreplacement
+    have hremovedDetached : allocated detached removed := by
+      exact allocated_of_bump_eq hremoved
+        (transplantNode_bumpIndex s successor replacement)
+    have hsuccessorDetached : allocated detached successor := by
+      exact allocated_of_bump_eq hsuccessor
+        (transplantNode_bumpIndex s successor replacement)
+    have hrightDetached : linkAllocated detached removedNode.right := by
+      exact linkAllocated_of_bump_eq hr.2.1
+        (transplantNode_bumpIndex s successor replacement)
+    let withRight := linkRight detached successor removedNode.right
+    have hgRight : deleteGeom withRight :=
+      linkRight_deleteGeom detached successor removedNode.right removed hgDetached
+        hremovedDetached hsuccessorDetached hrightDetached
+    have hremovedRight : allocated withRight removed := by
+      exact allocated_of_bump_eq hremovedDetached
+        (linkRight_bumpIndex detached successor removedNode.right)
+    have hsuccessorRight : allocated withRight successor := by
+      exact allocated_of_bump_eq hsuccessorDetached
+        (linkRight_bumpIndex detached successor removedNode.right)
+    let moved := transplantNode withRight removed successor
+    have hgMoved : deleteGeom moved :=
+      transplantNode_deleteGeom withRight removed successor hgRight hremovedRight
+        (Or.inr hsuccessorRight)
+    have hremovedMoved : allocated moved removed := by
+      exact allocated_of_bump_eq hremovedRight
+        (transplantNode_bumpIndex withRight removed successor)
+    have hsuccessorMoved : allocated moved successor := by
+      exact allocated_of_bump_eq hsuccessorRight
+        (transplantNode_bumpIndex withRight removed successor)
+    have hleftMoved : linkAllocated moved removedNode.left := by
+      exact linkAllocated_of_bump_eq
+        (linkAllocated_of_bump_eq
+          (linkAllocated_of_bump_eq hr.1
+            (transplantNode_bumpIndex s successor replacement))
+          (linkRight_bumpIndex detached successor removedNode.right))
+        (transplantNode_bumpIndex withRight removed successor)
+    let withLeft := linkLeft moved successor removedNode.left
+    have hgLeft : deleteGeom withLeft :=
+      linkLeft_deleteGeom moved successor removedNode.left removed hgMoved hremovedMoved
+        hsuccessorMoved hleftMoved
+    exact paintNode_deleteGeom withLeft successor removedNode.color hgLeft hr.2.2.2
+
+private theorem moveSuccessor_wf (s : State)
+    (removed successor replacement : UInt64)
+    (hwf : wf s) (hlinks : linksAllocated s)
+    (hremoved : allocated s removed) (hsuccessor : allocated s successor)
+    (hreplacement : linkAllocated s replacement) :
+    wf (moveSuccessor s removed successor replacement) :=
+  (moveSuccessor_deleteGeom s removed successor replacement ⟨hwf, hlinks⟩
+    hremoved hsuccessor hreplacement).1
+
+/-- `fixDeleted` 的 x 为左孩子时，覆盖红兄弟、双黑孩子与近/远侄子三类分支。 -/
+private theorem fixDeleted_left_deleteGeom (s : State)
+    (xAddress parentAddress witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hparent : allocated s parentAddress) :
+    deleteGeom
+      (let firstSibling := (treeNode s parentAddress).right
+       let afterRedSibling :=
+         if treeColor s firstSibling = 1 then
+           let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+           rotateLeftDelete recolored parentAddress
+         else s
+       let sibling := (treeNode afterRedSibling parentAddress).right
+       let nearChild := (treeNode afterRedSibling sibling).left
+       let farChild := (treeNode afterRedSibling sibling).right
+       if treeColor afterRedSibling nearChild = 0 &&
+           treeColor afterRedSibling farChild = 0 then
+         let siblingRed := paintNode afterRedSibling sibling 1
+         paintNode siblingRed parentAddress 0
+       else
+         let aligned :=
+           if treeColor afterRedSibling farChild = 0 then
+             let recolored :=
+               paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+             rotateRightDelete recolored sibling
+           else afterRedSibling
+         let alignedSibling := (treeNode aligned parentAddress).right
+         let alignedFar := (treeNode aligned alignedSibling).right
+         let parentColor := treeColor aligned parentAddress
+         let recolored :=
+           paintNode
+             (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+             alignedFar 0
+         rotateLeftDelete recolored parentAddress) := by
+  have hp := treeNode_deleteGeom s parentAddress witness hg hwitness (Or.inr hparent)
+  let firstSibling := (treeNode s parentAddress).right
+  have hfirst : linkAllocated s firstSibling := hp.2.1
+  let afterRedSibling :=
+    if treeColor s firstSibling = 1 then
+      let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+      rotateLeftDelete recolored parentAddress
+    else s
+  have hafter : deleteGeom afterRedSibling ∧
+      afterRedSibling.bumpIndex = s.bumpIndex := by
+    by_cases hred : treeColor s firstSibling = 1
+    · let paintedSibling := paintNode s firstSibling 0
+      have hgSibling := paintNode_deleteGeom s firstSibling 0 hg (by decide)
+      let recolored := paintNode paintedSibling parentAddress 1
+      have hgRecolored :=
+        paintNode_deleteGeom paintedSibling parentAddress 1 hgSibling (by decide)
+      have hwitnessRecolored : allocated recolored witness := by
+        exact allocated_of_bump_eq
+          (allocated_of_bump_eq hwitness (paintNode_bumpIndex s firstSibling 0))
+          (paintNode_bumpIndex paintedSibling parentAddress 1)
+      have hparentRecolored : allocated recolored parentAddress := by
+        exact allocated_of_bump_eq
+          (allocated_of_bump_eq hparent (paintNode_bumpIndex s firstSibling 0))
+          (paintNode_bumpIndex paintedSibling parentAddress 1)
+      have hgRotated :=
+        rotateLeftDelete_deleteGeom recolored parentAddress witness hgRecolored
+          hwitnessRecolored (Or.inr hparentRecolored)
+      constructor
+      · simpa [afterRedSibling, hred, recolored, paintedSibling] using hgRotated
+      · calc
+          afterRedSibling.bumpIndex =
+              (rotateLeftDelete recolored parentAddress).bumpIndex := by
+                simp [afterRedSibling, hred, recolored, paintedSibling]
+          _ = recolored.bumpIndex :=
+            rotateLeftDelete_bumpIndex recolored parentAddress
+          _ = paintedSibling.bumpIndex := paintNode_bumpIndex paintedSibling parentAddress 1
+          _ = s.bumpIndex := paintNode_bumpIndex s firstSibling 0
+    · constructor
+      · simpa [afterRedSibling, hred] using hg
+      · simp [afterRedSibling, hred]
+  have hwitnessAfter : allocated afterRedSibling witness :=
+    allocated_of_bump_eq hwitness hafter.2
+  have hparentAfter : allocated afterRedSibling parentAddress :=
+    allocated_of_bump_eq hparent hafter.2
+  let sibling := (treeNode afterRedSibling parentAddress).right
+  have hpAfter := treeNode_deleteGeom afterRedSibling parentAddress witness hafter.1
+    hwitnessAfter (Or.inr hparentAfter)
+  have hsibling : linkAllocated afterRedSibling sibling := hpAfter.2.1
+  let nearChild := (treeNode afterRedSibling sibling).left
+  let farChild := (treeNode afterRedSibling sibling).right
+  have hsiblingNode := treeNode_deleteGeom afterRedSibling sibling witness hafter.1
+    hwitnessAfter hsibling
+  change linkAllocated afterRedSibling nearChild ∧
+    linkAllocated afterRedSibling farChild ∧
+    linkAllocated afterRedSibling (treeNode afterRedSibling sibling).parent ∧
+    (treeNode afterRedSibling sibling).color ≤ 1 at hsiblingNode
+  change deleteGeom
+    (if treeColor afterRedSibling nearChild = 0 &&
+        treeColor afterRedSibling farChild = 0 then
+      paintNode (paintNode afterRedSibling sibling 1) parentAddress 0
+    else
+      let aligned :=
+        if treeColor afterRedSibling farChild = 0 then
+          rotateRightDelete
+            (paintNode (paintNode afterRedSibling nearChild 0) sibling 1) sibling
+        else afterRedSibling
+      let alignedSibling := (treeNode aligned parentAddress).right
+      let alignedFar := (treeNode aligned alignedSibling).right
+      let parentColor := treeColor aligned parentAddress
+      let recolored :=
+        paintNode
+          (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+          alignedFar 0
+      rotateLeftDelete recolored parentAddress)
+  by_cases hblack :
+      treeColor afterRedSibling nearChild = 0 &&
+        treeColor afterRedSibling farChild = 0
+  · simp only [hblack, if_pos]
+    let siblingRed := paintNode afterRedSibling sibling 1
+    have hgSibling :=
+      paintNode_deleteGeom afterRedSibling sibling 1 hafter.1 (by decide)
+    change deleteGeom (paintNode siblingRed parentAddress 0)
+    exact paintNode_deleteGeom siblingRed parentAddress 0 hgSibling (by decide)
+  · simp only [hblack, if_neg]
+    let aligned :=
+      if treeColor afterRedSibling farChild = 0 then
+        let recolored :=
+          paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+        rotateRightDelete recolored sibling
+      else afterRedSibling
+    have haligned : deleteGeom aligned ∧
+        aligned.bumpIndex = afterRedSibling.bumpIndex := by
+      by_cases hfar : treeColor afterRedSibling farChild = 0
+      · let paintedNear := paintNode afterRedSibling nearChild 0
+        have hgNear :=
+          paintNode_deleteGeom afterRedSibling nearChild 0 hafter.1 (by decide)
+        let recolored := paintNode paintedNear sibling 1
+        have hgRecolored :=
+          paintNode_deleteGeom paintedNear sibling 1 hgNear (by decide)
+        have hwitnessRecolored : allocated recolored witness := by
+          exact allocated_of_bump_eq
+            (allocated_of_bump_eq hwitnessAfter
+              (paintNode_bumpIndex afterRedSibling nearChild 0))
+            (paintNode_bumpIndex paintedNear sibling 1)
+        have hsiblingRecolored : linkAllocated recolored sibling := by
+          exact linkAllocated_of_bump_eq
+            (linkAllocated_of_bump_eq hsibling
+              (paintNode_bumpIndex afterRedSibling nearChild 0))
+            (paintNode_bumpIndex paintedNear sibling 1)
+        have hgRotated :=
+          rotateRightDelete_deleteGeom recolored sibling witness hgRecolored
+            hwitnessRecolored hsiblingRecolored
+        constructor
+        · simpa [aligned, hfar, recolored, paintedNear] using hgRotated
+        · calc
+            aligned.bumpIndex =
+                (rotateRightDelete recolored sibling).bumpIndex := by
+                  simp [aligned, hfar, recolored, paintedNear]
+            _ = recolored.bumpIndex :=
+              rotateRightDelete_bumpIndex recolored sibling
+            _ = paintedNear.bumpIndex := paintNode_bumpIndex paintedNear sibling 1
+            _ = afterRedSibling.bumpIndex :=
+              paintNode_bumpIndex afterRedSibling nearChild 0
+      · constructor
+        · simpa [aligned, hfar] using hafter.1
+        · simp [aligned, hfar]
+    have hwitnessAligned : allocated aligned witness :=
+      allocated_of_bump_eq hwitnessAfter haligned.2
+    have hparentAligned : allocated aligned parentAddress :=
+      allocated_of_bump_eq hparentAfter haligned.2
+    let alignedSibling := (treeNode aligned parentAddress).right
+    have hpAligned := treeNode_deleteGeom aligned parentAddress witness haligned.1
+      hwitnessAligned (Or.inr hparentAligned)
+    have hAlignedSibling : linkAllocated aligned alignedSibling := hpAligned.2.1
+    let alignedFar := (treeNode aligned alignedSibling).right
+    have hsAligned := treeNode_deleteGeom aligned alignedSibling witness haligned.1
+      hwitnessAligned hAlignedSibling
+    have hAlignedFar : linkAllocated aligned alignedFar := hsAligned.2.1
+    let parentColor := treeColor aligned parentAddress
+    have hparentColor : parentColor ≤ 1 := by
+      unfold parentColor treeColor
+      split
+      · decide
+      · exact hpAligned.2.2.2
+    let paintedSibling := paintNode aligned alignedSibling parentColor
+    have hgPaintedSibling :=
+      paintNode_deleteGeom aligned alignedSibling parentColor haligned.1 hparentColor
+    let paintedParent := paintNode paintedSibling parentAddress 0
+    have hgPaintedParent :=
+      paintNode_deleteGeom paintedSibling parentAddress 0 hgPaintedSibling (by decide)
+    let recolored := paintNode paintedParent alignedFar 0
+    have hgRecolored :=
+      paintNode_deleteGeom paintedParent alignedFar 0 hgPaintedParent (by decide)
+    have hwitnessRecolored : allocated recolored witness := by
+      exact allocated_of_bump_eq
+        (allocated_of_bump_eq
+          (allocated_of_bump_eq hwitnessAligned
+            (paintNode_bumpIndex aligned alignedSibling parentColor))
+          (paintNode_bumpIndex paintedSibling parentAddress 0))
+        (paintNode_bumpIndex paintedParent alignedFar 0)
+    have hparentRecolored : allocated recolored parentAddress := by
+      exact allocated_of_bump_eq
+        (allocated_of_bump_eq
+          (allocated_of_bump_eq hparentAligned
+            (paintNode_bumpIndex aligned alignedSibling parentColor))
+          (paintNode_bumpIndex paintedSibling parentAddress 0))
+        (paintNode_bumpIndex paintedParent alignedFar 0)
+    change deleteGeom (rotateLeftDelete recolored parentAddress)
+    exact rotateLeftDelete_deleteGeom recolored parentAddress witness hgRecolored
+      hwitnessRecolored (Or.inr hparentRecolored)
+
+/-- `fixDeleted` 的 x 为右孩子时的镜像分支。 -/
+private theorem fixDeleted_right_deleteGeom (s : State)
+    (xAddress parentAddress witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hparent : allocated s parentAddress) :
+    deleteGeom
+      (let firstSibling := (treeNode s parentAddress).left
+       let afterRedSibling :=
+         if treeColor s firstSibling = 1 then
+           let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+           rotateRightDelete recolored parentAddress
+         else s
+       let sibling := (treeNode afterRedSibling parentAddress).left
+       let nearChild := (treeNode afterRedSibling sibling).right
+       let farChild := (treeNode afterRedSibling sibling).left
+       if treeColor afterRedSibling nearChild = 0 &&
+           treeColor afterRedSibling farChild = 0 then
+         let siblingRed := paintNode afterRedSibling sibling 1
+         paintNode siblingRed parentAddress 0
+       else
+         let aligned :=
+           if treeColor afterRedSibling farChild = 0 then
+             let recolored :=
+               paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+             rotateLeftDelete recolored sibling
+           else afterRedSibling
+         let alignedSibling := (treeNode aligned parentAddress).left
+         let alignedFar := (treeNode aligned alignedSibling).left
+         let parentColor := treeColor aligned parentAddress
+         let recolored :=
+           paintNode
+             (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+             alignedFar 0
+         rotateRightDelete recolored parentAddress) := by
+  have hp := treeNode_deleteGeom s parentAddress witness hg hwitness (Or.inr hparent)
+  let firstSibling := (treeNode s parentAddress).left
+  have hfirst : linkAllocated s firstSibling := hp.1
+  let afterRedSibling :=
+    if treeColor s firstSibling = 1 then
+      let recolored := paintNode (paintNode s firstSibling 0) parentAddress 1
+      rotateRightDelete recolored parentAddress
+    else s
+  have hafter : deleteGeom afterRedSibling ∧
+      afterRedSibling.bumpIndex = s.bumpIndex := by
+    by_cases hred : treeColor s firstSibling = 1
+    · let paintedSibling := paintNode s firstSibling 0
+      have hgSibling := paintNode_deleteGeom s firstSibling 0 hg (by decide)
+      let recolored := paintNode paintedSibling parentAddress 1
+      have hgRecolored :=
+        paintNode_deleteGeom paintedSibling parentAddress 1 hgSibling (by decide)
+      have hwitnessRecolored : allocated recolored witness := by
+        exact allocated_of_bump_eq
+          (allocated_of_bump_eq hwitness (paintNode_bumpIndex s firstSibling 0))
+          (paintNode_bumpIndex paintedSibling parentAddress 1)
+      have hparentRecolored : allocated recolored parentAddress := by
+        exact allocated_of_bump_eq
+          (allocated_of_bump_eq hparent (paintNode_bumpIndex s firstSibling 0))
+          (paintNode_bumpIndex paintedSibling parentAddress 1)
+      have hgRotated :=
+        rotateRightDelete_deleteGeom recolored parentAddress witness hgRecolored
+          hwitnessRecolored (Or.inr hparentRecolored)
+      constructor
+      · simpa [afterRedSibling, hred, recolored, paintedSibling] using hgRotated
+      · calc
+          afterRedSibling.bumpIndex =
+              (rotateRightDelete recolored parentAddress).bumpIndex := by
+                simp [afterRedSibling, hred, recolored, paintedSibling]
+          _ = recolored.bumpIndex :=
+            rotateRightDelete_bumpIndex recolored parentAddress
+          _ = paintedSibling.bumpIndex := paintNode_bumpIndex paintedSibling parentAddress 1
+          _ = s.bumpIndex := paintNode_bumpIndex s firstSibling 0
+    · constructor
+      · simpa [afterRedSibling, hred] using hg
+      · simp [afterRedSibling, hred]
+  have hwitnessAfter : allocated afterRedSibling witness :=
+    allocated_of_bump_eq hwitness hafter.2
+  have hparentAfter : allocated afterRedSibling parentAddress :=
+    allocated_of_bump_eq hparent hafter.2
+  let sibling := (treeNode afterRedSibling parentAddress).left
+  have hpAfter := treeNode_deleteGeom afterRedSibling parentAddress witness hafter.1
+    hwitnessAfter (Or.inr hparentAfter)
+  have hsibling : linkAllocated afterRedSibling sibling := hpAfter.1
+  let nearChild := (treeNode afterRedSibling sibling).right
+  let farChild := (treeNode afterRedSibling sibling).left
+  have hsiblingNode := treeNode_deleteGeom afterRedSibling sibling witness hafter.1
+    hwitnessAfter hsibling
+  change linkAllocated afterRedSibling farChild ∧
+    linkAllocated afterRedSibling nearChild ∧
+    linkAllocated afterRedSibling (treeNode afterRedSibling sibling).parent ∧
+    (treeNode afterRedSibling sibling).color ≤ 1 at hsiblingNode
+  change deleteGeom
+    (if treeColor afterRedSibling nearChild = 0 &&
+        treeColor afterRedSibling farChild = 0 then
+      paintNode (paintNode afterRedSibling sibling 1) parentAddress 0
+    else
+      let aligned :=
+        if treeColor afterRedSibling farChild = 0 then
+          rotateLeftDelete
+            (paintNode (paintNode afterRedSibling nearChild 0) sibling 1) sibling
+        else afterRedSibling
+      let alignedSibling := (treeNode aligned parentAddress).left
+      let alignedFar := (treeNode aligned alignedSibling).left
+      let parentColor := treeColor aligned parentAddress
+      let recolored :=
+        paintNode
+          (paintNode (paintNode aligned alignedSibling parentColor) parentAddress 0)
+          alignedFar 0
+      rotateRightDelete recolored parentAddress)
+  by_cases hblack :
+      treeColor afterRedSibling nearChild = 0 &&
+        treeColor afterRedSibling farChild = 0
+  · simp only [hblack, if_pos]
+    let siblingRed := paintNode afterRedSibling sibling 1
+    have hgSibling :=
+      paintNode_deleteGeom afterRedSibling sibling 1 hafter.1 (by decide)
+    change deleteGeom (paintNode siblingRed parentAddress 0)
+    exact paintNode_deleteGeom siblingRed parentAddress 0 hgSibling (by decide)
+  · simp only [hblack, if_neg]
+    let aligned :=
+      if treeColor afterRedSibling farChild = 0 then
+        let recolored :=
+          paintNode (paintNode afterRedSibling nearChild 0) sibling 1
+        rotateLeftDelete recolored sibling
+      else afterRedSibling
+    have haligned : deleteGeom aligned ∧
+        aligned.bumpIndex = afterRedSibling.bumpIndex := by
+      by_cases hfar : treeColor afterRedSibling farChild = 0
+      · let paintedNear := paintNode afterRedSibling nearChild 0
+        have hgNear :=
+          paintNode_deleteGeom afterRedSibling nearChild 0 hafter.1 (by decide)
+        let recolored := paintNode paintedNear sibling 1
+        have hgRecolored :=
+          paintNode_deleteGeom paintedNear sibling 1 hgNear (by decide)
+        have hwitnessRecolored : allocated recolored witness := by
+          exact allocated_of_bump_eq
+            (allocated_of_bump_eq hwitnessAfter
+              (paintNode_bumpIndex afterRedSibling nearChild 0))
+            (paintNode_bumpIndex paintedNear sibling 1)
+        have hsiblingRecolored : linkAllocated recolored sibling := by
+          exact linkAllocated_of_bump_eq
+            (linkAllocated_of_bump_eq hsibling
+              (paintNode_bumpIndex afterRedSibling nearChild 0))
+            (paintNode_bumpIndex paintedNear sibling 1)
+        have hgRotated :=
+          rotateLeftDelete_deleteGeom recolored sibling witness hgRecolored
+            hwitnessRecolored hsiblingRecolored
+        constructor
+        · simpa [aligned, hfar, recolored, paintedNear] using hgRotated
+        · calc
+            aligned.bumpIndex =
+                (rotateLeftDelete recolored sibling).bumpIndex := by
+                  simp [aligned, hfar, recolored, paintedNear]
+            _ = recolored.bumpIndex :=
+              rotateLeftDelete_bumpIndex recolored sibling
+            _ = paintedNear.bumpIndex := paintNode_bumpIndex paintedNear sibling 1
+            _ = afterRedSibling.bumpIndex :=
+              paintNode_bumpIndex afterRedSibling nearChild 0
+      · constructor
+        · simpa [aligned, hfar] using hafter.1
+        · simp [aligned, hfar]
+    have hwitnessAligned : allocated aligned witness :=
+      allocated_of_bump_eq hwitnessAfter haligned.2
+    have hparentAligned : allocated aligned parentAddress :=
+      allocated_of_bump_eq hparentAfter haligned.2
+    let alignedSibling := (treeNode aligned parentAddress).left
+    have hpAligned := treeNode_deleteGeom aligned parentAddress witness haligned.1
+      hwitnessAligned (Or.inr hparentAligned)
+    have hAlignedSibling : linkAllocated aligned alignedSibling := hpAligned.1
+    let alignedFar := (treeNode aligned alignedSibling).left
+    have hsAligned := treeNode_deleteGeom aligned alignedSibling witness haligned.1
+      hwitnessAligned hAlignedSibling
+    have hAlignedFar : linkAllocated aligned alignedFar := hsAligned.1
+    let parentColor := treeColor aligned parentAddress
+    have hparentColor : parentColor ≤ 1 := by
+      unfold parentColor treeColor
+      split
+      · decide
+      · exact hpAligned.2.2.2
+    let paintedSibling := paintNode aligned alignedSibling parentColor
+    have hgPaintedSibling :=
+      paintNode_deleteGeom aligned alignedSibling parentColor haligned.1 hparentColor
+    let paintedParent := paintNode paintedSibling parentAddress 0
+    have hgPaintedParent :=
+      paintNode_deleteGeom paintedSibling parentAddress 0 hgPaintedSibling (by decide)
+    let recolored := paintNode paintedParent alignedFar 0
+    have hgRecolored :=
+      paintNode_deleteGeom paintedParent alignedFar 0 hgPaintedParent (by decide)
+    have hwitnessRecolored : allocated recolored witness := by
+      exact allocated_of_bump_eq
+        (allocated_of_bump_eq
+          (allocated_of_bump_eq hwitnessAligned
+            (paintNode_bumpIndex aligned alignedSibling parentColor))
+          (paintNode_bumpIndex paintedSibling parentAddress 0))
+        (paintNode_bumpIndex paintedParent alignedFar 0)
+    have hparentRecolored : allocated recolored parentAddress := by
+      exact allocated_of_bump_eq
+        (allocated_of_bump_eq
+          (allocated_of_bump_eq hparentAligned
+            (paintNode_bumpIndex aligned alignedSibling parentColor))
+          (paintNode_bumpIndex paintedSibling parentAddress 0))
+        (paintNode_bumpIndex paintedParent alignedFar 0)
+    change deleteGeom (rotateRightDelete recolored parentAddress)
+    exact rotateRightDelete_deleteGeom recolored parentAddress witness hgRecolored
+      hwitnessRecolored (Or.inr hparentRecolored)
+
+/-- 完整删除 fixup 保持几何；parent/x 均可为哨兵，否则必须已分配。 -/
+private theorem fixDeleted_deleteGeom (s : State)
+    (xAddress parentAddress witness : UInt64)
+    (hg : deleteGeom s) (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress)
+    (hparentAddress : linkAllocated s parentAddress) :
+    deleteGeom (fixDeleted s xAddress parentAddress) := by
+  unfold fixDeleted
+  dsimp only
+  split
+  · exact paintNode_deleteGeom s xAddress 0 hg (by decide)
+  · split
+    · exact paintNode_deleteGeom s xAddress 0 hg (by decide)
+    · split
+      · exact paintNode_deleteGeom s xAddress 0 hg (by decide)
+      · rename_i _ _ hparent0
+        have hparent : allocated s parentAddress :=
+          hparentAddress.resolve_left hparent0
+        split
+        · exact fixDeleted_left_deleteGeom s xAddress parentAddress witness
+            hg hwitness hparent
+        · exact fixDeleted_right_deleteGeom s xAddress parentAddress witness
+            hg hwitness hparent
+
+private theorem fixDeleted_wf (s : State)
+    (xAddress parentAddress witness : UInt64)
+    (hwf : wf s) (hlinks : linksAllocated s)
+    (hwitness : allocated s witness)
+    (hxAddress : linkAllocated s xAddress)
+    (hparentAddress : linkAllocated s parentAddress) :
+    wf (fixDeleted s xAddress parentAddress) :=
+  (fixDeleted_deleteGeom s xAddress parentAddress witness ⟨hwf, hlinks⟩
+    hwitness hxAddress hparentAddress).1
+
+private theorem moveSuccessor_bumpIndex (s : State)
+    (removed successor replacement : UInt64) :
+    (moveSuccessor s removed successor replacement).bumpIndex = s.bumpIndex := by
+  unfold moveSuccessor
+  dsimp only
+  split <;>
+    simp only [paintNode_bumpIndex, linkLeft_bumpIndex, linkRight_bumpIndex,
+      transplantNode_bumpIndex]
+
+private theorem fixDeleted_bumpIndex (s : State) (xAddress parentAddress : UInt64) :
+    (fixDeleted s xAddress parentAddress).bumpIndex = s.bumpIndex := by
+  unfold fixDeleted
+  repeat (first
+    | split
+    | simp only [paintNode_bumpIndex, rotateLeftDelete_bumpIndex,
+        rotateRightDelete_bumpIndex]
+    | rfl)
+
+private theorem releaseRemoved_delete_wf (s : State) (addr : UInt64)
+    (hwf : wf s) (ha : 1 ≤ addr ∧ addr < s.bumpIndex)
+    (hsz0 : (0 : Nat) < s.size.toNat) : wf (releaseRemoved s addr) := by
+  unfold releaseRemoved
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  have ha0n : (1 : Nat) ≤ addr.toNat := ha.1
+  have ha1n : addr.toNat < s.bumpIndex.toNat := ha.2
+  have hb5n : s.bumpIndex.toNat ≤ 5 := hb5
+  have haddr5 : addr.toNat ≤ 5 := by omega
+  refine ⟨?_, hb1, hb5, ?_, ?_, ?_⟩
+  · show (s.size - 1).toNat ≤ 4
+    have hsz' : s.size.toNat ≤ 4 := hsz
+    have hsub : (s.size - 1).toNat ≤ s.size.toNat := by
+      have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+      rw [UInt64.toNat_sub]
+      have : (1 : Nat) ≤ s.size.toNat := hsz0
+      have hone : UInt64.toNat 1 = 1 := rfl
+      simp only [hone, h2]
+      have hszlt : s.size.toNat < 4294967296 * 4294967296 :=
+        UInt64.toNat_lt_size _
+      omega
+    omega
+  · exact haddr5
+  · exact Nat.le_of_lt ha.2
+  · intro a ha0 ha1
+    have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    have hi4 : (addr.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    by_cases hia : (addr.toNat - 1) % 4 = (a.toNat - 1) % 4
+    · have hget : (s.nodes.set ((addr.toNat - 1) % 4)
+          { s.nodes[(addr.toNat - 1) % 4]! with
+            left := s.freeHead, right := 0, parent := 0, color := 0 } hi4)[
+          (a.toNat - 1) % 4]! =
+          { s.nodes[(addr.toNat - 1) % 4]! with
+            left := s.freeHead, right := 0, parent := 0, color := 0 } := by
+        rw [← hia, vec_set_self]
+      rw [hget]
+      exact ⟨hfb, Nat.zero_le _, Nat.zero_le _, Nat.zero_le _⟩
+    · rw [vec_set_ne s.nodes ((addr.toNat - 1) % 4) ((a.toNat - 1) % 4)
+        { s.nodes[(addr.toNat - 1) % 4]! with
+          left := s.freeHead, right := 0, parent := 0, color := 0 }
+        hi4 hia hslot]
+      exact hptr a ha0 ha1
+
+/-- `removeNode` 的结构搬移、fixup、根染黑与释放四段组合保持基础 `wf`。 -/
+private theorem removePipeline_wf (s : State)
+    (removedAddress successorAddress replacementAddress replacementParent
+      removedColor : UInt64)
+    (hg : deleteGeom s) (hremoved : allocated s removedAddress)
+    (hsuccessor : allocated s successorAddress)
+    (hreplacement : linkAllocated s replacementAddress)
+    (hreplacementParent : linkAllocated s replacementParent)
+    (hsz0 : (0 : Nat) < s.size.toNat) :
+    wf
+      (let removed := treeNode s removedAddress
+       let moved :=
+         if removed.left = 0 then
+           transplantNode s removedAddress removed.right
+         else if removed.right = 0 then
+           transplantNode s removedAddress removed.left
+         else
+           moveSuccessor s removedAddress successorAddress replacementAddress
+       let fixed :=
+         if removedColor = 0 then
+           fixDeleted moved replacementAddress replacementParent
+         else moved
+       let rootBlackState := paintNode fixed fixed.root 0
+       releaseRemoved rootBlackState removedAddress) := by
+  let removed := treeNode s removedAddress
+  have hr := treeNode_deleteGeom s removedAddress removedAddress hg hremoved
+    (Or.inr hremoved)
+  change linkAllocated s removed.left ∧ linkAllocated s removed.right ∧
+    linkAllocated s removed.parent ∧ removed.color ≤ 1 at hr
+  let moved :=
+    if removed.left = 0 then
+      transplantNode s removedAddress removed.right
+    else if removed.right = 0 then
+      transplantNode s removedAddress removed.left
+    else
+      moveSuccessor s removedAddress successorAddress replacementAddress
+  have hmoved : deleteGeom moved ∧ moved.bumpIndex = s.bumpIndex ∧
+      moved.size = s.size := by
+    by_cases hleft0 : removed.left = 0
+    · have hgMoved :=
+        transplantNode_deleteGeom s removedAddress removed.right hg hremoved hr.2.1
+      refine ⟨?_, ?_, ?_⟩
+      · simpa [moved, hleft0] using hgMoved
+      · simpa [moved, hleft0] using
+          transplantNode_bumpIndex s removedAddress removed.right
+      · simpa [moved, hleft0] using
+          transplantNode_size s removedAddress removed.right
+    · by_cases hright0 : removed.right = 0
+      · have hgMoved :=
+          transplantNode_deleteGeom s removedAddress removed.left hg hremoved hr.1
+        refine ⟨?_, ?_, ?_⟩
+        · simpa [moved, hleft0, hright0] using hgMoved
+        · simpa [moved, hleft0, hright0] using
+            transplantNode_bumpIndex s removedAddress removed.left
+        · simpa [moved, hleft0, hright0] using
+            transplantNode_size s removedAddress removed.left
+      · have hgMoved :=
+          moveSuccessor_deleteGeom s removedAddress successorAddress replacementAddress
+            hg hremoved hsuccessor hreplacement
+        refine ⟨?_, ?_, ?_⟩
+        · simpa [moved, hleft0, hright0] using hgMoved
+        · simpa [moved, hleft0, hright0] using
+            moveSuccessor_bumpIndex s removedAddress successorAddress replacementAddress
+        · simpa [moved, hleft0, hright0] using
+            moveSuccessor_size s removedAddress successorAddress replacementAddress
+  have hremovedMoved : allocated moved removedAddress :=
+    allocated_of_bump_eq hremoved hmoved.2.1
+  have hreplacementMoved : linkAllocated moved replacementAddress :=
+    linkAllocated_of_bump_eq hreplacement hmoved.2.1
+  have hparentMoved : linkAllocated moved replacementParent :=
+    linkAllocated_of_bump_eq hreplacementParent hmoved.2.1
+  let fixed :=
+    if removedColor = 0 then
+      fixDeleted moved replacementAddress replacementParent
+    else moved
+  have hfixed : deleteGeom fixed ∧ fixed.bumpIndex = moved.bumpIndex ∧
+      fixed.size = moved.size := by
+    by_cases hblack : removedColor = 0
+    · have hgFixed :=
+        fixDeleted_deleteGeom moved replacementAddress replacementParent removedAddress
+          hmoved.1 hremovedMoved hreplacementMoved hparentMoved
+      refine ⟨?_, ?_, ?_⟩
+      · simpa [fixed, hblack] using hgFixed
+      · simpa [fixed, hblack] using
+          fixDeleted_bumpIndex moved replacementAddress replacementParent
+      · simpa [fixed, hblack] using
+          fixDeleted_size moved replacementAddress replacementParent
+    · exact ⟨by simpa [fixed, hblack] using hmoved.1,
+        by simp [fixed, hblack], by simp [fixed, hblack]⟩
+  let rootBlackState := paintNode fixed fixed.root 0
+  have hgRoot : deleteGeom rootBlackState :=
+    paintNode_deleteGeom fixed fixed.root 0 hfixed.1 (by decide)
+  have hremovedFixed : allocated fixed removedAddress :=
+    allocated_of_bump_eq hremovedMoved hfixed.2.1
+  have hremovedRoot : allocated rootBlackState removedAddress :=
+    allocated_of_bump_eq hremovedFixed (paintNode_bumpIndex fixed fixed.root 0)
+  have hsizeRoot : rootBlackState.size = s.size := by
+    calc
+      rootBlackState.size = fixed.size := paintNode_size fixed fixed.root 0
+      _ = moved.size := hfixed.2.2
+      _ = s.size := hmoved.2.2
+  have hsizeRoot0 : (0 : Nat) < rootBlackState.size.toNat := by
+    rw [hsizeRoot]
+    exact hsz0
+  exact releaseRemoved_delete_wf rootBlackState removedAddress hgRoot.1 hremovedRoot hsizeRoot0
+
 /-- `releaseRemoved` 保持 `wf`（回收地址已分配且 size > 0）。 -/
 private theorem releaseRemoved_wf (s : State) (addr : UInt64)
     (hwf : wf s) (ha : 1 ≤ addr ∧ addr < s.bumpIndex)
@@ -2884,6 +4105,146 @@ private theorem releaseRemoved_wf (s : State) (addr : UInt64)
           left := s.freeHead, right := 0, parent := 0, color := 0 } hi4 hia hslot
       rw [hget]
       exact hptr a ha0 ha1
+
+/-- `removeNode` 成功时，在返回地址确属已分配节点且输入 size 非零的有效树上保持 `wf`。 -/
+theorem removeNode_wf (s : State) (k : UInt64) {t : State} {a : UInt64}
+    (h : removeNode s k = .ok (t, a))
+    (hwf : wf s) (hlinks : linksAllocated s)
+    (ha : allocated s a) (hsize : (0 : Nat) < s.size.toNat) :
+    wf t := by
+  let a0 := s.root
+  let i0 := (a0.toNat - 1) % 4
+  let n0 := s.nodes[i0]!
+  let a1 := if k = n0.key then 0 else if k < n0.key then n0.left else n0.right
+  let i1 := (a1.toNat - 1) % 4
+  let n1 := s.nodes[i1]!
+  let a2 :=
+    if a1 = 0 then 0
+    else if k = n1.key then 0
+    else if k < n1.key then n1.left else n1.right
+  let i2 := (a2.toNat - 1) % 4
+  let n2 := s.nodes[i2]!
+  let a3 :=
+    if a2 = 0 then 0
+    else if k = n2.key then 0
+    else if k < n2.key then n2.left else n2.right
+  let i3 := (a3.toNat - 1) % 4
+  let n3 := s.nodes[i3]!
+  let removedAddress :=
+    if k = n0.key then a0
+    else if a1 = 0 then 0
+    else if k = n1.key then a1
+    else if a2 = 0 then 0
+    else if k = n2.key then a2
+    else if a3 = 0 then 0
+    else if k = n3.key then a3 else 0
+  let removedIndex := (removedAddress.toNat - 1) % 4
+  let removed := s.nodes[removedIndex]!
+  let successorRoot := removed.right
+  let successorLeft1 := s.nodes[(successorRoot.toNat - 1) % 4]!.left
+  let successorLeft2 :=
+    if successorLeft1 = 0 then 0
+    else s.nodes[(successorLeft1.toNat - 1) % 4]!.left
+  let successorAddress :=
+    if removed.left = 0 || removed.right = 0 then removedAddress
+    else if successorLeft2 ≠ 0 then successorLeft2
+    else if successorLeft1 ≠ 0 then successorLeft1
+    else successorRoot
+  let successorIndex := (successorAddress.toNat - 1) % 4
+  let successor := s.nodes[successorIndex]!
+  let removedColor := successor.color
+  let replacementAddress :=
+    if successor.left ≠ 0 then successor.left else successor.right
+  let replacementParent :=
+    if successorAddress = removedAddress then removed.parent
+    else if successor.parent = removedAddress then successorAddress
+    else successor.parent
+  let moved :=
+    if removed.left = 0 then
+      transplantNode s removedAddress removed.right
+    else if removed.right = 0 then
+      transplantNode s removedAddress removed.left
+    else
+      moveSuccessor s removedAddress successorAddress replacementAddress
+  let fixed :=
+    if removedColor = 0 then
+      fixDeleted moved replacementAddress replacementParent
+    else moved
+  let rootBlackState := paintNode fixed fixed.root 0
+  let released := releaseRemoved rootBlackState removedAddress
+  change
+    (if removedAddress = 0 then
+       (Except.error .overflow : Except Error (State × UInt64))
+     else Except.ok (released, removedAddress)) = Except.ok (t, a) at h
+  by_cases hremoved0 : removedAddress = 0
+  · simp [hremoved0] at h
+  · rw [if_neg hremoved0] at h
+    injection h with hpair
+    injection hpair with ht haeq
+    subst t
+    subst a
+    have hremoved : allocated s removedAddress := ha
+    have hg : deleteGeom s := ⟨hwf, hlinks⟩
+    have hr := treeNode_deleteGeom s removedAddress removedAddress hg hremoved
+      (Or.inr hremoved)
+    change linkAllocated s removed.left ∧ linkAllocated s removed.right ∧
+      linkAllocated s removed.parent ∧ removed.color ≤ 1 at hr
+    have hsuccessor : allocated s successorAddress := by
+      by_cases hleft0 : removed.left = 0
+      · simpa [successorAddress, hleft0] using hremoved
+      · by_cases hright0 : removed.right = 0
+        · simpa [successorAddress, hleft0, hright0] using hremoved
+        · have hroot : allocated s successorRoot := by
+            exact hr.2.1.resolve_left hright0
+          have hrootNode :=
+            treeNode_deleteGeom s successorRoot removedAddress hg hremoved (Or.inr hroot)
+          have hleft1 : linkAllocated s successorLeft1 := by
+            simpa only [successorLeft1, successorRoot, removed, removedIndex, treeNode]
+              using hrootNode.1
+          have hleft2 : linkAllocated s successorLeft2 := by
+            by_cases hleft10 : successorLeft1 = 0
+            · exact Or.inl (by simp [successorLeft2, hleft10])
+            · have hleft1Alloc : allocated s successorLeft1 :=
+                hleft1.resolve_left hleft10
+              have hleft1Node :=
+                treeNode_deleteGeom s successorLeft1 removedAddress hg hremoved
+                  (Or.inr hleft1Alloc)
+              simpa [successorLeft2, hleft10, treeNode] using hleft1Node.1
+          by_cases hleft20 : successorLeft2 = 0
+          · by_cases hleft10 : successorLeft1 = 0
+            · simpa [successorAddress, hleft0, hright0, hleft20, hleft10]
+                using hroot
+            · have hleft1Alloc : allocated s successorLeft1 :=
+                hleft1.resolve_left hleft10
+              simpa [successorAddress, hleft0, hright0, hleft20, hleft10]
+                using hleft1Alloc
+          · have hleft2Alloc : allocated s successorLeft2 :=
+              hleft2.resolve_left hleft20
+            simpa [successorAddress, hleft0, hright0, hleft20] using hleft2Alloc
+    have hs := treeNode_deleteGeom s successorAddress removedAddress hg hremoved
+      (Or.inr hsuccessor)
+    change linkAllocated s successor.left ∧ linkAllocated s successor.right ∧
+      linkAllocated s successor.parent ∧ successor.color ≤ 1 at hs
+    have hreplacement : linkAllocated s replacementAddress := by
+      by_cases hleft0 : successor.left = 0
+      · simpa [replacementAddress, hleft0] using hs.2.1
+      · simpa [replacementAddress, hleft0] using hs.1
+    have hreplacementParent : linkAllocated s replacementParent := by
+      by_cases hsame : successorAddress = removedAddress
+      · simpa [replacementParent, hsame] using hr.2.2.1
+      · by_cases hparent : successor.parent = removedAddress
+        · have hrep : replacementParent = successorAddress := by
+            simp [replacementParent, hsame, hparent]
+          rw [hrep]
+          change successorAddress = 0 ∨ allocated s successorAddress
+          exact Or.inr hsuccessor
+        · simpa [replacementParent, hsame, hparent] using hs.2.2.1
+    have hpipeline :=
+      removePipeline_wf s removedAddress successorAddress replacementAddress
+        replacementParent removedColor hg hremoved hsuccessor hreplacement
+        hreplacementParent hsize
+    simpa [removed, removedIndex, treeNode, moved, fixed, rootBlackState, released]
+      using hpipeline
 
 end Proofs
 
