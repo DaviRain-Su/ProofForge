@@ -98,12 +98,20 @@ lake exe pf -- build --target evm --out build/evm Counter
 
 ## 写合约
 
-从 [`Examples/Counter.lean`](Examples/Counter.lean) 读起：单账户、`UInt64`、checked add。入口就是普通 Lean。
+合约应 import **对应 target 的 SDK**，不要用 `ProofForge` 伞模块（会拖进 Emit / Assemble / Registry）。
+
+| Target | Import |
+| --- | --- |
+| Solana / sBPF | `ProofForge.Attr` + `ProofForge.Svm.Sdk` |
+| EVM | `ProofForge.Attr` + `ProofForge.Evm.Sdk` |
+
+仓内好例子：[`Examples/VersionedLedger.lean`](Examples/VersionedLedger.lean)（SVM）、[`Examples/TipJar.lean`](Examples/TipJar.lean)（EVM）。最小形状：
 
 ```lean
-import ProofForge
+import ProofForge.Attr
+import ProofForge.Svm.Sdk
 
-namespace Examples.Counter
+namespace MyProgram.Counter
 
 structure State where
   value : UInt64

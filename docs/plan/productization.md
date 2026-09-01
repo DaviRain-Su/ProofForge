@@ -218,11 +218,11 @@ my-program/
 
 ### 待做 · P0（prod-001）— SDK 导入表面
 
-- [ ] README / 快速开始：合约示例改为 `ProofForge.Svm.Sdk` / `Evm.Sdk`（+ Attr）
-- [ ] 扩展 `scripts/check_ownership.py`（或并列脚本）
-  - [ ] Examples **新增**文件禁止 `import ProofForge` 伞模块（存量白名单，只减不增）
-  - [ ] `ProofForge/{Svm,Evm}/Sdk/**` 禁止 import 同 target `Emit` / `Assemble` / `Registry`
-- [ ] CI 接入守卫；故意违规用例证明会红
+- [x] README / 快速开始：合约示例改为 `ProofForge.Svm.Sdk` / `Evm.Sdk`（+ Attr）
+- [x] 扩展 `scripts/check_ownership.py`（或并列脚本）
+  - [x] Examples **新增**文件禁止 `import ProofForge` 伞模块（存量白名单，只减不增）
+  - [x] `ProofForge/{Svm,Evm}/Sdk/**` 禁止 import 同 target `Emit` / `Assemble` / `Registry`
+- [x] CI 接入守卫；故意违规用例证明会红
 - [ ] （可选）存量 Examples 分批从伞 import 迁到 SDK import，不阻塞 P0 合入门
 
 ### 待做 · P1（prod-002）— Lake 包拆分 + CLI 去硬编码
