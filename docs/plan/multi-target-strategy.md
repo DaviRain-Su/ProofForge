@@ -129,7 +129,7 @@ target 并行的切片优先级**。
 
 | 轨 | 下一刀 | 任务 ID |
 |---|---|---|
-| **A 形式化** | Queue + Vec + Versioned SF-1/2 **done** → BitSet | `sf-005`… |
+| **A 形式化** | Queue/Vec/Versioned/BitSet SF-1..3 **done** → Transient | `sf-006`… |
 | **B Runtime** | signed Clock · Instructions sysvar · alias-aware variable walk | `svm-rt-001`…`003` |
 | **C SDK** | rent top-up · Token-2022 extension facade · runtime-selected Memo | `svm-sdk-001`…`003` |
 | **D 应用** | Phoenix CancelUpTo 8/9 · fee 用 `Core.Math` | `svm-app-001`…`002` |
