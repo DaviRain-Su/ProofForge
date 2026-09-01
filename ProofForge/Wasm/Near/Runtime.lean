@@ -112,6 +112,12 @@ it neither removes an account nor performs a refund. -/
   force : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Compiler-owned exact output frame for a mutating JSON Boolean result. It is intentionally
+nominal so ordinary Bool or one-field record returns retain their existing target behavior. -/
+@[pf_boundary] structure JsonBooleanResult where
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /-- Compiler-owned output carrier for the NEP-145 `Option<StorageBalance>` wire prerequisite.
 `registered = 0` requires all quantity limbs to be zero and serializes as `null`; `registered = 1`
 serializes exact quoted-decimal `total` and `available` fields. It is not a generic Option/record

@@ -653,6 +653,27 @@ private def returnJsonNullInstr (level : Nat) : Array String := #[
   indent level "(call $pf_value_return (i64.const 4) (i64.extend_i32_u (local.get $pf_output_ptr)))"
 ]
 
+private def returnJsonBooleanInstr (st : EState) (values : Array (Val ValKind))
+    (level : Nat) : Except String (Array String) := do
+  unless values.size == 1 do
+    throw "near/codec: JSON Boolean output plan does not match result leaves"
+  let value ← renderVal st values[0]!
+  return #[
+    indent level ("(if (i64.gt_u " ++ value ++ " (i64.const 1)) (then unreachable))"),
+    indent level "(local.set $pf_output_ptr (call $pf_arena_alloc (i64.const 5) (i64.const 1)))",
+    indent level ("(if (i64.eqz " ++ value ++ ")"),
+    indent (level + 2) "(then",
+    indent (level + 4) "(i32.store (local.get $pf_output_ptr) (i32.const 1936482662))",
+    indent (level + 4) "(i64.store8 (i32.add (local.get $pf_output_ptr) (i32.const 4)) (i64.const 101))",
+    indent (level + 4) "(local.set $pf_output_length (i64.const 5))",
+    indent (level + 2) ")",
+    indent (level + 2) "(else",
+    indent (level + 4) "(i32.store (local.get $pf_output_ptr) (i32.const 1702195828))",
+    indent (level + 4) "(local.set $pf_output_length (i64.const 4))",
+    indent (level + 2) "))",
+    indent level "(call $pf_value_return (local.get $pf_output_length) (i64.extend_i32_u (local.get $pf_output_ptr)))"
+  ]
+
 private def outputPlanOf (method : Method ValKind OpExt) :
     Except String (Option Codec.OutputPlan) := do
   match method.outputSchema with
@@ -1761,10 +1782,16 @@ private partial def emitRegion (p : Program ValKind OpExt)
           if st.initializer then lines := lines ++ markInitialized p level
           match st.pendingPromiseReturn with
           | some promiseLocal =>
+              if outputPlan == some .jsonBoolean then
+                throw "extract/unsupported: JSON Boolean output cannot also return a promise"
               lines := lines.push (indent level
                 ("(call $pf_promise_return (local.get " ++ promiseLocal ++ "))"))
           | none =>
-              if echo then lines := lines ++ returnU64Instr v level
+              if echo then
+                if outputPlan == some .jsonBoolean then
+                  lines := lines ++ (← returnJsonBooleanInstr st #[value] level)
+                else
+                  lines := lines ++ returnU64Instr v level
           return { lines, st, terminal := true }
         -- A terminal state value identifies its own field when it is a projection. `pendingDest`
         -- is only the fallback for a scalar temporary produced by a preceding checked operation;
@@ -2069,7 +2096,7 @@ private partial def emitRegion (p : Program ValKind OpExt)
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .returnU64 value =>
         unless view || outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 ||
-            outputPlan == some .jsonStorageBalanceOption do
+            outputPlan == some .jsonStorageBalanceOption || outputPlan == some .jsonBoolean do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
         let (values, skipped) := collectReturnU64s value tail
         unless skipped.all isExitOp do
@@ -2090,6 +2117,10 @@ private partial def emitRegion (p : Program ValKind OpExt)
               throw "extract/unsupported: StorageBalanceBounds output cannot also return a promise"
             return {
               lines := ← returnJsonStorageBalanceBoundsInstr st values level, st, terminal := true }
+        | some .jsonBoolean =>
+            if st.pendingPromiseReturn.isSome then
+              throw "extract/unsupported: JSON Boolean output cannot also return a promise"
+            return { lines := ← returnJsonBooleanInstr st values level, st, terminal := true }
         | some .promiseOrJsonU128 =>
             match st.pendingPromiseReturn with
             | some promiseLocal =>

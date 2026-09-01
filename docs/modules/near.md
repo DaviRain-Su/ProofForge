@@ -66,6 +66,10 @@ the standard method: exact compiler-owned `StorageUnregisterArgs` maps missing/n
 to one `0/1/2` leaf. The raw-key object parser has an exact 47-byte bound including 32 whitespace
 bytes and rejects unknown/duplicate/escaped keys. Stock serde accepts unknown fields, so this is a
 bounded canonical subset rather than a complete NEP-145 wrapper.
+wsm-near-json-boolean-mutation-output-001 adds the paired output prerequisite. Only nominal
+`JsonBooleanResult` mutations bind exact unquoted `false`/`true`; the target validates its 0/1
+discriminant after state persistence, and a trap rolls all writes back. Ordinary scalar/record,
+view, Unit, void, and Promise outputs do not acquire this policy.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.

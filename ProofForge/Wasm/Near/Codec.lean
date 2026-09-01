@@ -200,6 +200,10 @@ def storageUnregisterArgsSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs" #[
     ("force", .scalar .uint64)]
 
+def jsonBooleanResultSchema : Core.Codec.Schema :=
+  .record "ProofForge.Wasm.Near.Runtime.JsonBooleanResult" #[
+    ("value", .scalar .uint64)]
+
 def storageBalanceResultSchema : Core.Codec.Schema :=
   .record "ProofForge.Wasm.Near.Runtime.StorageBalanceResult" #[
     ("registered", .scalar .uint64), ("total", .scalar .uint128),
@@ -340,15 +344,16 @@ def outputPlan : Core.Codec.Schema → Except String BorshOutputPlan
       throw "near/codec: bounded output elements must be UInt8, UInt16, UInt32, or UInt64"
   | _ => throw "near/codec: output plan requires bounded bytes, string, or scalar array"
 
-/-- Closed NEAR output policies. JSON support is limited to quoted u128 scalar results, the exact
-compiler-owned StorageBalance/StorageBalanceBounds frames, and explicit Unit mutation results;
-generic objects, arrays, nullable values, and strings remain absent. -/
+/-- Closed NEAR output policies. JSON support is limited to quoted u128 scalar results, exact
+compiler-owned Boolean/StorageBalance/StorageBalanceBounds frames, and explicit Unit mutation
+results; generic objects, arrays, nullable values, and strings remain absent. -/
 inductive OutputPlan where
   | borsh (plan : BorshOutputPlan)
   | jsonU128
   | promiseOrJsonU128
   | jsonStorageBalanceOption
   | jsonStorageBalanceBounds
+  | jsonBoolean
   | jsonNullUnit
   | voidEmpty
   deriving Repr, BEq, Inhabited
@@ -359,6 +364,7 @@ def OutputPlan.sourceValueCount : OutputPlan → Nat
   | .promiseOrJsonU128 => 2
   | .jsonStorageBalanceOption => 5
   | .jsonStorageBalanceBounds => 5
+  | .jsonBoolean => 1
   | .jsonNullUnit => 0
   | .voidEmpty => 0
 
@@ -368,6 +374,7 @@ def OutputPlan.canonical : OutputPlan → String
   | .promiseOrJsonU128 => "near-promise-or-json-u128-v1"
   | .jsonStorageBalanceOption => "near-json-storage-balance-option-v1"
   | .jsonStorageBalanceBounds => "near-json-storage-balance-bounds-v1"
+  | .jsonBoolean => "near-json-boolean-v1"
   | .jsonNullUnit => "near-json-null-unit-v1"
   | .voidEmpty => "near-void-empty-v1"
 
@@ -380,6 +387,7 @@ def targetOutputPlan : Core.Codec.Schema → Except String OutputPlan
   | schema =>
       if schema == storageBalanceResultSchema then pure .jsonStorageBalanceOption
       else if schema == storageBalanceBoundsResultSchema then pure .jsonStorageBalanceBounds
+      else if schema == jsonBooleanResultSchema then pure .jsonBoolean
       else if schema == .unit then pure .jsonNullUnit
       else throw "near/codec: unsupported specialized output schema"
 

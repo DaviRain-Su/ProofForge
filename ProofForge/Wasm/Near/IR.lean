@@ -964,6 +964,18 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       retSchema := .scalar .uint64
       retCount := 1 }, some {
         ixName := method.ixName, schema := Codec.storageBalanceBoundsResultSchema, plan })
+  if method.retSchema == Codec.jsonBooleanResultSchema then
+    unless method.kind == .increment do
+      throw s!"near/codec: {method.ixName} JSON Boolean output requires a mutating entry"
+    let plan := Codec.OutputPlan.jsonBoolean
+    unless method.retCount == plan.sourceValueCount do
+      throw s!"near/codec: {method.ixName} output frame does not match its JSON Boolean plan"
+    return ({ method with
+      retWidths := #[8]
+      retTypes := #[.uint64]
+      retSchema := .scalar .uint64
+      retCount := 1 }, some {
+        ixName := method.ixName, schema := Codec.jsonBooleanResultSchema, plan })
   match method.retSchema with
   | .boundedArray .. | .boundedBytes _ | .boundedString _ =>
       unless method.kind == .get do

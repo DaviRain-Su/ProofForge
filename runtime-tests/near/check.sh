@@ -386,6 +386,13 @@ json_storage_unregister_input_anchors = (
     '(func (export "inspectForce")',
     '(func (export "commitForce")',
 )
+json_boolean_mutation_anchors = (
+    '(func (export "setChecked")',
+    '(call $pf_arena_alloc (i64.const 5) (i64.const 1))',
+    '(i32.const 1936482662)',
+    '(i32.const 1702195828)',
+    '(call $pf_value_return (local.get $pf_output_length)',
+)
 vector_anchors = (
     '(func (export "push")',
     '(func (export "setFirst")',
@@ -601,6 +608,8 @@ for wat in wats:
         extra = json_storage_deposit_input_anchors
     elif wat.stem == "NearJsonStorageUnregisterInput":
         extra = json_storage_unregister_input_anchors
+    elif wat.stem == "NearJsonBooleanMutation":
+        extra = json_boolean_mutation_anchors
     elif wat.stem == "NearStorage":
         extra = storage_anchors
     elif wat.stem == "NearStorageEconomics":

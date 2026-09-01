@@ -233,6 +233,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-json-storage-deposit-input-001](tasks/wsm-near-json-storage-deposit-input-001.md) | done | bounded optional AccountId/registration-only JSON input prerequisite |
 | [wsm-near-storage-deposit-001](tasks/wsm-near-storage-deposit-001.md) | done | payable variable-cost `storage_deposit` over canonical BAL2 registration keys |
 | [wsm-near-json-storage-unregister-input-001](tasks/wsm-near-json-storage-unregister-input-001.md) | done | bounded optional force JSON input prerequisite |
+| [wsm-near-json-boolean-mutation-output-001](tasks/wsm-near-json-boolean-mutation-output-001.md) | done | exact state-persisting JSON Boolean result prerequisite |
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |

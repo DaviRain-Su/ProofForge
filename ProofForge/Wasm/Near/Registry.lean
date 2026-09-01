@@ -33,6 +33,7 @@ def entries : Array Entry := #[
   { name := "NearJsonFtResolveInput", digest := "f16d9836431a6bb0" },
   { name := "NearJsonStorageDepositInput", digest := "d592930fd54837e9" },
   { name := "NearJsonStorageUnregisterInput", digest := "c8e529615ae6bd9d" },
+  { name := "NearJsonBooleanMutation", digest := "2013acaf1c2746e1" },
   { name := "NearStorage", digest := "cd97bb762dac8be3" },
   { name := "NearStorageEconomics", digest := "9c98eca433f99470" },
   { name := "NearStorageRegistration", digest := "5ef5aae5a559d252" },
