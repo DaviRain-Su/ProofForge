@@ -1,4 +1,5 @@
 import ProofForge.Core.SafeCast
+import ProofForge.Core.Math
 import ProofForge.Evm.Sdk.Base
 import ProofForge.Evm.Sdk.Fungible
 import ProofForge.Evm.Sdk.Erc721
@@ -23,6 +24,6 @@ Contract-facing umbrella for EVM values, typed storage handles, target effects, 
 pause/reentrancy/payment/fungible/ERC-721/bounded-ERC-1155 ledger policy components, compile-time
 static storage declarations, persistent bounded UInt64 storage vectors/bitmaps/ring queues/
 enumerable sets/maps/checkpoints, bounded static role sets, and shared allocation-free checked
-wide-to-UInt32/UInt64 narrowing. Applications import this module rather than target Runtime, Ops, IR, or
-Emit internals.
+wide-to-UInt8/UInt16/UInt32/UInt64 narrowing and bounded UInt64 math. Applications import this
+module rather than target Runtime, Ops, IR, or Emit internals.
 -/

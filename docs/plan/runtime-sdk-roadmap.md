@@ -72,11 +72,11 @@ instruction 增加 recipe opcode。
 
 | 层 | 已有 | 主要缺口 |
 |---|---|---|
-| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、allocation-free UInt128/UInt256→UInt32/UInt64 SafeCast、generic fixed-scalar `Except` do-bind、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；compiler-owned finite SDK value 可用 representation-free `@[pf_boundary]` 复用 generic static schema/projection/result frame；SVM/EVM scalar、static aggregate、tagged、generic bounded 与 bytes/String input target binding；两边独立的 top-level bounded/tagged output plan；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | consumer-driven UInt16/UInt8 safe casts、signed values、collection target bindings、bounded mutation writeback、wide/aggregate dynamic element、nested/constructed tagged output、nested dynamic shapes 与更高 resource ceiling |
+| Shared | target registration、typed extension、Core CFG、bounded scalar frame、checked arithmetic/control、allocation-free UInt128/UInt256→UInt8/UInt16/UInt32/UInt64 SafeCast、allocation-free UInt64 min/max/floor-average/checked-ceilDiv/saturating add-sub-mul/floor-and-ceiling log2-log10-log256/integer-sqrt/full-intermediate floor-and-ceiling-mulDiv/explicit-scale floor-and-ceiling fixed-point mul-div、generic fixed-scalar `Except` do-bind、bounded codec schema/resource budget、allocation-free fixed bytes/u128/u256 source values、compiler-erased `BoundedVec` input carrier 与 capacity-preserving operations、bounded Map/Set/Queue/BitSet logical semantics、distinct bounded bytes/UTF-8 string source contracts、aggregate source-schema derivation、target-neutral static projection/rewrite traversal；compiler-owned finite SDK value 可用 representation-free `@[pf_boundary]` 复用 generic static schema/projection/result frame；SVM/EVM scalar、static aggregate、tagged、generic bounded 与 bytes/String input target binding；两边独立的 top-level bounded/tagged output plan；bounded scalar dynamic read；同一 logical schema 的 cross-target plan conformance | signed values/casts、UInt128/UInt256 roots/saturation、typed fixed-point values/casts、collection target bindings、bounded mutation writeback、wide/aggregate dynamic element、nested/constructed tagged output、nested dynamic shapes 与更高 resource ceiling |
 | SVM Runtime | Loader-v3 ABI、编译期账户下标、PDA/seeds、target-owned Clock/EpochSchedule/Rent sysvar query（unsigned/Bool native fields complete）、checked fixed-account lamport debit/credit、checked zero-initializing account-data resize 与 backward duplicate-alias static walk、通用 CPI words、System/Token wrappers、typed scalar/static aggregate Borsh entry/return（含 generic compiler-owned SDK record whole-value binding）、Option/payload-enum tagged input/output、fixed-capacity canonical Borsh Vec/bytes/String input/output（strict UTF-8）、bounded remaining-account view、typed CPI scratch/return-data、checked program-memory spans 与 Token-2022 TLV envelope | signed timestamp、sliced/Instructions sysvar、AccountView+direct mutation 的 alias-aware variable walk、nested/constructed/wide dynamic return policy；Token-2022 extension 完整语义 |
 | SVM Component / SDK | `AccountStorage`、RBMap/allocator/cursor、recorder、FIFO cancellation、program-memory span、checked lamport mutation 与 `AccountData` resize；`Svm.Sdk` 已统一 fixed Account/Signer/bounded view、`Account.Handle.transferLamports` / `.resizeData` / `.closeTo`、canonical Pubkey/program id、exact SPL Token base-state views、CPI-relative handles、static ASCII PDA、System、classic Token、role-typed ATA、bounded ASCII Memo、POD Field、fixed Vec/Queue/packed BitSet/enumerable UInt64 Set、ordered Map/RBMap、one-based allocator、fixed version/discriminator header + explicit migration edge、checked account-memory facade，以及可同类双 slot 的 invocation-local buffer/Vector64/writer 和 fixed-width UInt64 `Record64` | rent top-up/owner-reassign lifecycle、runtime-selected ATA/Memo geometry、UTF-8 Memo 与 Token-2022 extension semantics 尚未统一；richer persistent key/value/payload migration shapes、wider/typed POD transient shapes、更多 manifest-bounded slot 与 insert/remove/iteration 仍 fail closed |
 | EVM Runtime | Address/UInt128/UInt256/FixedBytes、typed scalar/static aggregate ABI、Tagged Tuple v1 Option/payload-enum input/output、`DynamicInputPlan` 下的 Bounded Array v1 与 Packed Bytes v1 canonical dynamic input，以及独立 `OutputPlan` 的 top-level bounded dynamic/tagged result（strict UTF-8 String）、full-width gas/basefee/prevrandao/gaslimit/gasprice/blobbasefee、blobhash、caller/origin/coinbase、msg.sig/msg.data.length、blockhash 与 address balance/code observations、Cancun target pin、hashed maps、LOG/revert、ETH、ERC-20/WETH/Uniswap/Permit closed calls、ordered static lock effect | nested/constructed/wide dynamic return 与 aggregate storage 组合；dynamic constructor/nested dynamic；bounded generic call return/error 合同；blob payload/bounded raw msg.data bytes 与标准化资源 manifest |
-| EVM SDK | shared UInt128/UInt256→UInt32/UInt64 SafeCast；`Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；persistent bounded UInt64 `StorageVec`/`StorageBitmap`/`StorageRing`/`StorageEnumerableSet`/`StorageEnumerableMap`/`StorageCheckpoints`；honest code observation + safe closed-call result policy | richer cast/math/string/bytes utilities、typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；wide-key/value map、wider checkpoints 与 richer persistent element shapes |
+| EVM SDK | shared UInt128/UInt256→UInt8/UInt16/UInt32/UInt64 SafeCast 与 UInt64 min/max/floor-average/checked-ceilDiv/saturating add-sub-mul/floor-and-ceiling log2-log10-log256/integer-sqrt/full-intermediate floor-and-ceiling-mulDiv/explicit-scale fixed-point mul-div；`Storage.Layout` typed maps、`Storage.Static` declarations/ordered stores、Context/Immutable/Event/Revert；`Payments` bounded Ether/ERC20/WETH/router facade；`Access`/`Roles.Set2`/`Pausable`；`Reentrancy` explicit fail-closed guard；`Fungible.Balances/Allowances` checked ledger policy；`Erc721` bounded owner/approval/operator/balance core；`Erc1155` bounded single-id balance/operator/movement core；persistent bounded UInt64 `StorageVec`/`StorageBitmap`/`StorageRing`/`StorageEnumerableSet`/`StorageEnumerableMap`/`StorageCheckpoints`；honest code observation + safe closed-call result policy | signed math、UInt128/UInt256 roots/saturation、typed fixed-point values/casts 与 richer string/bytes utilities、typed pause/asset events、bounded revert bubbling/generic call policy、ERC-721/1155 receiver callbacks/full-width token ids/standard Address views、ERC-1155 batch/metadata；dynamic indexed Address return；wide-key/value map、wider checkpoints 与 richer persistent element shapes |
 | 应用 | Phoenix fixed N=4 与 Phoenix-v1 account profile；Token/Capped 等 EVM examples | Phoenix-v1 仍只覆盖部分 instruction/matching policy；跨 target conformance examples 不完整 |
 
 ## 4. 交付顺序
@@ -119,7 +119,16 @@ runtime-code observation policy、R5-012 safe closed-call result policy、R5-013
 ERC-721 core、R5-014 bounded single-id ERC-1155 core、R5-015 persistent StorageBitmap 与
 R5-016 persistent StorageRing、R5-017 persistent StorageEnumerableSet、
 R5-018 persistent StorageCheckpoints、R5-019 persistent StorageEnumerableMap、R5-020 shared SafeCast、
-R5-021 checked UInt32 narrowing/generic scalar `Except` bind、R3-026 persistent SVM BitSet、
+R5-021 checked UInt32 narrowing/generic scalar `Except` bind、R5-022 checked UInt16 narrowing、
+R5-023 checked UInt8 narrowing、R1-024 shared bounded UInt64 math、
+R1-025 shared saturating UInt64 arithmetic、
+R1-026 shared UInt64 integer logarithms、
+R1-027 shared UInt64 integer square root、
+R1-028 shared UInt64 ceiling logarithms/root、
+R1-029 shared full-precision UInt64 mulDiv、
+R1-030 shared full-precision UInt64 ceiling mulDiv、
+R1-031 shared scaled UInt64 fixed-point policy、
+R3-026 persistent SVM BitSet、
 R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
 transient wide vectors，以及 R2-010 checked
 fixed-account data resize 均已集成；独立
@@ -150,8 +159,10 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R5-018](tasks/r5-018.md)、[R5-019](tasks/r5-019.md)、[R5-020](tasks/r5-020.md)、
 [R5-021](tasks/r5-021.md)、[R3-026](tasks/r3-026.md)、
 [R3-027](tasks/r3-027.md)、[R3-028](tasks/r3-028.md)、
-[R3-029](tasks/r3-029.md)、[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md) 和
-[R1-023](tasks/r1-023.md)。
+[R3-029](tasks/r3-029.md)、[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md)、
+[R1-023](tasks/r1-023.md)、[R1-024](tasks/r1-024.md)、[R1-025](tasks/r1-025.md)、
+[R1-026](tasks/r1-026.md)、[R1-027](tasks/r1-027.md)、[R1-028](tasks/r1-028.md)、
+[R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md) 和 [R1-031](tasks/r1-031.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -271,6 +282,61 @@ R1-023 已完成 shared static wide result frame：Core `UInt128`/`UInt256` 正�
 `@[pf_boundary]` generic constructor projection，effect prefix 后仍产出完整 2/4-limb frame；
 SVM CFG 入口按 `retCount` 校验所有 successful non-init exits，缺叶或残留 `returnState`
 直接 fail closed，不从可复用 local 推断结果。详见 [R1-023](tasks/r1-023.md)。
+
+R1-024 已完成 shared bounded UInt64 math：`Core.Math.UInt64` 以 ordinary inline Lean 提供
+min/max、不会构造 input sum 的 floor average，以及 caller-typed zero-denominator checked
+ceilDiv。BatchSizer 与 EvmPriceBand 分别拥有 SVM/EVM state、error 和 ABI/account policy；
+两个 target SDK facade 只 re-export 同一纯值组件，extraction guard 证明没有 target extension
+effect，也没有 Runtime/Ops/IR/Component/Emit、allocation 或 pointer。Signed、saturating、
+full-precision 与 wide math 继续 fail closed。详见 [R1-024](tasks/r1-024.md)。
+
+R1-025 已完成 shared saturating UInt64 arithmetic：explicit saturatingAdd/saturatingSub/
+saturatingMul 分别通过 max-left、left<right 与 zero + max/left preflight 选择 exact result 或
+UInt64 boundary；默认 `+/-/*` checked 语义不变。BatchSizer 与 EvmPriceBand 分别消费同一纯
+policy；structural extraction guard 钉住 preflight 与 arithmetic operands，不新增 target
+effect、Runtime/Ops/IR/CFG/Component/Emit、allocation 或 pointer。Signed、wide saturation 与
+full-precision math 继续 fail closed。详见 [R1-025](tasks/r1-025.md)。
+
+R1-026 已完成 shared UInt64 integer logarithms：floor log2/log10/log256 对零统一返回零，
+并分别使用 exact 6/5/7-step bounded local-frame ladder，避免纯 let substitution 把 staged
+计算指数复制进 target。BatchSizer/EvmPriceBand 分别绑定 capacity/encoding 与 quote-band
+policy；extraction guard 钉住 loop bounds 并拒绝 target extension effect。不新增 Runtime/
+Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared layout。
+wide/full-precision math 继续 fail closed。详见 [R1-026](tasks/r1-026.md)。
+
+R1-027 已完成 shared UInt64 integer square root：floor `sqrt` 对齐 Rust `u64::isqrt` 和
+OpenZeppelin default `Math.sqrt`，使用 exact 5-step magnitude seed、three-halves improvement、
+6-step Newton `(estimate, quotient)` scalar frame 与 division correction。structural guard 同时
+拒绝把 Newton recurrence 误降成 additive `forAccum`，并拒绝 target extension effect。不新增
+Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared layout。
+wide/full-precision root 继续 fail closed。详见 [R1-027](tasks/r1-027.md)。
+
+R1-028 已完成 shared UInt64 ceiling logarithms/root：`log2Ceil`、`log10Ceil`、
+`log256Ceil` 与 `sqrtCeil` 用 guarded predecessor identity 提供 OpenZeppelin upward rounding，
+保持 R1-026/027 的 exact bounded ladder/frame，不计算可能溢出的 power/square。SVM/EVM
+consumer 分别表达 covering capacity/grid 与 quote band/root policy。不新增 Runtime/Ops/IR/
+CFG/Component/Emit、allocation、pointer 或 shared layout。详见 [R1-028](tasks/r1-028.md)。
+
+R1-029 已完成 shared full-precision UInt64 `mulDiv`：四个 safe 32-bit partial products 构造
+exact 128-bit product，固定 64-step restoring division 返回 floor quotient；零 denominator 与
+`denominator ≤ productHigh` 的 exact quotient-overflow preflight 分别返回 caller-owned typed
+errors。SVM/EVM consumer 各自拥有 persistence 和 error policy；不新增 Runtime/Ops/IR/CFG/
+Component/Emit、allocation、pointer 或 shared physical layout。ceiling `mulDiv`、signed/
+fixed-point 与 wider returned quotient 继续 fail closed。详见 [R1-029](tasks/r1-029.md)。
+
+R1-030 已完成 shared full-precision UInt64 ceiling `mulDivCeil`：floor 与 ceiling API 复用
+同一个 private exact-product/restoring-division kernel，ceiling 仅根据最终 remainder 做 checked
+increment，并单独拒绝 floor=`UInt64.max` 且 remainder 非零的 rounding overflow。两个 target
+consumer 各自保留 typed errors 和 persistence；不新增 Runtime/Ops/IR/CFG/Component/Emit、
+allocation、pointer 或 shared physical layout。signed/fixed-point 与 wider returned quotient
+继续 fail closed。详见 [R1-030](tasks/r1-030.md)。
+
+R1-031 已完成 shared scaled UInt64 fixed-point policy：`Core.FixedPoint.UInt64` 在 R1-029/030
+的 exact floor/ceiling kernel 上提供 `mulDown`/`mulUp`/`divDown`/`divUp`，scale 由 application
+显式选择且必须非零；division 另外保留独立 zero-divisor error，所有路径保留 caller-owned
+overflow。SVM/EVM consumer 各自拥有 state/error policy；不新增 Runtime/Ops/IR/CFG/Component/
+Emit、allocation、pointer 或 shared physical layout。typed fixed-point values/scale/casts、signed/
+wider fixed point 继续 fail closed。详见 [R1-031](tasks/r1-031.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
@@ -825,10 +891,26 @@ normalization 保持不变。Accumulator/Config 的 checkpoint/
 window 方法分别验证 independent permission、authorization、zero 与 state policy；没有
 width-specific Runtime/Ops/IR/CFG/Component/Emit case。详见 [R5-021](tasks/r5-021.md)。
 
+R5-022 已完成 checked UInt128/UInt256→UInt16 follow-up：shared helper 复用同一 allocation-free
+policy boundary，在全部 upper limbs 为零后精确要求 low limb `< 2^16`，之后才执行 explicit
+narrowing。Accumulator/Config 现有 consumer 分别增加 permissionless batch 与 owner-first
+threshold policy，区分 typed width/zero errors，并保持原 UInt64/UInt32 字段和失败交易原子性。
+该切片复用 R5-021 的 generic fixed-scalar `Except` bind，不增加 Runtime/Ops/IR/CFG/Component/
+Emit、allocation、pointer 或隐藏 state write。UInt8 与 signed casts 继续等待真实 consumer。
+详见 [R5-022](tasks/r5-022.md)。
+
+R5-023 已完成 checked UInt128/UInt256→UInt8 follow-up：shared helper 在 upper limbs 全零后精确
+要求 low limb `< 2^8`，再执行 explicit byte narrowing，由此补齐 unsigned fixed-scalar
+UInt8/16/32/64 targets。Accumulator 的 permissionless mode 路径返回 UInt8；Config 的
+owner-first level 路径将成功 byte 显式 widen 为 UInt64 result，以完整保留 `0x1001`
+authorization sentinel，避免把控制结果截断为 `1`。两者都在 literal UInt8 state write 前
+完成 width/zero policy；没有 Runtime/Ops/IR/CFG/Component/Emit、allocation 或 pointer。
+Signed/saturating/wide-to-wide casts 继续 fail closed。详见 [R5-023](tasks/r5-023.md)。
+
 ### R6 — 双目标验收
 
 - CI-001 已把 shared Lean guards、SVM build/Mollusk/Surfpool 与 EVM build/Anvil 拆成三条
-  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 406-job Lean aggregate 不再在两个
+  无依赖的并行 lane，最终 `test` job 汇总三者；最重的 411-job Lean aggregate 不再在两个
   target lane 重复执行。SVM/EVM lane 现在于 runtime fixtures 前校验实际 clean build
   manifest；Surfpool gate 等待 health/version RPC 并使用 bounded cleanup。详见
   [CI-001](tasks/ci-001.md)。

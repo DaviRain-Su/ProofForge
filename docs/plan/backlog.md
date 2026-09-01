@@ -92,7 +92,17 @@ R5-016 persistent bounded storage ring queue 与 explicit effect-result sequenci
 R5-017 persistent bounded enumerable set 与 mutable-query snapshot sequencing、
 R5-018 persistent bounded UInt64 checkpoints、R5-019 persistent bounded enumerable UInt64 map、
 R5-020 shared checked UInt128/UInt256→UInt64 SafeCast、
-R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind；
+R5-021 shared checked UInt128/UInt256→UInt32 SafeCast 与 generic fixed-scalar `Except` bind、
+R5-022 shared checked UInt128/UInt256→UInt16 SafeCast、
+R5-023 shared checked UInt128/UInt256→UInt8 SafeCast、
+R1-024 shared allocation-free UInt64 min/max/floor-average/checked-ceilDiv、
+R1-025 shared allocation-free UInt64 saturatingAdd/saturatingSub/saturatingMul、
+R1-026 shared allocation-free UInt64 floor log2/log10/log256、
+R1-027 shared allocation-free UInt64 floor integer sqrt、
+R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
+R1-029 shared allocation-free full-precision UInt64 mulDiv；
+R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
+R1-031 shared allocation-free scaled UInt64 fixed-point policy；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -101,11 +111,11 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 
 ## 已做
 
-- **当前可验证基线（2026-08-31）**：Lean 汇总 406 jobs；SVM manifest 全 67 programs；
-  Mollusk 全量 421/421（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
+- **当前可验证基线（2026-08-31）**：Lean 汇总 415 jobs；SVM manifest 全 70 programs；
+  Mollusk 全量 435/435（MemoryOps 20/20、LamportTransfer 15/15、Phoenix-v1 profile 76/76、
   RawEntry 21/21、Keys 9/9）；EVM manifest 全
-  40 programs 且 Anvil 40/40。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
-  并保留汇总 `test` gate；完整 406-job `lake build Tests` 只在 Lean lane 执行一次，不再被
+  41 programs 且 Anvil 41/41。CI 将 shared Lean guards、SVM 与 EVM 分成三条独立并行 lane，
+  并保留汇总 `test` gate；完整 415-job `lake build Tests` 只在 Lean lane 执行一次，不再被
   SVM/EVM 重复编译。两个 target lane 在 runtime fixtures 前核对实际 clean build manifest；
   Surfpool 同时等待 health/version RPC，并在退出时 bounded cleanup。任一 lane 失败不会跳过
   或延迟另两条 lane 的反馈。详见
@@ -384,6 +394,66 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `retCount` fail closed 校验每个 successful non-init exit，禁止从可复用 local 猜测缺失叶；
   未新增 Runtime/Ops/IR constructor/Component/Emit recipe。focused Lean 176 jobs、全量 Tests
   407 jobs 通过。详见 `docs/plan/tasks/r1-023.md`。
+
+- R1-024 shared bounded UInt64 math 已完成：`Core.Math.UInt64` 用 ordinary inline Lean 提供
+  min/max、overflow-safe floor average 与 caller-typed checked ceilDiv；BatchSizer 与
+  EvmPriceBand 分别拥有 SVM/EVM state、error 和 target binding。两个 target SDK facade
+  re-export 同一纯值 API，extraction guard 拒绝 target extension effect；没有新增 Runtime/
+  Ops/IR/Component/Emit、allocation、pointer 或 shared physical layout。Mollusk/Anvil focused
+  matrices 及 Surfpool 1.5.0 Loader-v3 exact-ELF 部署通过。详见 `docs/plan/tasks/r1-024.md`。
+
+- R1-025 shared saturating UInt64 arithmetic 已完成：同一 `Core.Math.UInt64` 增加 explicit
+  saturatingAdd/saturatingSub/saturatingMul，分别以 max-left、left<right 与 zero + max/left
+  preflight 保证不执行 overflow/underflow/zero-divisor arithmetic。BatchSizer/EvmPriceBand
+  分别绑定 capacity 与 quote policy；structural extraction guard 钉住 guard/operand 关系并拒绝
+  target extension effect。默认 `+/-/*` 仍为 checked；signed/wide/full-precision math 继续
+  fail closed。详见 `docs/plan/tasks/r1-025.md`。
+
+- R1-026 shared UInt64 integer logarithms 已完成：`Core.Math.UInt64` 增加 floor log2/log10/
+  log256，统一把零映射到零；6/5/7-step static ladders 复用既有 bounded loop、local frame、
+  compare/shift/div arithmetic，不把中间表达式指数复制到 target。BatchSizer/EvmPriceBand
+  分别绑定 capacity/encoding 与 quote-band policy；extraction guard 钉住 exact loop bounds 并
+  拒绝 target extension effect。wide/full-precision math 继续 fail closed。
+  详见 `docs/plan/tasks/r1-026.md`。
+
+- R1-027 shared UInt64 integer square root 已完成：`Core.Math.UInt64.sqrt` 与 Rust `u64::isqrt`
+  及 OpenZeppelin floor `Math.sqrt` 对齐，零和一直接返回；非平凡值使用 5-step magnitude
+  seed、three-halves improvement、6-step Newton scalar frame 和 division correction。双标量
+  `(estimate, quotient)` 明确拒绝旧 additive `forAccum` 误识别；BatchSizer/EvmPriceBand
+  分别绑定 capacity-grid 与 quote-normalization policy。不新增 Runtime/Ops/IR/CFG/Component/
+  Emit、allocation、pointer 或 shared layout。wide root 继续 fail closed。
+  详见 `docs/plan/tasks/r1-027.md`。
+
+- R1-028 shared UInt64 ceiling logarithms/root 已完成：`log2Ceil`、`log10Ceil`、
+  `log256Ceil` 和 `sqrtCeil` 使用 `input - 1` identity，把 OpenZeppelin upward-rounding
+  policy 复用到 R1-026/027 的同样 6/5/7-step magnitude ladders 与 5+6-step Newton frame。
+  零、one、exact power/square、next value 和 UInt64 maximum 均有 host/SVM/EVM 边界。
+  BatchSizer/EvmPriceBand 分别绑定 covering capacity 与 quote-band policy。不新增 Runtime/
+  Ops/IR/CFG/Component/Emit、allocation、power table 或 shared layout。详见
+  `docs/plan/tasks/r1-028.md`。
+
+- R1-029 shared full-precision UInt64 `mulDiv` 已完成：四个 safe 32-bit partial products 组成
+  exact 128-bit intermediate，再用固定 64-step restoring division 求 floor quotient；
+  `denominator ≤ productHigh` 在循环前精确拒绝 UInt64 quotient overflow，零 denominator 与
+  overflow 使用 caller-owned distinct typed errors。BatchSizer/EvmPriceBand 分别绑定 SVM
+  capacity-ratio 与 EVM weighted-quote policy；不新增 Runtime/Ops/IR/CFG/Component/Emit、
+  allocation、pointer、wide heap value 或 shared layout。ceiling `mulDiv`、signed/fixed-point
+  与 wider returned quotient 继续 fail closed。详见 `docs/plan/tasks/r1-029.md`。
+
+- R1-030 shared full-precision UInt64 ceiling `mulDivCeil` 已完成：R1-029 的 product formation、
+  quotient overflow preflight 与唯一 64-step restoring-division frame 收口到同一个 private
+  rounding kernel；ceiling 只在 exact remainder 非零时做 checked increment，floor maximum
+  加 remainder 的唯一额外 overflow 也返回 caller-owned error。BatchSizer/EvmPriceBand 分别
+  暴露 `prorateUp`/`weightedUp`，没有复制除法循环或新增 target effect、allocation、pointer、
+  layout。signed/fixed-point 与 wider returned quotient 继续 fail closed。详见
+  `docs/plan/tasks/r1-030.md`。
+
+- R1-031 shared scaled UInt64 fixed-point policy 已完成：`Core.FixedPoint.UInt64` 提供
+  `mulDown`/`mulUp`/`divDown`/`divUp`，显式检查 nonzero application-selected scale，区分
+  zero divisor 和 overflow，并完整复用 R1-029/030 的 exact product 与唯一 bounded division
+  kernel。BatchSizer/EvmPriceBand 分别拥有 scale/divisor/error/persistence policy；没有新增
+  target effect、allocation、pointer 或 physical layout。typed fixed-point value、scale type、
+  cast/conversion、signed/wider fixed point 继续 fail closed。详见 `docs/plan/tasks/r1-031.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
@@ -859,6 +929,23 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   验证 permissionless 与 owner-first policy、typed width/zero errors 和失败原子性；原 UInt64
   路径保留。详见 `docs/plan/tasks/r5-021.md`。
 
+- R5-022 checked wide-to-UInt16 SafeCast 已完成集成：`Core.SafeCast` 在所有 upper limbs 为零后
+  精确要求 low limb `< 2^16`，才执行 explicit UInt16 narrowing；sentinel 继续只存在于 shared
+  policy。R5-021 的 generic fixed-scalar `Except` bind 原样复用，没有新增 width-specific
+  Ops/IR/CFG/Component/Runtime/Emit case。Accumulator/Config 现有 consumer 增加 batch/threshold
+  路径，分别验证 permissionless 与 owner-first ordering、typed width/zero errors、原 UInt64/
+  UInt32 字段保持和 raw-storage rollback。UInt8 与 signed casts 继续 fail closed，等待真实
+  consumer。详见 `docs/plan/tasks/r5-022.md`。
+
+- R5-023 checked wide-to-UInt8 SafeCast 已完成集成：`Core.SafeCast` 在 upper limbs 全零后
+  精确要求 low limb `< 2^8`，再执行 explicit UInt8 narrowing，补齐 unsigned fixed-scalar
+  UInt8/16/32/64 target。Accumulator 的 permissionless mode 路径返回 narrow byte；Config 的
+  owner-first level 路径将成功 byte 显式 widen 到 UInt64 result，从而保留完整 `0x1001`
+  authorization sentinel，而不是把它静默截断成 `1`。两个 consumer 均验证 typed width/zero
+  errors、原有 wider fields 保持和 raw-storage rollback；没有新增 width-specific Runtime/Ops/
+  IR/CFG/Component/Emit。Signed/saturating/wide-to-wide casts 继续 fail closed。详见
+  `docs/plan/tasks/r5-023.md`。
+
 - R2-002 SVM bounded scratch/instruction layout 已完成：`Svm.Scratch` 用 typed region handles
   统一 static invoke 与 dynamic signed self-CPI 的 metas/descriptor/data/infos/signer-tail
   geometry；malformed bank、重复 region、非法 alignment 与 1,024-byte OOM 均在 emission 前
@@ -1008,15 +1095,15 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   divisor；SDK 不暴露 raw EVM 零除返回 0 的语义。该纯值路径不分配 heap/memory buffer、
   不写 storage、也不新增 main Emit recipe。详见 `docs/plan/tasks/e-u256-004.md`。
 
-- `lake build Tests` 当前 406 jobs，汇总门覆盖全部 imported test modules 与 target guards。
-- SVM registry 67 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
-  `pf build` 当前通过；全套 Mollusk 421/421，其中 MemoryOps 20/20、LamportTransfer 15/15、
+- `lake build Tests` 当前 415 jobs，汇总门覆盖全部 imported test modules 与 target guards。
+- SVM registry 70 个程序；这表示每个程序有门，不表示每个入口都已有链上矩阵。全量
+  `pf build` 当前通过；全套 Mollusk 435/435，其中 MemoryOps 20/20、LamportTransfer 15/15、
   RawEntry 21/21、Keys 9/9、Phoenix-v1 profile 76/76。
-- EVM registry 40 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
+- EVM registry 41 个程序；Counter / Pair / Flag / Maybe / Context / EvmBounded /
   EvmStaticCounter / EvmStaticRoster / EvmOrderedStorage / EvmVecLog / EvmVecStack /
   EvmFeatureFlags / EvmClaimBitmap / EvmRingMailbox / EvmRingHistory / GuardedPayout /
   EvmAllowlist / EvmIdRegistry / EvmConfigMap / EvmScoreMap / EvmCheckpointBook /
-  EvmCheckpointTrace / EvmSafeCastAccumulator / EvmSafeCastConfig /
+  EvmCheckpointTrace / EvmSafeCastAccumulator / EvmSafeCastConfig / EvmPriceBand /
   Collectible / Badge / TipJar / Lang / Vault /
   Ownable / Token / Capped / MultiToken / CraftToken / TwoStepCounter / Credits / Window / Phase /
   Wide / Const 均进入

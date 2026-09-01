@@ -75,7 +75,8 @@ def entries : Array Entry := #[
   { name := "TransientWide128", digest := "be610f5f69db20a6" },
   { name := "TransientWide256", digest := "a0985f87fb42010c" },
   { name := "LamportTransfer", digest := "795d11e30ee48fb5" },
-  { name := "PubkeyGate", digest := "8374e353a1923c12" }
+  { name := "PubkeyGate", digest := "8374e353a1923c12" },
+  { name := "BatchSizer", digest := "a6b93f19f54f1cb3" }
 ]
 
 def names : Array String := entries.map (·.name)
