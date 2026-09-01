@@ -101,8 +101,8 @@ examples 已证明工程链可用。
 |---|---|---|---|---|
 | **E-B0** | `evm-powdr-dep-001` | Lake git 依赖 pin 三仓库（只读 lib target）；CI 只 `lake build` 依赖闭包 | 不拖慢主 Lean lane | 零运行时行为变化；**三仓库 isolated probe ✓**（`powdr-probe/` + `build_powdr_probe.sh [--full]`） |
 | **E-B1** | `evm-yul-fragment-001` | 审计 ProofForge `EmitYul` 输出 ⊆ yul-compiler verified fragment；列 reject 清单（`gas()`、超深栈、未支持 builtin） | **partial ✓** — `scripts/check_yul_fragment.py` + `emit_evm_golden_yul.lean` + reject 表（`docs/plan/tasks/evm-yul-fragment-001.md`）；CI self-test 待接 | 指导 Emit 保持「可双编」子集 |
-| **E-B2** | `evm-yulc-backend-001` | `pf build --target evm --backend=yulc`（或 env）；同一 `.yul` 走 yulc C API / CLI | **partial ✓** — `Assemble.Backend` + CLI/env + `build_yulc.sh` + Counter smoke script | Anvil 行为 diff（**不比 bytecode 字节**） | 与 solc **并行**；默认仍 solc |
-| **E-B3** | `evm-yulc-diff-001` | CI optional lane：Counter/Token/Capped 等 **双 backend** differential vs solc | 基线允许已知差异表 | 回归防 Fragment 漂移 |
+| **E-B2** | `evm-yulc-backend-001` | `pf build --target evm --backend=yulc`（或 env）；同一 `.yul` 走 yulc CLI | **partial ✓** — backend wired; Counter smoke + Anvil diff **verified** | 与 solc **并行**；默认仍 solc |
+| **E-B3** | `evm-yulc-diff-001` | CI optional lane：Counter 等 **双 backend** differential vs solc | **partial ✓** — `anvil_yulc_counter.sh` + `yulc.sh` runner | 基线允许已知差异表 |
 | **E-B4** | `evm-l3-bridge-001` | 选定 emit 片段 ↔ `yul-semantics` `RunCommitted` / `evm-semantics` `Steps` 对应（Counter 级） | 有界证明或 assume+audit 边界明示 | 对标 SVM `svm-sem-*` |
 
 **Feature A vs B 决策表：**

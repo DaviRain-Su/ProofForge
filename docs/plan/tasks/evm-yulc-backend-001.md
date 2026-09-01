@@ -23,7 +23,15 @@ without changing the default build path.
 | Env `PROOFFORGE_EVM_BACKEND` | `backendFromEnv` |
 | Env `PROOFFORGE_YULC` | override yulc binary path |
 | Build helper | `scripts/build_yulc.sh` |
-| Counter smoke | `scripts/smoke_yulc_counter.sh` |
+| Counter smoke | `scripts/smoke_yulc_counter.sh` — **verified** (2426 hex chars) |
+
+## Verified (2026-09-01)
+
+```bash
+./scripts/build_yulc.sh          # yulc @ powdr-probe pin
+./scripts/smoke_yulc_counter.sh  # ok
+./runtime-tests/evm/anvil_yulc_counter.sh  # behavior match; bytecode differs
+```
 
 ## Usage
 
@@ -42,12 +50,12 @@ Counter compiles; Token/Vault/TipJar fail on `gas()` until lowered or allowliste
 
 ## Still open (E-B3)
 
-- CI optional lane: `smoke_yulc_counter.sh` after `build_yulc.sh`
-- Anvil differential: solc vs yulc behavior (not bytecode bytes) for Counter/Capped
+- CI optional lane: `runtime-tests/evm/yulc.sh` (see `evm-yulc-diff-001`)
+- Expand dual-backend Anvil ladder beyond Counter
 - `pf_store_*` lowering preprocessor for wider yulc coverage
 
 ## Acceptance
 
 - [x] `pf build --target evm --backend=yulc` produces `.bin` when yulc accepts Yul
-- [ ] Dual-backend Anvil regression with known-diff table
-- [ ] Documented fragment allowlist in CI
+- [x] Counter smoke + Anvil behavior diff (see `evm-yulc-diff-001`)
+- [ ] CI optional lane with cached yul-compiler build

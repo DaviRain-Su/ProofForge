@@ -323,6 +323,47 @@ jobs:
       - name: Run NEAR sandbox detached Promise function-call gate
         run: runtime-tests/near/promise.sh
 
+  evm-yulc:
+    name: EVM yulc (Feature B, optional)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and yul-compiler build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+            powdr-probe/.lake/packages
+          key: evm-yulc-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'powdr-probe/lakefile.toml', 'powdr-probe/lean-toolchain', '.agents/setup') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build pf and fetch powdr-probe deps
+        run: |
+          lake build pf:exe
+          ./scripts/build_powdr_probe.sh
+
+      - name: Build yulc
+        run: ./scripts/build_yulc.sh
+
+      - name: Run yulc smoke and Counter Anvil dual-backend gate
+        run: runtime-tests/evm/yulc.sh
+
   # Preserve the original required-check identity while making proof/guard and target failures
   # independently observable. This job fails unless every lane completes, including after an error.
   test:
