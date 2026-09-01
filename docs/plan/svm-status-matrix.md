@@ -49,11 +49,13 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 
 | ID | Slice | Status |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1; see app-004→2); digest `2dc1e143994eca61` |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1; see app-004→2, app-005→4); digest `6c073c1dcdb31f6` |
 | [svm-app-002](tasks/svm-app-002.md) | Matching / fee / remainder | **done** |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id + mixed bid/ask |
+| [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id + reject len=5 |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
+| [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -66,7 +68,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md) / [007](tasks/svm-sem-007.md) | walked `r7` host knives | **done** — single + two-arg |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md) / [007](tasks/svm-sem-007.md) / [008](tasks/svm-sem-008.md) | walked `r7` + account-0 host knives | **done** — single/two-arg `r7` + account-0 header/key |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)

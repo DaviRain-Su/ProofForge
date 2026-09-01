@@ -1203,4 +1203,89 @@ theorem walkTwoArgs_eq_absArgs_stack :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 3 - Loader account-0 header/key walk (`svm-sem-008`)
+
+Loader-v3 serializes account 0 at `ACC0_HEADER` (`0x8`): dup marker, signer/writable flags,
+then `ACC0_KEY` (`0x10`). This host knife walks a cursor in `r8` over that header, loads the
+non-dup marker byte and the first pubkey limb, and proves agreement with absolute `r6`-relative
+loads. Still not full account vector walk, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute input offsets matching `Emit` `.equ ACC0_HEADER` / `ACC0_KEY`. -/
+def account0HeaderOffset : Nat := 0x8
+def account0KeyOffset : Nat := 0x10
+def account0NonDupMarker : U8 := 0xff
+
+/-- Absolute VAs for account-0 header byte and first key limb. -/
+def account0HeaderAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0HeaderOffset
+def account0KeyAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0KeyOffset
+
+/-- Seed Loader input with Counter value/arg0 plus account-0 non-dup header and key limb. -/
+def account0MetaInputMem (value arg0 keyLimb : U64) : Option Mem := do
+  let m₁ ← counterInputMem value arg0
+  let m₂ ← storev .m8 m₁ account0HeaderAddr (.vbyte account0NonDupMarker)
+  storev .m64 m₂ account0KeyAddr (.vlong keyLimb)
+
+/-- `r6` = input base; `r8` = absolute account-0 header cursor (`ACC0_HEADER`). -/
+def account0WalkRegs : RegMap :=
+  setReg (setReg initRegMap .br6 mmInputStart)
+    .br8 (mmInputStart + BitVec.ofNat 64 account0HeaderOffset)
+
+/-- Typed walk: ldxb r1,[r8+0]; ldxdw r2,[r8+8]; stxdw [r10+stackOff],r2. -/
+def walkAccount0Meta? (stackOff : U16) : Option EbpfAsm := do
+  let dupOff ← positiveOffset? 0
+  let keyOff ← positiveOffset? 8
+  return [
+    .ldx .m8 .br1 .br8 dupOff,
+    .ldx .m64 .br2 .br8 keyOff,
+    .st .m64 .br10 (.reg .br2) stackOff]
+
+/-- Run the walked account-0 meta load against seeded input memory. -/
+def evalWalkAccount0MetaToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0Meta? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-0 dup byte and key limb. -/
+def evalAbsAccount0Meta? (memory : Mem) : Option (U8 × U64) := do
+  let dup ← loadv .m8 memory account0HeaderAddr
+  let key ← loadv .m64 memory account0KeyAddr
+  match dup, key with
+  | .vbyte d, .vlong k => some (d, k)
+  | _, _ => none
+
+/-- Walked account-0 assembly is well-formed. -/
+theorem walkAccount0Meta_verified :
+    (walkAccount0Meta? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walk: dup=`0xff`, key limb=`0x42`, staged at `[r10-16]`. -/
+theorem evalWalkAccount0_key_0x42 :
+    (do
+      let mem ← account0MetaInputMem 7 5 0x42
+      let (regs, finalMem) ← evalWalkAccount0MetaToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        regs .br2 == 0x42 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x42))) =
+      some true := by
+  native_decide
+
+/-- Walked account-0 meta agrees with absolute `r6`-relative header/key loads. -/
+theorem walkAccount0Meta_eq_absLoad :
+    (do
+      let mem ← account0MetaInputMem 7 5 0x42
+      let (regs, _) ← evalWalkAccount0MetaToStack? rhsStackOffset mem
+      let (dup, key) ← evalAbsAccount0Meta? mem
+      pure (regs .br1 == dup.setWidth 64 && regs .br2 == key &&
+        dup == account0NonDupMarker && key == 0x42)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

@@ -27,7 +27,7 @@ plan: ../svm-work-plan.md
 | F eng | `svm-eng-001`…`002` | **all done** |
 
 Post-closeout knives (outside original A–F ledger, still on this PR):
-`svm-app-004` (CancelMultiple cap 1→2 + mixed bid/ask), `svm-sem-006`/`007` (E∞ walked `r7`).
+`svm-app-004`/`005` (CancelMultiple cap →4 + mixed bid/ask + four-id), `svm-sem-006`/`007`/`008` (E∞ walked `r7` + account-0).
 
 Plan index/matrix rows scrubbed of leftover `todo` for these ids (2026-09-01 audit).
 
@@ -42,8 +42,8 @@ Plan index/matrix rows scrubbed of leftover `todo` for these ids (2026-09-01 aud
 
 ## Explicit non-claims
 
-- Agave/ELF host adequacy (E∞) — **first knife** `svm-sem-006` walked `r7` (Loader/syscall/ELF still open)
-- Full Phoenix instruction matrix beyond bounded tag-3..11 slices — **app-004** raises CancelMultiple cap 1→2 (rest still open)
+- Agave/ELF host adequacy (E∞) — knives `svm-sem-006`/`007`/`008` walked `r7` + account-0 (full Loader/syscall/ELF still open)
+- Full Phoenix instruction matrix beyond bounded tag-3..11 slices — **app-005** raises CancelMultiple cap →4 (rest still open)
 - WASM workstreams (#4/#5 untouched)
 - Re-proving main’s Queue nowrap-push / pop-clear theorems
 

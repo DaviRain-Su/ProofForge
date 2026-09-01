@@ -173,7 +173,7 @@ Phase 4   Map/Tree 证明 + Token-2022 + 内存桥
 Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
           · A: sf-012..sf-013（FifoCancel / BatchRecorder）
           · E: svm-sem-005 Queue empty-push L3 **done**
-          · D: svm-app-001 Phoenix-v1 下一指令族（**done**：tags 10/11 CancelMultipleById cap=1）
+          · D: svm-app-001 Phoenix-v1 下一指令族（**done**：tags 10/11 CancelMultipleById cap=4）
           · D: svm-app-002 matching/fee/remainder 宣称面 **done**（tag 3 有界片）
           · D: svm-app-003 非 Phoenix SDK 小例子集 **done**
 
@@ -227,9 +227,10 @@ Phase 7   收口
 
 | ID | 内容 | 验收 |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=1；见 app-004→2）；digest `2dc1e143994eca61`；CancelById Mollusk 7 |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=4；见 app-004/005）；digest `6c073c1dcdb31f6`；CancelById Mollusk 含四 id |
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | **done** — tag 3 matching/fee/remainder |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id |
+| [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -246,6 +247,7 @@ Phase 7   收口
 | [svm-sem-005](tasks/svm-sem-005.md) | E5 | 选定容器例全函数（Queue empty-push） | **done** — TicketLine 布局；三写 storev 投影 |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ knife | walked `r7` arg cursor ↔ E1 absolute `.arg` | **done** — first host knife |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ knife 2 | two consecutive walked `r7` u64 args ↔ E1 | **done** — multi-field cursor |
+| [svm-sem-008](tasks/svm-sem-008.md) | E∞ knife 3 | Loader account-0 header/key walk ↔ abs load | **done** — non-dup + key limb |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

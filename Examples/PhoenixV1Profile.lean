@@ -2649,13 +2649,13 @@ def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
 
 /--
 Official Phoenix `CancelMultipleOrdersByIdWithFreeFunds` tag 11 wire:
-`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **two** order ids
-(`BoundedVec` capacity = 2). Empty vectors are a no-op. Each id is cancelled through the shared
+`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **four** order ids
+(`BoundedVec` capacity = 4; max wire 73 bytes). Empty vectors are a no-op. Each id is cancelled through the shared
 per-id helper; collateral stays in free funds.
 -/
 @[pf_entry, pf_svm_raw 11 4 0]
 def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
-    (orders : BoundedVec CancelOrderParams 2) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 4) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
         checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
@@ -2668,10 +2668,18 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
   else
     let side0 := orders.values[0]!.side.toUInt64
     let side1ok :=
-      orders.length = 1 ||
+      orders.length ≤ 1 ||
         orders.values[1]!.side.toUInt64 = 0 ||
         orders.values[1]!.side.toUInt64 = 1
-    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok then
+    let side2ok :=
+      orders.length ≤ 2 ||
+        orders.values[2]!.side.toUInt64 = 0 ||
+        orders.values[2]!.side.toUInt64 = 1
+    let side3ok :=
+      orders.length ≤ 3 ||
+        orders.values[3]!.side.toUInt64 = 0 ||
+        orders.values[3]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok then
       .error .overflow
     else
       let layout := Examples.PhoenixV1.small 2
@@ -2684,25 +2692,41 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
       let o0 := orders.values[0]!
       let _ ←
         cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side0 o0.price o0.sequence
-      if orders.length = 2 then
+      if orders.length ≥ 2 then
         let o1 := orders.values[1]!
         let _ ←
           cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
             o1.side.toUInt64 o1.price o1.sequence
-        let _ := finishMarketBatch
-        .ok (_s, 0)
+        if orders.length ≥ 3 then
+          let o2 := orders.values[2]!
+          let _ ←
+            cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+              o2.side.toUInt64 o2.price o2.sequence
+          if orders.length ≥ 4 then
+            let o3 := orders.values[3]!
+            let _ ←
+              cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                o3.side.toUInt64 o3.price o3.sequence
+            let _ := finishMarketBatch
+            .ok (_s, 0)
+          else
+            let _ := finishMarketBatch
+            .ok (_s, 0)
+        else
+          let _ := finishMarketBatch
+          .ok (_s, 0)
       else
         let _ := finishMarketBatch
         .ok (_s, 0)
 
 /--
-Official Phoenix `CancelMultipleOrdersById` tag 10 uses the same two-id vector, but claims any
+Official Phoenix `CancelMultipleOrdersById` tag 10 uses the same four-id vector, but claims any
 released collateral and withdraws through the shared nine-account classic Token context. Quote and
-base lots from both ids are aggregated before claim/withdraw.
+base lots from all ids are aggregated before claim/withdraw.
 -/
 @[pf_entry, pf_svm_raw 10 9 0]
 def cancelMultipleOrdersById (_s : State)
-    (orders : BoundedVec CancelOrderParams 2) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 4) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if cancelWithdrawContextValid = 0 then
       .error .overflow
@@ -2713,10 +2737,18 @@ def cancelMultipleOrdersById (_s : State)
   else
     let side0 := orders.values[0]!.side.toUInt64
     let side1ok :=
-      orders.length = 1 ||
+      orders.length ≤ 1 ||
         orders.values[1]!.side.toUInt64 = 0 ||
         orders.values[1]!.side.toUInt64 = 1
-    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok then
+    let side2ok :=
+      orders.length ≤ 2 ||
+        orders.values[2]!.side.toUInt64 = 0 ||
+        orders.values[2]!.side.toUInt64 = 1
+    let side3ok :=
+      orders.length ≤ 3 ||
+        orders.values[3]!.side.toUInt64 = 0 ||
+        orders.values[3]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok then
       .error .overflow
     else
       let layout := Examples.PhoenixV1.small 2
@@ -2732,7 +2764,7 @@ def cancelMultipleOrdersById (_s : State)
       let released0 ← releasedLotsForCancel512At layout side0 o0.price removed0
       let quote0 := if side0 = 0 then released0 else 0
       let base0 := if side0 = 0 then 0 else released0
-      if orders.length = 2 then
+      if orders.length ≥ 2 then
         let o1 := orders.values[1]!
         let side1 := o1.side.toUInt64
         let removed1 ←
@@ -2744,27 +2776,95 @@ def cancelMultipleOrdersById (_s : State)
         if quote0 > u64Max - quote1 || base0 > u64Max - base1 then
           .error .overflow
         else
-          let quoteReleased := quote0 + quote1
-          let baseReleased := base0 + base1
-          let quoteLotSize := layout.quoteLotSize
-          let baseLotSize := layout.baseLotSize
-          let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
-          let baseDivisor := if baseReleased = 0 then 1 else baseReleased
-          if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
-            let quoteAtoms := quoteReleased * quoteLotSize
-            let baseAtoms := baseReleased * baseLotSize
-            let _ ←
-              if traderIndex = 0 || quoteReleased = 0 then .ok 0
-              else claimReleasedFunds512At layout traderIndex 0 quoteReleased
-            let _ ←
-              if traderIndex = 0 || baseReleased = 0 then .ok 0
-              else claimReleasedFunds512At layout traderIndex 1 baseReleased
-            let _ := withdrawReleasedAt 0 quoteAtoms
-            let _ := withdrawReleasedAt 1 baseAtoms
-            let _ := finishMarketBatch
-            .ok (_s, 0)
+          let quote01 := quote0 + quote1
+          let base01 := base0 + base1
+          if orders.length ≥ 3 then
+            let o2 := orders.values[2]!
+            let side2 := o2.side.toUInt64
+            let removed2 ←
+              cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                side2 o2.price o2.sequence
+            let released2 ← releasedLotsForCancel512At layout side2 o2.price removed2
+            let quote2 := if side2 = 0 then released2 else 0
+            let base2 := if side2 = 0 then 0 else released2
+            if quote01 > u64Max - quote2 || base01 > u64Max - base2 then
+              .error .overflow
+            else
+              let quote012 := quote01 + quote2
+              let base012 := base01 + base2
+              if orders.length ≥ 4 then
+                let o3 := orders.values[3]!
+                let side3 := o3.side.toUInt64
+                let removed3 ←
+                  cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                    side3 o3.price o3.sequence
+                let released3 ← releasedLotsForCancel512At layout side3 o3.price removed3
+                let quote3 := if side3 = 0 then released3 else 0
+                let base3 := if side3 = 0 then 0 else released3
+                if quote012 > u64Max - quote3 || base012 > u64Max - base3 then
+                  .error .overflow
+                else
+                  let quoteReleased := quote012 + quote3
+                  let baseReleased := base012 + base3
+                  let quoteLotSize := layout.quoteLotSize
+                  let baseLotSize := layout.baseLotSize
+                  let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
+                  let baseDivisor := if baseReleased = 0 then 1 else baseReleased
+                  if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+                    let quoteAtoms := quoteReleased * quoteLotSize
+                    let baseAtoms := baseReleased * baseLotSize
+                    let _ ←
+                      if traderIndex = 0 || quoteReleased = 0 then .ok 0
+                      else claimReleasedFunds512At layout traderIndex 0 quoteReleased
+                    let _ ←
+                      if traderIndex = 0 || baseReleased = 0 then .ok 0
+                      else claimReleasedFunds512At layout traderIndex 1 baseReleased
+                    let _ := withdrawReleasedAt 0 quoteAtoms
+                    let _ := withdrawReleasedAt 1 baseAtoms
+                    let _ := finishMarketBatch
+                    .ok (_s, 0)
+                  else
+                    .error .overflow
+              else
+                let quoteLotSize := layout.quoteLotSize
+                let baseLotSize := layout.baseLotSize
+                let quoteDivisor := if quote012 = 0 then 1 else quote012
+                let baseDivisor := if base012 = 0 then 1 else base012
+                if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+                  let quoteAtoms := quote012 * quoteLotSize
+                  let baseAtoms := base012 * baseLotSize
+                  let _ ←
+                    if traderIndex = 0 || quote012 = 0 then .ok 0
+                    else claimReleasedFunds512At layout traderIndex 0 quote012
+                  let _ ←
+                    if traderIndex = 0 || base012 = 0 then .ok 0
+                    else claimReleasedFunds512At layout traderIndex 1 base012
+                  let _ := withdrawReleasedAt 0 quoteAtoms
+                  let _ := withdrawReleasedAt 1 baseAtoms
+                  let _ := finishMarketBatch
+                  .ok (_s, 0)
+                else
+                  .error .overflow
           else
-            .error .overflow
+            let quoteLotSize := layout.quoteLotSize
+            let baseLotSize := layout.baseLotSize
+            let quoteDivisor := if quote01 = 0 then 1 else quote01
+            let baseDivisor := if base01 = 0 then 1 else base01
+            if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+              let quoteAtoms := quote01 * quoteLotSize
+              let baseAtoms := base01 * baseLotSize
+              let _ ←
+                if traderIndex = 0 || quote01 = 0 then .ok 0
+                else claimReleasedFunds512At layout traderIndex 0 quote01
+              let _ ←
+                if traderIndex = 0 || base01 = 0 then .ok 0
+                else claimReleasedFunds512At layout traderIndex 1 base01
+              let _ := withdrawReleasedAt 0 quoteAtoms
+              let _ := withdrawReleasedAt 1 baseAtoms
+              let _ := finishMarketBatch
+              .ok (_s, 0)
+            else
+              .error .overflow
       else
         let quoteLotSize := layout.quoteLotSize
         let baseLotSize := layout.baseLotSize
