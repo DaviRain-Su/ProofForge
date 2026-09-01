@@ -318,6 +318,34 @@ private def projectOpExt
             (← _projectVal sixthDepositLo) (← _projectVal sixthDepositHi) (← _projectVal sixthGas)
             (← _projectVal callbackDepositLo) (← _projectVal callbackDepositHi)
             (← _projectVal callbackGas)
+      | .promiseFunctionCallAnd7ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+          leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+          sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity leftArguments midArguments
+          rightArguments fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+          rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+          fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo seventhDepositHi
+          seventhGas callbackDepositLo callbackDepositHi callbackGas =>
+          return .promiseFunctionCallAnd7ThenReturned
+            leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+            fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+            leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+            sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity
+            (← leftArguments.mapM _projectVal) (← midArguments.mapM _projectVal)
+            (← rightArguments.mapM _projectVal) (← fourthArguments.mapM _projectVal)
+            (← fifthArguments.mapM _projectVal) (← sixthArguments.mapM _projectVal)
+            (← seventhArguments.mapM _projectVal) (← callbackArguments.mapM _projectVal)
+            (← _projectVal leftDepositLo) (← _projectVal leftDepositHi) (← _projectVal leftGas)
+            (← _projectVal midDepositLo) (← _projectVal midDepositHi) (← _projectVal midGas)
+            (← _projectVal rightDepositLo) (← _projectVal rightDepositHi) (← _projectVal rightGas)
+            (← _projectVal fourthDepositLo) (← _projectVal fourthDepositHi) (← _projectVal fourthGas)
+            (← _projectVal fifthDepositLo) (← _projectVal fifthDepositHi) (← _projectVal fifthGas)
+            (← _projectVal sixthDepositLo) (← _projectVal sixthDepositHi) (← _projectVal sixthGas)
+            (← _projectVal seventhDepositLo) (← _projectVal seventhDepositHi) (← _projectVal seventhGas)
+            (← _projectVal callbackDepositLo) (← _projectVal callbackDepositHi)
+            (← _projectVal callbackGas)
       | .promiseResultRead capacity index =>
           return .promiseResultRead capacity (← _projectVal index)
       | .transientBuffer64Begin capacity => pure (.transientBuffer64Begin capacity)
@@ -637,6 +665,53 @@ def extOpCanon : Ops.OpExt (Wasm.IR.Val Ops.ValKind) → String
         s!"{Wasm.IR.valCanon extValCanon callbackDepositLo}," ++
         s!"{Wasm.IR.valCanon extValCanon callbackDepositHi}," ++
         s!"{Wasm.IR.valCanon extValCanon callbackGas})"
+  | .promiseFunctionCallAnd7ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity leftArguments midArguments
+      rightArguments fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo seventhDepositHi
+      seventhGas callbackDepositLo callbackDepositHi callbackGas =>
+      s!"npromise.and7.then.returned:{leftReceiver.toUTF8.size}:{leftReceiver}:" ++
+        s!"{leftMethod.toUTF8.size}:{leftMethod}:{midReceiver.toUTF8.size}:{midReceiver}:" ++
+        s!"{midMethod.toUTF8.size}:{midMethod}:{rightReceiver.toUTF8.size}:{rightReceiver}:" ++
+        s!"{rightMethod.toUTF8.size}:{rightMethod}:{fourthReceiver.toUTF8.size}:{fourthReceiver}:" ++
+        s!"{fourthMethod.toUTF8.size}:{fourthMethod}:{fifthReceiver.toUTF8.size}:{fifthReceiver}:" ++
+        s!"{fifthMethod.toUTF8.size}:{fifthMethod}:{sixthReceiver.toUTF8.size}:{sixthReceiver}:" ++
+        s!"{sixthMethod.toUTF8.size}:{sixthMethod}:{seventhReceiver.toUTF8.size}:{seventhReceiver}:" ++
+        s!"{seventhMethod.toUTF8.size}:{seventhMethod}:{callbackMethod.toUTF8.size}:{callbackMethod}." ++
+        s!"{leftArgsCapacity}.{midArgsCapacity}.{rightArgsCapacity}.{fourthArgsCapacity}." ++
+        s!"{fifthArgsCapacity}.{sixthArgsCapacity}.{seventhArgsCapacity}.{callbackArgsCapacity}(" ++
+        s!"{canonValues leftArguments};{canonValues midArguments};{canonValues rightArguments};" ++
+        s!"{canonValues fourthArguments};{canonValues fifthArguments};{canonValues sixthArguments};" ++
+        s!"{canonValues seventhArguments};{canonValues callbackArguments};" ++
+        s!"{Wasm.IR.valCanon extValCanon leftDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon leftDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon leftGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon midDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon midDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon midGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon rightDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon rightDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon rightGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon fourthDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon fourthDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon fourthGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon fifthDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon fifthDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon fifthGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon sixthDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon sixthDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon sixthGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon seventhDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon seventhDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon seventhGas};" ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositLo}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackDepositHi}," ++
+        s!"{Wasm.IR.valCanon extValCanon callbackGas})"
   | .promiseResultRead capacity index =>
       s!"npromise.result.read.{capacity}({Wasm.IR.valCanon extValCanon index})"
   | .transientBuffer64Begin capacity => s!"ntb64.begin.{capacity}"
@@ -832,6 +907,34 @@ private def rewritePayload
         (← rewriteValue fourthDepositLo) (← rewriteValue fourthDepositHi) (← rewriteValue fourthGas)
         (← rewriteValue fifthDepositLo) (← rewriteValue fifthDepositHi) (← rewriteValue fifthGas)
         (← rewriteValue sixthDepositLo) (← rewriteValue sixthDepositHi) (← rewriteValue sixthGas)
+        (← rewriteValue callbackDepositLo) (← rewriteValue callbackDepositHi)
+        (← rewriteValue callbackGas)
+  | .promiseFunctionCallAnd7ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity leftArguments midArguments
+      rightArguments fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo seventhDepositHi
+      seventhGas callbackDepositLo callbackDepositHi callbackGas =>
+      return .promiseFunctionCallAnd7ThenReturned
+        leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+        fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+        leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+        sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity
+        (← leftArguments.mapM rewriteValue) (← midArguments.mapM rewriteValue)
+        (← rightArguments.mapM rewriteValue) (← fourthArguments.mapM rewriteValue)
+        (← fifthArguments.mapM rewriteValue) (← sixthArguments.mapM rewriteValue)
+        (← seventhArguments.mapM rewriteValue) (← callbackArguments.mapM rewriteValue)
+        (← rewriteValue leftDepositLo) (← rewriteValue leftDepositHi) (← rewriteValue leftGas)
+        (← rewriteValue midDepositLo) (← rewriteValue midDepositHi) (← rewriteValue midGas)
+        (← rewriteValue rightDepositLo) (← rewriteValue rightDepositHi) (← rewriteValue rightGas)
+        (← rewriteValue fourthDepositLo) (← rewriteValue fourthDepositHi) (← rewriteValue fourthGas)
+        (← rewriteValue fifthDepositLo) (← rewriteValue fifthDepositHi) (← rewriteValue fifthGas)
+        (← rewriteValue sixthDepositLo) (← rewriteValue sixthDepositHi) (← rewriteValue sixthGas)
+        (← rewriteValue seventhDepositLo) (← rewriteValue seventhDepositHi) (← rewriteValue seventhGas)
         (← rewriteValue callbackDepositLo) (← rewriteValue callbackDepositHi)
         (← rewriteValue callbackGas)
   | .promiseResultRead capacity index =>

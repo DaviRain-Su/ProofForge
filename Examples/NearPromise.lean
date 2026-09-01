@@ -220,6 +220,29 @@ def callbackJoined6 (state : State) (callbackValue : UInt64) : Except Error (Sta
   else
     .error .overflow
 
+/-- Authenticated seven-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined7 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 7 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let _ := result.borshUInt64D 999
+    let _ := result.read 4
+    let _ := result.borshUInt64D 999
+    let _ := result.read 5
+    let _ := result.borshUInt64D 999
+    let _ := result.read 6
+    let seventh := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, seventh)
+  else
+    .error .overflow
+
 /-- Diagnostic callback for the strict standalone quoted-u128 result codec. This callback owns the
 exact one-result guard and index zero read. Status is returned while validity and both limbs are persisted
 for sandbox observation; this is not the FT resolver. -/
@@ -534,6 +557,34 @@ def sendAnd6SixthMissing (state : State) (value : UInt64) : Except Error (State 
     receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     receiver "missing" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     "callbackJoined6" (borshUInt64 90) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join seven successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd7Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd7ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined7" (borshUInt64 91) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed seventh child retains left/middle/right/fourth/fifth/sixth/seventh callback-result ordering. -/
+@[pf_entry]
+def sendAnd7SeventhMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd7ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined7" (borshUInt64 92) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
   .ok ({ state with marker := value }, value)
 
 /-- The caller succeeds while this detached receipt fails remotely on an absent method. -/

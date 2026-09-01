@@ -491,6 +491,32 @@ def main() -> None:
         "near-promise: failed sixth child in 6-way join retained successful left/middle/right/fourth/fifth results"
     )
 
+    joined7_success = _call_u64(client, "sendAnd7Success", 615)
+    if NearClient.success_value_bytes(joined7_success) != NearClient.encode_u64_le(777):
+        raise AssertionError("7-way joined callback did not forward the successful seventh result")
+    if client.view_u64("get") != 91:
+        raise AssertionError("7-way joined callback did not commit its independent argument 91")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("7-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 7-way join exposed seven successful child results to one callback")
+
+    joined7_seventh_failure = _call_u64(
+        client, "sendAnd7SeventhMissing", 616, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined7_seventh_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("7-way seventh-child failure did not forward the fallback result")
+    if client.view_u64("get") != 92:
+        raise AssertionError("7-way seventh-child failure did not run and commit callback argument 92")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("7-way seventh-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed seventh child in 7-way join retained successful left/middle/right/fourth/fifth/sixth results"
+    )
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
     if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")
