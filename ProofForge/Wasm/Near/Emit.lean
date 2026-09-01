@@ -147,6 +147,7 @@ private partial def logsOfOps (ops : Array (Op ValKind OpExt)) : Array String :=
       | .ext (.promiseTransferAccountReturned _ _ _) => #[]
       | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
+      | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => #[]
       | .ext (.promiseResultRead _ _) => #[]
       | .ext (.transientBuffer64Begin _)
       | .ext (.transientBuffer64Set _ _ _)
@@ -226,6 +227,11 @@ private partial def promiseLiteralsOfOps
           leftReceiver leftMethod rightReceiver rightMethod callbackMethod
           _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) =>
           #[leftReceiver, leftMethod, rightReceiver, rightMethod, callbackMethod]
+      | .ext (.promiseFunctionCallAnd3ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+          _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) =>
+          #[leftReceiver, leftMethod, midReceiver, midMethod, rightReceiver, rightMethod,
+            callbackMethod]
       | .ite _ _ _ thn els => promiseLiteralsOfOps thn ++ promiseLiteralsOfOps els
       | .forBody _ body => promiseLiteralsOfOps body
       | _ => #[]
@@ -246,6 +252,7 @@ private partial def opsReturnPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsReturnPromise thn || opsReturnPromise els
     | .forBody _ body => opsReturnPromise body
     | _ => false
@@ -260,6 +267,7 @@ private partial def opsCallPromiseFunction (ops : Array (Op ValKind OpExt)) : Bo
     | .ext (.promiseFunctionCallReturned _ _ _ _ _ _ _)
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsCallPromiseFunction thn || opsCallPromiseFunction els
     | .forBody _ body => opsCallPromiseFunction body
     | _ => false
@@ -301,6 +309,7 @@ private partial def opsChainPromise (ops : Array (Op ValKind OpExt)) : Bool :=
     | .ext (.promiseFtOnTransferThenResolveReturned _ _ _ _ _) => true
     | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsChainPromise thn || opsChainPromise els
     | .forBody _ body => opsChainPromise body
     | _ => false
@@ -312,6 +321,7 @@ private partial def opsJoinPromise (ops : Array (Op ValKind OpExt)) : Bool :=
   ops.any fun op =>
     match op with
     | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+    | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
     | .ite _ _ _ thn els => opsJoinPromise thn || opsJoinPromise els
     | .forBody _ body => opsJoinPromise body
     | _ => false
@@ -1586,22 +1596,27 @@ private def stagePromiseCall (p : Program ValKind OpExt) (st : EState)
 /-- Join exactly two concrete Promise indices in caller order. The two stores are immediately
 followed by `promise_and`, keeping this temporary frame local to the host operation that consumes
 it. -/
-private def stagePromiseAnd (st : EState) (leftPromiseLocal rightPromiseLocal : String)
-    (level : Nat) : StagedPromiseCall :=
+private def stagePromiseAndN (st : EState) (promiseLocals : Array String) (level : Nat) :
+    StagedPromiseCall :=
+  let count := promiseLocals.size
   let pointerLocal := localOfTemp st.fresh
   let jointPromiseLocal := localOfTemp (st.fresh + 1)
   let st' := { st with fresh := st.fresh + 2 }
-  let lines := #[
-    indent level ("(local.set " ++ pointerLocal ++
-      " (i64.extend_i32_u (call $pf_arena_alloc (i64.const 16) (i64.const 8))))"),
-    indent level ("(i64.store (i32.wrap_i64 (local.get " ++ pointerLocal ++
-      ")) (local.get " ++ leftPromiseLocal ++ "))"),
+  let bytes := count * 8
+  let allocLine := indent level ("(local.set " ++ pointerLocal ++
+    " (i64.extend_i32_u (call $pf_arena_alloc (i64.const " ++ toString bytes ++
+    ") (i64.const 8))))")
+  let storeLines := (Array.range count).map fun i =>
     indent level ("(i64.store (i32.add (i32.wrap_i64 (local.get " ++ pointerLocal ++
-      ")) (i32.const 8)) (local.get " ++ rightPromiseLocal ++ "))"),
-    indent level ("(local.set " ++ jointPromiseLocal ++ " (call $pf_promise_and (local.get " ++
-      pointerLocal ++ ") (i64.const 2)))")
-  ]
-  { lines, promiseLocal := jointPromiseLocal, st := st' }
+      ")) (i32.const " ++ toString (i * 8) ++ ")) (local.get " ++ promiseLocals[i]! ++ "))")
+  let andLine := indent level ("(local.set " ++ jointPromiseLocal ++
+    " (call $pf_promise_and (local.get " ++ pointerLocal ++ ") (i64.const " ++
+    toString count ++ ")))")
+  { lines := #[allocLine] ++ storeLines ++ #[andLine], promiseLocal := jointPromiseLocal, st := st' }
+
+private def stagePromiseAnd (st : EState) (leftPromiseLocal rightPromiseLocal : String)
+    (level : Nat) : StagedPromiseCall :=
+  stagePromiseAndN st #[leftPromiseLocal, rightPromiseLocal] level
 
 /-- Stage one transfer-only receipt. The amount is an exact little-endian u128 at a fresh
 16-byte arena span; no method, arguments, or gas value belongs to a native transfer action. -/
@@ -2264,6 +2279,32 @@ private partial def emitRegion (p : Program ValKind OpExt)
           lines := left.lines ++ right.lines ++ joint.lines ++ callback.lines ++ region.lines
           st := region.st
           terminal := region.terminal }
+    | .ext (.promiseFunctionCallAnd3ThenReturned
+        leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+        leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+        leftArguments midArguments rightArguments callbackArguments
+        leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+        rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas) =>
+        if view then throw "extract/unsupported: near view cannot create a promise"
+        if st.pendingPromiseReturn.isSome then
+          throw "extract/unsupported: near method cannot return more than one promise"
+        let left ← stagePromiseCall p st leftReceiver leftMethod leftArgsCapacity leftArguments
+          leftDepositLo leftDepositHi leftGas level
+        let mid ← stagePromiseCall p left.st midReceiver midMethod midArgsCapacity midArguments
+          midDepositLo midDepositHi midGas level
+        let right ← stagePromiseCall p mid.st rightReceiver rightMethod rightArgsCapacity
+          rightArguments rightDepositLo rightDepositHi rightGas level
+        let joint := stagePromiseAndN right.st
+          #[left.promiseLocal, mid.promiseLocal, right.promiseLocal] level
+        let callback ← stagePromiseThen p joint.st joint.promiseLocal callbackMethod
+          callbackArgsCapacity callbackArguments callbackDepositLo callbackDepositHi callbackGas level
+        let region ← emitRegion p outputPlan view echo level defaultSlot tail
+          { callback.st with pendingPromiseReturn := some callback.promiseLocal }
+        return {
+          lines := left.lines ++ mid.lines ++ right.lines ++ joint.lines ++ callback.lines ++
+            region.lines
+          st := region.st
+          terminal := region.terminal }
     | .ext (.promiseResultRead capacity index) =>
         if view then throw "extract/unsupported: near view cannot read promise results"
         let index ← renderVal st index
@@ -2455,6 +2496,15 @@ private partial def usesKind (kind : ValKind) : Op ValKind OpExt → Bool
           leftArguments.any valHas || rightArguments.any valHas || callbackArguments.any valHas ||
             #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
               callbackDepositLo, callbackDepositHi, callbackGas].any valHas
+      | .promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _
+          leftArguments midArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+          leftArguments.any valHas || midArguments.any valHas || rightArguments.any valHas ||
+            callbackArguments.any valHas ||
+            #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+              rightDepositLo, rightDepositHi, rightGas, callbackDepositLo, callbackDepositHi,
+              callbackGas].any valHas
       | .promiseResultRead _ index => valHas index
       | .transientBuffer64Set _ index value => valHas index || valHas value
       | .storageRead _ _ key | .storageRemove _ _ key | .storageHasKey _ _ key => key.any valHas
@@ -2686,6 +2736,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
   | .ext (.promiseTransferAccountReturned _ _ _) => true
   | .ext (.promiseFunctionCallThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseFunctionCallAndThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
+  | .ext (.promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) => true
   | .ext (.promiseResultRead _ _) => true
   | .ext (.logUtf8Bounded _ _) => true
   | .ext (.storageUnregisteredLog _) => true

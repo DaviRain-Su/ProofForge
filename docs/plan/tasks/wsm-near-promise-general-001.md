@@ -55,7 +55,10 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
    `ProofForge/Wasm/Near/Sdk/Promise.lean` (`createReturned`, `thenReturned`, `depthOk`);
    compile-time smoke in `Examples/NearPromiseHandle.handleDepthSmoke`; Extract of handle-typed
    entry bodies remains follow-up
-2. Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)
+2. ~~Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)~~ — **landed** for N=3:
+   `Runtime.promiseFunctionCallAnd3ThenReturned`, `Promises.callAnd3ThenReturned`, Extract/Emit
+   `stagePromiseAndN`, fixtures `sendAnd3Success` / `sendAnd3RightMissing` / `callbackJoined3`;
+   registry digest `604403f53aa23d87`; generalize to parameterized maxFanIn remains follow-up
 3. Sandbox DAG: create→then; create×3→and→callback
 4. Docs + capability-matrix row
 

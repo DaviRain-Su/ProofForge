@@ -728,6 +728,24 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                   (flipVal fuel' rightDepositHi) (flipVal fuel' rightGas)
                   (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
                   (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd3ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+                leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+                leftArguments midArguments rightArguments callbackArguments
+                leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+                rightDepositLo rightDepositHi rightGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd3ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+                  leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' callbackDepositLo)
+                  (flipVal fuel' callbackDepositHi) (flipVal fuel' callbackGas)
             | .promiseResultRead capacity index =>
                 .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity

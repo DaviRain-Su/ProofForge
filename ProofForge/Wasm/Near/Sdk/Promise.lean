@@ -136,6 +136,32 @@ input order even when either child fails. -/
     rightDeposit.w0 rightDeposit.w1 rightGas
     callbackDeposit.w0 callbackDeposit.w1 callbackGas
 
+/-- Schedule three ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..2 preserve
+left/middle/right input order even when any child fails. -/
+@[pf_inline] def callAnd3ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd3ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+    leftArguments midArguments rightArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
 namespace PromiseHandle
 
 @[pf_inline] def depthOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=

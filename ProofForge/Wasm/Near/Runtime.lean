@@ -569,6 +569,49 @@ actions are appended to the callback receipt, never to the join itself. -/
   let _ := callbackGas
   0
 
+/-- Schedule three ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..2
+preserve left/middle/right input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd3ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
 /-!
 Callback-result foundation. `promiseResultsCount` is immutable invocation context. Every
 `promiseResultRead` replaces one invocation-local bounded descriptor. Status is the exact nearcore

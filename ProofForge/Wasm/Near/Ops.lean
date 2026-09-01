@@ -115,6 +115,14 @@ inductive OpExt (V : Type) where
       (leftDepositLo leftDepositHi leftGas : V)
       (rightDepositLo rightDepositHi rightGas : V)
       (callbackDepositLo callbackDepositHi callbackGas : V)
+  | promiseFunctionCallAnd3ThenReturned
+      (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod : String)
+      (leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+      (leftArguments midArguments rightArguments callbackArguments : Array V)
+      (leftDepositLo leftDepositHi leftGas : V)
+      (midDepositLo midDepositHi midGas : V)
+      (rightDepositLo rightDepositHi rightGas : V)
+      (callbackDepositLo callbackDepositHi callbackGas : V)
   | promiseResultRead (capacity : Nat) (index : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
@@ -225,6 +233,23 @@ def OpExt.wellFormed : OpExt Val → Bool
         #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
           callbackDepositLo, callbackDepositHi, callbackGas].all
           (·.wellFormed ValKind.arity)
+  | .promiseFunctionCallAnd3ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+      rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+      Codec.accountIdLiteralValid leftReceiver && Codec.promiseMethodLiteralValid leftMethod &&
+        Codec.accountIdLiteralValid midReceiver && Codec.promiseMethodLiteralValid midMethod &&
+        Codec.accountIdLiteralValid rightReceiver && Codec.promiseMethodLiteralValid rightMethod &&
+        Codec.promiseMethodLiteralValid callbackMethod &&
+        storageFrameWellFormed leftArgsCapacity leftArguments &&
+        storageFrameWellFormed midArgsCapacity midArguments &&
+        storageFrameWellFormed rightArgsCapacity rightArguments &&
+        storageFrameWellFormed callbackArgsCapacity callbackArguments &&
+        #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+          rightDepositLo, rightDepositHi, rightGas, callbackDepositLo, callbackDepositHi,
+          callbackGas].all (·.wellFormed ValKind.arity)
   | .promiseResultRead capacity index =>
       Codec.storageCapacityValid capacity && index.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
@@ -310,6 +335,21 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
         (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
         (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
         (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas)
+  | .promiseFunctionCallAnd3ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+      leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+      rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+      .promiseFunctionCallAnd3ThenReturned
+        leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+        leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+        (leftArguments.map mapValue) (midArguments.map mapValue) (rightArguments.map mapValue)
+        (callbackArguments.map mapValue)
+        (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+        (mapValue midDepositLo) (mapValue midDepositHi) (mapValue midGas)
+        (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+        (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas)
   | .promiseResultRead capacity index => .promiseResultRead capacity (mapValue index)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
@@ -363,6 +403,14 @@ private def cfgPayloadValues : OpExt Val → Array Val
       leftArguments ++ rightArguments ++ callbackArguments ++
         #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
           callbackDepositLo, callbackDepositHi, callbackGas]
+  | .promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _
+      leftArguments midArguments rightArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+      rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+      leftArguments ++ midArguments ++ rightArguments ++ callbackArguments ++
+        #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+          rightDepositLo, rightDepositHi, rightGas, callbackDepositLo, callbackDepositHi,
+          callbackGas]
   | .promiseResultRead _ index => #[index]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]

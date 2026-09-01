@@ -135,6 +135,21 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
             (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
             (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
             (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas))
+      | .promiseFunctionCallAnd3ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+          leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+          leftArguments midArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+          .near (.promiseFunctionCallAnd3ThenReturned
+            leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+            leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+            (leftArguments.map mapValue) (midArguments.map mapValue) (rightArguments.map mapValue)
+            (callbackArguments.map mapValue)
+            (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+            (mapValue midDepositLo) (mapValue midDepositHi) (mapValue midGas)
+            (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+            (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas))
       | .promiseResultRead capacity index =>
           .near (.promiseResultRead capacity (mapValue index))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
@@ -195,6 +210,14 @@ def OpExt.values : OpExt Val → Array Val
           leftArguments ++ rightArguments ++ callbackArguments ++
             #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
               callbackDepositLo, callbackDepositHi, callbackGas]
+      | .promiseFunctionCallAnd3ThenReturned _ _ _ _ _ _ _ _ _ _ _
+          leftArguments midArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+          leftArguments ++ midArguments ++ rightArguments ++ callbackArguments ++
+            #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+              rightDepositLo, rightDepositHi, rightGas, callbackDepositLo, callbackDepositHi,
+              callbackGas]
       | .promiseResultRead _ index => #[index]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
@@ -343,6 +366,31 @@ def OpExt.wellFormed : OpExt Val → Bool
               #[leftDepositLo, leftDepositHi, leftGas, rightDepositLo, rightDepositHi, rightGas,
                 callbackDepositLo, callbackDepositHi, callbackGas]).all
               (·.wellFormed ValKind.arity)
+      | .promiseFunctionCallAnd3ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+          leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+          leftArguments midArguments rightArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas =>
+          Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+            Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+            Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity &&
+            leftArguments.size == leftArgsCapacity + 1 &&
+            midArguments.size == midArgsCapacity + 1 &&
+            rightArguments.size == rightArgsCapacity + 1 &&
+            callbackArguments.size == callbackArgsCapacity + 1 &&
+            (leftArguments ++ midArguments ++ rightArguments ++ callbackArguments ++
+              #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+                rightDepositLo, rightDepositHi, rightGas, callbackDepositLo, callbackDepositHi,
+                callbackGas]).all (·.wellFormed ValKind.arity)
       | .promiseResultRead capacity index =>
           Wasm.Near.Codec.storageCapacityValid capacity &&
             index.wellFormed ValKind.arity
