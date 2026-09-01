@@ -194,4 +194,15 @@ def bytesEqual (_s : State) (left right : BoundedBytes 8) : Bool :=
 def stringsEqual (_s : State) (left right : BoundedString 8) : Bool :=
   left.equals right
 
+/-- Typed lexicographic policy stays in Core; this protocol chooses a Bool "strictly before"
+result and keeps Borsh geometry in the raw adapter. -/
+@[pf_entry, pf_svm_raw 29 2 0]
+def bytesLess (_s : State) (left right : BoundedBytes 8) : Bool :=
+  left.isLexLess right
+
+/-- UTF-8 validation remains adapter-owned; ordering reuses the same unsigned active-byte scan. -/
+@[pf_entry, pf_svm_raw 30 2 0]
+def stringsLess (_s : State) (left right : BoundedString 8) : Bool :=
+  left.isLexLess right
+
 end Examples.RawEntry

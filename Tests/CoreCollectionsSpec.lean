@@ -276,10 +276,17 @@ private def invalidText : BoundedString 4 :=
 #guard !ascii.equals cent
 #guard !ascii.equals abd
 #guard !malformedLength.equals malformedLength
+#guard ascii.compareLex? asciiWithDirtyTail == some .equal
+#guard ascii.compareLex? abd == some .less
+#guard abd.compareLex? ascii == some .greater
+#guard ascii.compareLex? cent == some .less
+#guard malformedLength.compareLex? malformedLength == none
 #guard asciiText.equals dirtyAsciiText
 #guard dirtyAsciiText.equals asciiText
 #guard !asciiText.equals invalidText
 #guard invalidText.equals invalidText
+#guard asciiText.compareLex? dirtyAsciiText == some .equal
+#guard invalidText.compareLex? invalidText == some .equal
 #guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true
 #guard (BoundedString.ofBytes? surrogate).isNone
 

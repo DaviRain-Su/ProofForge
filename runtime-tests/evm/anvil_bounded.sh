@@ -90,7 +90,14 @@ for case in \
   'bytesEqual(bytes,bytes)|616263|616264|0' \
   'bytesEqual(bytes,bytes)|616263|6162|0' \
   'stringsEqual(string,string)|e282ac|e282ac|1' \
-  'stringsEqual(string,string)|c2a2|e282ac|0'; do
+  'stringsEqual(string,string)|c2a2|e282ac|0' \
+  'bytesLess(bytes,bytes)|||0' \
+  'bytesLess(bytes,bytes)|616263|616264|1' \
+  'bytesLess(bytes,bytes)|616264|616263|0' \
+  'bytesLess(bytes,bytes)|6162|616263|1' \
+  'bytesLess(bytes,bytes)|616263|6162|0' \
+  'stringsLess(string,string)|c2a2|e282ac|1' \
+  'stringsLess(string,string)|e282ac|c2a2|0'; do
   signature="${case%%|*}"
   rest="${case#*|}"
   left="${rest%%|*}"
@@ -99,29 +106,33 @@ for case in \
   expected="${rest#*|}"
   result="$("$cast" call --rpc-url "$rpc" "$addr" \
     --data "$(packed_pair_data "$signature" "$left" "$right")")"
-  solana_lean_require_uint "$result" "$expected" "bounded active-prefix equality $signature"
+  solana_lean_require_uint "$result" "$expected" "bounded active-prefix comparison $signature"
 done
 
 # Both dynamic tails are independently canonical and adjacent. Aliasing, gaps, and wrong first
-# offsets fail before the source-level comparison observes either fixed local frame.
-for malformed in \
-  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 96)" \
-  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 64 64)" \
-  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 64 160)"; do
-  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
-    echo "FAIL: noncanonical bounded equality ABI offsets unexpectedly succeeded" >&2
-    exit 1
-  fi
+# offsets fail before either source-level comparison observes its fixed local frames.
+for signature in 'bytesEqual(bytes,bytes)' 'bytesLess(bytes,bytes)'; do
+  for malformed in \
+    "$(packed_pair_data "$signature" 616263 616263 96)" \
+    "$(packed_pair_data "$signature" 616263 616263 64 64)" \
+    "$(packed_pair_data "$signature" 616263 616263 64 160)"; do
+    if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+      echo "FAIL: noncanonical bounded comparison ABI offsets unexpectedly succeeded" >&2
+      exit 1
+    fi
+  done
 done
 
-for invalid_pair in 'c080|616263' '616263|eda080'; do
-  left="${invalid_pair%%|*}"
-  right="${invalid_pair#*|}"
-  malformed="$(packed_pair_data 'stringsEqual(string,string)' "$left" "$right")"
-  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
-    echo "FAIL: invalid UTF-8 bounded equality input unexpectedly succeeded" >&2
-    exit 1
-  fi
+for signature in 'stringsEqual(string,string)' 'stringsLess(string,string)'; do
+  for invalid_pair in 'c080|616263' '616263|eda080'; do
+    left="${invalid_pair%%|*}"
+    right="${invalid_pair#*|}"
+    malformed="$(packed_pair_data "$signature" "$left" "$right")"
+    if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+      echo "FAIL: invalid UTF-8 bounded comparison input unexpectedly succeeded" >&2
+      exit 1
+    fi
+  done
 done
 
 for case in \

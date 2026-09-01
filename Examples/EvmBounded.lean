@@ -75,4 +75,14 @@ def bytesEqual (_s : State) (left right : BoundedBytes 4) : Bool :=
 def stringsEqual (_s : State) (left right : BoundedString 4) : Bool :=
   left.equals right
 
+/-- The application exposes one Bool policy while Core retains the typed three-way ordering. -/
+@[pf_entry]
+def bytesLess (_s : State) (left right : BoundedBytes 4) : Bool :=
+  left.isLexLess right
+
+/-- ABI UTF-8 gates precede the shared unsigned active-byte ordering policy. -/
+@[pf_entry]
+def stringsLess (_s : State) (left right : BoundedString 4) : Bool :=
+  left.isLexLess right
+
 end Examples.EvmBounded

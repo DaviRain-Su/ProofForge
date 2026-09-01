@@ -160,6 +160,49 @@ backing bytes are ignored, and the scan is bounded by compile-time capacity rath
       visited := visited + 1
     return equal == 1 && visited == UInt64.ofNat capacity
 
+/-- One compile-time bounded unsigned-byte scan. `ordering` is a private lowering detail:
+zero remains undecided/equal, one means left is smaller, and two means right is smaller. The public
+API exposes only Bool or `LexOrder`, never this scalar state. -/
+@[pf_inline] private def lexLessUnchecked {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool := Id.run do
+  let leftLength := left.length.toUInt64
+  let rightLength := right.length.toUInt64
+  let commonLength := if leftLength < rightLength then leftLength else rightLength
+  let mut ordering : UInt64 := 0
+  let mut visited : UInt64 := 0
+  for i in [0:capacity] do
+    let active := UInt64.ofNat i < commonLength
+    let undecided := ordering == 0
+    let leftByte := left.values[i]!
+    let rightByte := right.values[i]!
+    ordering :=
+      if active && undecided then
+        if leftByte < rightByte then 1
+        else if rightByte < leftByte then 2
+        else 0
+      else ordering
+    visited := visited + 1
+  return visited == UInt64.ofNat capacity &&
+    (ordering == 1 || (ordering == 0 && leftLength < rightLength))
+
+/-- Checked strict lexicographic ordering for contract policy. Invalid frames are never ordered,
+and inactive fixed-frame slots cannot affect the result. -/
+@[pf_inline] def isLexLess {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then false
+  else if UInt64.ofNat capacity < right.length.toUInt64 then false
+  else lexLessUnchecked left right
+
+/-- Typed three-way source-level ordering. The first differing unsigned active byte decides; if one
+active prefix exhausts first, the shorter value sorts first. Invalid frames return `none`. -/
+@[pf_inline] def compareLex? {capacity : Nat}
+    (left right : BoundedBytes capacity) : Option LexOrder :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then none
+  else if UInt64.ofNat capacity < right.length.toUInt64 then none
+  else if lexLessUnchecked left right then some .less
+  else if lexLessUnchecked right left then some .greater
+  else some .equal
+
 private def isContinuation (byte : Nat) : Bool := 0x80 ≤ byte && byte ≤ 0xbf
 
 /-- Strict Unicode scalar UTF-8 validation over the active prefix. It rejects truncated,
@@ -226,6 +269,17 @@ comparison. No normalization or locale policy is inferred. -/
 @[pf_inline] def equals {capacity : Nat}
     (left right : BoundedString capacity) : Bool :=
   left.asBytes.equals right.asBytes
+
+/-- Strict UTF-8 is a carrier/boundary invariant, so String ordering reuses the one unsigned-byte
+lexicographic policy without normalization or locale-dependent collation. -/
+@[pf_inline] def compareLex? {capacity : Nat}
+    (left right : BoundedString capacity) : Option LexOrder :=
+  left.asBytes.compareLex? right.asBytes
+
+/-- Checked strict ordering shares the byte implementation and returns false for malformed frames. -/
+@[pf_inline] def isLexLess {capacity : Nat}
+    (left right : BoundedString capacity) : Bool :=
+  left.asBytes.isLexLess right.asBytes
 
 /-- Checked conversion keeps the byte and string carriers physically independent in source while
 reusing one strict UTF-8 contract. -/

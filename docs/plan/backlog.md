@@ -104,6 +104,7 @@ R1-029 shared allocation-free full-precision UInt64 mulDiv；
 R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
 R1-031 shared allocation-free scaled UInt64 fixed-point policy；
 R1-032 shared allocation-free bounded bytes/String active-prefix equality；
+R1-033 shared allocation-free bounded bytes/String unsigned lexicographic ordering；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -463,6 +464,14 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   不在每次比较时重复 validation，也不做 normalization/locale policy。RawEntry 与 EvmBounded
   分别绑定双 Borsh frame 和双 adjacent ABI tail；不新增 Runtime/Ops/IR/CFG/Component/Emit、
   allocation、pointer 或 shared wire layout。详见 `docs/plan/tasks/r1-032.md`。
+
+- R1-033 shared bounded bytes/String ordering 已完成：Core 提供 typed `LexOrder`、checked
+  `compareLex?` 和 contract-facing `isLexLess`；后者以一个 compile-time bounded scan 按
+  unsigned active bytes 比较，首个差异决定顺序、相同前缀由较短值优先，并忽略 inactive
+  fixed slots。String 通过 compiler-erased byte view 复用且不引入 normalization/collation。
+  RawEntry tags 29/30 与 EvmBounded 分别验证 canonical Borsh/ABI 双输入和 Bool policy；没有
+  新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared wire。详见
+  `docs/plan/tasks/r1-033.md`。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在

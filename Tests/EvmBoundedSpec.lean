@@ -40,6 +40,8 @@ private def equalString : BoundedString 4 :=
 #guard boundedString (init 0) fullString == 209
 #guard bytesEqual (init 0) equalBytes equalBytes
 #guard stringsEqual (init 0) equalString equalString
+#guard !bytesLess (init 0) equalBytes equalBytes
+#guard !stringsLess (init 0) equalString equalString
 
 elab "#pf_guard_evm_bounded_abi" : command => do
   let env ← getEnv
@@ -71,6 +73,10 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing bounded bytes equality entry"
   let some stringsEqual := program.entries.find? (·.ixName == "stringsEqual")
     | throwError "missing bounded string equality entry"
+  let some bytesLess := program.entries.find? (·.ixName == "bytesLess")
+    | throwError "missing bounded bytes ordering entry"
+  let some stringsLess := program.entries.find? (·.ixName == "stringsLess")
+    | throwError "missing bounded string ordering entry"
   unless bounded.logicalParamCount == 1 && bounded.paramCount == 5 &&
       bounded.paramTypes == #[.uint32, .uint64, .uint64, .uint64, .uint64] &&
       bounded.selector == ProofForge.Crypto.Keccak.selector "boundedValues" #["uint64[]"] &&
@@ -116,8 +122,15 @@ elab "#pf_guard_evm_bounded_abi" : command => do
         ProofForge.Crypto.Keccak.selector "stringsEqual" #["string", "string"] &&
       stringsEqual.inputPolicy ==
         "0=packed-bytes-v1(string;capacity=4;utf8=true)," ++
-        "1=packed-bytes-v1(string;capacity=4;utf8=true)" do
-    throwError "bounded bytes/string equality lost its two canonical dynamic inputs"
+        "1=packed-bytes-v1(string;capacity=4;utf8=true)" &&
+      bytesLess.logicalParamCount == 2 && bytesLess.paramCount == 10 &&
+      bytesLess.selector == ProofForge.Crypto.Keccak.selector "bytesLess" #["bytes", "bytes"] &&
+      bytesLess.inputPolicy == bytesEqual.inputPolicy &&
+      stringsLess.logicalParamCount == 2 && stringsLess.paramCount == 10 &&
+      stringsLess.selector ==
+        ProofForge.Crypto.Keccak.selector "stringsLess" #["string", "string"] &&
+      stringsLess.inputPolicy == stringsEqual.inputPolicy do
+    throwError "bounded bytes/string comparison lost its two canonical dynamic inputs"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul

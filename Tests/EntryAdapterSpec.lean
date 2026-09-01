@@ -119,6 +119,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing bounded-bytes equality source method"
   let some sourceStringsEqual := source.methods.find? (·.ixName == "stringsEqual")
     | throwError "missing bounded-string equality source method"
+  let some sourceBytesLess := source.methods.find? (·.ixName == "bytesLess")
+    | throwError "missing bounded-bytes ordering source method"
+  let some sourceStringsLess := source.methods.find? (·.ixName == "stringsLess")
+    | throwError "missing bounded-string ordering source method"
   let pubkeySchema := .record "ProofForge.Svm.Sdk.Pubkey" #[
     ("word0", .scalar .uint64), ("word1", .scalar .uint64),
     ("word2", .scalar .uint64), ("word3", .scalar .uint64)]
@@ -147,7 +151,13 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceBytesEqual.retSchema == .scalar .boolean && sourceBytesEqual.retCount == 1 &&
       sourceStringsEqual.annotations == #["svm.raw.v1:28:2:0"] &&
       sourceStringsEqual.paramSchemas == #[.boundedString 8, .boundedString 8] &&
-      sourceStringsEqual.retSchema == .scalar .boolean && sourceStringsEqual.retCount == 1 do
+      sourceStringsEqual.retSchema == .scalar .boolean && sourceStringsEqual.retCount == 1 &&
+      sourceBytesLess.annotations == #["svm.raw.v1:29:2:0"] &&
+      sourceBytesLess.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesLess.retSchema == .scalar .boolean && sourceBytesLess.retCount == 1 &&
+      sourceStringsLess.annotations == #["svm.raw.v1:30:2:0"] &&
+      sourceStringsLess.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsLess.retSchema == .scalar .boolean && sourceStringsLess.retCount == 1 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
   let program ←
     match IR.fromExtracted source with
@@ -387,9 +397,15 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing projected bounded-bytes equality method"
   let some stringsEqual := program.methods.find? (·.ixName == "stringsEqual")
     | throwError "missing projected bounded-string equality method"
+  let some bytesLess := program.methods.find? (·.ixName == "bytesLess")
+    | throwError "missing projected bounded-bytes ordering method"
+  let some stringsLess := program.methods.find? (·.ixName == "stringsLess")
+    | throwError "missing projected bounded-string ordering method"
   for (method, tag, marker) in [
       (bytesEqual, 27, "borsh-schema.[4-12:b"),
-      (stringsEqual, 28, "borsh-schema.[4-12:t")
+      (stringsEqual, 28, "borsh-schema.[4-12:t"),
+      (bytesLess, 29, "borsh-schema.[4-12:b"),
+      (stringsLess, 30, "borsh-schema.[4-12:t")
     ] do
     match method.entry with
     | .raw entry =>
@@ -400,12 +416,12 @@ elab "#pf_guard_entry_adapter" : command => do
             entry.paramLeafCounts == #[9, 9] && entry.minDataLen == 9 &&
             entry.maxDataLen == 25 && entry.inferredReturnWidths == #[1] &&
             entry.returnDataLen == 1 && entry.canonical.contains marker do
-          throwError s!"wrong bounded equality Borsh plan: {repr entry}"
-    | .generated => throwError "bounded equality method lost its raw adapter"
+          throwError s!"wrong bounded comparison Borsh plan: {repr entry}"
+    | .generated => throwError "bounded comparison method lost its raw adapter"
     let graph ←
       match method.toCFG with
       | .ok graph => pure graph
-      | .error reason => throwError s!"bounded equality did not reach CFG: {reason}"
+      | .error reason => throwError s!"bounded comparison did not reach CFG: {reason}"
     unless graph.blocks.any fun block =>
         match block.terminator with
         | .exit (.returnU64 _) => true
@@ -453,8 +469,11 @@ elab "#pf_guard_entry_adapter" : command => do
       asm.contains "call echoOptionValue" && asm.contains "call echoTaggedValue" &&
       asm.contains "call echoPubkey" && asm.contains "jne r1, 33, err_raw_echoPubkey" &&
       asm.contains "call bytesEqual" && asm.contains "call stringsEqual" &&
+      asm.contains "call bytesLess" && asm.contains "call stringsLess" &&
       asm.contains "borsh_schema_utf8_loop_stringsEqual_0" &&
       asm.contains "borsh_schema_utf8_loop_stringsEqual_9" &&
+      asm.contains "borsh_schema_utf8_loop_stringsLess_0" &&
+      asm.contains "borsh_schema_utf8_loop_stringsLess_9" &&
       asm.contains "borsh_return_invalid_echoBoundedValues_" &&
       asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
       asm.contains "borsh_return_invalid_echoBoundedString_" &&

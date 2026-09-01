@@ -31,6 +31,8 @@ const ECHO_TAGGED_TAG: u8 = 25;
 const ECHO_PUBKEY_TAG: u8 = 26;
 const BYTES_EQUAL_TAG: u8 = 27;
 const STRINGS_EQUAL_TAG: u8 = 28;
+const BYTES_LESS_TAG: u8 = 29;
+const STRINGS_LESS_TAG: u8 = 30;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -575,6 +577,23 @@ fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
             vec![0xe2, 0x82, 0xac],
             0,
         ),
+        (BYTES_LESS_TAG, vec![], vec![], 0),
+        (BYTES_LESS_TAG, b"abc".to_vec(), b"abd".to_vec(), 1),
+        (BYTES_LESS_TAG, b"abd".to_vec(), b"abc".to_vec(), 0),
+        (BYTES_LESS_TAG, b"ab".to_vec(), b"abc".to_vec(), 1),
+        (BYTES_LESS_TAG, b"abc".to_vec(), b"ab".to_vec(), 0),
+        (
+            STRINGS_LESS_TAG,
+            vec![0xc2, 0xa2],
+            vec![0xe2, 0x82, 0xac],
+            1,
+        ),
+        (
+            STRINGS_LESS_TAG,
+            vec![0xe2, 0x82, 0xac],
+            vec![0xc2, 0xa2],
+            0,
+        ),
     ] {
         let data = bounded_bytes_pair_data(tag, &left, &right);
         let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
@@ -585,18 +604,20 @@ fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
         );
     }
 
-    for (left, right) in [
-        (vec![0xc0, 0x80], b"abc".to_vec()),
-        (b"abc".to_vec(), vec![0xed, 0xa0, 0x80]),
-    ] {
-        expect_raw_error(
-            &mollusk,
-            program_id,
-            program_id,
-            program_account.clone(),
-            true,
-            &bounded_bytes_pair_data(STRINGS_EQUAL_TAG, &left, &right),
-        );
+    for tag in [STRINGS_EQUAL_TAG, STRINGS_LESS_TAG] {
+        for (left, right) in [
+            (vec![0xc0, 0x80], b"abc".to_vec()),
+            (b"abc".to_vec(), vec![0xed, 0xa0, 0x80]),
+        ] {
+            expect_raw_error(
+                &mollusk,
+                program_id,
+                program_id,
+                program_account.clone(),
+                true,
+                &bounded_bytes_pair_data(tag, &left, &right),
+            );
+        }
     }
 }
 
