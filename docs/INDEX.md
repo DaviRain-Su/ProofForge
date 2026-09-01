@@ -4,7 +4,8 @@
 
 | 文档 | 作用 |
 |---|---|
-| [README.md](../README.md) | 仓库入口与当前范围 |
+| [README.md](../README.md) | 仓库入口（English） |
+| [README.zh-CN.md](../README.zh-CN.md) | 仓库入口（简体中文） |
 | [00-business-validation.md](00-business-validation.md) | 为什么做、为什么现在做 |
 | [01-prd.md](01-prd.md) | 做 / 不做 |
 | [02-architecture.md](02-architecture.md) | 当前模块边界、信任边界与早期迁移背景 |
