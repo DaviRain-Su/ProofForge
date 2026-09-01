@@ -1,5 +1,6 @@
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.Queue
+import Std.Tactic.BVDecide
 
 /-!
 # 抽象账户字状态模型：SDK 存储组件的第二层形式化验证
@@ -248,6 +249,18 @@ theorem scalarHeader_wf_parts {header : Field} {bodyAccount : Nat}
   exact ⟨h.1.1.1.1.1.1.1, h.1.1.1.1.1.1.2, h.1.1.1.1.1.2, h.1.1.1.1.2,
     h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
+/-- 从结构化组件重建 `scalarHeaderWellFormed`。 -/
+theorem scalarHeader_wf_build {header : Field} {bodyAccount : Nat}
+    (hwf : header.wellFormed = true) (hw : header.widthWords = 1)
+    (ha : header.region.account = bodyAccount) (hp : 0 < bodyAccount)
+    (hs : header.region.strideWords = 1) (hc : header.region.capacity = 1)
+    (hi : (header.region.indexBase == IndexBase.zero) = true)
+    (hacc : (header.region.access == Access.programOwnedMutable) = true) :
+    scalarHeaderWellFormed header bodyAccount = true := by
+  unfold scalarHeaderWellFormed
+  simp [Bool.and_eq_true, beq_iff_eq, hwf, hw, ha, hs, hc, hi, hacc]
+  exact hp
+
 /-- `BoundedVec.wellFormed` 的结构化合同。 -/
 theorem boundedVec_wf_parts {vec : BoundedVec}
     (h : vec.wellFormed = true) :
@@ -284,6 +297,26 @@ theorem indexBase_beq_one_eq {b : IndexBase} (h : (b == IndexBase.one) = true) :
   cases b with
   | zero => exact absurd h (by decide)
   | one => rfl
+
+/-- 由 slots access 链到 programOwnedMutable（Access 无 LawfulBEq）。 -/
+private theorem access_beq_prog_of_slots {a b : Access}
+    (hab : (a == b) = true) (hslots : (b == Access.programOwnedMutable) = true) :
+    (a == Access.programOwnedMutable) = true := by
+  have hb : b = Access.programOwnedMutable := by
+    cases b with | mk bw bo =>
+    cases bw <;> cases bo <;> try rfl
+    repeat' exact absurd hslots (by native_decide)
+  have ha : a = b := by
+    cases a with | mk aw ao =>
+    cases b with | mk bw bo =>
+    cases aw <;> cases bw <;> cases ao <;> cases bo <;> try rfl
+    repeat' exact absurd hab (by native_decide)
+  rw [ha, hb]
+  native_decide
+
+private theorem ofNat_capacity_toNat (cap : Nat) (h : cap < 2 ^ 64) :
+    (UInt64.ofNat cap).toNat = cap := by
+  simpa [UInt64.toNat_ofNat, Nat.mod_eq_of_lt h]
 
 section WfBridge
 
@@ -1524,5 +1557,348 @@ theorem mFree_invalid_noop (mem : AccountWords) (alloc : Allocator) (slot : UInt
   · rw [if_pos (Or.inr (Or.inl h))]
   · rw [if_pos (Or.inr (Or.inr (Or.inl h)))]
   · rw [if_pos (Or.inr (Or.inr (Or.inr h)))]
+
+section AllocProofs
+
+variable (alloc : Allocator)
+
+/-! ### OneBasedAllocator fail-closed 几何 -/
+
+/-- wf 的结构化合同（显式 `@OneBasedAllocator.liveCount`，避免与 `Allocator.liveCount` 读函数混淆）。 -/
+theorem allocator_wf_parts (hwf : alloc.wellFormed = true) :
+    alloc.slots.wellFormed = true ∧
+    (alloc.slots.indexBase == IndexBase.one) = true ∧
+    (alloc.slots.access == Access.programOwnedMutable) = true ∧
+    (@OneBasedAllocator.liveCount alloc).wellFormed = true ∧
+    alloc.cursor.wellFormed = true ∧
+    (@OneBasedAllocator.liveCount alloc).widthWords = 1 ∧
+    alloc.cursor.widthWords = 1 ∧
+    (@OneBasedAllocator.liveCount alloc).region.account = alloc.slots.account ∧
+    alloc.cursor.region.account = alloc.slots.account ∧
+    (@OneBasedAllocator.liveCount alloc).region.strideWords = 1 ∧
+    alloc.cursor.region.strideWords = 1 ∧
+    (@OneBasedAllocator.liveCount alloc).region.capacity = 1 ∧
+    alloc.cursor.region.capacity = 1 ∧
+    ((@OneBasedAllocator.liveCount alloc).region.indexBase == IndexBase.zero) = true ∧
+    (alloc.cursor.region.indexBase == IndexBase.zero) = true ∧
+    ((@OneBasedAllocator.liveCount alloc).region.access == alloc.slots.access) = true ∧
+    (alloc.cursor.region.access == alloc.slots.access) = true ∧
+    (@OneBasedAllocator.liveCount alloc).firstWord + 1 = alloc.cursor.firstWord := by
+  simp only [OneBasedAllocator.wellFormed, Bool.and_eq_true, beq_iff_eq] at hwf
+  exact ⟨hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.1.2,
+    hwf.1.1.1.1.1.2,
+    hwf.1.1.1.1.2,
+    hwf.1.1.1.2,
+    hwf.1.1.2,
+    hwf.1.2,
+    hwf.2⟩
+
+private theorem allocator_slots_capacity_u64 (hwf : alloc.wellFormed = true) :
+    alloc.slots.capacity < 2 ^ 64 := by
+  have hsw : alloc.slots.wellFormed = true := (allocator_wf_parts alloc hwf).1
+  simp [Region.wellFormed, Bool.and_eq_true, decide_eq_true_eq] at hsw
+  have hgeom : alloc.slots.baseWord + alloc.slots.strideWords * (alloc.slots.capacity - 1) < maxDataWord :=
+    hsw.2
+  have hcap_pos : 0 < alloc.slots.capacity := hsw.1.1.1.1.2
+  have hstride : 0 < alloc.slots.strideWords := hsw.1.1.1.2
+  have hcap_le_geom : alloc.slots.capacity - 1 ≤
+      alloc.slots.baseWord + alloc.slots.strideWords * (alloc.slots.capacity - 1) := by
+    have hmul : alloc.slots.capacity - 1 ≤
+        alloc.slots.strideWords * (alloc.slots.capacity - 1) := by
+      rcases Nat.eq_zero_or_pos (alloc.slots.capacity - 1) with hz | hp
+      · simp [hz]
+      · exact Nat.le_mul_of_pos_left (alloc.slots.capacity - 1) hstride
+    exact Nat.le_trans hmul (Nat.le_add_left _ _)
+  have hcap : alloc.slots.capacity ≤ maxDataWord := by
+    have hlt : alloc.slots.capacity - 1 < maxDataWord :=
+      Nat.lt_of_le_of_lt hcap_le_geom hgeom
+    omega
+  exact Nat.lt_of_le_of_lt hcap (by native_decide : maxDataWord < 2 ^ 64)
+
+theorem mAllocLiveCountField_eq (alloc : Allocator) :
+    mAllocLiveCountField alloc = @OneBasedAllocator.liveCount alloc := rfl
+
+theorem allocator_wf_indexBase (hwf : alloc.wellFormed = true) :
+    (alloc.slots.indexBase == IndexBase.one) = true :=
+  (allocator_wf_parts alloc hwf).2.1
+
+theorem allocator_wf_slots_access (hwf : alloc.wellFormed = true) :
+    (alloc.slots.access == Access.programOwnedMutable) = true :=
+  (allocator_wf_parts alloc hwf).2.2.1
+
+theorem allocator_wf_liveCount_wf (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).wellFormed = true := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.1
+
+theorem allocator_wf_liveCount_width (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).widthWords = 1 := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_account (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).region.account = alloc.slots.account := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_stride (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).region.strideWords = 1 := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_capacity (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).region.capacity = 1 := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_indexBase (hwf : alloc.wellFormed = true) :
+    ((mAllocLiveCountField alloc).region.indexBase == IndexBase.zero) = true := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_access (hwf : alloc.wellFormed = true) :
+    ((mAllocLiveCountField alloc).region.access == alloc.slots.access) = true := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_wf (hwf : alloc.wellFormed = true) :
+    alloc.cursor.wellFormed = true :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.1
+
+theorem allocator_wf_cursor_width (hwf : alloc.wellFormed = true) :
+    alloc.cursor.widthWords = 1 :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_account (hwf : alloc.wellFormed = true) :
+    alloc.cursor.region.account = alloc.slots.account :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_stride (hwf : alloc.wellFormed = true) :
+    alloc.cursor.region.strideWords = 1 :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_capacity (hwf : alloc.wellFormed = true) :
+    alloc.cursor.region.capacity = 1 :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_indexBase (hwf : alloc.wellFormed = true) :
+    (alloc.cursor.region.indexBase == IndexBase.zero) = true :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_cursor_access (hwf : alloc.wellFormed = true) :
+    (alloc.cursor.region.access == alloc.slots.access) = true :=
+  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+theorem allocator_wf_liveCount_adj (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).firstWord + 1 = alloc.cursor.firstWord := by
+  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+
+theorem allocator_slots_stride_pos (hwf : alloc.wellFormed = true) :
+    0 < alloc.slots.strideWords := by
+  have hsw : alloc.slots.wellFormed = true := (allocator_wf_parts alloc hwf).1
+  simp only [Region.wellFormed, Bool.and_eq_true, decide_eq_true_eq] at hsw
+  exact hsw.1.1.1.2
+
+theorem allocator_scalarHeader_liveCount (hwf : alloc.wellFormed = true)
+    (hacc : 0 < alloc.slots.account) :
+    scalarHeaderWellFormed (mAllocLiveCountField alloc) alloc.slots.account = true := by
+  have hprog : ((mAllocLiveCountField alloc).region.access == Access.programOwnedMutable) = true :=
+    access_beq_prog_of_slots (allocator_wf_liveCount_access alloc hwf) (allocator_wf_slots_access alloc hwf)
+  exact scalarHeader_wf_build (allocator_wf_liveCount_wf alloc hwf) (allocator_wf_liveCount_width alloc hwf)
+    (allocator_wf_liveCount_account alloc hwf) hacc (allocator_wf_liveCount_stride alloc hwf)
+    (allocator_wf_liveCount_capacity alloc hwf) (allocator_wf_liveCount_indexBase alloc hwf) hprog
+
+theorem allocator_scalarHeader_cursor (hwf : alloc.wellFormed = true)
+    (hacc : 0 < alloc.slots.account) :
+    scalarHeaderWellFormed alloc.cursor alloc.slots.account = true := by
+  have hprog : (alloc.cursor.region.access == Access.programOwnedMutable) = true :=
+    access_beq_prog_of_slots (allocator_wf_cursor_access alloc hwf) (allocator_wf_slots_access alloc hwf)
+  exact scalarHeader_wf_build (allocator_wf_cursor_wf alloc hwf) (allocator_wf_cursor_width alloc hwf)
+    (allocator_wf_cursor_account alloc hwf) hacc (allocator_wf_cursor_stride alloc hwf)
+    (allocator_wf_cursor_capacity alloc hwf) (allocator_wf_cursor_indexBase alloc hwf) hprog
+
+theorem mFieldWord_alloc_liveCount (hwf : alloc.wellFormed = true)
+    (hacc : 0 < alloc.slots.account) :
+    mFieldWord (mAllocLiveCountField alloc) 0 = some (mAllocLiveCountField alloc).firstWord := by
+  have hla := allocator_wf_liveCount_account alloc hwf
+  have hsw := allocator_scalarHeader_liveCount alloc hwf hacc
+  have hsw' : scalarHeaderWellFormed (mAllocLiveCountField alloc)
+      (mAllocLiveCountField alloc).region.account = true := by
+    simpa [hla] using hsw
+  exact mFieldWord_scalar_header hsw'
+
+theorem mFieldWord_alloc_cursor (hwf : alloc.wellFormed = true)
+    (hacc : 0 < alloc.slots.account) :
+    mFieldWord alloc.cursor 0 = some alloc.cursor.firstWord := by
+  have hca := allocator_wf_cursor_account alloc hwf
+  have hsw := allocator_scalarHeader_cursor alloc hwf hacc
+  have hsw' : scalarHeaderWellFormed alloc.cursor alloc.cursor.region.account = true := by
+    simpa [hca] using hsw
+  exact mFieldWord_scalar_header hsw'
+
+theorem mFieldWord_alloc_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
+    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity) :
+    mFieldWord (mAllocSlotsField alloc) slot =
+      some (alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords) := by
+  have hidx := allocator_wf_indexBase alloc hwf
+  have hidx' := indexBase_beq_one_eq hidx
+  unfold mAllocSlotsField mFieldWord
+  simp only [hidx', hp1, hp2, and_true, if_true, Field.firstWord, Nat.zero_add]
+  rfl
+
+theorem alloc_liveCount_ne_cursor (hwf : alloc.wellFormed = true) :
+    (mAllocLiveCountField alloc).firstWord ≠ alloc.cursor.firstWord := by
+  have hadj := allocator_wf_liveCount_adj alloc hwf
+  omega
+
+theorem alloc_liveCount_ne_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
+    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
+    (hsep : (mAllocLiveCountField alloc).firstWord + 1 ≤ alloc.slots.baseWord) :
+    (mAllocLiveCountField alloc).firstWord ≠
+      alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords := by
+  have _ := allocator_slots_stride_pos alloc hwf
+  omega
+
+theorem alloc_cursor_ne_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
+    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
+    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord) :
+    alloc.cursor.firstWord ≠
+      alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords := by
+  have _ := allocator_slots_stride_pos alloc hwf
+  omega
+
+theorem mAllocBump_masked (mem : AccountWords) (alloc : Allocator) :
+    mAllocBump mem alloc = mAllocBump mem alloc &&& 0xffffffff := by
+  unfold mAllocBump
+  bv_decide
+
+private theorem u64_pack_high_masked (bump slot : UInt64)
+    (hbump : bump = bump &&& 0xffffffff) :
+    (bump ||| slot <<< 32) >>> 32 = slot &&& 0xffffffff := by
+  rw [hbump]
+  exact packed_cursor_high bump slot
+
+/-- free 有效分支的写入序列。 -/
+def mFreeAt (mem : AccountWords) (alloc : Allocator) (slot freeHead bump count : UInt64)
+    : AccountWords :=
+  let mem := mWriteField mem (mAllocSlotsField alloc) slot freeHead
+  mWriteField (mWriteField mem alloc.cursor 0 (bump ||| (slot <<< 32)))
+    (mAllocLiveCountField alloc) 0 (count - 1)
+
+/-- **free 三写后 cursor 高 32 位 = slot**（bump 已 u32 掩码）。 -/
+theorem mFreeAt_freeHead (mem : AccountWords) (alloc : Allocator)
+    (slot freeHead bump count : UInt64)
+    (hwf : alloc.wellFormed = true) (hacc : 0 < alloc.slots.account)
+    (hslot : slot.toNat ≤ containerCapacityLimit)
+    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
+    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord)
+    (hbump : bump = bump &&& 0xffffffff) :
+    mAllocFreeHead (mFreeAt mem alloc slot freeHead bump count) alloc = slot := by
+  have hread : mReadField (mFreeAt mem alloc slot freeHead bump count) alloc.cursor 0
+      = bump ||| slot <<< 32 := by
+    unfold mFreeAt mWriteField mReadField
+    rw [mFieldWord_alloc_cursor alloc hwf hacc, mFieldWord_alloc_liveCount alloc hwf hacc,
+      mFieldWord_alloc_slots alloc hwf slot hp1 hp2]
+    simp only [mWriteWord,
+      if_neg (Ne.symm (alloc_liveCount_ne_cursor alloc hwf)),
+      if_neg fun hc => (alloc_cursor_ne_slots alloc hwf slot hp1 hp2 hsep) hc,
+      if_pos rfl]
+    rfl
+  unfold mAllocFreeHead mAllocCursor
+  rw [hread]
+  rw [u64_pack_high_masked bump slot hbump, slot_low_u32 slot hslot]
+
+/-- **有效 free 链接到 `mFreeAt` 三写组合**。 -/
+theorem mFree_valid_links (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
+    (hwf : alloc.wellFormed = true) (hslot : slot ≠ 0) (hslot_le : slot ≤ mAllocBump mem alloc)
+    (hp2 : slot.toNat ≤ alloc.slots.capacity)
+    (hcount : 0 < mAllocLiveCount mem alloc) :
+    mFree mem alloc slot =
+      (mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
+        (mAllocLiveCount mem alloc), slot) := by
+  unfold mFree mFreeAt
+  simp only [mAllocLiveCount, mAllocBump, mAllocFreeHead, mAllocCursor]
+  by_cases hguard :
+      slot = 0 ∨ mReadField mem alloc.cursor 0 &&& 4294967295 < slot ∨
+        UInt64.ofNat alloc.slots.capacity < slot ∨ mReadField mem (mAllocLiveCountField alloc) 0 = 0
+  · exfalso
+    rcases hguard with h | h | h | h
+    · exact hslot h
+    · exact (UInt64.not_lt.mpr hslot_le) h
+    · have hlt : UInt64.ofNat alloc.slots.capacity < slot := h
+      have hle : slot.toNat ≤ (UInt64.ofNat alloc.slots.capacity).toNat := by
+        rw [ofNat_capacity_toNat alloc.slots.capacity (allocator_slots_capacity_u64 alloc hwf)]
+        exact hp2
+      exact (UInt64.not_lt).2 (by
+        apply (UInt64.le_iff_toNat_le).2
+        exact hle) hlt
+    · rw [mAllocLiveCount] at hcount
+      rw [h] at hcount
+      exact absurd (UInt64.lt_iff_toNat_lt.mp hcount) (Nat.lt_irrefl 0)
+  · simp only [if_neg hguard]
+
+/-- **free 后再 alloc 取回同一槽（自由表头路径）**。 -/
+theorem mFree_then_mAlloc_same (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
+    (hwf : alloc.wellFormed = true) (hacc : 0 < alloc.slots.account)
+    (hslot : slot ≠ 0) (hslot_le : slot ≤ mAllocBump mem alloc)
+    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
+    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord)
+    (hslotcap : slot.toNat ≤ containerCapacityLimit)
+    (hcount : 0 < mAllocLiveCount mem alloc)
+    (hroom : mAllocLiveCount mem alloc < UInt64.ofNat alloc.slots.capacity) :
+    (mAlloc (mFree mem alloc slot).1 alloc).2 = slot := by
+  have links := mFree_valid_links mem alloc slot hwf hslot hslot_le hp2 hcount
+  let mem' := mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
+    (mAllocLiveCount mem alloc)
+  have hmem' : (mFree mem alloc slot).1 = mem' := congrArg Prod.fst links
+  have hfh := mFreeAt_freeHead mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
+    (mAllocLiveCount mem alloc) hwf hacc hslotcap hp1 hp2 hsep (mAllocBump_masked mem alloc)
+  have hfhAt : mAllocFreeHead mem' alloc = slot := hfh
+  have hfhAt_ne : mAllocFreeHead mem' alloc ≠ 0 := by
+    rw [hfhAt]
+    intro h0
+    exact hslot h0
+  have hcountPost : mAllocLiveCount mem' alloc = mAllocLiveCount mem alloc - 1 := by
+    change mAllocLiveCount (mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
+      (mAllocLiveCount mem alloc)) alloc = mAllocLiveCount mem alloc - 1
+    rw [mAllocLiveCount]
+    unfold mFreeAt mReadField mWriteField
+    rw [mFieldWord_alloc_liveCount alloc hwf hacc, mFieldWord_alloc_cursor alloc hwf hacc,
+      mFieldWord_alloc_slots alloc hwf slot hp1 hp2]
+    simp only [mWriteWord,
+      if_neg (Ne.symm (alloc_liveCount_ne_cursor alloc hwf)),
+      if_neg fun hc => (alloc_cursor_ne_slots alloc hwf slot hp1 hp2 hsep) hc]
+    rfl
+  have hnotfull : ¬(UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem' alloc) := by
+    intro hle
+    have hlt : mAllocLiveCount mem' alloc < UInt64.ofNat alloc.slots.capacity := by
+      rw [hcountPost]
+      apply (UInt64.lt_iff_toNat_lt).2
+      rw [u64_toNat_sub_one (by have := (UInt64.lt_iff_toNat_lt).1 hcount; omega)]
+      have hcap : (UInt64.ofNat alloc.slots.capacity).toNat = alloc.slots.capacity :=
+        ofNat_capacity_toNat alloc.slots.capacity (allocator_slots_capacity_u64 alloc hwf)
+      rw [hcap]
+      have := (UInt64.lt_iff_toNat_lt).1 hroom
+      have := (UInt64.lt_iff_toNat_lt).1 hcount
+      omega
+    exact (UInt64.not_le).2 hlt hle
+  have halloc : (mAlloc mem' alloc).2 = mAllocFreeHead mem' alloc := by
+    unfold mAlloc
+    simp only [mAllocLiveCount, mAllocBump, mAllocFreeHead, mAllocCursor, hcountPost]
+    by_cases hfull : UInt64.ofNat alloc.slots.capacity ≤ mReadField mem' (mAllocLiveCountField alloc) 0
+    · exact absurd hfull hnotfull
+    · simp only [if_neg hfull]
+      have hfhne' : mReadField mem' alloc.cursor 0 >>> 32 ≠ 0 := by
+        rw [show mReadField mem' alloc.cursor 0 >>> 32 = mAllocFreeHead mem' alloc from rfl]
+        exact hfhAt_ne
+      simp only [if_pos hfhne']
+  have hstep := congrArg Prod.snd (congrArg (fun m => mAlloc m alloc) hmem')
+  rw [hstep, halloc, hfhAt]
+
+end AllocProofs
 
 end ProofForge.Svm.Sdk.StorageModel
