@@ -62,7 +62,13 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 3. ~~Sandbox DAG: create→then; create×3→and→callback~~ — **landed** in
    `runtime-tests/near/promise.py` (`sendAnd3Success` / `sendAnd3RightMissing` scenes on
    `NearPromise.wasm`); handle fixture `sendHandleAnd3` + registry digest `b6a5c316187f4df9`
-4. Docs + capability-matrix row
+4. ~~Docs + capability-matrix row~~ — **landed** (`capability-matrix.md` §5 NEAR Promise row;
+   `multi-target-strategy.md` N13 status)
+
+## Still open
+
+- Parameterized `maxFanIn` `andN` on `PromiseHandle`
+- Extract of handle-typed entry bodies
 
 ## Deliverables
 

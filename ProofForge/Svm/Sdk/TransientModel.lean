@@ -476,6 +476,25 @@ theorem mBytesPush_get (bw : BytesWords) (slot : Fin 2) (cap : Nat) (byte : UInt
     omega
   simp [mBytesGet, hact', hlen, hr.2.1]
 
+/-! ## Bytes logData (sf-007)
+
+Host syscall is intentionally opaque: the model records success/failure gates only and does not
+mutate the active byte buffer. -/
+
+def mBytesLogData (bw : BytesWords) (slot : Fin 2) (cap : Nat) : BytesWords × UInt64 :=
+  if !requireBytesActive bw slot cap then (bw, bytesStateCode)
+  else (bw, okCode)
+
+theorem mBytesLogData_host_opaque (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (hact : requireBytesActive bw slot cap = true) :
+    (mBytesLogData bw slot cap).1 = bw ∧ (mBytesLogData bw slot cap).2 = okCode := by
+  simp [mBytesLogData, hact]
+
+theorem mBytesLogData_stale (bw : BytesWords) (slot : Fin 2) (cap : Nat)
+    (h : requireBytesActive bw slot cap = false) :
+    mBytesLogData bw slot cap = (bw, bytesStateCode) := by
+  simp [mBytesLogData, h]
+
 /-! ## Combined invocation scratch: vec slots ⟂ bytes slots -/
 
 structure InvocationScratch where
@@ -510,6 +529,12 @@ theorem mBytesPush_scratch_preserves_vec (s : InvocationScratch) (slot : Fin 2)
     (_hin : byte ≤ 255)
     (_hroom : (s.bytes.bank slot).length < cap) :
     let s' : InvocationScratch := { s with bytes := (mBytesPush s.bytes slot cap byte).1 }
+    s'.vec = s.vec := by
+  rfl
+
+theorem mBytesLogData_scratch_preserves_vec (s : InvocationScratch) (slot : Fin 2)
+    (cap : Nat) (_hact : requireBytesActive s.bytes slot cap = true) :
+    let s' : InvocationScratch := { s with bytes := (mBytesLogData s.bytes slot cap).1 }
     s'.vec = s.vec := by
   rfl
 
