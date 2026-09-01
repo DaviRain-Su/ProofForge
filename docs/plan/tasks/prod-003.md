@@ -42,3 +42,4 @@ prod-002。解锁 prod-004。同一 PR #11。
 - [x] templates 可 `lake build`；只 import Attr + Sdk
 - [x] `pf.toml` `[[program]]` 驱动 build
 - [ ] 完整 assemble 制品依赖本机 `sbpf`/`solc`
+- [x] 本地：`pf init`→`lake build`→`pf build` 产出 `.so`/`.bin`（svm+evm）

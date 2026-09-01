@@ -43,3 +43,4 @@ prod-001。解锁 prod-003。同一 PR #11。
 - [x] CLI：`--module` + `pf.toml`；Examples 硬编码仅作 Registry 回退
 - [x] import-closure CI：`scripts/check_sdk_import_closure.py`
 - [ ] 全量 CI 回归 digest（交 GitHub Actions）
+- [x] 本地：`Examples.Counter` SVM/EVM assemble 通过 Registry digest 钉（sbpf/solc 已装）

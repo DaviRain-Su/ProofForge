@@ -232,7 +232,8 @@ my-program/
 - [x] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit（`scripts/check_sdk_import_closure.py`）
 - [x] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
 - [x] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
-- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变（交 CI；本环境缺 `sbpf` 二进制未跑 assemble）
+- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变（交 GitHub CI）
+  - 本地已用 `sbpf`/`solc` 验证：`Examples.Counter` SVM/EVM assemble 通过 Registry digest 钉（`3382e308fa0843e9` / `254202356ee921d6`）；模板 `pf init`→`lake build`→`pf build` 出 `.so`/`.bin`
 
 ### 待做 · P2（prod-003）— `pf init` + 可构建模板
 
@@ -240,7 +241,7 @@ my-program/
 - [x] 以 `templates/svm-counter`、`templates/evm-counter` 为源生成工程
 - [x] 生成物：`lakefile.lean`、`lean-toolchain`、`pf.toml`、最小合约、`README.md`
 - [x] 模板 path-`require` monorepo；合约只 import 对应 `*Sdk`（git tag 钉死见 P3）
-- [x] 验收：`pf init` → `lake build` 绿；`lake exe pf -- build` 可抽 IR（assemble 需本机 `sbpf`/`solc`）
+- [x] 验收：`pf init` → `lake build` 绿；`lake exe pf -- build` 产出 `.so`/`.bin`（本机已装 `sbpf`/`solc` 钉）
 - [ ] （后续）near / xrpl 模板等 WASM SDK facade 稳定后再加
 
 ### 待做 · P3（prod-004）— Release 打包
