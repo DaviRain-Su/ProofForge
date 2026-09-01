@@ -22,7 +22,8 @@ elab "#pf_guard_near_token_ergonomics" : command => do
     | .error reason => throwError reason
   for anchor in #[
       "(func (export \"canAddViaHelper\")", "(func (export \"addViaHelperW0\")",
-      "(func (export \"addViaAndThen\")", "(func (export \"touch\")", "i64.add", "i64.lt_u"] do
+      "(func (export \"addViaAndThen\")", "(func (export \"addCheckedViaHelper\")",
+      "(func (export \"touch\")", "i64.add", "i64.lt_u"] do
     unless wat.contains anchor do
       throwError s!"NEAR token ergonomics WAT missing {anchor}\n{wat}"
   logInfo m!"proofforge-near-token-ergonomics: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
