@@ -1510,6 +1510,17 @@ private theorem ptr_bound_set_unalloc (bump : UInt64) (nodes : Vector Node 4)
   rw [hget]
   exact hold a ha0 ha1
 
+/-! ### sf-011：`rotateLeft_wf` / `rotateRight_wf`
+
+轴与其右（左）孩须已分配，以便从 `wf` 读出孩子指针上界。
+成功路径只重排已有界指针，不改 size/bump/freeHead。 -/
+
+/-! ### sf-011：旋转 `wf` 保持（续）
+
+`rotateLeft_meta` / `rotateRight_meta` 已收 size/bump/free 守恒。
+全指针 `rotateLeft_wf` / `rotateRight_wf`（及 insert/remove）在下一提交补全；
+结构谓词与 `paintNode_wf` / `set_value_wf` 见上方。 -/
+
 end Proofs
 
 end Examples.Tree
