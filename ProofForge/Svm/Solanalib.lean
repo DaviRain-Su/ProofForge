@@ -1853,4 +1853,91 @@ theorem walkAccount1MetaAfterSkip_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 11 - Loader account-1 signer/writable flags after skip (`svm-sem-016`)
+
+Knife 10 lands the cursor on account-1 meta. Emit then gates with `ldxb` of header+1 (signer)
+and +2 (writable), same as account-0. This knife composes the zero-`EXACT_DATA_LEN` skip with
+those flag loads from the advanced `r2` cursor and proves agreement with absolute `r6`-relative
+loads at `0x2869` / `0x286a`. Still not lamports/owner/data_len for account-1, full vectors,
+syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute VAs for account-1 signer and writable flag bytes. -/
+def account1SignerAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account1HeaderOffset + 1)
+def account1WritableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account1HeaderOffset + 2)
+
+/-- Seed skip+account-1 meta layout plus signer/writable flags. -/
+def account1FlagsInputMem (value arg0 key0Limb : U64) (nextMarker : U8)
+    (rentEpoch key1Limb : U64) (signer writable : U8) : Option Mem := do
+  let m₁ ← account1MetaInputMem value arg0 key0Limb nextMarker rentEpoch key1Limb
+  let m₂ ← storev .m8 m₁ account1SignerAddr (.vbyte signer)
+  storev .m8 m₂ account1WritableAddr (.vbyte writable)
+
+/-- Typed skip then account-1 flags: after knife-9 skip, `r2` is the account-1 header;
+`ldxb r1,[r2+1]`; `ldxb r2,[r2+2]`; stage signer. -/
+def walkAccount1FlagsAfterSkip? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let signerOff ← positiveOffset? 1
+  let writableOff ← positiveOffset? 2
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 signerOff,
+    .ldx .m8 .br4 .br2 writableOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run skip+account-1 flag walk against seeded input memory. -/
+def evalWalkAccount1FlagsAfterSkipToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount1FlagsAfterSkip? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-1 signer and writable flag bytes. -/
+def evalAbsAccount1Flags? (memory : Mem) : Option (U8 × U8) := do
+  let signer ← loadv .m8 memory account1SignerAddr
+  let writable ← loadv .m8 memory account1WritableAddr
+  match signer, writable with
+  | .vbyte s, .vbyte w => some (s, w)
+  | _, _ => none
+
+/-- Walked account-1-flags-after-skip assembly is well-formed. -/
+theorem walkAccount1FlagsAfterSkip_verified :
+    (walkAccount1FlagsAfterSkip? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete skip+flags: signer=`1`, writable=`1`, signer staged at `[r10-16]`. -/
+theorem evalWalkAccount1_after_skip_signer_writable_1 :
+    (do
+      let mem ← account1FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1
+      let (regs, finalMem) ← evalWalkAccount1FlagsAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-1 flags after skip agree with absolute `r6`-relative loads. -/
+theorem walkAccount1FlagsAfterSkip_eq_absLoad :
+    (do
+      let mem ← account1FlagsInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0
+      let (regs, _) ← evalWalkAccount1FlagsAfterSkipToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount1Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

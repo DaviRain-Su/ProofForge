@@ -632,7 +632,7 @@ fn raw_cancel_up_to_data(
 
 /// Official Borsh `CancelMultipleOrdersByIdParams`: `tag || u32 len || CancelOrderParams*`.
 /// This profile slice accepts at most eight ids (`len ∈ {0..=8}`; max wire 141 bytes).
-/// Tag 10 withdraw accepts at most six ids (`len ∈ {0..=6}`; max wire 107 bytes).
+/// Tag 10 withdraw accepts at most seven ids (`len ∈ {0..=7}`; max wire 124 bytes).
 fn raw_cancel_by_id_data(tag: u8, orders: &[(u8, u64, u64)]) -> Vec<u8> {
     assert!(tag == 10 || tag == 11);
     assert!(orders.len() <= 8);
@@ -4538,6 +4538,75 @@ fn official_raw_cancel_by_id_withdraw_cancels_six_owned_bids_and_claims_quote() 
 }
 
 #[test]
+fn official_raw_cancel_by_id_withdraw_cancels_seven_owned_bids_and_claims_quote() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let sequences = [!51u64, !52u64, !53u64, !54u64, !55u64, !56u64, !57u64];
+    let prices = [5u64, 6, 7, 8, 9, 10, 11];
+    let sizes = [1u64, 2, 3, 4, 1, 2, 1];
+    let locked: u64 = prices
+        .iter()
+        .zip(sizes.iter())
+        .map(|(p, s)| p * s)
+        .sum();
+    // quoteLotSize in fixture = 3 → released quote atoms = locked * 3.
+    let quote_atoms = locked * 3;
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 330);
+    write_word(&mut market, 8320, locked);
+    write_word(&mut market, 8321, 7);
+    for i in 0..7 {
+        market = run_market_write(
+            "insertBid512",
+            market,
+            true,
+            &[prices[i], sequences[i], 1, sizes[i], 0, 0],
+            &[Check::success()],
+        );
+    }
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let orders: Vec<(u8, u64, u64)> = (0..7).map(|i| (0, prices[i], sequences[i])).collect();
+    let data = raw_cancel_by_id_data(10, &orders);
+    assert_eq!(data.len(), 124);
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&data),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 331);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 0);
+    assert_eq!(read_word(&market, 8321), 7);
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        1000 - quote_atoms
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_quote_key)),
+        20 + quote_atoms
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        1_000
+    );
+    let expected: Vec<(u16, u64, u64, u64)> = (0..7)
+        .map(|i| (0, sequences[i], prices[i], sizes[i]))
+        .collect();
+    assert_cancel_all_batch(
+        &phoenix_data_payloads(&mollusk)[0],
+        10,
+        330,
+        market_key,
+        trader_key,
+        &expected,
+    );
+}
+
+#[test]
 fn official_raw_cancel_by_id_rejects_noncanonical_wire_and_invalid_side_atomically() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
     let market_key = Pubkey::new_unique();
@@ -4545,10 +4614,10 @@ fn official_raw_cancel_by_id_rejects_noncanonical_wire_and_invalid_side_atomical
     write_word(&mut market, MARKET_SEQUENCE_WORD, 280);
     let before = market.data.clone();
     for data in [
-        // length=7 exceeds profile capacity 6 / maxDataLen 107 for tag 10.
+        // length=8 exceeds profile capacity 7 / maxDataLen 124 for tag 10.
         {
-            let mut over = vec![10, 7, 0, 0, 0];
-            for i in 1u64..=7u64 {
+            let mut over = vec![10, 8, 0, 0, 0];
+            for i in 1u64..=8u64 {
                 over.push(0u8);
                 over.extend_from_slice(&i.to_le_bytes());
                 over.extend_from_slice(&(!i).to_le_bytes());

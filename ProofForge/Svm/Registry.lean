@@ -69,7 +69,7 @@ def entries : Array Entry := #[
   { name := "VersionedMigrator", digest := "2c6847a98f93b590" },
   { name := "VersionedPayloadMigrator", digest := "39327e5abe0c9299" },
   { name := "Phoenix", digest := "2dfc5d8abbd4a2e0" },
-  { name := "PhoenixV1Profile", digest := "b88c8a2247d2c28e" },
+  { name := "PhoenixV1Profile", digest := "31c33408a7d9dbf7" },
   { name := "Book", digest := "525c5967ae68d203" },
   { name := "Seat", digest := "831f313077f89947" },
   { name := "Lang", digest := "64264acebea0c34c" },

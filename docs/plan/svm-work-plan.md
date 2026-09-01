@@ -235,6 +235,7 @@ Phase 7   收口
 | [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141 |
 | [svm-app-008](tasks/svm-app-008.md) | Phoenix CancelMultipleById tag-10 capacity 4→5 | **done** — maxDataLen 90; digest `5fddbc7822acef7e` |
 | [svm-app-009](tasks/svm-app-009.md) | Phoenix CancelMultipleById tag-10 capacity 5→6 | **done** — seam 1088; maxDataLen 107; digest `b88c8a2247d2c28e` |
+| [svm-app-010](tasks/svm-app-010.md) | Phoenix CancelMultipleById tag-10 capacity 6→7 | **done** — seam 1152; maxDataLen 124; digest `31c33408a7d9dbf7` |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -259,6 +260,7 @@ Phase 7   收口
 | [svm-sem-013](tasks/svm-sem-013.md) | E∞ knife | Loader account-0 executable + rent_epoch | **done** — knife 8; zero-dataLen rent at `0x2860` |
 | [svm-sem-014](tasks/svm-sem-014.md) | E∞ knife | Loader account-0 → next-account marker | **done** — knife 9; skip to `0x2868` |
 | [svm-sem-015](tasks/svm-sem-015.md) | E∞ knife | Loader account-1 header/key after skip | **done** — knife 10; `0x2868`/`0x2870` |
+| [svm-sem-016](tasks/svm-sem-016.md) | E∞ knife | Loader account-1 signer/writable after skip | **done** — knife 11; `0x2869`/`0x286a` |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

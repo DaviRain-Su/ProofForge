@@ -475,5 +475,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+
+-- E∞ knife 11: Loader account-1 signer/writable flags after skip (`svm-sem-016`)
+#guard (walkAccount1FlagsAfterSkip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1
+      let (regs, finalMem) ← evalWalkAccount1FlagsAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1FlagsInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0
+      let (regs, _) ← evalWalkAccount1FlagsAfterSkipToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount1Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
