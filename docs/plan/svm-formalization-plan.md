@@ -154,7 +154,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | ID | 对象 | 层 | 状态 | task |
 |---|---|---|---|---|
 | SF-0 | wf-parts / word 引理习惯成文 | infra | todo | [sf-000](tasks/sf-000.md) |
-| SF-1a | Queue 非空 push（wrap + 读回） | L2 | doing（nowrap 链接已在 main） | [sf-001](tasks/sf-001.md) |
+| SF-1a | Queue 非空 push（wrap + 读回） | L2 | **done** | [sf-001](tasks/sf-001.md) |
 | SF-1b | Queue pop / peek / initialize / 往返 | L2 | doing（clear/advance 链接已在 main） | [sf-002](tasks/sf-002.md) |
 | SF-2a | BoundedVec pop + setAt | L2 | todo | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned 状态机 | L1+L2 | todo | [sf-004](tasks/sf-004.md) |
@@ -197,7 +197,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md)  
-3. [sf-001](tasks/sf-001.md)（**只补 wrap + 读回**；nowrap 已在 main）→ [sf-002](tasks/sf-002.md)（**wrap/peek/往返**）  
+3. ~~[sf-001](tasks/sf-001.md)~~（wrap + 读回 **done**）→ [sf-002](tasks/sf-002.md)（**wrap/peek/往返**）  
 4. 按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 

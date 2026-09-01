@@ -878,6 +878,153 @@ theorem mQueuePush_nowrap_links (mem : AccountWords) (q : BoundedQueue) (value :
   simp only [if_neg hguard, if_neg hhead, if_neg hnowrap]
 
 
+/-- **非空推读回（nowrap）**：链接后 count = size+1、head 不变、payload 槽读回 value。 -/
+theorem mQueuePush_nowrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hnowrap : ¬ (BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0)) :
+    let size := mReadField mem q.count 0
+    let head := mReadField mem q.head 0
+    let tail := head + size
+    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
+    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
+    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  have htail_le : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      ≤ q.slots.region.capacity := by
+    have hle' : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+        ≤ (BoundedQueue.capacity q).toNat := by
+      have : ¬ ((BoundedQueue.capacity q).toNat
+          < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat) := by
+        intro hlt'
+        have hcap_lt : BoundedQueue.capacity q <
+            mReadField mem q.head 0 + mReadField mem q.count 0 :=
+          (UInt64.lt_iff_toNat_lt).mpr hlt'
+        exact hnowrap hcap_lt
+      omega
+    rw [hcapnat] at hle'
+    exact hle'
+  have htail_ge : (1 : Nat) ≤ (mReadField mem q.head 0 + mReadField mem q.count 0).toNat := by
+    have hhn : (0 : Nat) < (mReadField mem q.head 0).toNat := by
+      have : (mReadField mem q.head 0).toNat ≠ 0 := by
+        intro hz
+        apply hhead
+        cases hhd : mReadField mem q.head 0 with
+        | ofBitVec val =>
+          have hz' : val.toNat = 0 := by
+            simpa [hhd, UInt64.toNat] using hz
+          have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
+          subst this
+          rfl
+      omega
+    rw [hnowraw]
+    omega
+  have links := mQueuePush_nowrap_links mem q value hwf hsize hhead hheadb hnowrap
+  rw [links]
+  have h2 := mQueuePushAt_twoWrites mem q
+    (mReadField mem q.head 0 + mReadField mem q.count 0) value
+    (mReadField mem q.head 0) hwf htail_ge htail_le
+  refine ⟨h2.1, ?_, h2.2⟩
+  exact mReadField_write_same _ _ _ _ q.head.firstWord
+    (mFieldWord_queue_head q hwf)
+
+
+/-- **非空推链接（wrap）**：head ≠ 0、cap < head + size 时，
+`mQueuePush` 整体 = `mQueuePushAt` 的三写组合（tail = head + size - cap、
+head 写回自身）。 -/
+theorem mQueuePush_wrap_links (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hwrap : BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0) :
+    mQueuePush mem q value =
+      (mQueuePushAt mem q
+        (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) value
+        (mReadField mem q.head 0) (mReadField mem q.count 0),
+        mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hguard : ¬ (BoundedQueue.capacity q ≤ mReadField mem q.count 0) := by
+    intro hh
+    have h1 := (UInt64.le_iff_toNat_le).mp hh
+    rw [hcapnat] at h1
+    omega
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  unfold mQueuePush
+  simp only [if_neg hguard, if_neg hhead, if_pos hwrap]
+
+
+/-- **非空推读回（wrap）**：链接后 count = size+1、head 不变、环绕 payload 槽读回 value。 -/
+theorem mQueuePush_wrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hwrap : BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0) :
+    let size := mReadField mem q.count 0
+    let head := mReadField mem q.head 0
+    let tail := head + size - BoundedQueue.capacity q
+    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
+    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
+    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  have hraw_ge_cap : (BoundedQueue.capacity q).toNat
+      < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat :=
+    (UInt64.lt_iff_toNat_lt).mp hwrap
+  have hsub : (mReadField mem q.head 0 + mReadField mem q.count 0
+        - BoundedQueue.capacity q).toNat
+      = (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+        - (BoundedQueue.capacity q).toNat :=
+    u64toNatSub (by omega)
+  have htail_ge : (1 : Nat)
+      ≤ (mReadField mem q.head 0 + mReadField mem q.count 0
+        - BoundedQueue.capacity q).toNat := by
+    rw [hsub, hnowraw, hcapnat]
+    have := hsize
+    have := hheadb
+    omega
+  have htail_le : (mReadField mem q.head 0 + mReadField mem q.count 0
+        - BoundedQueue.capacity q).toNat
+      ≤ q.slots.region.capacity := by
+    rw [hsub, hnowraw, hcapnat]
+    have := hsize
+    have := hheadb
+    omega
+  have links := mQueuePush_wrap_links mem q value hwf hsize hhead hheadb hwrap
+  rw [links]
+  have h2 := mQueuePushAt_twoWrites mem q
+    (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) value
+    (mReadField mem q.head 0) hwf htail_ge htail_le
+  refine ⟨h2.1, ?_, h2.2⟩
+  exact mReadField_write_same _ _ _ _ q.head.firstWord
+    (mFieldWord_queue_head q hwf)
+
+
 /-- **pop 清空链接**：size = 1 时，`mQueuePop` 整体 = `mQueuePopAt` 的
 两写组合（remaining = 0、head 复位 0），返回队首值。 -/
 theorem mQueuePop_clear_links (mem : AccountWords) (q : BoundedQueue)

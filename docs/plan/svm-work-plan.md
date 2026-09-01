@@ -91,7 +91,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | Runtime (R2) | remaining-account view、scratch/CPI plan、signer tail、Token-2022 TLV envelope、program-memory、telemetry、Clock/EpochSchedule/Rent unsigned、checked lamports、resize | **signed Clock**、**Instructions/sliced sysvar**、**AccountView+direct mutation 的 alias-aware variable walk**、**nested/wide dynamic return**、**Token-2022 各 extension 完整语义** |
 | SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund | **rent top-up / owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**Token-2022 extension facade** |
 | Shared math（新） | `Core.Math.UInt64` + `Core.FixedPoint.UInt64` + SafeCast→UInt8/16；SVM Mollusk `core_math` + EVM Anvil 双 consumer（R1-024…031 / R5-022/023） | signed / 更宽 root·sat / typed fixed-point — **不挡 SVM 主线**；Phoenix fee 可直接组合 |
-| 形式化 (A) | StorageModel；Queue：**空 push 读回 + nowrap push 链接 + pop clear/advance(非 wrap)** 已在 main | Queue **wrap / 读回 / peek / 往返**；然后 Vec/BitSet/Map/Transient/Tree/Component |
+| 形式化 (A) | StorageModel；Queue：**空/nowrap/wrap push 链接 + 读回** + pop clear/advance(非 wrap) | Queue **wrap pop / peek / 往返**；然后 Vec/BitSet/Map/Transient/Tree/Component |
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
 | 语义桥 / L3 | checked arith / CFG branch correspondence；assembler-semantics golden（E0） | E1–E5 ladder |
 | 工程 | 三 lane CI、Lean/SVM/EVM 门 | 形式化门进 CI、artifact/digest 漂移说明 |
@@ -127,7 +127,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 
 - Phase 1–7 **不变**；外分支不插入新 Phase。  
 - 本轨实现 PR **禁止**以 `wasm-near` / `wasm-feature` 为 base。  
-- 若 WASM 先合 main：本轨下一次 `merge origin/main` 时只做 §3.2 窄缝 + README 表合并，然后继续 sf-001。  
+- 若 WASM 先合 main：本轨下一次 `merge origin/main` 时只做 §3.2 窄缝 + README 表合并，然后继续 sf-002。  
 - 若本轨证明先合：WASM 合入时由他们补 reject 臂（他们分支上已有）。
 
 ---
@@ -142,8 +142,8 @@ Phase 0   导航对齐
           · 确认 WASM PR 不阻塞
 
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
-          · A: sf-000 → **sf-001 wrap/读回** → **sf-002 wrap/peek/往返**（Queue 收口）
-            （nowrap push / pop clear·advance 已在 main，禁止重做）
+          · A: sf-000 → ~~sf-001 wrap/读回~~ → **sf-002 wrap/peek/往返**（Queue 收口）
+            （empty/nowrap/wrap push 链接+读回 已完成，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（可并行）
           · B: svm-rt-001 signed Clock（可并行）
           · F: svm-eng-001 形式化 CI 门（可并行）
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周，merge main 之后）
 
-1. **主线证明**：`sf-001` 只打 **wrap + 读回**（nowrap 已在 main）  
+1. **主线证明**：`sf-002` 打 **wrap pop / peek / 往返**（`sf-001` wrap+读回已完成）  
 2. **紧接**：`sf-002` 打 **wrap advance + peek/往返**（clear/advance 已在 main）  
 3. **主线 L3**：`svm-sem-001`（E1）  
 4. **并行可选**：`svm-rt-001` 或 `svm-sdk-001`  
