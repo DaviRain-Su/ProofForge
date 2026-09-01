@@ -45,4 +45,8 @@ private def wrongPositions : Descriptor :=
 #guard canValueAt 4 3 0 && canValueAt 4 3 2
 #guard !canValueAt 4 3 3 && !canValueAt 4 5 0
 
+-- Index-scan / removeAt / clear are compile-time facade composition (no new Runtime leaf).
+#guard directory.canIndex 0 == false  -- empty live prefix
+#guard (directory.clear) == (directory.initialize)
+
 end Tests.SvmSdkStorageEnumerableSetSpec

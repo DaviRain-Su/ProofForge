@@ -155,6 +155,24 @@ next push reinitializes them. -/
     let _ := write vec.count 0 (size - 1)
     value
 
+/-- Alias of `initialize`: reset the count header. Payload words stay unreachable. -/
+@[pf_inline] def BoundedVec.clear (vec : BoundedVec) : UInt64 :=
+  BoundedVec.initialize vec
+
+/-- One-based unordered swap-remove. OOB or null position returns `0` with no store; success
+returns `1`. Forward positions after the hole are not stable. -/
+@[pf_inline] def BoundedVec.removeAt (vec : BoundedVec) (position : UInt64) : UInt64 :=
+  let size := BoundedVec.size vec
+  if position = 0 || size < position then 0
+  else if position = size then
+    let _ := BoundedVec.pop vec
+    1
+  else
+    let last := read vec.slots size
+    let _ := write vec.slots position last
+    let _ := write vec.count 0 (size - 1)
+    1
+
 /-! ## Ordered maps -/
 
 /-- Typed handle over one statically shaped account-resident red-black map (four-word key or

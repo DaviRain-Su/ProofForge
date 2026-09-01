@@ -1343,9 +1343,30 @@ theorem mQueuePeek_eq (mem : AccountWords) (q : BoundedQueue)
   unfold mQueuePeek
   simp [hhead]
 
+/-- 模型版 getAt：零基 offset，至多环绕一次（`offset < size ≤ capacity`）。 -/
+def mQueueGetAt (mem : AccountWords) (q : BoundedQueue) (offset : UInt64) : UInt64 :=
+  let size := mReadField mem q.count 0
+  let head := mReadField mem q.head 0
+  if size = 0 || head = 0 || size ≤ offset then 0
+  else
+    let capacity := BoundedQueue.capacity q
+    let raw := head + offset
+    let slot := if capacity < raw then raw - capacity else raw
+    mReadField mem q.slots slot
+
+theorem mQueueGetAt_oob (mem : AccountWords) (q : BoundedQueue) (offset : UInt64)
+    (h : mReadField mem q.count 0 ≤ offset) :
+    mQueueGetAt mem q offset = 0 := by
+  unfold mQueueGetAt
+  simp [h]
+
 /-- 模型版 initialize：写回 head/count = 0，返回 1（与 SDK 一致）。 -/
 def mQueueInitialize (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
   (mWriteField (mWriteField mem q.head 0 0) q.count 0 0, 1)
+
+/-- clear 与 initialize 同构。 -/
+def mQueueClear (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
+  mQueueInitialize mem q
 
 /-- initialize 后两个 header 均为 0。 -/
 theorem mQueueInitialize_zero_headers (mem : AccountWords) (q : BoundedQueue)

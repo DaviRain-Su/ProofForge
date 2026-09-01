@@ -161,4 +161,20 @@ theorem canValueAt_of_wf (capacity count index : UInt64)
     BoundedSet.canValueAt capacity count index = (index < count) := by
   simp [BoundedSet.canValueAt, hwf]
 
+/-- Model `removeAt`: resolve `valueAt` then reuse `remove`. OOB is a no-op `0`. -/
+def EnumSet.removeAt (s : EnumSet) (index : Nat) : EnumSet × UInt64 :=
+  if index < s.count then EnumSet.remove s (EnumSet.valueAt s index) else (s, 0)
+
+theorem removeAt_oob (s : EnumSet) (index : Nat) (h : ¬ index < s.count) :
+    EnumSet.removeAt s index = (s, 0) := by
+  simp [EnumSet.removeAt, h]
+
+/-- Model `clear` resets to the empty set of the same capacity. -/
+def EnumSet.clear (s : EnumSet) : EnumSet :=
+  EnumSet.empty s.capacity
+
+theorem clear_contains_false (s : EnumSet) (v : UInt64) :
+    EnumSet.contains (EnumSet.clear s) v = false := by
+  simpa [EnumSet.clear] using contains_empty s.capacity v
+
 end ProofForge.Svm.Sdk.StorageEnumerableSetModel
