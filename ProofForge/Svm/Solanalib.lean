@@ -3213,4 +3213,112 @@ theorem walkAccount3MetaAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 25 - Loader account-3 signer/writable after skip chain (`svm-sem-030`)
+
+Knife 24 lands the cursor on account-3 meta. Emit then gates with `ldxb` of header+1 (signer)
+and +2 (writable). This knife composes the account-0/1/2 skip chain with those flag loads and
+proves agreement with absolute `r6`-relative loads. Still not budget/owner/exec-rent for
+account-3, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute VAs for account-3 signer and writable flag bytes. -/
+def account3SignerAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account3HeaderOffset + 1)
+def account3WritableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account3HeaderOffset + 2)
+
+/-- Seed triple-skip+account-3 meta layout plus signer/writable flags. -/
+def account3FlagsInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) : Option Mem := do
+  let m₁ ← account3MetaInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word
+  let m₂ ← storev .m8 m₁ account3SignerAddr (.vbyte acc3Signer)
+  storev .m8 m₂ account3WritableAddr (.vbyte acc3Writable)
+
+/-- Typed triple skip then account-3 flags: `ldxb r1,[r2+1]`; `ldxb r2,[r2+2]`; stage signer. -/
+def walkAccount3FlagsAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let signerOff ← positiveOffset? 1
+  let writableOff ← positiveOffset? 2
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 signerOff,
+    .ldx .m8 .br4 .br2 writableOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run triple skip+account-3 flag walk against seeded input memory. -/
+def evalWalkAccount3FlagsAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount3FlagsAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-3 signer and writable flag bytes. -/
+def evalAbsAccount3Flags? (memory : Mem) : Option (U8 × U8) := do
+  let signer ← loadv .m8 memory account3SignerAddr
+  let writable ← loadv .m8 memory account3WritableAddr
+  match signer, writable with
+  | .vbyte s, .vbyte w => some (s, w)
+  | _, _ => none
+
+/-- Walked account-3-flags-after-skip-chain assembly is well-formed. -/
+theorem walkAccount3FlagsAfterSkipChain_verified :
+    (walkAccount3FlagsAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete triple skip+flags: signer=`1`, writable=`1`, signer staged at `[r10-16]`. -/
+theorem evalWalkAccount3_after_skip_signer_writable_1 :
+    (do
+      let mem ← account3FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64
+          0xE5 0xF6 0x17 0x28 1 0xEE account0NonDupMarker 0x73 1 1
+      let (regs, finalMem) ← evalWalkAccount3FlagsAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-3 flags after skip chain agree with absolute `r6`-relative loads. -/
+theorem walkAccount3FlagsAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account3FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0
+      let (regs, _) ← evalWalkAccount3FlagsAfterSkipChainToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount3Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
