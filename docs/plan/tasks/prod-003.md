@@ -24,6 +24,14 @@
 2. EVM 同上。
 3. 生成工程的 import 守卫为零违规。
 
+## 实现清单（本 PR）
+
+1. `pf init <name> --target svm|evm`。
+2. 固化 `templates/svm-counter` / `evm-counter` 为可复制源。
+3. 生成工程只依赖对应 Sdk；含 `pf.toml` + 最小 `@[pf_entry]`。
+4. 隔离目录验收：`pf init` → `pf build` 出制品。
+5. 文档走通 Foundry/Anchor 式上手路径。
+
 ## 依赖
 
-prod-002。
+prod-002。解锁 prod-004。同一 PR #11。

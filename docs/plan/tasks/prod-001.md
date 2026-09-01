@@ -22,6 +22,13 @@
 2. 文档与 [productization.md](../productization.md) §3.2 一致。
 3. 全量既有回归仍绿。
 
+## 实现清单（本 PR）
+
+1. 改 README / 快速开始示例 import。
+2. 扩展 ownership 守卫：Examples 新增伞 import、Sdk→Emit/Assemble/Registry。
+3. 存量伞 import 白名单（只减不增）；可选开启分批迁移但不阻塞本卡验收。
+4. CI 跑守卫；加负例证明会失败。
+
 ## 依赖
 
-无。解锁 prod-002。
+无。解锁 prod-002。本卡与后续 prod-* **同一 PR #11** 交付。

@@ -21,6 +21,14 @@
 2. 版本号与 pin 在 CLI 与 Release notes 一致。
 3. SDK 包 root 不含 Examples/Tests。
 
+## 实现清单（本 PR）
+
+1. tag 触发的 Release workflow（`pf` linux/mac + checksums + changelog）。
+2. 同版本 Lake require 说明；SDK root 不含 Examples/Tests。
+3. `pf --version` 打印工具链 pin。
+4. Release notes 附 capability 摘要。
+5. 干净机器：装 CLI → require tag → 模板 `pf build`。
+
 ## 依赖
 
-prod-003。
+prod-003。本卡完成后 PR #11 可合并。

@@ -205,10 +205,64 @@ my-program/
 - 一上来拆多个 git 仓库或 npm 风格 registry。
 - 用模板替换仓内 Examples（Examples 仍是 compiler 回归与能力证明）。
 
-## 7. 建议的立即执行顺序
+## 7. 本 PR 跟踪清单（#11 · `cursor/productization-split-4d63`）
 
-1. 合并本文与 prod-001…004 任务卡，作为产品化看板。
-2. 落地 P0：推荐 import + CI 守卫（低风险，给后续拆包让路）。
-3. P1 拆 Lake lib，先 SVM/EVM SDK，WASM SDK 随 facade 成熟跟进。
-4. P2 让 `pf init --target svm|evm` 生成可构建工程——这是「像 Foundry/Anchor 一样能上手」的门槛。
-5. P3 再谈二进制 release 与版本钉。
+本产品化切片 **全部在同一 PR / 同一分支完成**，按 P0→P3 顺序推进；每完成一阶段更新本表勾选与任务卡状态。
+
+### 已落地（文档骨架）
+
+- [x] 权威方案本文
+- [x] 任务卡 [prod-001](tasks/prod-001.md) … [prod-004](tasks/prod-004.md)
+- [x] `templates/svm-counter`、`templates/evm-counter` 目标工程骨架（尚不可隔离构建）
+- [x] `docs/INDEX.md` / `docs/plan/README.md` 入口链接
+
+### 待做 · P0（prod-001）— SDK 导入表面
+
+- [ ] README / 快速开始：合约示例改为 `ProofForge.Svm.Sdk` / `Evm.Sdk`（+ Attr）
+- [ ] 扩展 `scripts/check_ownership.py`（或并列脚本）
+  - [ ] Examples **新增**文件禁止 `import ProofForge` 伞模块（存量白名单，只减不增）
+  - [ ] `ProofForge/{Svm,Evm}/Sdk/**` 禁止 import 同 target `Emit` / `Assemble` / `Registry`
+- [ ] CI 接入守卫；故意违规用例证明会红
+- [ ] （可选）存量 Examples 分批从伞 import 迁到 SDK import，不阻塞 P0 合入门
+
+### 待做 · P1（prod-002）— Lake 包拆分 + CLI 去硬编码
+
+- [ ] `lakefile.lean` 增加 `ProofForgeSvmSdk` / `ProofForgeEvmSdk` / `ProofForgeCompiler`（按需 Attr/Core）
+- [ ] 伞模块 `ProofForge.lean` 降级为 compiler workspace 便利聚合；用户模板禁止引用
+- [ ] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit
+- [ ] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
+- [ ] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
+- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变
+
+### 待做 · P2（prod-003）— `pf init` + 可构建模板
+
+- [ ] CLI 子命令：`pf init <name> --target svm|evm`
+- [ ] 以 `templates/svm-counter`、`templates/evm-counter` 为源生成工程
+- [ ] 生成物：`lakefile.lean`、`lean-toolchain`、`pf.toml`、最小合约、`README.md`
+- [ ] 模板只 `require` 对应 `*Sdk`（path 或 git tag）
+- [ ] 验收：临时目录 `pf init` → `pf build` 产出对应 target 制品
+- [ ] （后续）near / xrpl 模板等 WASM SDK facade 稳定后再加
+
+### 待做 · P3（prod-004）— Release 打包
+
+- [ ] GitHub Release workflow：`pf` 二进制（linux/mac）+ checksums + changelog
+- [ ] 同 tag `vX.Y.Z` 供 Lake `require … @ "vX.Y.Z"`
+- [ ] `pf --version` 打印 CLI / Lean / sbpf / solc / wat2wasm 等 pin
+- [ ] Release notes 附 fail-closed capability 摘要（摘自 capability matrix）
+- [ ] 验收：干净机器安装 CLI + require SDK tag + 模板工程 `pf build` 成功
+
+### 明确不在本 PR
+
+- 新合约语法 / 新包管理器
+- 拆独立 git 仓或 npm 式 registry
+- 改链上语义、IR digest、Runtime interpreter（除非 P1 搬家且 byte-identical）
+- 用模板替换仓内 Examples
+- 统一 SVM / EVM 物理存储模型
+
+## 8. 建议的立即执行顺序
+
+1. 在本 PR 落地 **P0（prod-001）**：推荐 import + CI 守卫。
+2. **P1（prod-002）** 拆 Lake lib + CLI 模块发现。
+3. **P2（prod-003）** `pf init` 使模板可隔离构建。
+4. **P3（prod-004）** tag / 二进制 release。
+5. 每阶段推送到本分支并更新本节勾选；全部勾完再转 ready / 合并。
