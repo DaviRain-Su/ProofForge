@@ -570,9 +570,9 @@ preflight，drop/truncate 保持 element alignment；full/OOB/stale/OOM 与两�
 继续复用现有 Vector64 lifecycle。两个独立 consumer 的 Mollusk 8/8 同时钉住完整 16-/32-byte
 result frame；没有 Runtime/Ops/IR/Component/Emit、allocator 或 pointer 新增。详见
 [R3-029](tasks/r3-029.md)。
-R3 尚未完成；generic POD transient shapes、更多 manifest-bounded handle、owner reassignment、
+R3 尚未完成；generic POD transient shapes、更多 manifest-bounded handle、
 runtime-selected ATA/Memo geometry、UTF-8 Memo、richer persistent key/value/payload migration shapes 与
-更多 Token-2022 extension semantics 仍待完成（resize rent top-up 已由 `svm-sdk-001` 收口）。
+更多 Token-2022 extension semantics 仍待完成（resize rent top-up 已由 `svm-sdk-001` 收口；owner reassignment 已由 `svm-sdk-002` 标 n/a 永久 fail-closed）。
 
 ### R4 — EVM Runtime
 
