@@ -66,7 +66,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | 阶 | 内容 | 终点判据 | 状态 |
 |---|---|---|---|
 | E0 | 单指令 / 短 fragment ↔ Solanalib `step` | 已有 arith/store/branch | **已有** |
-| E1 | operand materialization + 多指令 straightline | 真实 Counter emit 片段可模拟 | `svm-sem-001` |
+| E1 | operand materialization + 多指令 straightline | **done**（Counter field/arg/lit → straightline） | `svm-sem-001` |
 | E2 | `.s` golden ↔ `sbpfSemantics` 解析/步进 | 全 corpus / 选定程序差分门 | `svm-sem-002` |
 | E3 | 整函数 CFG（有界 block）end-to-end correspondence | Counter increment 全路径 | `svm-sem-003` |
 | E4 | 账户字模型（Track A）与 sBPF 内存 store 的桥 | `AccountWords` write ≡ typed `storev`（有界） | `svm-sem-004` |
@@ -144,7 +144,7 @@ Phase 0   导航对齐
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
           · A: sf-000..sf-011 几何 **done** → **sf-012 FifoCancel / sf-013 BatchRecorder**（doing）
             （nowrap push / pop clear·advance 已在 main，禁止重做）
-          · E: svm-sem-001 operand materialization / straightline（可并行）
+          · E: svm-sem-001 operand materialization / straightline（**done**）
           · B: svm-rt-001 signed Clock（可并行）
           · F: svm-eng-001 形式化 CI 门（**done**）
           · D 侧注：fee/matching 直接组合 `Core.Math` / `FixedPoint`，勿再开共享算术片
@@ -152,10 +152,11 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001..007 + svm-rt-004/`005` **done** → next: svm-sem-001 / svm-app-*
+          · C: svm-sdk-001..007 + svm-rt-004/`005` + svm-sem-001 **done** → next: svm-sem-002 / svm-app-*
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
           · F: svm-eng-002 **done** (status matrix + `scripts/svm_status_summary.py`)
+          · E: svm-sem-001 **done** (Counter field/arg/lit materialize + straightline)
 
 Phase 3   Transient 证明 + SDK 形状加宽 + Counter 全函数 L3
           · A: sf-006..sf-007（TransientModel）
@@ -236,7 +237,7 @@ Phase 7   收口
 | ID | 阶 | 内容 | 验收 |
 |---|---|---|---|
 | （基线） | E0 | checked arith / store / branch fragment ↔ Solanalib `step` | **已有** |
-| [svm-sem-001](tasks/svm-sem-001.md) | E1 | operand materialization + 多指令 straightline | 真实 Counter emit 片段可在 Solanalib 下模拟 |
+| [svm-sem-001](tasks/svm-sem-001.md) | E1 | operand materialization + 多指令 straightline | **done** — Counter field/arg/lit → straightline; axioms `propext`/`Quot.sound`/`native_decide` |
 | [svm-sem-002](tasks/svm-sem-002.md) | E2 | `.s` golden ↔ `sbpfSemantics` 解析/步进差分门 | CI 可跑 corpus 子集；失败可定位 program |
 | [svm-sem-003](tasks/svm-sem-003.md) | E3 | 整函数有界 CFG end-to-end（Counter increment） | success/overflow 全路径 correspondence |
 | [svm-sem-004](tasks/svm-sem-004.md) | E4 | Track A `AccountWords` ↔ typed `storev` 内存桥 | 有界槽写读一致；不声称任意地址 |
@@ -262,7 +263,7 @@ Phase 7   收口
 | B | svm-rt-001 … 005 | **全部 done**（005 digest `243ea72de353e8e3`） |
 | C | svm-sdk-001 … 007 | **全部 done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed） |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
-| E | svm-sem-001 … 005（E0 已有） | todo |
+| E | svm-sem-001 … 005（E0 已有） | svm-sem-001 **done**；002–005 todo |
 | F | svm-eng-001 … 002 | **全部 done**（[svm-status-matrix.md](svm-status-matrix.md)） |
 
 ---
@@ -297,7 +298,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK `001`–`007` + `svm-eng-001`/`002` **done** → 下一刀 **`svm-sem-001`**（或 `svm-app-001`）
+1. **主线能力**：through `svm-rt-005` + SDK `001`–`007` + `svm-eng-001`/`002` + **`svm-sem-001`** done → 下一刀 **`svm-sem-002`**（或 `svm-app-001`）
 2. **并行**：`svm-app-*` Phoenix 指令面 / matching 宣称
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

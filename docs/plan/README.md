@@ -233,7 +233,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-app-001](tasks/svm-app-001.md) | todo | Phoenix-v1 下一组 instruction |
 | [svm-app-002](tasks/svm-app-002.md) | todo | matching/fee/remainder 宣称面 |
 | [svm-app-003](tasks/svm-app-003.md) | todo | 非 Phoenix SDK 小例子集 |
-| [svm-sem-001](tasks/svm-sem-001.md) | todo | L3/E1 operand materialization + straightline |
+| [svm-sem-001](tasks/svm-sem-001.md) | done | L3/E1 operand materialization + straightline |
 | [svm-sem-002](tasks/svm-sem-002.md) | todo | L3/E2 assembler-semantics golden 差分门 |
 | [svm-sem-003](tasks/svm-sem-003.md) | todo | L3/E3 Counter 整函数 CFG correspondence |
 | [svm-sem-004](tasks/svm-sem-004.md) | todo | L3/E4 AccountWords ↔ storev 桥 |
@@ -241,7 +241,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | done | 能力+证明双矩阵收口页（[svm-status-matrix.md](svm-status-matrix.md)） |
 
-本周默认：Track A + B runtime through `svm-rt-005` + C SDK `001`–`007` + `svm-eng-001`/`002` **done** → 下一刀 **`svm-sem-001` / `svm-app-*`**。
+本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`** done → 下一刀 **`svm-sem-002` / `svm-app-*`**。
 WASM PR #4/#5 仍开着不阻塞。
 
 

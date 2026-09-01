@@ -43,6 +43,10 @@ Lean 4.31.0。上游无 encoder / textual assembler，因此这里直接生成
   拒绝尚未 lowering 的 argumented edge，并生成 emitter 对应的
   `j<cmp> r1,r2,then; ja else` decoded pair。`evalCFGBranch_corresponds` 直接通过上游 `step`
   证明 eq/ne/lt/le/gt/ge 六种 unsigned 比较选择同一 Core edge 且内存不变。
+- E1 `materializeOperand?` / `checkedStraightlineFragment?` / `evalCounterStraightline`：
+  Counter 形 `field|arg|lit` 装入 `[r10-8]/[r10-16]`，再 `ldxdw` 进 `r1`/`r2`，然后复用 E0
+  guard/body。`evalCounterStraightline_add_7_5` / `_add_overflow_max` 给出具体 success/overflow
+  边；`#print axioms` 仅 `propext` / `Quot.sound` / `native_decide`。
 
 旧的通用 guard/body API 仍刻意分层：Solanalib 的 `BitVec 64` 正确暴露 wrap
 （`u64Max + 1 = 0`），`evalCheckedWrite?` 只在 source guard 成功后执行 typed body 和 store；
@@ -67,14 +71,20 @@ Solanalib 当前没有为本仓提供：
 - high-level `Account` / `Instruction` 到 SBPF memory 的 refinement；
 - 完整 Agave verifier（上游 verifier 只覆盖 instruction-level version/divisor 条件）。
 
-这仍不是完整 emitter refinement；目前只覆盖 checked arithmetic/static write 和普通
-CFG branch，不覆盖 operand materialization、任意 block body 或 whole-program execution。
+这仍不是完整 emitter refinement；目前覆盖：
+
+- E0：checked arithmetic / static write / 普通 CFG branch（假定 `r1`/`r2` 已持有操作数）
+- E1（`svm-sem-001`）：Counter 形 operand materialization + straightline
+  （`field|arg|lit → [r10-8]/[r10-16] → ldxdw r1/r2 →` 既有 guard/body/store）
+
+仍不覆盖：walked `r7` args、整函数 CFG（E3）、AccountWords 桥（E4）、whole-program execution。
 
 ## Tests
 
-- `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization，以及
+- `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization；
   五种 checked arithmetic 的 success/overflow edge、multiply zero path、scratch handoff 与
-  state-store 行为；六种普通比较各覆盖 then/else decoded edge。
+  state-store；六种普通比较 then/else；以及 E1 Counter field/arg/lit materialization 与
+  straightline success/overflow `#guard`。
 - `Tests/NormalizationSpec.lean`：真实抽出的 Counter increment/decrement/scale/divide/modulo
   都从 Core Place、SVM slot 和各自 target-owned CFG checked terminator 生成对应 typed
   fragment；Counter.nonzero 生成真实普通 branch fragment；任一 Core/CFG operand 不一致或

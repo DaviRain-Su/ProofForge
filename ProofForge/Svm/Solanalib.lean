@@ -487,4 +487,157 @@ theorem evalCFGBranch_corresponds (cmp : Core.Ops.Cmp) (lhs rhs : U64)
       decodedSlots, branchBody, stepDecoded, step, initBpfState, evalJmp_setFramePointer,
       hbranch]
 
+/-! ## E1 — operand materialization + straightline (`svm-sem-001`)
+
+Counter-shaped emit prefix matching `Emit.checkedCFGTemplate`:
+
+`load field|arg|lit → [r10-8]/[r10-16] → ldxdw r1/r2 → guard → success body/store`.
+
+Covered: field+arg, field+lit, and the composed straightline under Solanalib `step`.
+Still out of scope: walked `r7` args, whole-function CFG (E3), AccountWords bridge (E4).
+-/
+
+/-- Emitter stack offsets relative to `r10` (negative displacements as unsigned 16-bit). -/
+def stackOffset (bytes : Nat) : U16 :=
+  BitVec.ofNat 16 ((2 ^ 16 - bytes) % (2 ^ 16))
+
+def lhsStackOffset : U16 := stackOffset 8
+def rhsStackOffset : U16 := stackOffset 16
+
+/-- Counter account payload: 8-byte discriminator + 8-byte `value`. -/
+def counterAccountDataLen : Nat := 16
+
+/-- Absolute input-region offset of Counter `value` (`ACC0_DATA + 8`). -/
+def counterValueOffset : Nat := ABI.acc0Data + 8
+
+/-- Absolute input-region offset of Counter `increment` arg0 (`INSTRUCTION_DATA + 8`). -/
+def counterArg0Offset : Nat :=
+  (ABI.inputLayoutOf counterAccountDataLen false 1).instructionData + 8
+
+/-- Operand sources materialized by the Counter emit prefix. -/
+inductive OperandSource where
+  | field (accountOffset : Nat)
+  | arg (instructionOffset : Nat)
+  | lit (value : U64)
+  deriving Repr, DecidableEq
+
+/-- Split a 64-bit immediate into the two halves consumed by `ldImm`. -/
+def immHalves (value : U64) : U32 × U32 :=
+  (BitVec.ofNat 32 (value.toNat % (2 ^ 32)),
+    BitVec.ofNat 32 ((value.toNat / (2 ^ 32)) % (2 ^ 32)))
+
+/-- Typed counterpart of `loadVal` for one Counter-shaped operand into `[r10 + stackOff]`. -/
+def materializeOperand? (source : OperandSource) (stackOff : U16) : Option EbpfAsm :=
+  match source with
+  | .field accountOffset => do
+      let off ← positiveOffset? accountOffset
+      return [
+        .ldx .m64 .br1 .br6 off,
+        .st .m64 .br10 (.reg .br1) stackOff]
+  | .arg instructionOffset => do
+      let off ← positiveOffset? instructionOffset
+      return [
+        .ldx .m64 .br1 .br6 off,
+        .st .m64 .br10 (.reg .br1) stackOff]
+  | .lit value =>
+      let (lo, hi) := immHalves value
+      some [
+        .ldImm .br1 lo hi,
+        .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Reload staged operands into `r1`/`r2` exactly as the emitter does. -/
+def reloadOperands : EbpfAsm :=
+  [ .ldx .m64 .br1 .br10 lhsStackOffset,
+    .ldx .m64 .br2 .br10 rhsStackOffset ]
+
+/-- Materialize both operands, reload into `r1`/`r2`, then reuse the E0 control fragment. -/
+def checkedStraightlineFragment? (kind : Core.CheckedArith)
+    (success overflow : Core.CFG.BlockId) (store : BpfInstruction)
+    (lhs rhs : OperandSource) : Option EbpfAsm := do
+  let left ← materializeOperand? lhs lhsStackOffset
+  let right ← materializeOperand? rhs rhsStackOffset
+  let control := checkedControlFragment kind success overflow store
+  return left ++ right ++ reloadOperands ++ control.guard ++ control.successBody
+
+/-- Seed Loader input memory with Counter `value` and arg0 words. -/
+def counterInputMem (value arg0 : U64) : Option Mem := do
+  let m₁ ← storev .m64 initMem (mmInputStart + BitVec.ofNat 64 counterValueOffset) (.vlong value)
+  storev .m64 m₁ (mmInputStart + BitVec.ofNat 64 counterArg0Offset) (.vlong arg0)
+
+/-- Registers for a Counter-shaped straightline: `r6` = input base; `r10` set by `initBpfState`. -/
+def counterStraightlineRegs : RegMap :=
+  setReg initRegMap .br6 mmInputStart
+
+/--
+Simplified E1 evaluator: run the materialize+reload prefix under `step`, then reuse
+`evalCheckedCFGWrite` with the resulting `r1`/`r2` contents.
+-/
+def evalCounterStraightline (kind : Core.CheckedArith)
+    (success overflow : Core.CFG.BlockId) (store : BpfInstruction)
+    (lhs rhs : OperandSource) (memory : Mem) :
+    Option CheckedCFGWriteOutcome := do
+  let left ← materializeOperand? lhs lhsStackOffset
+  let right ← materializeOperand? rhs rhsStackOffset
+  let materializePrefix := left ++ right ++ reloadOperands
+  let state0 := initBpfState counterStraightlineRegs memory 64 version
+  let after := runDecodedFrom 0 materializePrefix state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ =>
+      evalCheckedCFGWrite (checkedControlFragment kind success overflow store)
+        (regs .br1) (regs .br2) mem
+  | .success _ | .eflag | .err => none
+
+/-- Counter field+arg materialization and straightline assembly are well-formed. -/
+theorem materializeOperand_field_arg_verified :
+    (materializeOperand? (.field counterValueOffset) lhsStackOffset).isSome = true ∧
+    (materializeOperand? (.arg counterArg0Offset) rhsStackOffset).isSome = true ∧
+    (staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }).isSome = true ∧
+    (Option.isSome <| do
+        let store ← staticStoreInstruction?
+          { name := "value", offset := 8, width := 8, abi := "u64-le" }
+        checkedStraightlineFragment? .add 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset)) = true := by
+  native_decide
+
+/-- Literal RHS materialization also builds a verified straightline. -/
+theorem materializeOperand_field_lit_verified :
+    (materializeOperand? (.lit 5) rhsStackOffset).isSome = true ∧
+    (Option.isSome <| do
+        let store ← staticStoreInstruction?
+          { name := "value", offset := 8, width := 8, abi := "u64-le" }
+        checkedStraightlineFragment? .add 11 12 store
+          (.field counterValueOffset) (.lit 5)) = true := by
+  native_decide
+
+/-- Concrete Counter add (7+5) through materialize → E0 success writes 12. -/
+theorem evalCounterStraightline_add_7_5 :
+    (do
+      let mem ← counterInputMem 7 5
+      let store ← staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      let outcome ← evalCounterStraightline .add 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset) mem
+      match outcome with
+      | .success target finalMem =>
+          pure (target == 11 &&
+            loadv .m64 finalMem (mmInputStart + 104) == some (.vlong 12))
+      | .overflow _ _ => pure false) = some true := by
+  native_decide
+
+/-- Concrete Counter overflow (max+1) through materialize → E0 overflow, value unchanged. -/
+theorem evalCounterStraightline_add_overflow_max :
+    (do
+      let mem ← counterInputMem (~~~(0 : U64)) 1
+      let store ← staticStoreInstruction?
+        { name := "value", offset := 8, width := 8, abi := "u64-le" }
+      let before := loadv .m64 mem (mmInputStart + 104)
+      let outcome ← evalCounterStraightline .add 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset) mem
+      match outcome with
+      | .overflow target finalMem =>
+          pure (target == 12 && loadv .m64 finalMem (mmInputStart + 104) == before)
+      | .success _ _ => pure false) = some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

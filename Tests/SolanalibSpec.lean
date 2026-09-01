@@ -131,4 +131,40 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
 #guard
   (staticStoreInstruction? { valueSlot with offset := 2 ^ 15 }).isNone
 
+-- E1: Counter-shaped operand materialization + straightline (`svm-sem-001`)
+#guard (materializeOperand? (.field counterValueOffset) lhsStackOffset).isSome
+#guard (materializeOperand? (.arg counterArg0Offset) rhsStackOffset).isSome
+#guard (materializeOperand? (.lit 5) rhsStackOffset).isSome
+
+#guard
+  match staticStoreInstruction? valueSlot with
+  | some store =>
+      (checkedStraightlineFragment? .add 11 12 store
+        (.field counterValueOffset) (.arg counterArg0Offset)).isSome &&
+      (checkedStraightlineFragment? .add 11 12 store
+        (.field counterValueOffset) (.lit 5)).isSome
+  | none => false
+
+#guard
+  match counterInputMem 7 5, staticStoreInstruction? valueSlot with
+  | some mem, some store =>
+      match evalCounterStraightline .add 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset) mem with
+      | some (.success target finalMem) =>
+          target == 11 &&
+            loadv .m64 finalMem (mmInputStart + 104) == some (.vlong 12)
+      | _ => false
+  | _, _ => false
+
+#guard
+  match counterInputMem (~~~(0 : U64)) 1, staticStoreInstruction? valueSlot with
+  | some mem, some store =>
+      let before := loadv .m64 mem (mmInputStart + 104)
+      match evalCounterStraightline .add 11 12 store
+          (.field counterValueOffset) (.arg counterArg0Offset) mem with
+      | some (.overflow target finalMem) =>
+          target == 12 && loadv .m64 finalMem (mmInputStart + 104) == before
+      | _ => false
+  | _, _ => false
+
 end Tests.SolanalibSpec
