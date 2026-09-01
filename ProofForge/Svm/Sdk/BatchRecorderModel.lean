@@ -40,6 +40,10 @@ def Geometry.WellFormed (geometry : Geometry) : Prop :=
     geometry.maxBytes ≤ ProofForge.Svm.BatchRecorder.maxInnerDataBytes ∧
     0 < geometry.maxRecords
 
+instance (geometry : Geometry) : Decidable geometry.WellFormed := by
+  unfold Geometry.WellFormed
+  infer_instance
+
 /--
 Logical invocation-local recorder state. `count` is the abstract value overlaid at
 `geometry.countOffset`; keeping it separate avoids introducing account-word storage into this
@@ -86,14 +90,29 @@ def Outcome.emittedBytes : Outcome → Nat
 def activeFor (recorder : Recorder) (geometry : Geometry) : Prop :=
   recorder.active = true ∧ recorder.geometry = geometry
 
+instance (recorder : Recorder) (geometry : Geometry) :
+    Decidable (activeFor recorder geometry) := by
+  unfold activeFor
+  infer_instance
+
 /-- A single record is statically admissible exactly when it fits after a fresh header. -/
 def recordFitsFresh (geometry : Geometry) (record : List UInt8) : Prop :=
   record ≠ [] ∧ geometry.headerBytes + record.length ≤ geometry.maxBytes
+
+instance (geometry : Geometry) (record : List UInt8) :
+    Decidable (recordFitsFresh geometry record) := by
+  unfold recordFitsFresh
+  infer_instance
 
 /-- The two dynamic preflight branches in `BatchRecorder.Emit.emitAppend`. -/
 def appendNeedsFlush (recorder : Recorder) (record : List UInt8) : Prop :=
   recorder.geometry.maxRecords ≤ recorder.count ∨
     recorder.geometry.maxBytes < recorder.length + record.length
+
+instance (recorder : Recorder) (record : List UInt8) :
+    Decidable (appendNeedsFlush recorder record) := by
+  unfold appendNeedsFlush
+  infer_instance
 
 /--
 Open (or replace) the invocation-local recorder. `header` is the already-rendered full header,
@@ -118,7 +137,7 @@ the emitter. A statically oversized/empty record is rejected without a partial p
 -/
 def mAppend (recorder : Recorder) (geometry : Geometry) (enabled : Bool)
     (record : List UInt8) : Recorder × Outcome :=
-  if hactive : activeFor recorder geometry then
+  if activeFor recorder geometry then
     if enabled then
       if recordFitsFresh geometry record then
         if appendNeedsFlush recorder record then
@@ -142,7 +161,7 @@ def mAppend (recorder : Recorder) (geometry : Geometry) (enabled : Bool)
 
 /-- Flush even an empty batch, reset logical payload to the header, and invalidate the handle. -/
 def mFinish (recorder : Recorder) (geometry : Geometry) : Recorder × Outcome :=
-  if hactive : activeFor recorder geometry then
+  if activeFor recorder geometry then
     ({ recorder with
          active := false
          length := geometry.headerBytes
@@ -170,10 +189,11 @@ theorem mBegin_then_mAppend_ok
          bytes := header ++ record },
        .appended) := by
   have hcount : ¬geometry.maxRecords ≤ 0 := by
+    have hpositive : 0 < geometry.maxRecords := hgeometry.2.2.2.2
     omega
   have hbytes :
       ¬geometry.maxBytes < geometry.headerBytes + record.length := by
-    omega
+    exact Nat.not_lt.mpr hfits
   simp [mBegin, hgeometry, hheader, mAppend, activeFor, recordFitsFresh,
     hrecord, hfits, appendNeedsFlush, hcount, hbytes]
 
@@ -191,8 +211,11 @@ theorem appendNeedsFlush_at_maxBytes
     (hrecord : record ≠ []) :
     appendNeedsFlush recorder record := by
   right
-  have hpositive : 0 < record.length := List.length_pos.mpr hrecord
-  omega
+  cases record with
+  | nil => exact (hrecord rfl).elim
+  | cons _ tail =>
+      simp only [List.length_cons]
+      omega
 
 /-- Reaching `maxRecords` flushes the old batch before installing the record in a fresh batch. -/
 theorem mAppend_at_maxRecords_flushes
@@ -225,12 +248,10 @@ theorem mAppend_at_maxBytes_flushes
            count := 1
            bytes := recorder.header ++ record },
        .autoFlushed recorder.batch) := by
-  have hgeometry : recorder.geometry = geometry := hactive.2
   have hflush : appendNeedsFlush recorder record := by
-    right
-    have hpositive : 0 < record.length := List.length_pos.mpr hrecord
-    simp only [hgeometry, hlength]
-    omega
+    apply appendNeedsFlush_at_maxBytes recorder record
+    · simpa [hactive.2] using hlength
+    · exact hrecord
   simp [mAppend, hactive, recordFitsFresh, hrecord, hfits, hflush]
 
 /-- A record that cannot fit after an empty header requests finish/rejection and changes nothing. -/
