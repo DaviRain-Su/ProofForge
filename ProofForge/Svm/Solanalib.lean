@@ -2497,4 +2497,203 @@ theorem walkAccount2MetaAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 18 - Loader account-2 signer/writable after skip chain (`svm-sem-023`)
+
+Knife 17 lands the cursor on account-2 meta. Emit then gates with `ldxb` of header+1 (signer)
+and +2 (writable). This knife composes the account-0/1 skip chain with those flag loads and
+proves agreement with absolute `r6`-relative loads. Still not budget/owner/exec-rent for
+account-2, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute VAs for account-2 signer and writable flag bytes. -/
+def account2SignerAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account2HeaderOffset + 1)
+def account2WritableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account2HeaderOffset + 2)
+
+/-- Seed chained skip+account-2 meta layout plus signer/writable flags. -/
+def account2FlagsInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8) : Option Mem := do
+  let m₁ ← account2MetaInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word
+  let m₂ ← storev .m8 m₁ account2SignerAddr (.vbyte acc2Signer)
+  storev .m8 m₂ account2WritableAddr (.vbyte acc2Writable)
+
+/-- Typed double skip then account-2 flags: `ldxb r1,[r2+1]`; `ldxb r2,[r2+2]`; stage signer. -/
+def walkAccount2FlagsAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let signerOff ← positiveOffset? 1
+  let writableOff ← positiveOffset? 2
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 signerOff,
+    .ldx .m8 .br4 .br2 writableOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained skip+account-2 flag walk against seeded input memory. -/
+def evalWalkAccount2FlagsAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount2FlagsAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-2 signer and writable flag bytes. -/
+def evalAbsAccount2Flags? (memory : Mem) : Option (U8 × U8) := do
+  let signer ← loadv .m8 memory account2SignerAddr
+  let writable ← loadv .m8 memory account2WritableAddr
+  match signer, writable with
+  | .vbyte s, .vbyte w => some (s, w)
+  | _, _ => none
+
+/-- Walked account-2-flags-after-skip-chain assembly is well-formed. -/
+theorem walkAccount2FlagsAfterSkipChain_verified :
+    (walkAccount2FlagsAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip+flags: signer=`1`, writable=`1`, signer staged at `[r10-16]`. -/
+theorem evalWalkAccount2_after_skip_signer_writable_1 :
+    (do
+      let mem ← account2FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1
+      let (regs, finalMem) ← evalWalkAccount2FlagsAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-2 flags after skip chain agree with absolute `r6`-relative loads. -/
+theorem walkAccount2FlagsAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account2FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0
+      let (regs, _) ← evalWalkAccount2FlagsAfterSkipChainToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount2Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 19 - Loader account-2 lamports/data_len after skip chain (`svm-sem-024`)
+
+Knife 18 covers account-2 signer/writable after the skip chain. Emit then reads account-2
+lamports and data_len from the same advanced header cursor (`+0x48` / `+0x50`). This knife
+composes that skip chain with those word loads and proves agreement with absolute `r6`-relative
+loads. Still not owner/executable/rent for account-2, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets/VAs for account-2 lamports and data_len. -/
+def account2LamportsOffset : Nat :=
+  account2HeaderOffset + (account0LamportsOffset - account0HeaderOffset)
+def account2DataLenOffset : Nat :=
+  account2HeaderOffset + (account0DataLenOffset - account0HeaderOffset)
+def account2LamportsAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2LamportsOffset
+def account2DataLenAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account2DataLenOffset
+
+/-- Seed chained skip+account-2 flags layout plus lamports and data_len words. -/
+def account2BudgetInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen : U64) : Option Mem := do
+  let m₁ ← account2FlagsInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable
+  let m₂ ← storev .m64 m₁ account2LamportsAddr (.vlong acc2Lamports)
+  storev .m64 m₂ account2DataLenAddr (.vlong acc2DataLen)
+
+/-- Typed double skip then account-2 budget: `ldxdw r1,[r2+0x48]`; `ldxdw r2,[r2+0x50]`. -/
+def walkAccount2BudgetAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let lamportsOff ← positiveOffset? (account0LamportsOffset - account0HeaderOffset)
+  let accDataLenOff ← positiveOffset? (account0DataLenOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 lamportsOff,
+    .ldx .m64 .br4 .br2 accDataLenOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained skip+account-2 budget walk against seeded input memory. -/
+def evalWalkAccount2BudgetAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount2BudgetAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-2 lamports and data_len. -/
+def evalAbsAccount2Budget? (memory : Mem) : Option (U64 × U64) := do
+  let lamports ← loadv .m64 memory account2LamportsAddr
+  let dataLen ← loadv .m64 memory account2DataLenAddr
+  match lamports, dataLen with
+  | .vlong l, .vlong d => some (l, d)
+  | _, _ => none
+
+/-- Walked account-2-budget-after-skip-chain assembly is well-formed. -/
+theorem walkAccount2BudgetAfterSkipChain_verified :
+    (walkAccount2BudgetAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip+budget: lamports=`2000`, data_len=`64`, lamports staged at `[r10-16]`. -/
+theorem evalWalkAccount2_after_skip_lamports_2000_dataLen_64 :
+    (do
+      let mem ← account2BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64
+      let (regs, finalMem) ← evalWalkAccount2BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 2000 && regs .br2 == 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 2000))) =
+      some true := by
+  native_decide
+
+/-- Walked account-2 budget after skip chain agrees with absolute `r6`-relative loads. -/
+theorem walkAccount2BudgetAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account2BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64
+      let (regs, _) ← evalWalkAccount2BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount2Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 2000 && dataLen == 64)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

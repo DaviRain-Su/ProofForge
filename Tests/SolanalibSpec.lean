@@ -623,5 +623,49 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 18: Loader account-2 signer/writable after skip chain (`svm-sem-023`)
+#guard (walkAccount2FlagsAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account2FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1
+      let (regs, finalMem) ← evalWalkAccount2FlagsAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account2FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0
+      let (regs, _) ← evalWalkAccount2FlagsAfterSkipChainToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount2Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) with
+  | some true => true
+  | _ => false
+
+-- E∞ knife 19: Loader account-2 lamports/data_len after skip chain (`svm-sem-024`)
+#guard (walkAccount2BudgetAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account2BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64
+      let (regs, finalMem) ← evalWalkAccount2BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 2000 && regs .br2 == 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 2000))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account2BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64
+      let (regs, _) ← evalWalkAccount2BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount2Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 2000 && dataLen == 64)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
