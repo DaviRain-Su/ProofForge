@@ -13,7 +13,7 @@ Copy everything below the line into the PR body.
 | **PR** | https://github.com/DaviRain-Su/ProofForge/pull/11 |
 | **Branch** | `cursor/productization-split-4d63` → `main` |
 | **Scope** | **Entire productization slice lives in this PR** (prod-001 → prod-004). |
-| **Now** | prod-001…004 implemented + locally verified (full SVM/EVM/XRPL/NEAR Registry assemble + clean-dir git require). Waiting on GitHub CI after Examples Lake globs fix. |
+| **Now** | prod-001…004 implemented + locally verified (full SVM/EVM/XRPL/NEAR Registry + `/tmp` `pf init` assemble). Waiting on GitHub CI (`a9e1456a`+). |
 | **CI** | Ownership + Sdk import-closure + Sdk lib builds; full SVM/EVM/WASM digest lanes. |
 
 Authority doc: [`docs/plan/productization.md`](../productization.md) (§7 is the live checklist).
