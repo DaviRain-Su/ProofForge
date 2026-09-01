@@ -30,6 +30,8 @@ def entries : Array Entry := #[
   { name := "Token2022MintClose", digest := "607b3786fb54eaee" },
   { name := "Ata", digest := "574dc90c21ca9723" },
   { name := "Rent", digest := "831e5502b9b3cfe5" },
+  { name := "RentTopUp", digest := "389be3285e53c93d" },
+  { name := "VaultRentGrow", digest := "754ab90d0d3145ae" },
   { name := "TokenMint", digest := "f7535d90750f9692" },
   { name := "SysAlloc", digest := "dbb2269b9ac57a3" },
   { name := "TokenAcc", digest := "53013fc1bc2e0753" },

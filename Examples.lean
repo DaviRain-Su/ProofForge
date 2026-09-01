@@ -97,6 +97,8 @@ import Examples.Phoenix
 import Examples.PhoenixV1Profile
 import Examples.AccountView
 import Examples.AccountViewMutation
+import Examples.RentTopUp
+import Examples.VaultRentGrow
 import Examples.MemoryOps
 import Examples.TransientPair
 import Examples.TransientLedger

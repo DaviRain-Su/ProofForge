@@ -1,6 +1,8 @@
 import ProofForge.Attr
+import ProofForge.Core.Math
 import ProofForge.Svm.AccountView
 import ProofForge.Svm.Runtime
+import ProofForge.Svm.Sdk.Sysvar
 
 /-!
 # SVM SDK account and signer handles
@@ -119,6 +121,33 @@ introduced.
   let _ := source.resizeData 0
   let _ := source.transferLamports destination balance
   balance
+
+/-!
+Ensure one fixed program-owned account holds at least `Rent.minimumBalance dataLen` lamports by
+debiting an explicit program-owned `payer`. This is ordinary SDK composition over the existing
+`Sysvar.Rent.minimumBalance` query and checked `transferLamports` — no new Runtime leaf, Emit
+recipe, or implicit signer debit.
+
+The deficit is `saturatingSub required current`, so an already-exempt account still runs the
+zero-amount transfer path (same writable/owner/distinctness gates as any other transfer). An
+underfunded payer fails closed before any write. `dataLen` must be a compile-time `Nat`.
+-/
+@[pf_inline] def Handle.topUpRentExempt (self payer : Handle) (dataLen : Nat) : UInt64 :=
+  let required := Sysvar.Rent.minimumBalance dataLen
+  let current := self.lamports
+  let deficit := ProofForge.Core.Math.UInt64.saturatingSub required current
+  let _ := payer.transferLamports self deficit
+  deficit
+
+/-!
+Resize one fixed external account after an explicit rent top-up for the **target** length. Top-up
+runs before resize so the funded account is rent-safe for `newLength`; a later resize failure
+rolls back with the Solana instruction. No new Emit recipe is introduced.
+-/
+@[pf_inline] def Handle.resizeDataWithRentTopUp (self payer : Handle) (newLength : Nat) : UInt64 :=
+  let deficit := self.topUpRentExempt payer newLength
+  let _ := deficit
+  self.resizeData (UInt64.ofNat newLength)
 
 /-- Compile-time bounded remaining-account window. This is the target plan type itself, not a
 second source-side geometry structure. -/

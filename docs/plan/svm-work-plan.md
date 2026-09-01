@@ -89,7 +89,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | 面 | 已有 | 主要剩余 |
 |---|---|---|
 | Runtime (R2) | remaining-account view、scratch/CPI plan、signer tail、Token-2022 TLV envelope、program-memory、telemetry、Clock/EpochSchedule/Rent unsigned、checked lamports、resize | **signed Clock**、**Instructions/sliced sysvar**、**AccountView+direct mutation 的 alias-aware variable walk**、**nested/wide dynamic return**、**Token-2022 各 extension 完整语义** |
-| SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund | **rent top-up / owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**Token-2022 extension facade** |
+| SDK (R3) | Account/Signer/PDA/System/Token/ATA/Memo、POD 容器全家桶、version header、transient 双 slot、wide vectors、close/refund、**rent top-up**、Token-2022 mint-close facade | **owner-reassign**、**runtime-selected ATA/Memo geometry**、**UTF-8 Memo**、**richer POD migrate shapes**、**更多 manifesto slot + insert/remove/iter**、**更多 Token-2022 extension** |
 | Shared math（新） | `Core.Math.UInt64` + `Core.FixedPoint.UInt64` + SafeCast→UInt8/16；SVM Mollusk `core_math` + EVM Anvil 双 consumer（R1-024…031 / R5-022/023） | signed / 更宽 root·sat / typed fixed-point — **不挡 SVM 主线**；Phoenix fee 可直接组合 |
 | 形式化 (A) | SF-0..SF-10 **done**（Queue/Vec/BitSet/Transient/Alloc/Map/Set/Tree几何/FifoCancel/BatchRecorder/facade L1） | 可选加厚（Tree 可达/互逆）；L3 见 Track E |
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
@@ -152,7 +152,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001 rent top-up + close 政策收口
+          · C: svm-sdk-001 **done** → next owner-reassign / transient / Memo
           · C: svm-sdk-002 owner-reassign 显式政策（fail-closed 边界写清）
 
 Phase 3   Transient 证明 + SDK 形状加宽 + Counter 全函数 L3
@@ -209,7 +209,7 @@ Phase 7   收口
 
 | ID | 内容 | 优先级 | 验收 |
 |---|---|---|---|
-| [svm-sdk-001](tasks/svm-sdk-001.md) | resize **rent top-up** 显式政策（组合 Rent sysvar + lamports） | F1 | 两 consumer；不足租金 fail closed |
+| [svm-sdk-001](tasks/svm-sdk-001.md) | resize **rent top-up** 显式政策（组合 Rent sysvar + lamports） | F1 | **done**；`topUpRentExempt`/`resizeDataWithRentTopUp`；digests `389be3285e53c93d` / `754ab90d0d3145ae`；Mollusk 4+2 |
 | [svm-sdk-002](tasks/svm-sdk-002.md) | **owner-reassign** 生命周期（或书面永久 fail-closed + 矩阵 n/a） | F1 | 政策二选一，禁止半开 |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | generic POD transient shapes（超出 Record64/Vector128/256 的下一形状） | F1 | 同 slot 生命周期复用；双 consumer |
 | [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | manifest 先行；默认仍 2 |
@@ -257,8 +257,8 @@ Phase 7   收口
 | 轨道 | 片 | 状态 |
 |---|---|---|
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
-| B | svm-rt-001 … 005 | svm-rt-001 **done**；002–005 todo |
-| C | svm-sdk-001 … 007 | todo |
+| B | svm-rt-001 … 005 | svm-rt-001/002/003 **done**；004–005 todo |
+| C | svm-sdk-001 … 007 | svm-sdk-001/005 **done**；其余 todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
 | F | svm-eng-001 … 002 | todo |
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`svm-rt-002`/`svm-sdk-005`/`svm-rt-003` done → **`svm-sdk-001` rent top-up**（或 `svm-rt-004` sliced sysvar）
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`005` done → 下一刀 **`svm-sdk-002` owner-reassign**（或 `svm-rt-004` sliced sysvar / `svm-sdk-003` transient）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
