@@ -396,6 +396,16 @@ signer group. Metas are source / destination / authority; no mint account or dec
     (UInt64.ofNat accounts.authority.index)
     amount seeds bump
 
+/-- Execute a statically described unchecked `Transfer` with an ordinary transaction signer. -/
+@[pf_inline] def transferWith
+    (accounts : UncheckedTransferAccounts) (amount : UInt64) : UInt64 :=
+  ProofForge.Svm.Runtime.tokenTransferIx
+    (UInt64.ofNat accounts.tokenProgram.index)
+    (UInt64.ofNat accounts.source.index)
+    (UInt64.ofNat accounts.destination.index)
+    (UInt64.ofNat accounts.authority.index)
+    amount
+
 /-- Closed classic Token `MintToChecked`: external account 0 is the signing mint authority;
 mint is account 1 (writable), destination account 2 (writable). `decimals` must reduce to an
 extraction-time constant. -/

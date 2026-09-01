@@ -2993,6 +2993,88 @@ def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
         else
           .error .overflow
 
+/-- Credit free lots for DepositFunds. Overflow of free + lots fails closed. -/
+def creditFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+    (traderIndex side lots : UInt64) : Except Error UInt64 :=
+  if side = 0 then
+    let free := layout.quoteFree traderIndex
+    if free ≤ u64Max - lots then
+      let _ := layout.setQuoteFree traderIndex (free + lots)
+      .ok lots
+    else
+      .error .overflow
+  else
+    let free := layout.baseFree traderIndex
+    if free ≤ u64Max - lots then
+      let _ := layout.setBaseFree traderIndex (free + lots)
+      .ok lots
+    else
+      .error .overflow
+
+/-- Trader → vault classic Token transfer geometry for DepositFunds (tag 13). -/
+@[pf_inline] def quoteDepositTokenAccounts :
+    ProofForge.Svm.Sdk.Token.UncheckedTransferAccounts :=
+  .at 7 4 6 2
+
+@[pf_inline] def baseDepositTokenAccounts :
+    ProofForge.Svm.Sdk.Token.UncheckedTransferAccounts :=
+  .at 7 3 5 2
+
+/-- Pull atoms from the trader token account into the market vault. Trader is the ordinary signer. -/
+def depositAtomsAt (side atoms : UInt64) : UInt64 :=
+  if atoms = 0 then
+    0
+  else if side = 0 then
+    ProofForge.Svm.Sdk.Token.transferWith quoteDepositTokenAccounts atoms
+  else
+    ProofForge.Svm.Sdk.Token.transferWith baseDepositTokenAccounts atoms
+
+/--
+Official Phoenix `DepositFunds` tag 13 wire (exact-lots slice):
+`0d || quote_lots:u64 || base_lots:u64`. Zero lots skip that side. Reuses the shared nine-account
+classic Token context; trader signer transfers into vaults then free balances are credited.
+Missing trader or free-balance overflow fails closed. Zero/zero is a header-only sequence bump.
+-/
+@[pf_entry, pf_svm_raw 13 9 0]
+def depositFunds (_s : State) (quoteLots baseLots : UInt64) :
+    Except Error (State × UInt64) := do
+  if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let layout := Examples.PhoenixV1.small 2
+    let traderKey0 := signerKey 3
+    let traderIndex := layout.findTrader
+      traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+    if traderIndex = 0 then
+      .error .overflow
+    else
+      let marketSequence := layout.marketSequence
+      let _ := layout.setMarketSequence (marketSequence + 1)
+      let _ := beginMarketBatchAt 13 2 2 marketSequence
+      if quoteLots = 0 && baseLots = 0 then
+        let _ := finishMarketBatch
+        .ok (_s, 0)
+      else
+        let quoteLotSize := layout.quoteLotSize
+        let baseLotSize := layout.baseLotSize
+        let quoteDivisor := if quoteLots = 0 then 1 else quoteLots
+        let baseDivisor := if baseLots = 0 then 1 else baseLots
+        if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+          let quoteAtoms := quoteLots * quoteLotSize
+          let baseAtoms := baseLots * baseLotSize
+          let _ := depositAtomsAt 0 quoteAtoms
+          let _ := depositAtomsAt 1 baseAtoms
+          let _ ←
+            if quoteLots = 0 then .ok 0
+            else creditFreeFunds512At layout traderIndex 0 quoteLots
+          let _ ←
+            if baseLots = 0 then .ok 0
+            else creditFreeFunds512At layout traderIndex 1 baseLots
+          let _ := finishMarketBatch
+          .ok (_s, 0)
+        else
+          .error .overflow
+
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
@@ -3020,5 +3102,6 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelOneReleased512At
   finishCancelMultipleWithdraw512At
   addReleasedAcc512At
+  creditFreeFunds512At depositAtomsAt
 
 end Examples.PhoenixV1Profile

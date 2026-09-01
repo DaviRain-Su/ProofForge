@@ -689,6 +689,28 @@ private partial def opsHaveUncheckedTransfer
       | .forBody _ body => opsHaveUncheckedTransfer source destination authority seeds body
       | _ => false
 
+/-- Unsigned classic Token Transfer (tag 3) with an ordinary signer authority. -/
+private partial def opsHaveUnsignedUncheckedTransfer
+    (source destination authority : Nat) (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .invoke programIx metas data actualSeeds bump =>
+         programIx == 7 && bump.isNone && actualSeeds.isEmpty &&
+           metas == #[{ acc := source, signer := false, writable := true },
+             { acc := destination, signer := false, writable := true },
+             { acc := authority, signer := true, writable := false }] &&
+           data.size == 2 && data[0]? == some (.u8le (.lit 3)) &&
+           (match data[1]? with
+            | some (ProofForge.Svm.Ops.CpiWord.u64le _) => true
+            | _ => false)
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveUnsignedUncheckedTransfer source destination authority thenOps ||
+            opsHaveUnsignedUncheckedTransfer source destination authority elseOps
+      | .forBody _ body => opsHaveUnsignedUncheckedTransfer source destination authority body
+      | _ => false
+
 private partial def opsHaveFifoCancelCall
     (predicate : ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
@@ -956,6 +978,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing raw CancelMultipleOrdersByIdWithFreeFunds"
   let some withdrawFundsRaw := program.methods.find? (·.ixName == "withdrawFunds")
     | throwError "missing raw WithdrawFunds"
+  let some depositFundsRaw := program.methods.find? (·.ixName == "depositFunds")
+    | throwError "missing raw DepositFunds"
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
@@ -1048,6 +1072,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.dataLen == 17 do
         throwError s!"wrong raw WithdrawFunds adapter: {repr entry}"
   | .generated => throwError "WithdrawFunds lost its raw adapter"
+  match depositFundsRaw.entry with
+  | .raw entry =>
+      unless depositFundsRaw.kind == .get && entry.tag == 13 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
+          entry.dataLen == 17 do
+        throwError s!"wrong raw DepositFunds adapter: {repr entry}"
+  | .generated => throwError "DepositFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
@@ -1285,6 +1316,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 12 withdrawFundsRaw.ops &&
       opsHaveRawReduceFinish withdrawFundsRaw.ops do
     throwError "raw WithdrawFunds composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) depositFundsRaw.ops &&
+      opsHaveDataWord 2 1 depositFundsRaw.ops &&
+      opsHaveUnsignedUncheckedTransfer 4 6 2 depositFundsRaw.ops &&
+      opsHaveUnsignedUncheckedTransfer 3 5 2 depositFundsRaw.ops &&
+      opsHaveRawReduceHeader 13 depositFundsRaw.ops &&
+      opsHaveRawReduceFinish depositFundsRaw.ops do
+    throwError "raw DepositFunds composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
@@ -1581,6 +1619,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jeq r1, 11, raw_route_match_" &&
       asm.contains "jne r2, 17, raw_route_next_" &&
       asm.contains "jeq r1, 12, raw_route_match_" &&
+      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jeq r1, 13, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&

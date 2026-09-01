@@ -655,6 +655,14 @@ fn raw_withdraw_funds_data(quote_lots: u64, base_lots: u64) -> Vec<u8> {
     data
 }
 
+fn raw_deposit_funds_data(quote_lots: u64, base_lots: u64) -> Vec<u8> {
+    let mut data = vec![13];
+    data.extend_from_slice(&quote_lots.to_le_bytes());
+    data.extend_from_slice(&base_lots.to_le_bytes());
+    assert_eq!(data.len(), 17);
+    data
+}
+
 fn raw_reduce_data_for_tag(tag: u8, side: u8, price: u64, sequence: u64, size: u64) -> Vec<u8> {
     let mut data = vec![tag, side];
     data.extend_from_slice(&price.to_le_bytes());
@@ -4775,6 +4783,100 @@ fn official_raw_withdraw_funds_rejects_insufficient_free_atomically() {
     write_word(&mut market, 8323, 1);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_withdraw_funds_data(3, 0)));
+}
+
+#[test]
+fn official_raw_deposit_funds_credits_quote_and_base_free() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 500);
+    write_word(&mut market, 8321, 4);
+    write_word(&mut market, 8323, 2);
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let data = raw_deposit_funds_data(5, 3);
+    assert_eq!(data.len(), 17);
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&data),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 501);
+    assert_eq!(read_word(&market, 8321), 9);
+    assert_eq!(read_word(&market, 8323), 5);
+    // quote atoms = 5 * 3 = 15; base atoms = 3 * 2 = 6.
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        1_015
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_quote_key)),
+        5
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        1_006
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_base_key)),
+        4
+    );
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_reduce_header(&payloads[0], 13, 500, market_key, trader_key);
+}
+
+#[test]
+fn official_raw_deposit_funds_zero_zero_is_header_only() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 510);
+    write_word(&mut market, 8321, 4);
+    write_word(&mut market, 8323, 2);
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&raw_deposit_funds_data(0, 0)),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 511);
+    assert_eq!(read_word(&market, 8321), 4);
+    assert_eq!(read_word(&market, 8323), 2);
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        1_000
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        1_000
+    );
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_reduce_header(&payloads[0], 13, 510, market_key, trader_key);
+}
+
+#[test]
+fn official_raw_deposit_funds_rejects_token_underflow_atomically() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 520);
+    write_word(&mut market, 8321, 0);
+    write_word(&mut market, 8323, 0);
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    // Trader quote starts at 20 atoms → 20/3 = 6 lots max; request 7 lots.
+    assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_deposit_funds_data(7, 0)));
 }
 
 #[test]

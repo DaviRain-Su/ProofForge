@@ -696,6 +696,18 @@ def tokenTransferSignedIx
     seeds bump
 
 /--
+Statically indexed classic SPL Token `Transfer` (tag 3) with an ordinary transaction signer.
+Account metas are source / destination / authority; no mint account or decimals byte.
+-/
+def tokenTransferIx
+    (programIx sourceIx destinationIx authorityIx amount : UInt64) : UInt64 :=
+  invoke programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 3, .u64le amount]
+
+/--
 Token `MintToChecked`：普通包装。decimals 编译期常量。
 外层 0 是 mint authority。内层：mint w / dest w / authority。
 -/

@@ -31,5 +31,5 @@ depends-on: [svm-app-011]
 
 ## 仍未覆盖
 
-官方 `Option<u64>` withdraw-all；DepositFunds tag 13；tags 0–2 / 14–17 / admin 100+；
-tag-3 完整 TIF/self-trade/eviction。
+官方 `Option<u64>` withdraw-all；DepositFunds tag 13（见 [svm-app-013](svm-app-013.md)）；
+tags 0–2 / 14–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。
