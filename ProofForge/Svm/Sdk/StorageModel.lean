@@ -929,6 +929,8 @@ theorem mQueuePop_advance_links (mem : AccountWords) (q : BoundedQueue)
       rfl
     rw [h2] at h1
     omega
+  unfold mQueuePop
+  simp only [if_neg hguard, if_neg hrem, mQueueNext, if_neg hneqcap]
 
 end QueueProofs
 
