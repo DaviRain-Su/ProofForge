@@ -1510,16 +1510,167 @@ private theorem ptr_bound_set_unalloc (bump : UInt64) (nodes : Vector Node 4)
   rw [hget]
   exact hold a ha0 ha1
 
-/-! ### sf-011：`rotateLeft_wf` / `rotateRight_wf`
+/-! ### sf-011：旋转 / 插入 / 删除 `wf` 保持（续）
 
-轴与其右（左）孩须已分配，以便从 `wf` 读出孩子指针上界。
-成功路径只重排已有界指针，不改 size/bump/freeHead。 -/
+已收：结构谓词、`paintNode_wf` / `set_value_wf`、`rotateLeft_meta` / `rotateRight_meta`、
+`insertRoot_wf` / `insertNode_wf_empty` / `insertNode_wf_update`。
+待补：`rotateLeft_wf` / `rotateRight_wf`、`insertAt` 臂、`removeNode_wf`。 -/
 
-/-! ### sf-011：旋转 `wf` 保持（续）
+/-- `insertRoot` 成功路径保持 `wf`（对齐 `allocNode_wf` 的 bump / free-list 两臂）。 -/
+private theorem insertRoot_wf (s : State) (k v : UInt64) {t : State} {a : UInt64}
+    (h : insertRoot s k v = .ok (t, a)) (hwf : wf s) : wf t := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  unfold insertRoot at h
+  split at h
+  · rename_i hsz4
+    by_cases hfr : s.freeHead = s.bumpIndex
+    · -- bump arm
+      simp (config := { zeta := true }) [hfr] at h
+      split at h
+      · simp at h
+      · rename_i hb0
+        split at h
+        · rename_i hb4
+          simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hb : s.bumpIndex.toNat < 5 := hb4
+          have hbi : (s.bumpIndex + 1).toNat = s.bumpIndex.toNat + 1 :=
+            u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)
+          refine ⟨?_, ?_, ?_, ?_, Nat.le_refl _, ?_⟩
+          · show (s.size + 1).toNat ≤ 4
+            have hst : s.size.toNat < 4 := hsz4
+            rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]; omega
+          · show (1 : Nat) ≤ (s.bumpIndex + 1).toNat
+            have hb1' : (1 : Nat) ≤ s.bumpIndex.toNat := hb1
+            rw [hbi]; omega
+          · show (s.bumpIndex + 1).toNat ≤ 5
+            rw [hbi]; omega
+          · show (s.bumpIndex + 1).toNat ≤ 5
+            rw [hbi]; omega
+          · intro a ha0 ha1
+            have ha1' : a.toNat < (s.bumpIndex + 1).toNat := ha1
+            rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)] at ha1'
+            by_cases hab : a = s.bumpIndex
+            · rw [hab, vec_set_self]
+              exact ⟨Nat.zero_le _, Nat.zero_le _, Nat.zero_le _, Nat.zero_le _⟩
+            · have hslot_ne : (a.toNat - 1) % 4 ≠ (s.bumpIndex.toNat - 1) % 4 := by
+                intro heq
+                have ha5 : a.toNat < 5 := by omega
+                exact hab (slot_inj ha0 ha5 hb1 hb heq)
+              have hslot_lt : (a.toNat - 1) % 4 < 4 := by omega
+              have hlt : a < s.bumpIndex := by
+                have hne : a.toNat ≠ s.bumpIndex.toNat := by
+                  intro heq; exact hab (UInt64.toNat_inj.mp heq)
+                show a.toNat < s.bumpIndex.toNat; omega
+              have hget : (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+                show (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]?.get! = _
+                have h2 : (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]? = s.nodes[(a.toNat - 1) % 4]? := by
+                  simp [Vector.getElem_set, Ne.symm hslot_ne]
+                rw [h2]; simp [hslot_lt]
+              rw [hget]
+              obtain ⟨hl, hr, hp, hc⟩ := hptr a ha0 hlt
+              refine ⟨?_, ?_, ?_, hc⟩
+              · have hf' : (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+                show (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ (s.bumpIndex + 1).toNat
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]; omega
+              · have hf' : (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ s.bumpIndex.toNat := hr
+                show (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ (s.bumpIndex + 1).toNat
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]; omega
+              · have hf' : (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ s.bumpIndex.toNat := hp
+                show (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ (s.bumpIndex + 1).toNat
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]; omega
+        · simp at h
+    · -- free-list arm
+      simp (config := { zeta := true }) [hfr] at h
+      split at h
+      · simp at h
+      · rename_i hf0
+        split at h
+        · rename_i hf4
+          simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hne0 : s.freeHead ≠ 0 := hf0
+          have hfh : (1 : Nat) ≤ s.freeHead.toNat := by
+            have : s.freeHead.toNat ≠ 0 := by
+              intro heq; exact hne0 (UInt64.toNat_inj.mp heq)
+            omega
+          have hle' : s.freeHead.toNat ≤ s.bumpIndex.toNat := hfb
+          have hb5' : s.bumpIndex.toNat ≤ 5 := hb5
+          have hfblt : s.freeHead.toNat < s.bumpIndex.toNat := by
+            have hne : s.freeHead.toNat ≠ s.bumpIndex.toNat := fun heq =>
+              hfr (UInt64.toNat_inj.mp heq)
+            omega
+          have hfh4 : s.freeHead < 5 := by
+            show s.freeHead.toNat < 5; omega
+          have hmod : (s.freeHead.toNat - 1) % 4 = s.freeHead.toNat - 1 := by
+            have : s.freeHead.toNat - 1 < 4 := by omega
+            exact Nat.mod_eq_of_lt this
+          have hptr' := hptr s.freeHead hfh hfblt
+          obtain ⟨hl, _, _, _⟩ := hptr'
+          have hl' : (s.nodes[(s.freeHead.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+          refine ⟨?_, hb1, hb5, ?_, ?_, ?_⟩
+          · show (s.size + 1).toNat ≤ 4
+            have hst : s.size.toNat < 4 := hsz4
+            rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]; omega
+          · -- new freeHead = old nodes[free].left
+            show (s.nodes[(s.freeHead.toNat - 1) % 4]!).left.toNat ≤ 5
+            have hb : s.bumpIndex.toNat ≤ 5 := hb5
+            omega
+          · show (s.nodes[(s.freeHead.toNat - 1) % 4]!).left ≤ s.bumpIndex
+            exact hl'
+          · intro a ha0 ha1
+            have ha0n : (1 : Nat) ≤ a.toNat := ha0
+            have ha1n : a.toNat < s.bumpIndex.toNat := ha1
+            have hb5n : s.bumpIndex.toNat ≤ 5 := hb5
+            have hfh_to : (1 : Nat) ≤ s.freeHead.toNat := hfh
+            have hfh4n : s.freeHead.toNat < 5 := hfh4
+            by_cases hab : a = s.freeHead
+            · rw [hab, vec_set_self]
+              exact ⟨Nat.zero_le _, Nat.zero_le _, Nat.zero_le _, Nat.zero_le _⟩
+            · have hslot_ne : (a.toNat - 1) % 4 ≠ (s.freeHead.toNat - 1) % 4 := by
+                intro heq
+                have ha5 : a.toNat < 5 := by omega
+                exact hab (slot_inj ha0 ha5 hfh hfh4 heq)
+              have hlt : a < s.bumpIndex := ha1
+              have hslot_lt : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+              have hidx : (s.freeHead.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+              have hget : (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  hidx)[(a.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+                show (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  hidx)[(a.toNat - 1) % 4]?.get! = _
+                have h2 : (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  hidx)[(a.toNat - 1) % 4]? = s.nodes[(a.toNat - 1) % 4]? := by
+                  simp [Vector.getElem_set, Ne.symm hslot_ne]
+                rw [h2]; simp [hslot_lt]
+              rw [hget]
+              obtain ⟨hl2, hr2, hp2, hc2⟩ := hptr a ha0 hlt
+              exact ⟨hl2, hr2, hp2, hc2⟩
+        · simp at h
+  · simp at h
 
-`rotateLeft_meta` / `rotateRight_meta` 已收 size/bump/free 守恒。
-全指针 `rotateLeft_wf` / `rotateRight_wf`（及 insert/remove）在下一提交补全；
-结构谓词与 `paintNode_wf` / `set_value_wf` 见上方。 -/
+/-- 空树插入：`insertNode` 走 `insertRoot`，保持 `wf`。 -/
+theorem insertNode_wf_empty (s : State) (k v : UInt64) {t : State} {a : UInt64}
+    (h : insertNode s k v = .ok (t, a)) (hwf : wf s) (hroot : s.root = 0) : wf t := by
+  unfold insertNode at h
+  split at h
+  · exact insertRoot_wf s k v h hwf
+  · rename_i hne
+    exact (hne hroot).elim
+
+/-- 命中已有键时只改 value，保持 `wf`。 -/
+theorem insertNode_wf_update (s : State) (i : Nat) (v : UInt64) (hi : i < 4)
+    (hwf : wf s) :
+    wf { s with nodes := s.nodes.set i { s.nodes[i]! with value := v } } :=
+  set_value_wf s i v hi hwf
 
 end Proofs
 
