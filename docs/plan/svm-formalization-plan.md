@@ -52,7 +52,7 @@
 `mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
 `mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
 
-下一形式化刀：SF-2b Versioned（`sf-004`）。
+下一形式化刀：SF-3 BitSet（`sf-005`）。
 ---
 
 ## 4. 组件清单
@@ -152,7 +152,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-1a | Queue 非空 push（wrap + 读回） | L2 | **done** | [sf-001](tasks/sf-001.md) |
 | SF-1b | Queue pop / peek / initialize / 往返 | L2 | **done** | [sf-002](tasks/sf-002.md) |
 | SF-2a | BoundedVec pop + setAt | L2 | **done** | [sf-003](tasks/sf-003.md) |
-| SF-2b | Versioned 状态机 | L1+L2 | todo | [sf-004](tasks/sf-004.md) |
+| SF-2b | Versioned classify/initialize/apply | L1+L2 | **done** | [sf-004](tasks/sf-004.md) |
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | todo | [sf-005](tasks/sf-005.md) |
 | SF-4a | TransientModel + Vector64 | L2 | todo | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | todo | [sf-007](tasks/sf-007.md) |

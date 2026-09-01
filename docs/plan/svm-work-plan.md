@@ -142,7 +142,7 @@ Phase 0   导航对齐
           · 确认 WASM PR 不阻塞
 
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
-          · A: sf-000/001/002 **done** → sf-003 **done** → **sf-004 Versioned**（下一刀）
+          · A: sf-000/001/002 **done** → sf-003/004 **done** → **sf-005 BitSet**（下一刀）
             （nowrap push / pop clear·advance 已在 main，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（可并行）
           · B: svm-rt-001 signed Clock（可并行）
@@ -256,7 +256,7 @@ Phase 7   收口
 
 | 轨道 | 片 | 状态 |
 |---|---|---|
-| A | sf-000 … sf-016 | SF-0/1a/1b = **done**；SF-2a done；下一刀 SF-2b（sf-004）；其余 todo |
+| A | sf-000 … sf-016 | SF-0/1a/1b = **done**；SF-2a/2b done；下一刀 SF-3（sf-005）；其余 todo |
 | B | svm-rt-001 … 005 | todo |
 | C | svm-sdk-001 … 007 | todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周，merge main 之后）
 
-1. **主线证明**：Queue SF-1 已收口；下一刀 `sf-004` Versioned  
+1. **主线证明**：Queue SF-1 已收口；下一刀 `sf-005` BitSet  
 2. **并行可选**：`svm-sem-001` / `svm-rt-001` / `svm-eng-001`   
 3. **主线 L3**：`svm-sem-001`（E1）  
 4. **并行可选**：`svm-rt-001` 或 `svm-sdk-001`  
