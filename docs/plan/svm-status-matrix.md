@@ -49,7 +49,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 
 | ID | Slice | Status |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | todo |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1); digest `baf247ca608bdc85` |
 | [svm-app-002](tasks/svm-app-002.md) | Matching / fee / remainder | todo |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | todo |
 

@@ -173,7 +173,7 @@ Phase 4   Map/Tree 证明 + Token-2022 + 内存桥
 Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
           · A: sf-012..sf-013（FifoCancel / BatchRecorder）
           · E: svm-sem-005 Queue empty-push（或选定容器）全函数有界证明
-          · D: svm-app-001 Phoenix-v1 下一指令族（在现有 SDK 上组合）
+          · D: svm-app-001 Phoenix-v1 下一指令族（**done**：tags 10/11 CancelMultipleById cap=1）
           · D: svm-app-002 matching/fee 缺口补片（仍只在 Examples）
 
 Phase 6   Facade 扫尾 + 序列化/返回政策
@@ -226,7 +226,7 @@ Phase 7   收口
 
 | ID | 内容 | 验收 |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | Mollusk；digest 纪律；无新 Ops |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=1）；digest `baf247ca608bdc85`；Mollusk 6 |
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | 与 capability 叙述一致 |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | Mollusk + 可选 Surfpool |
 
@@ -262,7 +262,7 @@ Phase 7   收口
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
 | B | svm-rt-001 … 005 | **全部 done**（005 digest `243ea72de353e8e3`） |
 | C | svm-sdk-001 … 007 | **全部 done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed） |
-| D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
+| D | svm-app-001 … 003 | **001 done**；002/003 todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | svm-sem-001/`002` **done**；003–005 todo |
 | F | svm-eng-001 … 002 | **全部 done**（[svm-status-matrix.md](svm-status-matrix.md)） |
 
@@ -298,8 +298,8 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`/`002`** done → 下一刀 **`svm-sem-003`**（或 `svm-app-001`）
-2. **并行**：`svm-app-*` Phoenix 指令面 / matching 宣称
+1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`/`002`** + **`svm-app-001`** done → 下一刀 **`svm-sem-003`**（或 `svm-app-002`）
+2. **并行**：`svm-app-002` matching/fee 宣称面；`svm-app-003` 非 Phoenix 小例子
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。

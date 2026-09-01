@@ -949,6 +949,11 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   let some cancelUpToFreeRaw :=
       program.methods.find? (·.ixName == "cancelUpToOrdersWithFreeFunds")
     | throwError "missing raw CancelUpToWithFreeFunds"
+  let some cancelByIdRaw := program.methods.find? (·.ixName == "cancelMultipleOrdersById")
+    | throwError "missing raw CancelMultipleOrdersById"
+  let some cancelByIdFreeRaw :=
+      program.methods.find? (·.ixName == "cancelMultipleOrdersByIdWithFreeFunds")
+    | throwError "missing raw CancelMultipleOrdersByIdWithFreeFunds"
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
@@ -1020,6 +1025,20 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.minDataLen == 5 && entry.maxDataLen == 21 do
         throwError s!"wrong raw CancelUpToWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelUpToWithFreeFunds lost its raw adapter"
+  match cancelByIdRaw.entry with
+  | .raw entry =>
+      unless cancelByIdRaw.kind == .get && entry.tag == 10 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramCount == 1 &&
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 22 do
+        throwError s!"wrong raw CancelMultipleOrdersById adapter: {repr entry}"
+  | .generated => throwError "CancelMultipleOrdersById lost its raw adapter"
+  match cancelByIdFreeRaw.entry with
+  | .raw entry =>
+      unless cancelByIdFreeRaw.kind == .get && entry.tag == 11 && entry.accountCount == 4 &&
+          entry.programAccount == 0 && entry.paramCount == 1 &&
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 22 do
+        throwError s!"wrong raw CancelMultipleOrdersByIdWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "CancelMultipleOrdersByIdWithFreeFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
@@ -1234,6 +1253,22 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 8 cancelUpToRaw.ops &&
       opsHaveRawReduceFinish cancelUpToRaw.ops do
     throwError "raw CancelUpTo bounded component/query/withdraw composition is incomplete"
+  unless opsHaveIntrinsic (· == .isWritableN 1) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 2) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) cancelByIdFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 cancelByIdFreeRaw.ops &&
+      opsHaveRawReduceHeader 11 cancelByIdFreeRaw.ops &&
+      opsHaveRawReduceFinish cancelByIdFreeRaw.ops &&
+      !opsHaveInvoke cancelByIdFreeRaw.ops do
+    throwError "raw CancelMultipleOrdersByIdWithFreeFunds composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) cancelByIdRaw.ops &&
+      opsHaveDataWord 2 1 cancelByIdRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds cancelByIdRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds cancelByIdRaw.ops &&
+      opsHaveRawReduceHeader 10 cancelByIdRaw.ops &&
+      opsHaveRawReduceFinish cancelByIdRaw.ops do
+    throwError "raw CancelMultipleOrdersById composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
@@ -1520,6 +1555,13 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jne r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 6, raw_route_match_" &&
       asm.contains "jeq r1, 7, raw_route_match_" &&
+      asm.contains "jlt r2, 5, raw_route_next_" &&
+      asm.contains "jgt r2, 21, raw_route_next_" &&
+      asm.contains "jeq r1, 8, raw_route_match_" &&
+      asm.contains "jeq r1, 9, raw_route_match_" &&
+      asm.contains "jgt r2, 22, raw_route_next_" &&
+      asm.contains "jeq r1, 10, raw_route_match_" &&
+      asm.contains "jeq r1, 11, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&

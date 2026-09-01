@@ -12,7 +12,7 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-composed through bounded target-owned components; official instruction coverage includes tags 4–9
+composed through bounded target-owned components; official instruction coverage includes tags 4–11
 plus a strict PostOnly/no-TIF/deposited-funds-only slice of tag 3, not the complete Phoenix
 instruction set.
 -/
@@ -21,6 +21,7 @@ namespace Examples.PhoenixV1Profile
 open ProofForge.Svm.Runtime
 open ProofForge.Svm
 open ProofForge.Svm.Sdk
+open ProofForge.Core.Value
 
 def phoenixProgramOwner0 : UInt64 := 11497730047637682189
 def phoenixProgramOwner1 : UInt64 := 2178672117088209453
@@ -1526,6 +1527,13 @@ def cancelUpToAsks512At (layout : Examples.PhoenixV1.Layout)
 /-- Close the FIFO accumulator after all aggregate results have been consumed. -/
 def finishCancelAll : UInt64 := ProofForge.Svm.FifoCancel.Source.finish
 
+/-- Official Phoenix `CancelOrderParams` leaf: `side:u8 || price:u64 || sequence:u64`. -/
+structure CancelOrderParams where
+  side : UInt8
+  price : UInt64
+  sequence : UInt64
+  deriving Inhabited, Repr, DecidableEq
+
 /-- Shared official Token-context gate for tags 4 and 6. It authenticates the fixed raw account
 shape, market status, classic SPL Token program, trader destinations, vault keys, mints, and vault
 authorities before either storage mutation or CPI can occur. -/
@@ -2587,6 +2595,126 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
         let atoms := released * lotSize
         let _ := withdrawReleasedAt 1 atoms
         let _ := finishCancelAll
+        let _ := finishMarketBatch
+        .ok (_s, 0)
+      else
+        .error .overflow
+
+/--
+Official Phoenix `CancelMultipleOrdersByIdWithFreeFunds` tag 11 wire:
+`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most one order id. Empty
+vectors are a no-op (no sequence bump, no audit batch). Side/sequence mismatches, missing ids,
+and foreign owners are skipped. A successful cancel appends one Reduce event and keeps collateral
+in free funds.
+-/
+@[pf_entry, pf_svm_raw 11 4 0]
+def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
+    (orders : BoundedVec CancelOrderParams 1) : Except Error (State × UInt64) := do
+  if orders.length = 0 then
+    if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
+        checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
+      .error .overflow
+    else
+      .ok (_s, 0)
+  else if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let layout := Examples.PhoenixV1.small 2
+    let order := orders.values[0]!
+    let side := order.side.toUInt64
+    if side ≠ 0 && side ≠ 1 then
+      .error .overflow
+    else
+      let encodedBid := order.sequence >>> 63 = 1
+      let skip := (side = 0 && !encodedBid) || (side = 1 && encodedBid)
+      let traderKey0 := signerKey 3
+      let traderIndex := layout.findTrader
+        traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+      let orderIndex :=
+        if skip || traderIndex = 0 then 0
+        else if side = 0 then layout.findBid order.price order.sequence
+        else layout.findAsk order.price order.sequence
+      let owner :=
+        if orderIndex = 0 then 0
+        else if side = 0 then layout.bidOwner orderIndex
+        else layout.askOwner orderIndex
+      let resting :=
+        if orderIndex = 0 || owner ≠ traderIndex then 0
+        else if side = 0 then layout.bidOrderSize orderIndex
+        else layout.askOrderSize orderIndex
+      let marketSequence := layout.marketSequence
+      let _ := layout.setMarketSequence (marketSequence + 1)
+      let _ := beginMarketBatchAt 11 2 2 marketSequence
+      let removed ←
+        if resting = 0 then .ok 0
+        else
+          reduceFreeFunds512At layout 2 3 traderKey0 side order.price order.sequence resting
+      let recordIndex := if removed = 0 then 0 else orderIndex
+      let _ := recordReduceAt recordIndex order.sequence order.price removed 0
+      let _ := finishMarketBatch
+      .ok (_s, 0)
+
+/--
+Official Phoenix `CancelMultipleOrdersById` tag 10 uses the same single-id vector, but claims any
+released collateral and withdraws through the shared nine-account classic Token context. Pre-existing
+free balances are preserved. Missing ids remain header-only success.
+-/
+@[pf_entry, pf_svm_raw 10 9 0]
+def cancelMultipleOrdersById (_s : State)
+    (orders : BoundedVec CancelOrderParams 1) : Except Error (State × UInt64) := do
+  if orders.length = 0 then
+    if cancelWithdrawContextValid = 0 then
+      .error .overflow
+    else
+      .ok (_s, 0)
+  else if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
+    .error .overflow
+  else
+    let layout := Examples.PhoenixV1.small 2
+    let order := orders.values[0]!
+    let side := order.side.toUInt64
+    if side ≠ 0 && side ≠ 1 then
+      .error .overflow
+    else
+      let encodedBid := order.sequence >>> 63 = 1
+      let skip := (side = 0 && !encodedBid) || (side = 1 && encodedBid)
+      let traderKey0 := signerKey 3
+      let traderIndex := layout.findTrader
+        traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+      let orderIndex :=
+        if skip || traderIndex = 0 then 0
+        else if side = 0 then layout.findBid order.price order.sequence
+        else layout.findAsk order.price order.sequence
+      let owner :=
+        if orderIndex = 0 then 0
+        else if side = 0 then layout.bidOwner orderIndex
+        else layout.askOwner orderIndex
+      let resting :=
+        if orderIndex = 0 || owner ≠ traderIndex then 0
+        else if side = 0 then layout.bidOrderSize orderIndex
+        else layout.askOrderSize orderIndex
+      let marketSequence := layout.marketSequence
+      let _ := layout.setMarketSequence (marketSequence + 1)
+      let _ := beginMarketBatchAt 10 2 2 marketSequence
+      let removed ←
+        if resting = 0 then .ok 0
+        else
+          reduceFreeFunds512At layout 2 3 traderKey0 side order.price order.sequence resting
+      let released ←
+        if removed = 0 then .ok 0
+        else if side = 0 then quoteLotsReleased512At layout order.price removed
+        else .ok removed
+      let lotSize := if side = 0 then layout.quoteLotSize else layout.baseLotSize
+      let releasedDivisor := if released = 0 then 1 else released
+      if lotSize ≤ u64Max / releasedDivisor then
+        let atoms := released * lotSize
+        let _ ←
+          if traderIndex = 0 || released = 0 then .ok 0
+          else claimReleasedFunds512At layout traderIndex side released
+        let _ := withdrawReleasedAt side atoms
+        let recordIndex := if removed = 0 then 0 else orderIndex
+        let _ := recordReduceAt recordIndex order.sequence order.price removed 0
         let _ := finishMarketBatch
         .ok (_s, 0)
       else

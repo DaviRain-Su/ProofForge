@@ -1,7 +1,7 @@
 ---
 id: svm-app-001
 track: D-app
-status: todo
+status: done
 plan: ../svm-work-plan.md
 ---
 
@@ -13,9 +13,13 @@ plan: ../svm-work-plan.md
 
 ## 交付
 
-1. 指令语义与账户合同
-2. Mollusk 正反例
-3. digest 纪律；无 Phoenix 名进入 `ProofForge/Svm`
+1. 指令语义与账户合同 — **done**：tags **10/11** `CancelMultipleOrdersById` /
+   `CancelMultipleOrdersByIdWithFreeFunds`（官方 Borsh `Vec<CancelOrderParams>`；本 profile
+   片 **capacity = 1**；空 vec noop；side/MSB/missing/foreign skip；10=withdraw / 11=free）
+2. Mollusk 正反例 — **done**：`phoenix_v1_profile.rs` empty / success / skip / withdraw /
+   noncanonical / storage+token reject
+3. digest 纪律；无 Phoenix 名进入 `ProofForge/Svm` — **done**：digest `baf247ca608bdc85`；
+   Spec adapter+composition+ASM routes 8–11
 
 ## 非目标
 

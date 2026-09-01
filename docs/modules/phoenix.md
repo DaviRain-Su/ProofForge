@@ -143,7 +143,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   矩阵已有；当前产物已通过全 51 SVM build、Phoenix-v1 profile 51/51、全 Mollusk
   255/255 与 Anvil 12/12。跨四档逐样本只作 host reference↔source fold，不宣称完整
   chain refinement。
-- **部分支持（P5 fixed account profile + official tags 4–7）**：独立 profile 按 canonical
+- **部分支持（P5 fixed account profile + official tags 4–11）**：独立 profile 按 canonical
   owner、576-byte header、12 个 capacity tuple 与 exact length 选择静态 geometry；完整
   bid/ask/trader validator、Key4/FIFO find、one-based field access、allocator 与 RB mutation
   都由 `AccountStorage` 在 account bytes 上有界执行。最小 `(512,512,128)` profile 组合了
@@ -163,10 +163,16 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   bids 先于 asks，各侧保持 FIFO，event index 跨 32-record flush 连续。missing trader/empty
   book 仍 sequence+1 并发 header-only。tag 7 无 Token/status gate；tag 6 只 claim 本次释放量，
   保留 pre-existing free，并按 quote claim/withdraw → base claim/withdraw 排序。
-  Phoenix source 只做组合；没有新增 Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建
-  heap Map、node copy 或 persistent pointer。
-- **未支持（P5 remaining instructions/公网）**：cancel-up-to/by-id、matching/
-  placement wire、runtime remaining accounts、Token-2022 extension 语义、全部 Phoenix-v1
+  tags 8/9 CancelUpTo 在同一边界上增加 side + optional tick/search/cancel caps 的 Borsh
+  option wire（5–21 bytes）与有界 FIFO filter；tag 9 无 status gate，tag 8 走 9-account
+  withdraw 路径。tags 10/11 CancelMultipleOrdersById 接受官方
+  `tag || Borsh Vec<CancelOrderParams>` wire，本 profile 片容量为 1（5–22 bytes）；空 vec
+  为 noop（不 bump sequence、无 audit）。side/sequence MSB 不匹配、missing id、foreign owner
+  跳过并仍 bump sequence + header-only；成功取消写一条 Reduce。tag 11 保留 free funds；
+  tag 10 claim 本次释放量并保留 pre-existing free。Phoenix source 只做组合；没有新增
+  Phoenix-specific 顶层 Ops/IR/主 Emit case，也不创建 heap Map、node copy 或 persistent pointer。
+- **未支持（P5 remaining instructions/公网）**：matching/placement wire、runtime remaining
+  accounts、Token-2022 extension 语义、多 id CancelMultiple 满容量 Vec、全部 Phoenix-v1
   指令兼容与公网部署。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
@@ -185,6 +191,6 @@ fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specif
 
 独立 `PhoenixV1Profile` 是预编译 fixed-capacity account profile，不是运行时动态容器。
 `EntryAdapter → Component(FifoCancel/BatchRecorder/AccountStorage) → target-owned SVM backend`
-已贯通 official tags 4–7；下一片在相同稳定边界上增加 tags 8/9 CancelUpTo 的 bounded filter，
-而不是再改顶层 Ops/IR/主 Emit。完整 Phoenix-v1 指令集和
-动态 remaining accounts 仍关闭。
+已贯通 official tags 4–11（含 CancelUpTo 与容量-1 CancelMultipleOrdersById）；下一应用片在
+相同稳定边界上补 matching/fee/remainder 宣称面，而不是再改顶层 Ops/IR/主 Emit。完整
+Phoenix-v1 指令集和公网部署不在本片范围。
