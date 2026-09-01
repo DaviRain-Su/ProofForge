@@ -51,7 +51,10 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 
 ### Implementation order
 
-1. `PromiseHandle` + create/then with depth gate (no IR shape change beyond new component tags)
+1. ~~`PromiseHandle` + create/then with depth gate~~ — **landed** in
+   `ProofForge/Wasm/Near/Sdk/Promise.lean` (`createReturned`, `thenReturned`, `depthOk`);
+   compile-time smoke in `Examples/NearPromiseHandle.handleDepthSmoke`; Extract of handle-typed
+   entry bodies remains follow-up
 2. Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)
 3. Sandbox DAG: create→then; create×3→and→callback
 4. Docs + capability-matrix row

@@ -14,9 +14,10 @@ depends-on: []
 - Extract: `Core.Except.andThen` sequenced like `Bind.bind`; `ok`/`err` recognized alongside std `Except`
 - NEAR example: `Examples.NearTokenErgonomics.addViaAndThen`
 - EVM example: `Examples.EvmExceptErgonomics.addViaAndThen` (digest `8def48aa72cd2c19`)
+- SVM example: `Examples.SvmExceptErgonomics.addViaAndThen` (extract digest `d826699c521e0b7c`)
 
 ## Follow-up
 
 - Optional `do` notation guide in docs
-- SVM `andThen` cookbook example
 - Structure-valued `Except.ok` Decode (blocked for `NearToken.addChecked`)
+- Extract `PromiseHandle`-typed entry bodies for NEAR N13

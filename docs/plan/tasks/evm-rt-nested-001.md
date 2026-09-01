@@ -34,7 +34,9 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
   `sourceLimbWords`, Emit pack, IR rewrite for limb `indexGet`
 - **Constructed returns**: `echoBoundedPairs` (`(uint64,uint16)[]`) — same pipeline
 - Spec coverage: `Tests/EvmBoundedSpec.lean`, `Tests/CoreCodecSpec.lean`
-- Still open: **Anvil OK/reject matrix** for wide/constructed; tagged-in-array; depth ceiling raise
+- **Anvil OK/reject matrix** for wide/constructed: `runtime-tests/evm/anvil_bounded.sh`
+  (`echoBoundedWide`, `echoBoundedPairs`, malformed/over-capacity calldata)
+- Still open: tagged-in-array; depth ceiling raise
 
 ## Non-goals
 

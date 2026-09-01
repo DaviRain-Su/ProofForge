@@ -24,11 +24,27 @@ self-callback edge; its explicit callback arguments are independent of the child
 `callAndThenReturned` closes two ordered static children through one internal join and self callback.
 Strict fixed-width Borsh UInt64 decoding remains SDK policy over the active descriptor; additional
 scalar decoders and general Promise handles remain outside this slice.
+
+`PromiseHandle` (N13) wraps the opaque host promise index with bounded depth and fan-in metadata.
+Depth and fan-in ceilings are enforced via `depthOk` / `fanInOk` before chaining further edges.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
 
 open ProofForge.Core.Value
+
+/-- Default compile-time fan-in capacity for bounded Promise joins (N13). -/
+def defaultMaxFanIn : Nat := 4
+
+/-- Hard ceiling on Promise DAG depth tracked by source handles. -/
+def maxPromiseDepth : Nat := 8
+
+/-- Source-visible bounded Promise handle. The host index remains opaque to applications. -/
+structure PromiseHandle (maxFanIn : Nat := defaultMaxFanIn) where
+  id : UInt64
+  depth : UInt8
+  fanIn : UInt8
+  deriving Repr, Inhabited
 
 /-- Schedule one detached cross-contract function call. `receiver` and `method` must be static
 literals accepted by the NEAR target. -/
@@ -119,6 +135,37 @@ input order even when either child fails. -/
     leftDeposit.w0 leftDeposit.w1 leftGas
     rightDeposit.w0 rightDeposit.w1 rightGas
     callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+namespace PromiseHandle
+
+@[pf_inline] def depthOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=
+  handle.depth.toNat ≤ maxPromiseDepth
+
+@[pf_inline] def fanInOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=
+  handle.fanIn.toNat ≤ maxFanIn
+
+/-- Schedule one returned child call and expose it as a root handle (`depth = 0`). -/
+@[pf_inline] def createReturned {argsCapacity : Nat}
+    (receiver method : String) (arguments : BoundedBytes argsCapacity)
+    (deposit : Runtime.NearToken) (gas : UInt64) : PromiseHandle :=
+  { id := callReturned receiver method arguments deposit gas
+    depth := 0, fanIn := 0 }
+
+/-- Attach one self callback edge; increments tracked depth. Callers must check `depthOk`. -/
+@[pf_inline] def thenReturned {maxFanIn : Nat}
+    {childArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (receiver childMethod : String)
+    (childArguments : BoundedBytes childArgsCapacity)
+    (childDeposit : Runtime.NearToken) (childGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callThenReturned receiver childMethod childArguments childDeposit childGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := handle.fanIn }
+
+end PromiseHandle
 
 /-- Number of callback inputs for this invocation. Ordinary calls report zero. -/
 @[pf_inline] def resultsCount : UInt64 :=
