@@ -2647,6 +2647,13 @@ def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
   else if side = 0 then quoteLotsReleased512At layout price removed
   else .ok removed
 
+/-- Cancel one id and return released lots (side-aware). Inlined to shrink tag-10 scalar locals
+after main's Extract began retaining more sequenced join locals. -/
+def cancelOneReleased512At (layout : Examples.PhoenixV1.Layout)
+    (traderKey0 traderIndex side price sequence : UInt64) : Except Error UInt64 := do
+  let removed ← cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side price sequence
+  releasedLotsForCancel512At layout side price removed
+
 /-- Claim aggregated quote/base lots and withdraw atoms for CancelMultiple tag 10.
 Keeping this finish helper `pf_inline` collapses duplicated scalar locals across nest arms. -/
 def finishCancelMultipleWithdraw512At (layout : Examples.PhoenixV1.Layout)
@@ -2835,18 +2842,15 @@ def cancelMultipleOrdersById (_s : State)
       let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 10 2 2 marketSequence
       let o0 := orders.values[0]!
-      let removed0 ←
-        cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side0 o0.price o0.sequence
-      let released0 ← releasedLotsForCancel512At layout side0 o0.price removed0
+      let released0 ←
+        cancelOneReleased512At layout traderKey0 traderIndex side0 o0.price o0.sequence
       let quote0 := if side0 = 0 then released0 else 0
       let base0 := if side0 = 0 then 0 else released0
       if orders.length ≥ 2 then
         let o1 := orders.values[1]!
         let side1 := o1.side.toUInt64
-        let removed1 ←
-          cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
-            side1 o1.price o1.sequence
-        let released1 ← releasedLotsForCancel512At layout side1 o1.price removed1
+        let released1 ←
+          cancelOneReleased512At layout traderKey0 traderIndex side1 o1.price o1.sequence
         let quote1 := if side1 = 0 then released1 else 0
         let base1 := if side1 = 0 then 0 else released1
         if quote0 > u64Max - quote1 || base0 > u64Max - base1 then
@@ -2857,10 +2861,8 @@ def cancelMultipleOrdersById (_s : State)
           if orders.length ≥ 3 then
             let o2 := orders.values[2]!
             let side2 := o2.side.toUInt64
-            let removed2 ←
-              cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
-                side2 o2.price o2.sequence
-            let released2 ← releasedLotsForCancel512At layout side2 o2.price removed2
+            let released2 ←
+              cancelOneReleased512At layout traderKey0 traderIndex side2 o2.price o2.sequence
             let quote2 := if side2 = 0 then released2 else 0
             let base2 := if side2 = 0 then 0 else released2
             if quote01 > u64Max - quote2 || base01 > u64Max - base2 then
@@ -2871,10 +2873,8 @@ def cancelMultipleOrdersById (_s : State)
               if orders.length ≥ 4 then
                 let o3 := orders.values[3]!
                 let side3 := o3.side.toUInt64
-                let removed3 ←
-                  cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
-                    side3 o3.price o3.sequence
-                let released3 ← releasedLotsForCancel512At layout side3 o3.price removed3
+                let released3 ←
+                  cancelOneReleased512At layout traderKey0 traderIndex side3 o3.price o3.sequence
                 let quote3 := if side3 = 0 then released3 else 0
                 let base3 := if side3 = 0 then 0 else released3
                 if quote012 > u64Max - quote3 || base012 > u64Max - base3 then
@@ -2885,10 +2885,8 @@ def cancelMultipleOrdersById (_s : State)
                   if orders.length ≥ 5 then
                     let o4 := orders.values[4]!
                     let side4 := o4.side.toUInt64
-                    let removed4 ←
-                      cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
-                        side4 o4.price o4.sequence
-                    let released4 ← releasedLotsForCancel512At layout side4 o4.price removed4
+                    let released4 ←
+                      cancelOneReleased512At layout traderKey0 traderIndex side4 o4.price o4.sequence
                     let quote4 := if side4 = 0 then released4 else 0
                     let base4 := if side4 = 0 then 0 else released4
                     if quote0123 > u64Max - quote4 || base0123 > u64Max - base4 then
@@ -2939,6 +2937,7 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
   placeLimitOneMatchFreeFunds512At placeLimitTwoMatchesFreeFunds512At
   cancelOneByIdFreeFunds512At releasedLotsForCancel512At
+  cancelOneReleased512At
   finishCancelMultipleWithdraw512At
 
 end Examples.PhoenixV1Profile

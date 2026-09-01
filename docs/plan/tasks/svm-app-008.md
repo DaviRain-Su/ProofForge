@@ -20,11 +20,11 @@ depends-on: [svm-app-007]
 
 1. `Examples/PhoenixV1Profile.lean`：tag 10 capacity=5 + densified finish helper
 2. Spec：tag 10 `maxDataLen==90`；ASM `jgt r2, 90`
-3. Mollusk：五 id withdraw + reject len=6；digest `72e24d00aee1781c`
+3. Mollusk：五 id withdraw + reject len=6；digest `5fddbc7822acef7e`
 
 ## Evidence
 
-- Lean extract ×3 稳定 → digest `72e24d00aee1781c`
+- Lean extract ×3 稳定 → digest `5fddbc7822acef7e`（main Extract 合入后 densify `cancelOneReleased512At`）
 - Registry / Spec / Mollusk 同步
 
 ## 仍未覆盖
