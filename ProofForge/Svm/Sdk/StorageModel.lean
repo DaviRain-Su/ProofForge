@@ -1901,4 +1901,72 @@ theorem mFree_then_mAlloc_same (mem : AccountWords) (alloc : Allocator) (slot : 
 
 end AllocProofs
 
+/-! ## OrderedMap find 模型（SF-5b / sf-009）
+
+抽象 `AccountStorage.Source.findKey4`：空根短路返回 `0`；fifo 变体恒为 miss。
+完整 RB 遍历与旋转保持委托 `Runtime.accDataRbTreeKey4Find` stub（sf-011 或 Tree 片）。
+find 是纯读：不返回新 `AccountWords`。 -/
+
+namespace MapProofs
+
+open ProofForge.Svm.AccountStorage
+
+/-- Zero-based account data word read (mirrors `Runtime.accDataWord`). -/
+def mAccDataWord (mem : AccountWords) (word : Nat) : UInt64 := mem word
+
+/-- Map root scalar at compile-time `rootWord`. -/
+def mMapRoot (mem : AccountWords) (map : RbMap) : UInt64 :=
+  match map with
+  | .key4 rootWord _ | .fifo rootWord _ => mAccDataWord mem rootWord
+
+/-- Bounded key4 lookup model: empty root is an immediate miss.
+Non-empty trees delegate to the runtime stub until sf-011 fills traversal. -/
+def mAccDataRbTreeKey4Find
+    (mem : AccountWords) (rootWord : Nat) (_tree : Key4RbTree)
+    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 :=
+  if mAccDataWord mem rootWord = 0 then 0 else 0
+
+/-- Abstract four-word-key lookup mirroring `AccountStorage.Source.findKey4`. -/
+def mFindKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  match map with
+  | .key4 rootWord tree => mAccDataRbTreeKey4Find mem rootWord tree key0 key1 key2 key3
+  | .fifo .. => 0
+
+/-- Payload read at a one-based slot; slot `0` is the absent sentinel. -/
+def mSlotValue (mem : AccountWords) (payload : Field) (slot : UInt64) : UInt64 :=
+  if slot = 0 then 0 else mReadField mem payload slot
+
+/-- Composed find + payload read (mirrors `OrderedMap.findValueKey4`). -/
+def mFindValueKey4 (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
+    (key0 key1 key2 key3 : UInt64) : UInt64 :=
+  mSlotValue mem payload (mFindKey4 mem orderedMap.map key0 key1 key2 key3)
+
+/-- Fifo-backed maps never expose four-word keys through this entry point. -/
+theorem mFindKey4_fifo_miss (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
+    (k0 k1 k2 k3 : UInt64) :
+    mFindKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
+
+/-- Empty tree root (`0` sentinel) implies miss for any key. -/
+theorem mFindKey4_empty_root (mem : AccountWords) (rootWord : Nat) (tree : Key4RbTree)
+    (k0 k1 k2 k3 : UInt64) (hroot : mAccDataWord mem rootWord = 0) :
+    mFindKey4 mem (.key4 rootWord tree) k0 k1 k2 k3 = 0 := by
+  unfold mFindKey4 mAccDataRbTreeKey4Find
+  simp [hroot]
+
+/-- Miss lookup yields payload sentinel `0`. -/
+theorem mFindValueKey4_miss (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
+    (k0 k1 k2 k3 : UInt64) (h : mFindKey4 mem orderedMap.map k0 k1 k2 k3 = 0) :
+    mFindValueKey4 mem orderedMap payload k0 k1 k2 k3 = 0 := by
+  unfold mFindValueKey4 mSlotValue
+  simp [h]
+
+/-- Find is a pure read: identical memory yields identical results. -/
+theorem mFindKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
+    (h : ∀ w, mem w = mem' w) :
+    mFindKey4 mem map k0 k1 k2 k3 = mFindKey4 mem' map k0 k1 k2 k3 := by
+  unfold mFindKey4 mAccDataRbTreeKey4Find mAccDataWord
+  cases map <;> simp [h]
+
+end MapProofs
+
 end ProofForge.Svm.Sdk.StorageModel
