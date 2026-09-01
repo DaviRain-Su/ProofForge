@@ -833,6 +833,17 @@ private theorem u64toNatAdd {a b : UInt64} (h : a.toNat + b.toNat < 4294967296*4
   rw [h2]
   exact Nat.mod_eq_of_lt h
 
+/-- 通用 UInt64 减法无下溢桥。 -/
+private theorem u64toNatSub {a b : UInt64} (h : b.toNat ≤ a.toNat) :
+    (a - b).toNat = a.toNat - b.toNat := by
+  have hbig : (2:Nat)^64 = 4294967296*4294967296 := by decide
+  have hlt : a.toNat < 4294967296*4294967296 := by
+    obtain ⟨w⟩ := a
+    have := w.isLt
+    simpa [hbig] using this
+  rw [UInt64.toNat_sub, hbig]
+  omega
+
 /-- **非空推链接（nowrap）**：head ≠ 0、head + size ≤ cap 时，
 `mQueuePush` 整体 = `mQueuePushAt` 的三写组合（tail = head + size、
 head 写回自身）。 -/
@@ -865,6 +876,59 @@ theorem mQueuePush_nowrap_links (mem : AccountWords) (q : BoundedQueue) (value :
       omega)
   unfold mQueuePush
   simp only [if_neg hguard, if_neg hhead, if_neg hnowrap]
+
+
+/-- **pop 清空链接**：size = 1 时，`mQueuePop` 整体 = `mQueuePopAt` 的
+两写组合（remaining = 0、head 复位 0），返回队首值。 -/
+theorem mQueuePop_clear_links (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : mReadField mem q.count 0 = 1)
+    (hhead : mReadField mem q.head 0 ≠ 0) :
+    mQueuePop mem q =
+      (mQueuePopAt mem q 0 0, mReadField mem q.slots (mReadField mem q.head 0)) := by
+  have hguard : ¬ ((mReadField mem q.count 0) = 0 ∨ (mReadField mem q.head 0) = 0) := by
+    rw [hsize]
+    simp [hhead, show ((1:UInt64) = (0:UInt64)) = False from by decide]
+  unfold mQueuePop
+  rw [if_neg hguard, hsize]
+  simp
+
+/-- **pop 推进链接（head ≠ cap）**：size ≥ 2 且 head ≠ cap 时，
+`mQueuePop` 整体 = `mQueuePopAt` 的两写组合（remaining = size - 1、
+head 推进 head + 1），返回队首值。 -/
+theorem mQueuePop_advance_links (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hhead0 : mReadField mem q.head 0 ≠ 0)
+    (hneqcap : ¬ (mReadField mem q.head 0 = (BoundedQueue.capacity q))) :
+    mQueuePop mem q =
+      (mQueuePopAt mem q (mReadField mem q.count 0 - 1)
+        (mReadField mem q.head 0 + 1),
+        mReadField mem q.slots (mReadField mem q.head 0)) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hguard : ¬ ((mReadField mem q.count 0) = 0 ∨ (mReadField mem q.head 0) = 0) := by
+    intro h
+    rcases h with hc | hr
+    · have h2 : (mReadField mem q.count 0).toNat = 0 := by
+        rw [hc]
+        rfl
+      omega
+    · exact hhead0 hr
+  -- remaining = size - 1 ≠ 0
+  have hrem : ¬ ((mReadField mem q.count 0 - (1:UInt64)) = 0) := by
+    intro hc
+    have h1n : UInt64.toNat 1 = 1 := rfl
+    have hs2 : (mReadField mem q.count 0).toNat ≥ 2 := hsize
+    have h1 : ((mReadField mem q.count 0 - (1:UInt64)).toNat)
+        = (mReadField mem q.count 0).toNat - 1 :=
+      u64toNatSub (by omega)
+    have h2 : (mReadField mem q.count 0 - (1:UInt64)).toNat = 0 := by
+      rw [hc]
+      rfl
+    rw [h2] at h1
+    omega
 
 end QueueProofs
 
