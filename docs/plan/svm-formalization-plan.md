@@ -52,7 +52,7 @@
 `mQueuePeek*`、`mQueueInitialize*`、`mQueuePush_pop_roundtrip_empty`；
 通用 `u64toNatAdd/Sub` 无回绕桥。
 
-下一刀：收口 **SF-4b** Bytes/Record/Wide（[sf-007](tasks/sf-007.md)），并行 EVM nested / Near N13 任务已建档。
+下一刀：推进 **SF-5b** OrderedMap find 模型（[sf-009](tasks/sf-009.md)）；NEAR N13 已扩至 **6-way andN**（N=7..8 仍开）；EVM powdr 仍 blocked（[evm-powdr-dep-001](tasks/evm-powdr-dep-001.md)）。
 
 ---
 
