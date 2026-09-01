@@ -31,4 +31,20 @@ def bytesContains (_state : State) (haystack needle : BoundedBytes 3) : Bool :=
 def stringsContains (_state : State) (text needle : BoundedString 3) : Bool :=
   text.contains needle
 
+@[pf_entry]
+def bytesStartsWith (_state : State) (value prefixValue : BoundedBytes 3) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry]
+def stringsStartsWith (_state : State) (value prefixValue : BoundedString 3) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry]
+def bytesEndsWith (_state : State) (value suffix : BoundedBytes 3) : Bool :=
+  value.endsWith suffix
+
+@[pf_entry]
+def stringsEndsWith (_state : State) (value suffix : BoundedString 3) : Bool :=
+  value.endsWith suffix
+
 end Examples.EvmSearch

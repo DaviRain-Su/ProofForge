@@ -35,6 +35,10 @@ const BYTES_LESS_TAG: u8 = 29;
 const STRINGS_LESS_TAG: u8 = 30;
 const BYTES_CONTAINS_TAG: u8 = 31;
 const STRINGS_CONTAINS_TAG: u8 = 32;
+const BYTES_STARTS_WITH_TAG: u8 = 33;
+const STRINGS_STARTS_WITH_TAG: u8 = 34;
+const BYTES_ENDS_WITH_TAG: u8 = 35;
+const STRINGS_ENDS_WITH_TAG: u8 = 36;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -615,6 +619,44 @@ fn bounded_bytes_and_strings_compare_and_search_canonical_active_prefixes() {
             vec![0xc2, 0xa2],
             0,
         ),
+        (BYTES_STARTS_WITH_TAG, vec![], vec![], 1),
+        (BYTES_STARTS_WITH_TAG, vec![], b"a".to_vec(), 0),
+        (BYTES_STARTS_WITH_TAG, b"abc".to_vec(), vec![], 1),
+        (BYTES_STARTS_WITH_TAG, b"abc".to_vec(), b"ab".to_vec(), 1),
+        (BYTES_STARTS_WITH_TAG, b"abc".to_vec(), b"abc".to_vec(), 1),
+        (BYTES_STARTS_WITH_TAG, b"abc".to_vec(), b"bc".to_vec(), 0),
+        (BYTES_STARTS_WITH_TAG, b"abc".to_vec(), b"abcd".to_vec(), 0),
+        (BYTES_ENDS_WITH_TAG, vec![], vec![], 1),
+        (BYTES_ENDS_WITH_TAG, vec![], b"a".to_vec(), 0),
+        (BYTES_ENDS_WITH_TAG, b"abc".to_vec(), vec![], 1),
+        (BYTES_ENDS_WITH_TAG, b"abc".to_vec(), b"bc".to_vec(), 1),
+        (BYTES_ENDS_WITH_TAG, b"abc".to_vec(), b"abc".to_vec(), 1),
+        (BYTES_ENDS_WITH_TAG, b"abc".to_vec(), b"ab".to_vec(), 0),
+        (BYTES_ENDS_WITH_TAG, b"abc".to_vec(), b"abcd".to_vec(), 0),
+        (
+            STRINGS_STARTS_WITH_TAG,
+            vec![0xe2, 0x82, 0xac, 0xc2, 0xa2],
+            vec![0xe2, 0x82, 0xac],
+            1,
+        ),
+        (
+            STRINGS_STARTS_WITH_TAG,
+            vec![0xe2, 0x82, 0xac, 0xc2, 0xa2],
+            vec![0xc2, 0xa2],
+            0,
+        ),
+        (
+            STRINGS_ENDS_WITH_TAG,
+            vec![0xe2, 0x82, 0xac, 0xc2, 0xa2],
+            vec![0xc2, 0xa2],
+            1,
+        ),
+        (
+            STRINGS_ENDS_WITH_TAG,
+            vec![0xe2, 0x82, 0xac, 0xc2, 0xa2],
+            vec![0xe2, 0x82, 0xac],
+            0,
+        ),
     ] {
         let data = bounded_bytes_pair_data(tag, &left, &right);
         let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
@@ -625,7 +667,13 @@ fn bounded_bytes_and_strings_compare_and_search_canonical_active_prefixes() {
         );
     }
 
-    for tag in [STRINGS_EQUAL_TAG, STRINGS_LESS_TAG, STRINGS_CONTAINS_TAG] {
+    for tag in [
+        STRINGS_EQUAL_TAG,
+        STRINGS_LESS_TAG,
+        STRINGS_CONTAINS_TAG,
+        STRINGS_STARTS_WITH_TAG,
+        STRINGS_ENDS_WITH_TAG,
+    ] {
         for (left, right) in [
             (vec![0xc0, 0x80], b"abc".to_vec()),
             (b"abc".to_vec(), vec![0xed, 0xa0, 0x80]),

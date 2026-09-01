@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Allocation-free bounded bytes/String substring search over canonical adjacent ABI tails.
+# Allocation-free bounded bytes/String search over canonical adjacent ABI tails.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,7 +43,23 @@ for case in \
   'bytesContains(bytes,bytes)|616263|6263|1' \
   'bytesContains(bytes,bytes)|616263|6163|0' \
   'stringsContains(string,string)|e282ac|e282ac|1' \
-  'stringsContains(string,string)|e282ac|c2a2|0'; do
+  'stringsContains(string,string)|e282ac|c2a2|0' \
+  'bytesStartsWith(bytes,bytes)|||1' \
+  'bytesStartsWith(bytes,bytes)||61|0' \
+  'bytesStartsWith(bytes,bytes)|616263||1' \
+  'bytesStartsWith(bytes,bytes)|616263|6162|1' \
+  'bytesStartsWith(bytes,bytes)|616263|6263|0' \
+  'bytesStartsWith(bytes,bytes)|616263|616263|1' \
+  'bytesEndsWith(bytes,bytes)|||1' \
+  'bytesEndsWith(bytes,bytes)||61|0' \
+  'bytesEndsWith(bytes,bytes)|616263||1' \
+  'bytesEndsWith(bytes,bytes)|616263|6263|1' \
+  'bytesEndsWith(bytes,bytes)|616263|6162|0' \
+  'bytesEndsWith(bytes,bytes)|616263|616263|1' \
+  'stringsStartsWith(string,string)|e282ac|e282ac|1' \
+  'stringsStartsWith(string,string)|e282ac|c2a2|0' \
+  'stringsEndsWith(string,string)|e282ac|e282ac|1' \
+  'stringsEndsWith(string,string)|e282ac|c2a2|0'; do
   signature="${case%%|*}"
   rest="${case#*|}"
   left="${rest%%|*}"
@@ -52,29 +68,35 @@ for case in \
   expected="${rest#*|}"
   result="$("$cast" call --rpc-url "$rpc" "$addr" \
     --data "$(packed_pair_data "$signature" "$left" "$right")")"
-  solana_lean_require_uint "$result" "$expected" "bounded substring $signature"
+  solana_lean_require_uint "$result" "$expected" "bounded search $signature"
 done
 
-for signature in 'bytesContains(bytes,bytes)' 'stringsContains(string,string)'; do
+for signature in \
+  'bytesContains(bytes,bytes)' 'stringsContains(string,string)' \
+  'bytesStartsWith(bytes,bytes)' 'stringsStartsWith(string,string)' \
+  'bytesEndsWith(bytes,bytes)' 'stringsEndsWith(string,string)'; do
   for malformed in \
     "$(packed_pair_data "$signature" 616263 62 96)" \
     "$(packed_pair_data "$signature" 616263 62 64 64)" \
     "$(packed_pair_data "$signature" 616263 62 64 160)"; do
     if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
-      echo "FAIL: noncanonical substring ABI offsets unexpectedly succeeded" >&2
+      echo "FAIL: noncanonical bounded-search ABI offsets unexpectedly succeeded" >&2
       exit 1
     fi
   done
 done
 
-for invalid_pair in 'c080|616263' '616263|eda080'; do
-  left="${invalid_pair%%|*}"
-  right="${invalid_pair#*|}"
-  malformed="$(packed_pair_data 'stringsContains(string,string)' "$left" "$right")"
-  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
-    echo "FAIL: invalid UTF-8 substring input unexpectedly succeeded" >&2
-    exit 1
-  fi
+for signature in 'stringsContains(string,string)' \
+  'stringsStartsWith(string,string)' 'stringsEndsWith(string,string)'; do
+  for invalid_pair in 'c080|616263' '616263|eda080'; do
+    left="${invalid_pair%%|*}"
+    right="${invalid_pair#*|}"
+    malformed="$(packed_pair_data "$signature" "$left" "$right")"
+    if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+      echo "FAIL: invalid UTF-8 bounded-search input unexpectedly succeeded" >&2
+      exit 1
+    fi
+  done
 done
 
-echo "evm-anvil-search: ok (empty/short/full, present/absent, UTF-8, canonical dual tails)"
+echo "evm-anvil-search: ok (contains/prefix/suffix, UTF-8, canonical dual tails)"

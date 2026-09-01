@@ -37,10 +37,22 @@ elab "#pf_guard_evm_search" : command => do
     | throwError "missing source bytes substring method"
   let some sourceStrings := source.methods.find? (·.ixName == "stringsContains")
     | throwError "missing source string substring method"
-  unless sourceBytes.paramSchemas == #[.boundedBytes 3, .boundedBytes 3] &&
-      sourceStrings.paramSchemas == #[.boundedString 3, .boundedString 3] &&
-      sourceBytes.retSchema == .scalar .boolean && sourceStrings.retSchema == .scalar .boolean do
-    throwError "substring source methods lost their bounded logical schemas"
+  let some sourceBytesStarts := source.methods.find? (·.ixName == "bytesStartsWith")
+    | throwError "missing source bytes prefix method"
+  let some sourceStringsStarts := source.methods.find? (·.ixName == "stringsStartsWith")
+    | throwError "missing source string prefix method"
+  let some sourceBytesEnds := source.methods.find? (·.ixName == "bytesEndsWith")
+    | throwError "missing source bytes suffix method"
+  let some sourceStringsEnds := source.methods.find? (·.ixName == "stringsEndsWith")
+    | throwError "missing source string suffix method"
+  for method in #[sourceBytes, sourceBytesStarts, sourceBytesEnds] do
+    unless method.paramSchemas == #[.boundedBytes 3, .boundedBytes 3] &&
+        method.retSchema == .scalar .boolean do
+      throwError s!"{method.ixName} lost its bounded bytes schema"
+  for method in #[sourceStrings, sourceStringsStarts, sourceStringsEnds] do
+    unless method.paramSchemas == #[.boundedString 3, .boundedString 3] &&
+        method.retSchema == .scalar .boolean do
+      throwError s!"{method.ixName} lost its bounded string schema"
   let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
     match fuel with
     | 0 => #[]
@@ -49,8 +61,10 @@ elab "#pf_guard_evm_search" : command => do
         | .forBody bound body => bounds.push bound ++ loopBounds fuel' body
         | .ite _ _ _ yes no => bounds ++ loopBounds fuel' yes ++ loopBounds fuel' no
         | _ => bounds
-  unless loopBounds 8 sourceBytes.ops == #[9] && loopBounds 8 sourceStrings.ops == #[9] do
-    throwError "static product substring loop was not preserved exactly"
+  for method in #[sourceBytes, sourceStrings, sourceBytesStarts, sourceStringsStarts,
+      sourceBytesEnds, sourceStringsEnds] do
+    unless loopBounds 8 method.ops == #[9] do
+      throwError s!"{method.ixName} lost the shared static product scan"
   let program ←
     match ProofForge.Evm.IR.fromExtracted source with
     | .ok program => pure program
@@ -59,19 +73,32 @@ elab "#pf_guard_evm_search" : command => do
     | throwError "missing EVM bytes substring method"
   let some stringsMethod := program.entries.find? (·.ixName == "stringsContains")
     | throwError "missing EVM string substring method"
-  unless bytesMethod.logicalParamCount == 2 && bytesMethod.paramCount == 8 &&
-      bytesMethod.selector ==
-        ProofForge.Crypto.Keccak.selector "bytesContains" #["bytes", "bytes"] &&
-      bytesMethod.inputPolicy ==
-        "0=packed-bytes-v1(bytes;capacity=3;utf8=false)," ++
-        "1=packed-bytes-v1(bytes;capacity=3;utf8=false)" &&
-      stringsMethod.logicalParamCount == 2 && stringsMethod.paramCount == 8 &&
-      stringsMethod.selector ==
-        ProofForge.Crypto.Keccak.selector "stringsContains" #["string", "string"] &&
-      stringsMethod.inputPolicy ==
-        "0=packed-bytes-v1(string;capacity=3;utf8=true)," ++
-        "1=packed-bytes-v1(string;capacity=3;utf8=true)" do
-    throwError "substring ABI lost an independent canonical dynamic tail"
+  let some bytesStarts := program.entries.find? (·.ixName == "bytesStartsWith")
+    | throwError "missing EVM bytes prefix method"
+  let some stringsStarts := program.entries.find? (·.ixName == "stringsStartsWith")
+    | throwError "missing EVM string prefix method"
+  let some bytesEnds := program.entries.find? (·.ixName == "bytesEndsWith")
+    | throwError "missing EVM bytes suffix method"
+  let some stringsEnds := program.entries.find? (·.ixName == "stringsEndsWith")
+    | throwError "missing EVM string suffix method"
+  let bytesPolicy :=
+    "0=packed-bytes-v1(bytes;capacity=3;utf8=false)," ++
+    "1=packed-bytes-v1(bytes;capacity=3;utf8=false)"
+  let stringsPolicy :=
+    "0=packed-bytes-v1(string;capacity=3;utf8=true)," ++
+    "1=packed-bytes-v1(string;capacity=3;utf8=true)"
+  for (method, name) in #[(bytesMethod, "bytesContains"), (bytesStarts, "bytesStartsWith"),
+      (bytesEnds, "bytesEndsWith")] do
+    unless method.logicalParamCount == 2 && method.paramCount == 8 &&
+        method.selector == ProofForge.Crypto.Keccak.selector name #["bytes", "bytes"] &&
+        method.inputPolicy == bytesPolicy do
+      throwError s!"{name} ABI lost an independent canonical dynamic tail"
+  for (method, name) in #[(stringsMethod, "stringsContains"),
+      (stringsStarts, "stringsStartsWith"), (stringsEnds, "stringsEndsWith")] do
+    unless method.logicalParamCount == 2 && method.paramCount == 8 &&
+        method.selector == ProofForge.Crypto.Keccak.selector name #["string", "string"] &&
+        method.inputPolicy == stringsPolicy do
+      throwError s!"{name} ABI lost an independent canonical dynamic tail"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
@@ -81,8 +108,12 @@ elab "#pf_guard_evm_search" : command => do
     | .ok abi => pure abi
     | .error reason => throwError reason
   unless !yul.isEmpty && abi.contains "\"name\":\"bytesContains\"" &&
-      abi.contains "\"name\":\"stringsContains\"" do
-    throwError "substring methods did not reach EVM Yul/ABI emission"
+      abi.contains "\"name\":\"stringsContains\"" &&
+      abi.contains "\"name\":\"bytesStartsWith\"" &&
+      abi.contains "\"name\":\"stringsStartsWith\"" &&
+      abi.contains "\"name\":\"bytesEndsWith\"" &&
+      abi.contains "\"name\":\"stringsEndsWith\"" do
+    throwError "bounded search methods did not reach EVM Yul/ABI emission"
 
 #pf_guard_evm_search
 

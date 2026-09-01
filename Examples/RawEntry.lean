@@ -216,4 +216,21 @@ def bytesContains (_s : State) (haystack needle : BoundedBytes 8) : Bool :=
 def stringsContains (_s : State) (text needle : BoundedString 8) : Bool :=
   text.contains needle
 
+/-- Prefix/suffix helpers share Core policy and the existing dual-frame adapter geometry. -/
+@[pf_entry, pf_svm_raw 33 2 0]
+def bytesStartsWith (_s : State) (value prefixValue : BoundedBytes 8) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry, pf_svm_raw 34 2 0]
+def stringsStartsWith (_s : State) (value prefixValue : BoundedString 8) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry, pf_svm_raw 35 2 0]
+def bytesEndsWith (_s : State) (value suffix : BoundedBytes 8) : Bool :=
+  value.endsWith suffix
+
+@[pf_entry, pf_svm_raw 36 2 0]
+def stringsEndsWith (_s : State) (value suffix : BoundedString 8) : Bool :=
+  value.endsWith suffix
+
 end Examples.RawEntry

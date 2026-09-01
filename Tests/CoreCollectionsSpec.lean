@@ -301,6 +301,14 @@ private def emptyText : BoundedString 2 :=
 #guard !cent.contains middle
 #guard !ascii.contains malformedNeedle
 #guard !malformedLength.contains emptyNeedle
+#guard ascii.startsWith emptyNeedle
+#guard ascii.startsWith middle == false
+#guard ascii.startsWith ({ length := 2, values := #v[0x61, 0x62] } : BoundedBytes 2)
+#guard ascii.endsWith emptyNeedle
+#guard ascii.endsWith suffix
+#guard !ascii.endsWith middle
+#guard !ascii.startsWith malformedNeedle
+#guard !malformedLength.endsWith emptyNeedle
 #guard ascii.compareLex? asciiWithDirtyTail == some .equal
 #guard ascii.compareLex? abd == some .less
 #guard abd.compareLex? ascii == some .greater
@@ -313,6 +321,9 @@ private def emptyText : BoundedString 2 :=
 #guard asciiText.contains middleText
 #guard asciiText.contains emptyText
 #guard dirtyAsciiText.contains middleText
+#guard asciiText.startsWith emptyText
+#guard asciiText.endsWith middleText == false
+#guard dirtyAsciiText.endsWith ({ length := 2, values := #v[0x62, 0x63] } : BoundedString 2)
 #guard asciiText.compareLex? dirtyAsciiText == some .equal
 #guard invalidText.compareLex? invalidText == some .equal
 #guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true

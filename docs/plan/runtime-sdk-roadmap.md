@@ -131,6 +131,7 @@ R1-031 shared scaled UInt64 fixed-point policy、
 R1-032 shared bounded bytes/String active-prefix equality、
 R1-033 shared bounded bytes/String unsigned lexicographic ordering、
 R1-034 shared bounded bytes/String substring search、
+R1-035 shared bounded bytes/String prefix/suffix matching、
 R3-026 persistent SVM BitSet、
 R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
 transient wide vectors，以及 R2-010 checked
@@ -166,7 +167,8 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R1-023](tasks/r1-023.md)、[R1-024](tasks/r1-024.md)、[R1-025](tasks/r1-025.md)、
 [R1-026](tasks/r1-026.md)、[R1-027](tasks/r1-027.md)、[R1-028](tasks/r1-028.md)、
 [R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md)、[R1-031](tasks/r1-031.md)、
-[R1-032](tasks/r1-032.md)、[R1-033](tasks/r1-033.md)、[R1-034](tasks/r1-034.md)。
+[R1-032](tasks/r1-032.md)、[R1-033](tasks/r1-033.md)、[R1-034](tasks/r1-034.md)、
+[R1-035](tasks/r1-035.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -364,6 +366,13 @@ malformed-length fail-closed；`BoundedString.contains` 复用同一 byte policy
 codec gate 持有。Extract 只补 generic closed Nat range evaluation，未增加 search-specific
 Runtime/Ops/IR/CFG/Component/Emit case。RawEntry 与独立 EvmSearch Example 分别绑定 dual
 Borsh/ABI inputs。详见 [R1-034](tasks/r1-034.md)。
+
+R1-035 已完成 shared bounded bytes/String prefix/suffix matching：`startsWith`/`endsWith` 与
+`contains` 收敛到一个 static product-scan kernel，private scalar mode 选择任意/首位/末位起点，
+并统一 empty、longer、malformed-length 与 inactive-tail policy。String 仍复用 compiler-erased
+byte view，UTF-8 由 target codec gate 持有；RawEntry tags 33–36 与 EvmSearch 分别验证 dual
+Borsh/ABI inputs。未增加 Runtime/Ops/IR/CFG/Component/Extract/Emit case。详见
+[R1-035](tasks/r1-035.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
