@@ -527,6 +527,181 @@ theorem mBvPush_get (mem : AccountWords) (v : UInt64)
     · exact hlt2 hlt)]
   exact htwo.2
 
+
+private theorem u64_toNat_sub_one {a : UInt64} (h : (1 : Nat) ≤ a.toNat) :
+    (a - 1).toNat = a.toNat - 1 := by
+  have hbig : (2:Nat)^64 = 4294967296*4294967296 := by decide
+  have hlt : a.toNat < 4294967296*4294967296 := by
+    obtain ⟨w⟩ := a
+    have := w.isLt
+    simpa [hbig] using this
+  have hone : UInt64.toNat 1 = 1 := rfl
+  rw [UInt64.toNat_sub, hbig, hone]
+  omega
+
+/-- Rewrite helper: nonzero UInt64 has toNat ≥ 1. -/
+private theorem u64_toNat_pos {a : UInt64} (hne : a ≠ 0) : (1 : Nat) ≤ a.toNat := by
+  have : a.toNat ≠ 0 := by
+    intro hz
+    apply hne
+    cases h : a with
+    | ofBitVec val =>
+      have hz' : val.toNat = 0 := by simpa [h, UInt64.toNat] using hz
+      have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
+      subst this
+      rfl
+  omega
+
+/-- **合法 setAt 不改 count**：payload 槽与 count header 词不同。 -/
+theorem mBvSetAt_size (mem : AccountWords) (position value : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hpos0 : position ≠ 0)
+    (hin : ¬ (mBvSize mem vec < position))
+    (hbound : position.toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvSetAt mem vec position value) vec = mBvSize mem vec := by
+  have hpos_ge := u64_toNat_pos hpos0
+  have hws : mFieldWord vec.slots position
+      = some (vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf position hpos_ge hbound
+  have hwc : mFieldWord vec.count 0 = some vec.count.firstWord :=
+    mFieldWord_bv_count vec hwf
+  have hne : vec.count.firstWord
+      ≠ vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords := by
+    intro heq
+    have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+      (boundedVec_wf_header_before_slots vec hwf).1
+    omega
+  unfold mBvSetAt mBvSize
+  rw [if_neg (by
+    intro h
+    rcases h with h0 | hlt
+    · exact hpos0 h0
+    · exact hin hlt)]
+  exact mReadField_write_other mem vec.count vec.slots 0 position value hwc hws hne
+
+/-- **合法 setAt 同位置读回**。 -/
+theorem mBvSetAt_get (mem : AccountWords) (position value : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hpos0 : position ≠ 0)
+    (hin : ¬ (mBvSize mem vec < position))
+    (hbound : position.toNat ≤ vec.slots.region.capacity) :
+    mBvGetAt (mBvSetAt mem vec position value) vec position = value := by
+  have hsize := mBvSetAt_size vec mem position value hwf hpos0 hin hbound
+  have hpos_ge := u64_toNat_pos hpos0
+  have hws : mFieldWord vec.slots position
+      = some (vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf position hpos_ge hbound
+  have hproj : mBvSetAt mem vec position value
+      = mWriteField mem vec.slots position value := by
+    unfold mBvSetAt
+    rw [if_neg (by
+      intro h
+      rcases h with h0 | hlt
+      · exact hpos0 h0
+      · exact hin hlt)]
+  unfold mBvGetAt
+  have hin' : ¬ (mBvSize (mBvSetAt mem vec position value) vec < position) := by
+    rw [hsize]; exact hin
+  rw [if_neg (by
+    intro h
+    rcases h with h0 | hlt
+    · exact hpos0 h0
+    · exact hin' hlt), hproj]
+  exact mReadField_write_same mem vec.slots position value _ hws
+
+/-- **非空 pop 后 count 恰 −1**。 -/
+theorem mBvPop_size (mem : AccountWords) (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hbound : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvPop mem vec).1 vec = mBvSize mem vec - 1 := by
+  have hsize_ge := u64_toNat_pos hne
+  have hproj : (mBvPop mem vec).1
+      = mWriteField mem vec.count 0 (mBvSize mem vec - 1) := by
+    simp only [mBvPop]
+    rw [if_neg hne]
+  rw [hproj]
+  unfold mBvSize
+  exact mReadField_write_same mem vec.count 0 (mReadField mem vec.count 0 - 1) _
+    (mFieldWord_bv_count vec hwf)
+
+/-- **非空 pop 返回原末槽值**（payload 槽本身不被 pop 清零）。 -/
+theorem mBvPop_get (mem : AccountWords) (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (_hbound : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    (mBvPop mem vec).2 = mReadField mem vec.slots (mBvSize mem vec) := by
+  simp only [mBvPop]
+  rw [if_neg hne]
+
+/-- **push→pop 往返**：未满 push 后 pop 读回原 value，count 复原。 -/
+theorem mBvPush_pop_roundtrip (mem : AccountWords) (v : UInt64)
+    (hwf : vec.wellFormed = true)
+    (hfull : mBvSize mem vec < BoundedVec.capacity vec) :
+    let afterPush := (mBvPush mem vec v).1
+    (mBvPop afterPush vec).2 = v ∧
+    mBvSize (mBvPop afterPush vec).1 vec = mBvSize mem vec := by
+  have hsize_push := mBvPush_size vec mem v hwf hfull
+  have hget_push := mBvPush_get vec mem v hwf hfull
+  have hpos : (mBvSize mem vec + 1).toNat = (mBvSize mem vec).toNat + 1 :=
+    u64_toNat_add_one (show (mBvSize mem vec).toNat < 65536 by
+      have h1 : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
+        toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
+      have hcap'' : vec.slots.region.capacity ≤ 65536 :=
+        boundedVec_wf_capacity vec hwf
+      omega)
+  have hsize_lt : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
+    toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
+  have hret : (mBvPush mem vec v).2 = mBvSize mem vec + 1 := by
+    simp only [mBvPush]
+    rw [if_neg (by
+      show ¬(BoundedVec.capacity vec ≤ mBvSize mem vec)
+      exact fun hc => by
+        have h2 : (BoundedVec.capacity vec).toNat ≤ (mBvSize mem vec).toNat := hc
+        rw [bv_capacity_toNat vec hwf] at h2
+        exact absurd h2 (Nat.not_le_of_lt hsize_lt))]
+  have hne : mBvSize (mBvPush mem vec v).1 vec ≠ 0 := by
+    rw [hsize_push]
+    intro heq
+    have h1' : (mBvSize mem vec + 1).toNat = (0 : UInt64).toNat :=
+      congrArg UInt64.toNat heq
+    rw [hpos] at h1'
+    have h0 : UInt64.toNat 0 = 0 := rfl
+    rw [h0] at h1'
+    omega
+  have hbound : (mBvSize (mBvPush mem vec v).1 vec).toNat ≤ vec.slots.region.capacity := by
+    rw [hsize_push, hpos]
+    omega
+  have hpop_val := mBvPop_get vec (mBvPush mem vec v).1 hwf hne hbound
+  have hpop_size := mBvPop_size vec (mBvPush mem vec v).1 hwf hne hbound
+  have hslot :
+      mReadField (mBvPush mem vec v).1 vec.slots
+        (mBvSize (mBvPush mem vec v).1 vec) = v := by
+    have : mBvGetAt (mBvPush mem vec v).1 vec (mBvPush mem vec v).2 = v := hget_push
+    unfold mBvGetAt at this
+    rw [hsize_push, hret] at this
+    have hposne : ¬((mBvSize mem vec + 1 : UInt64) = 0) := fun heq => by
+      have h1' : (mBvSize mem vec + 1).toNat = (0 : UInt64).toNat :=
+        congrArg UInt64.toNat heq
+      rw [hpos] at h1'
+      have h0 : UInt64.toNat 0 = 0 := rfl
+      rw [h0] at h1'
+      omega
+    have hlt2 : ¬((mBvSize mem vec + 1 : UInt64) < (mBvSize mem vec + 1 : UInt64)) :=
+      fun h => absurd (show _ < _ from h) (Nat.lt_irrefl _)
+    rw [if_neg (by
+      intro hdisj
+      rcases hdisj with h0 | hlt
+      · exact hposne h0
+      · exact hlt2 hlt)] at this
+    simpa [hsize_push] using this
+  refine ⟨?_, ?_⟩
+  · simpa [hslot] using hpop_val
+  · have hsub : (mBvSize mem vec + 1 - 1 : UInt64) = mBvSize mem vec := by
+      apply UInt64.toNat.inj
+      have h1 := u64_toNat_sub_one (a := mBvSize mem vec + 1) (by rw [hpos]; omega)
+      rw [h1, hpos]
+      simp
+    simpa [hsize_push, hsub] using hpop_size
+
 end BvWfAlgebra
 
 section QueueProofs
