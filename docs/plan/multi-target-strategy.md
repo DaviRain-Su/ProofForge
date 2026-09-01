@@ -60,7 +60,7 @@ examples 已证明工程链可用。
 
 | 优先级 | 包 ID 建议 | 内容 | 验收 |
 |---|---|---|---|
-| P0 | `evm-rt-nested-001` | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix |
+| P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix |
 | P0 | `evm-codec-manifest-001` | per-method codec/memory resource manifest | Profile/Extract 稳定错误 |
 | P1 | `evm-signed-001` | signed int 源类型 + 窄化 cast 词汇 | 双 consumer + Anvil |
 | P1 | `evm-revert-bubble-001` | bounded revert bubbling / generic closed-call policy | 显式 fail-closed 边界文档 |
@@ -129,7 +129,7 @@ target 并行的切片优先级**。
 
 | 轨 | 下一刀 | 任务 ID |
 |---|---|---|
-| **A 形式化** | Queue/Vec/Versioned/BitSet SF-1..3 **done** → Transient | `sf-006`… |
+| **A 形式化** | SF-1..4a **done**；SF-4b partial → Allocator/Map | `sf-007`… |
 | **B Runtime** | signed Clock · Instructions sysvar · alias-aware variable walk | `svm-rt-001`…`003` |
 | **C SDK** | rent top-up · Token-2022 extension facade · runtime-selected Memo | `svm-sdk-001`…`003` |
 | **D 应用** | Phoenix CancelUpTo 8/9 · fee 用 `Core.Math` | `svm-app-001`…`002` |
@@ -174,7 +174,7 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
-| **N13** | `wsm-near-promise-general-001` | 有界 Promise handle、N 路 join（仍 fail-closed 上限） | N12 | DAG sandbox |
+| **N13** | [`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md) | 有界 Promise handle、N 路 join（仍 fail-closed 上限） | N12 | DAG sandbox |
 | **N14** | `wsm-near-store-meta-001` | collection prefix/metadata（仍 **不** 冒充 near-sdk `Drop`/cache） | N5 基础 ✓ | layout golden |
 | **N15** | `wsm-near-conformance-001` | Counter/Token 形 cross-target 示例（SVM/EVM 已有对照） | N12d | 三 target digest 表 |
 

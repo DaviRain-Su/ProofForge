@@ -52,7 +52,7 @@
 `mQueuePeek*`、`mQueueInitialize*`、`mQueuePush_pop_roundtrip_empty`；
 通用 `u64toNatAdd/Sub` 无回绕桥。
 
-下一刀：**SF-4** TransientModel（[sf-006](tasks/sf-006.md)）。
+下一刀：收口 **SF-4b** Bytes/Record/Wide（[sf-007](tasks/sf-007.md)），并行 EVM nested / Near N13 任务已建档。
 
 ---
 
@@ -155,8 +155,8 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-2a | BoundedVec pop + setAt | L2 | **done** | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned 状态机 | L1+L2 | **done** | [sf-004](tasks/sf-004.md) |
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | **done** | [sf-005](tasks/sf-005.md) |
-| SF-4a | TransientModel + Vector64 | L2 | todo | [sf-006](tasks/sf-006.md) |
-| SF-4b | Bytes + Record64 + WideVec | L2 | todo | [sf-007](tasks/sf-007.md) |
+| SF-4a | TransientModel + Vector64 | L2 | **done** | [sf-006](tasks/sf-006.md) |
+| SF-4b | Bytes + Record64 + WideVec | L2 | partial | [sf-007](tasks/sf-007.md) |
 | SF-5a | Allocator alloc/free 往返 | L2 | todo | [sf-008](tasks/sf-008.md) |
 | SF-5b | OrderedMap find/insert/remove | L2 | todo | [sf-009](tasks/sf-009.md) |
 | SF-6 | EnumerableSet | L2 | todo | [sf-010](tasks/sf-010.md) |
@@ -193,7 +193,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md)  
-3. ~~[sf-001](tasks/sf-001.md)~~ / ~~[sf-002](tasks/sf-002.md)~~ / ~~[sf-003](tasks/sf-003.md)~~ / ~~[sf-004](tasks/sf-004.md)~~ / ~~[sf-005](tasks/sf-005.md)~~ → [sf-006](tasks/sf-006.md)（Transient）  
+3. ~~sf-001..sf-006~~ → [sf-007](tasks/sf-007.md)（Transient Bytes/Record/Wide 收口）  
 4. 按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
