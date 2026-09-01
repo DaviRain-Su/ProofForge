@@ -128,6 +128,7 @@ import Tests.SvmTransientVectorSpec
 import Tests.SvmTransientBytesSpec
 import Tests.SvmTransientRecordSpec
 import Tests.SvmTransientWideVectorSpec
+import Tests.SvmTransientPubkeyVectorSpec
 import Tests.SvmWideReturnSpec
 import Tests.SvmTelemetrySpec
 import Tests.LamportTransferSpec

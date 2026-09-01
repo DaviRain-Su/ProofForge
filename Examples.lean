@@ -105,5 +105,7 @@ import Examples.TransientLedger
 import Examples.TransientOrderTape
 import Examples.TransientWide128
 import Examples.TransientWide256
+import Examples.TransientPubkeyBatch
+import Examples.TransientPubkeyRing
 import Examples.LamportTransfer
 import Examples.PubkeyGate

@@ -1,14 +1,16 @@
 import ProofForge.Attr
 import ProofForge.Core.Value
+import ProofForge.Svm.Sdk.Pubkey
 import ProofForge.Svm.Sdk.TransientRecord64
 
 /-!
 # Source-facing invocation-local typed wide vectors
 
 `Vector128` and `Vector256` are bounded, allocation-free vectors for the target-neutral logical
-values in `ProofForge.Core.Value`. Their physical binding is SVM-local: two and four little-endian
-`UInt64` words respectively, composed entirely over `Transient.Record64` and therefore over the
-existing two-slot `Transient.Vector64` component.
+values in `ProofForge.Core.Value`. `VectorPubkey` is the same composition for the SVM-local
+`Sdk.Pubkey` fixed schema (four little-endian `UInt64` words / 32 bytes). Physical binding is
+SVM-local and composed entirely over `Transient.Record64` and therefore over the existing two-slot
+`Transient.Vector64` component.
 
 Consumers never select record limbs. A push preflights one complete wide value before its first
 word write; get, set, last, and drop preserve one logical element boundary; truncate and clear can
@@ -185,7 +187,96 @@ bounded-index error. Consumers that need the value read it through typed `last` 
 
 @[pf_inline] def Vector256.finish (vector : Vector256) : UInt64 := vector.record.finish
 
+/-! ## Pubkey (fixed 32-byte identity schema) -/
+
+open ProofForge.Svm.Sdk
+
+/-- Compile-time geometry for one bounded invocation-local vector of complete `Sdk.Pubkey`
+values. This is the svm-sdk-003 fixed-schema POD shape: four little-endian limbs per element,
+composed over existing Record64 / Vector64 slots with no new Runtime leaf. -/
+structure VectorPubkey where
+  elements : Nat
+  alternate : Bool
+  deriving BEq, Repr, Inhabited
+
+/-- Slot-0 typed Pubkey vector. -/
+@[pf_inline] def VectorPubkey.bounded (elements : Nat) : VectorPubkey :=
+  { elements, alternate := false }
+
+/-- Slot-1 typed Pubkey vector with a private existing Vector64 metadata bank. -/
+@[pf_inline] def VectorPubkey.boundedAlt (elements : Nat) : VectorPubkey :=
+  { elements, alternate := true }
+
+@[pf_inline] private def VectorPubkey.record (vector : VectorPubkey) : Record64 :=
+  { limbs := 4, records := vector.elements, alternate := vector.alternate }
+
+/-- Compile-time geometry gate inherited from the four-word Record64 shape. -/
+def VectorPubkey.wellFormed (vector : VectorPubkey) : Bool := vector.record.wellFormed
+
+@[pf_inline] def VectorPubkey.begin (vector : VectorPubkey) : UInt64 := vector.record.begin
+
+/-- Number of live complete Pubkey values. -/
+@[pf_inline] def VectorPubkey.length (vector : VectorPubkey) : UInt64 := vector.record.count
+
+@[pf_inline] def VectorPubkey.isFull (vector : VectorPubkey) : Bool := vector.record.isFull
+
+/-- Append one complete Pubkey after Record64 preflights all four words. -/
+@[pf_inline] def VectorPubkey.push (vector : VectorPubkey) (value : Pubkey) : UInt64 :=
+  let record := vector.record
+  if record.hasRoom 1 then
+    let words : Vector64 := { capacity := record.words }
+    let _ := words.push value.word0
+    let _ := words.push value.word1
+    let _ := words.push value.word2
+    words.push value.word3
+  else
+    record.getLimb record.count 0
+
+/-- Read one complete Pubkey at a checked runtime index. -/
+@[pf_inline] def VectorPubkey.get (vector : VectorPubkey) (index : UInt64) : Pubkey :=
+  let word0 := vector.record.getLimb index 0
+  let word1 := vector.record.getLimb index 1
+  let word2 := vector.record.getLimb index 2
+  let word3 := vector.record.getLimb index 3
+  { word0, word1, word2, word3 }
+
+/-- Replace one complete Pubkey. The whole record index is checked before the first word write. -/
+@[pf_inline] def VectorPubkey.set (vector : VectorPubkey) (index : UInt64)
+    (value : Pubkey) : UInt64 :=
+  let record := vector.record
+  let count := record.count
+  if index < count then
+    let words : Vector64 := { capacity := record.words }
+    let base := index * 4
+    let _ := words.set base value.word0
+    let _ := words.set (base + 1) value.word1
+    let _ := words.set (base + 2) value.word2
+    words.set (base + 3) value.word3
+  else
+    record.getLimb index 0
+
+/-- Read the last complete Pubkey; empty is the existing bounded-index error. -/
+@[pf_inline] def VectorPubkey.last (vector : VectorPubkey) : Pubkey :=
+  let word0 := vector.record.lastLimb 0
+  let word1 := vector.record.lastLimb 1
+  let word2 := vector.record.lastLimb 2
+  let word3 := vector.record.lastLimb 3
+  { word0, word1, word2, word3 }
+
+/-- Remove the last complete Pubkey with one record-aligned truncate. -/
+@[pf_inline] def VectorPubkey.dropLast (vector : VectorPubkey) : UInt64 :=
+  vector.record.dropLast
+
+/-- Shorten to at most `keep` complete Pubkey values. -/
+@[pf_inline] def VectorPubkey.truncate (vector : VectorPubkey) (keep : UInt64) : UInt64 :=
+  vector.record.truncateRecords keep
+
+@[pf_inline] def VectorPubkey.clear (vector : VectorPubkey) : UInt64 := vector.record.clear
+
+@[pf_inline] def VectorPubkey.finish (vector : VectorPubkey) : UInt64 := vector.record.finish
+
 attribute [pf_inline] Vector128.elements Vector128.alternate
 attribute [pf_inline] Vector256.elements Vector256.alternate
+attribute [pf_inline] VectorPubkey.elements VectorPubkey.alternate
 
 end ProofForge.Svm.Sdk.Transient

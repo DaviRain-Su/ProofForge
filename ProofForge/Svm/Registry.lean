@@ -78,6 +78,8 @@ def entries : Array Entry := #[
   { name := "TransientOrderTape", digest := "e203afd44ef6eea9" },
   { name := "TransientWide128", digest := "be610f5f69db20a6" },
   { name := "TransientWide256", digest := "a0985f87fb42010c" },
+  { name := "TransientPubkeyBatch", digest := "8958053c8b1f52ac" },
+  { name := "TransientPubkeyRing", digest := "106f41e98d4dcc9c" },
   { name := "LamportTransfer", digest := "795d11e30ee48fb5" },
   { name := "PubkeyGate", digest := "8374e353a1923c12" },
   { name := "BatchSizer", digest := "a6b93f19f54f1cb3" }
