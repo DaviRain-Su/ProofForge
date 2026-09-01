@@ -452,6 +452,74 @@ def main() -> None:
         signer=client.account_id, deposit=7,
     )
     _assert_transfer_receipt(client, duplicate, client.account_id, 7)
+    _call(client, "mintSelfOne")
+    positive_before = client.view_state_values()
+    client.call_on(
+        client.account_id, "storage_unregister", b'{"force":null}',
+        signer=client.account_id, deposit=1, expect_success=False,
+    )
+    if client.view_state_values() != positive_before:
+        raise AssertionError("non-force positive storage_unregister changed ledger state")
+    forced = client.call_on(
+        client.account_id, "storage_unregister", b'{"force":true}',
+        signer=client.account_id, deposit=1,
+    )
+    if NearClient.success_value_bytes(forced) != b"true":
+        raise AssertionError("forced integrated storage_unregister did not return JSON true")
+    if _receipt_logs(forced):
+        raise AssertionError("forced integrated storage_unregister emitted an FT/log event")
+    _assert_transfer_receipt(client, forced, client.account_id, self_cost + 1)
+    if self_key in client.view_state_values() or _supply(client) != 0:
+        raise AssertionError("forced integrated storage_unregister did not remove/burn BAL2")
+    for wire, attached in (
+        (b"{}", 0),
+        (b"{}", 2),
+        (b'{"force":true,"unknown":null}', 1),
+    ):
+        rejected_before = client.view_state_values()
+        rejected = client.call_on(
+            client.account_id, "storage_unregister", wire,
+            signer=client.account_id, deposit=attached, expect_success=False,
+        )
+        if client.view_state_values() != rejected_before or _receipt_logs(rejected):
+            raise AssertionError("rejected integrated storage_unregister changed state/logged")
+    missing_unregister = client.call_on(
+        client.account_id, "storage_unregister", b"{}",
+        signer=client.account_id, deposit=1,
+    )
+    missing_logs = _receipt_logs(missing_unregister)
+    if NearClient.success_value_bytes(missing_unregister) != b"false" or missing_logs != [
+        f"The account {client.account_id} is not registered"
+    ]:
+        raise AssertionError(
+            "missing integrated storage_unregister result/log mismatch: "
+            f"value={NearClient.success_value_bytes(missing_unregister)!r}, logs={missing_logs!r}"
+        )
+    _assert_no_transfer_receipt(client, missing_unregister, "missing storage_unregister")
+    client.call_on(
+        client.account_id, "storage_deposit", b"{}",
+        signer=client.account_id, deposit=deposit,
+    )
+    zero_unregister = client.call_on(
+        client.account_id, "storage_unregister", b'{"force":false}',
+        signer=client.account_id, deposit=1,
+    )
+    if NearClient.success_value_bytes(zero_unregister) != b"true" or _receipt_logs(
+        zero_unregister
+    ):
+        raise AssertionError("zero integrated storage_unregister result/log mismatch")
+    _assert_transfer_receipt(client, zero_unregister, client.account_id, self_cost + 1)
+    if self_key in client.view_state_values() or _supply(client) != 0:
+        raise AssertionError("zero integrated storage_unregister changed supply or retained BAL2")
+    _call(client, "seedSelfMalformed8")
+    malformed_unregister_before = client.view_state_values()
+    client.call_on(
+        client.account_id, "storage_unregister", b'{"force":true}',
+        signer=client.account_id, deposit=1, expect_success=False,
+    )
+    if client.view_state_values() != malformed_unregister_before:
+        raise AssertionError("malformed-balance storage_unregister changed ledger state")
+    _call(client, "fixtureResetSelf")
     before_bad_deposit = client.view_state_values()
     client.call_on(
         client.account_id, "storage_deposit", b'{"unknown":null}',

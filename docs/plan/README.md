@@ -245,6 +245,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-ft-ledger-storage-views-001](tasks/wsm-near-ft-ledger-storage-views-001.md) | done | compose variable-cost NEP-145-shaped views into the integrated BAL2 ledger artifact |
 | [wsm-near-ft-ledger-storage-deposit-001](tasks/wsm-near-ft-ledger-storage-deposit-001.md) | done | compose payable bounded registration into the integrated BAL2 ledger artifact |
 | [wsm-near-ft-ledger-storage-withdraw-001](tasks/wsm-near-ft-ledger-storage-withdraw-001.md) | done | compose closed zero-available withdrawal into the integrated BAL2 ledger artifact |
+| [wsm-near-ft-ledger-storage-unregister-001](tasks/wsm-near-ft-ledger-storage-unregister-001.md) | done | compose caller-only force removal/refund into the integrated BAL2 ledger artifact |
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |

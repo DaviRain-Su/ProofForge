@@ -292,6 +292,61 @@ def storage_withdraw (state : State)
     else .error .overflow
   else .error .overflow
 
+/-- Public-shaped caller-only removal over the same `BAL2` registration/balance namespace.
+Missing accounts return false with the stock informational log. Present zero removes directly;
+positive balance requires explicit force and burns the exact supply snapshot. Successful removal
+refunds the variable retained storage cost plus the attached security yocto. The bounded input and
+checked (rather than saturating) refund addition remain explicit compatibility differences. -/
+@[pf_entry, pf_near_payable]
+def storage_unregister (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageUnregisterArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.JsonBooleanResult) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit && args.force ≤ 2 then
+    let caller := Context.caller
+    if DirectAccountNearTokenMap.accountLengthValid caller then
+      let storagePrice : NearToken := ⟨1, 0⟩
+      if Registration.trustedCostValid storagePrice then
+        let _ := balances.read caller
+        if Registration.readWasMissing then
+          let _ := Logs.storageUnregistered caller
+          let zero := args.force ^^^ args.force
+          -- Keep the independent Boolean terminal explicit while preserving every durable value.
+          let next : State :=
+            ⟨state.supplyW0 ^^^ zero, state.supplyW1 ^^^ zero, state.marker⟩
+          .ok (next, { value := zero })
+        else if Registration.readWasValidPresent then
+          let balance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
+          if Registration.tokenIsZero balance || args.force = 2 then
+            let supply : NearToken := ⟨state.supplyW0, state.supplyW1⟩
+            let bytes := Registration.variableAccountEntryBytes caller
+            let one : NearToken := ⟨1, 0⟩
+            if NearToken.canSub supply balance &&
+                NearToken.canMulUInt64 storagePrice bytes then
+              let cost : NearToken :=
+                ⟨NearToken.mulUInt64W0 storagePrice bytes,
+                  NearToken.mulUInt64W1 storagePrice bytes⟩
+              if NearToken.canAdd cost one then
+                let nextSupply : NearToken :=
+                  ⟨NearToken.subW0 supply balance, NearToken.subW1 supply balance⟩
+                let refund : NearToken :=
+                  ⟨NearToken.addW0 cost one, NearToken.addW1 cost one⟩
+                let removeStatus := balances.remove caller
+                if removeStatus = 1 then
+                  let _ := Promises.transferAccountDetached caller refund
+                  let result : ProofForge.Wasm.Near.Runtime.JsonBooleanResult :=
+                    { value := (args.force ^^^ args.force) ||| removeStatus }
+                  let next : State := ⟨nextSupply.w0, nextSupply.w1, removeStatus⟩
+                  .ok (next, result)
+                else .error .overflow
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

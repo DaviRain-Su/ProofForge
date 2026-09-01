@@ -401,3 +401,10 @@ refund 全额 deposit。该操作不改变 supply，bounded parser/fixture price
 `storage_withdraw` 同样已组合：exact 1 yocto 且 amount missing/null/zero 时只返回 variable
 total/available0；positive、missing registration 或错误 deposit 均失败。closed policy 没有
 实质 available 可提取，因此无 map/supply mutation、refund receipt、log 或 Promise。
+
+`storage_unregister` 完成同一 artifact 的 public-shaped lifecycle：exact 1 yocto，target 与
+refund recipient 始终为 predecessor；missing 返回 JSON false 并输出 stock informational
+log；present-zero 删除 BAL2 key、supply 不变；positive 仅 `force:true` 时删除并精确扣减
+supply。成功 refund `(caller.length+64)×1 + 1` yocto 且不发 FT event。bounded parser、
+immutable fixture price、checked 而非 saturating 的 refund addition 仍是不完整 NEP-145
+compatibility 的明确差异。

@@ -263,6 +263,13 @@ asynchronous; dynamic handles and multi-action builders are absent.
    missing/null/zero amount for a registered caller and returns its variable total with zero
    available. Positive amounts, missing/malformed registration, and arithmetic failure reject
    without map, supply, log, refund, or transfer effects; the security yocto remains attached.
+   **NEAR-FT-LEDGER-STORAGE-UNREGISTER (wsm-near-ft-ledger-storage-unregister-001 done):** the
+   integrated BAL2 artifact now composes the same bounded optional-force/Boolean boundary with
+   predecessor-only removal. Missing returns false with the stock informational log; zero removes
+   without supply change; forced-positive removal prechecks and burns exact supply. Success refunds
+   variable `(caller.length + 64) × 1 + 1` to predecessor and emits no FT event. Bounded input,
+   immutable fixture pricing, and checked rather than saturating refund addition remain explicit
+   non-compatibility boundaries.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

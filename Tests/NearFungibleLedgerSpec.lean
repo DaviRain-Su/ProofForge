@@ -34,6 +34,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       methodSteps "storage_balance_bounds" == #[] &&
       methodSteps "storage_deposit" == #["read.16.72", "write.16.72.16"] &&
       methodSteps "storage_withdraw" == #["read.16.72"] &&
+      methodSteps "storage_unregister" == #["read.16.72", "remove.16.72"] &&
       methodSteps "ft_total_supply" == #[] &&
       methodSteps "ft_metadata" == #[] &&
       methodSteps "ft_transfer" ==
@@ -89,6 +90,12 @@ elab "#pf_near_fungible_ledger_check" : command => do
       sourceStorageWithdraw.retSchema == Codec.storageBalanceResultSchema &&
       sourceStorageWithdraw.retCount == 5 do
     throwError "integrated storage_withdraw lost its exact source frames"
+  let some sourceStorageUnregister := source.methods.find? (·.ixName == "storage_unregister")
+    | throwError "missing source storage_unregister"
+  unless sourceStorageUnregister.paramSchemas == #[Codec.storageUnregisterArgsSchema] &&
+      sourceStorageUnregister.retSchema == Codec.jsonBooleanResultSchema &&
+      sourceStorageUnregister.retCount == 1 do
+    throwError "integrated storage_unregister lost its exact source frames"
   let duplicateNoArgs := { source with methods := source.methods.map fun candidate =>
     if candidate.ixName == "ft_total_supply" then
       { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
@@ -182,6 +189,16 @@ elab "#pf_near_fungible_ledger_check" : command => do
       storageWithdraw.entryPolicy == "near.entry.v1:payable" &&
       storageWithdraw.tupleArity == some 5 do
     throwError "integrated storage_withdraw lost payable specialized policies"
+  let some storageUnregister := program.entries.find? (·.ixName == "storage_unregister")
+    | throwError "missing target storage_unregister"
+  unless storageUnregister.inputSchema == some Codec.storageUnregisterArgsSchema &&
+      storageUnregister.inputPolicy ==
+        "near-json-storage-unregister-args-bounded-v1(max-wire=47,ws=32,keys=raw,unknown=reject)" &&
+      storageUnregister.outputSchema == some Codec.jsonBooleanResultSchema &&
+      storageUnregister.outputPolicy == "near-json-boolean-v1" &&
+      storageUnregister.entryPolicy == "near.entry.v1:payable" &&
+      storageUnregister.tupleArity == some 1 do
+    throwError "integrated storage_unregister lost payable specialized policies"
   let some transfer := program.entries.find? (·.ixName == "ft_transfer")
     | throwError "missing target ft_transfer"
   unless transfer.kind == .increment && transfer.entryPolicy == "near.entry.v1:payable" &&
@@ -338,6 +355,25 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !storageWithdrawBody.contains "(call $pf_log_utf8" &&
       !storageWithdrawBody.contains "(call $pf_promise" do
     throwError "storage_withdraw lost guard/read/result no-effect composition"
+  let storageUnregisterBody ← match wat.splitOn "(func (export \"storage_unregister\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "storage_unregister must occur exactly once"
+  unless storageUnregisterBody.contains "(i64.const 47)" &&
+      storageUnregisterBody.contains "(call $pf_json_storage_unregister_args" &&
+      storageUnregisterBody.contains "(call $pf_attached_deposit" &&
+      storageUnregisterBody.contains "(call $pf_storage_read" &&
+      storageUnregisterBody.contains "(call $pf_storage_remove" &&
+      storageUnregisterBody.contains "(call $pf_promise_batch_action_transfer" &&
+      storageUnregisterBody.contains "(call $pf_log_utf8" &&
+      storageUnregisterBody.contains "(call $pf_value_return" &&
+      !storageUnregisterBody.contains "(call $pf_value_return (i64.const 8)" do
+    throwError "storage_unregister lost parse/guard/read/precheck/remove/refund/log/Boolean composition"
+  let beforeRemove := storageUnregisterBody.splitOn "(call $pf_storage_remove" |>.headD ""
+  let afterRemove := (storageUnregisterBody.splitOn "(call $pf_storage_remove").getD 1 ""
+  unless beforeRemove.contains "(call $pf_storage_read" &&
+      !beforeRemove.contains "(call $pf_promise_batch_action_transfer" &&
+      afterRemove.contains "(call $pf_promise_batch_action_transfer" do
+    throwError "storage_unregister must precheck balance/supply/cost/refund before removal"
   let legacyNoArgsBody ← match wat.splitOn "(func (export \"balanceSelfHas\")" with
     | [_before, tail] =>
         match tail.splitOn "\n  )\n" with
@@ -470,6 +506,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "9eda44986bf6420d"
+  some "e1e290ddec221fa5"
 
 end Tests.NearFungibleLedgerSpec
