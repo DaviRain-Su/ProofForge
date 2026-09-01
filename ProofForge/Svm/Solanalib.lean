@@ -1597,4 +1597,85 @@ theorem walkAccount0OwnerHi_eq_absLoad :
       some true := by
   native_decide
 
+
+/-!
+## E-infinity knife 8 - Loader account-0 executable + rent_epoch (`svm-sem-013`)
+
+Emit exposes `ACC0_HEADER+3` (executable) and `.equ ACC0_RENT_EPOCH` (layout-dependent).
+For the zero-`EXACT_DATA_LEN` layout used by this knife, rent_epoch sits at absolute `0x2860`
+(`ABI.inputLayoutOf 0 false _`). Walk both from the same `r8` header cursor and prove agreement
+with absolute `r6`-relative loads. Still not full account vector, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets: executable byte and zero-dataLen rent_epoch word. -/
+def account0ExecutableOffset : Nat := account0HeaderOffset + 3
+/-- `ABI.inputLayoutOf 0 false _ |>.rentEpoch` = `0x2860`. -/
+def account0RentEpochOffset : Nat := 0x2860
+
+/-- Absolute VAs for account-0 executable flag and rent_epoch. -/
+def account0ExecutableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0ExecutableOffset
+def account0RentEpochAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0RentEpochOffset
+
+/-- Seed Loader input with account-0 meta, executable flag, and rent_epoch. -/
+def account0ExecRentInputMem (value arg0 keyLimb : U64) (executable : U8) (rentEpoch : U64) :
+    Option Mem := do
+  let m₁ ← account0MetaInputMem value arg0 keyLimb
+  let m₂ ← storev .m8 m₁ account0ExecutableAddr (.vbyte executable)
+  storev .m64 m₂ account0RentEpochAddr (.vlong rentEpoch)
+
+/-- Typed walk: ldxb r1,[r8+3]; ldxdw r2,[r8+0x2858]; stxdw [r10+off],r1. -/
+def walkAccount0ExecRent? (stackOff : U16) : Option EbpfAsm := do
+  let execOff ← positiveOffset? (account0ExecutableOffset - account0HeaderOffset)
+  let rentOff ← positiveOffset? (account0RentEpochOffset - account0HeaderOffset)
+  return [
+    .ldx .m8 .br1 .br8 execOff,
+    .ldx .m64 .br2 .br8 rentOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run the walked account-0 executable/rent_epoch load against seeded input memory. -/
+def evalWalkAccount0ExecRentToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0ExecRent? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-0 executable and rent_epoch. -/
+def evalAbsAccount0ExecRent? (memory : Mem) : Option (U8 × U64) := do
+  let executable ← loadv .m8 memory account0ExecutableAddr
+  let rentEpoch ← loadv .m64 memory account0RentEpochAddr
+  match executable, rentEpoch with
+  | .vbyte e, .vlong r => some (e, r)
+  | _, _ => none
+
+/-- Walked account-0 executable/rent_epoch assembly is well-formed. -/
+theorem walkAccount0ExecRent_verified :
+    (walkAccount0ExecRent? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walk: executable=`1`, rent_epoch=`0xEE`, executable staged at `[r10-16]`. -/
+theorem evalWalkAccount0_executable_1_rent_0xEE :
+    (do
+      let mem ← account0ExecRentInputMem 7 5 0x42 1 0xEE
+      let (regs, finalMem) ← evalWalkAccount0ExecRentToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xEE &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-0 executable/rent_epoch agree with absolute `r6`-relative loads. -/
+theorem walkAccount0ExecRent_eq_absLoad :
+    (do
+      let mem ← account0ExecRentInputMem 7 5 0x42 0 0xEE
+      let (regs, _) ← evalWalkAccount0ExecRentToStack? rhsStackOffset mem
+      let (executable, rentEpoch) ← evalAbsAccount0ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rentEpoch &&
+        executable == 0 && rentEpoch == 0xEE)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

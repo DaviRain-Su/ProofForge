@@ -414,5 +414,25 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 8: Loader account-0 executable + rent_epoch (`svm-sem-013`)
+#guard (walkAccount0ExecRent? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account0ExecRentInputMem 7 5 0x42 1 0xEE
+      let (regs, finalMem) ← evalWalkAccount0ExecRentToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xEE &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account0ExecRentInputMem 7 5 0x42 0 0xEE
+      let (regs, _) ← evalWalkAccount0ExecRentToStack? rhsStackOffset mem
+      let (executable, rentEpoch) ← evalAbsAccount0ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rentEpoch &&
+        executable == 0 && rentEpoch == 0xEE)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 

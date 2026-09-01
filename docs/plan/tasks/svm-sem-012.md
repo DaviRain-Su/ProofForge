@@ -29,4 +29,4 @@ depends-on: [svm-sem-011]
 
 ## 仍未覆盖
 
-完整 account 向量；executable/rent_epoch；syscall/CPI/sysvar；ELF accept。
+完整 account 向量；executable/rent_epoch（见 `svm-sem-013`）；syscall/CPI/sysvar；ELF accept。
