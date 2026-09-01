@@ -58,6 +58,14 @@ def addCheckedDirect (state : State) (delta : UInt64) : Except Error (State × N
   else
     .error .overflow
 
+/-- Same as `addCheckedViaAndThen` but uses inline `NearToken.addChecked` as the bind producer. -/
+@[pf_entry]
+def addCheckedHelperViaAndThen (state : State) (delta : UInt64) : Except Error (State × NearToken) :=
+  let left : NearToken := ⟨state.marker, 0⟩
+  let right : NearToken := ⟨delta, 0⟩
+  andThen (NearToken.addChecked left right Error.overflow) fun sum =>
+    ok (state, sum)
+
 @[pf_entry]
 def canAddViaHelper (_state : State) : UInt64 :=
   if NearToken.canAdd ⟨1, 0⟩ ⟨2, 0⟩ then 1 else 0

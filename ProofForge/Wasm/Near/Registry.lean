@@ -13,7 +13,7 @@ def entries : Array Entry := #[
   { name := "NearFungibleTokenEvent", digest := "768db0d9cec95f94" },
   { name := "NearFungibleLedger", digest := "e1e290ddec221fa5" },
   { name := "NearTokenArithmetic", digest := "f85fa4f3182ec1eb" },
-  { name := "NearTokenErgonomics", digest := "ab9da3168e8cd786" },
+  { name := "NearTokenErgonomics", digest := "c2e097e411bbd3b4" },
   { name := "NearTokenStorage", digest := "92e4c2bf2a7f74a0" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
   { name := "NearOutput", digest := "ff2281fdab18ece" },

@@ -8002,6 +8002,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | _ =>
                 return .error "extract/unsupported: bind producer is not a scalar control value"
         else if let some limbCount := fixedLimbBindCount? env ty then
+          let producer := unfoldUserHelpers env 16 producer
           match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
               (localDepth := localDepth + limbCount) (stateType? := stateType?)
               (deepScalars := deepScalars) with

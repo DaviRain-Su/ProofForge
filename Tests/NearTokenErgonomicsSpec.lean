@@ -23,6 +23,7 @@ elab "#pf_guard_near_token_ergonomics" : command => do
   for anchor in #[
       "(func (export \"canAddViaHelper\")", "(func (export \"addViaHelperW0\")",
       "(func (export \"addViaAndThen\")", "(func (export \"addCheckedViaAndThen\")",
+      "(func (export \"addCheckedHelperViaAndThen\")",
       "(func (export \"touch\")", "i64.add", "i64.lt_u"] do
     unless wat.contains anchor do
       throwError s!"NEAR token ergonomics WAT missing {anchor}\n{wat}"
@@ -32,4 +33,4 @@ elab "#pf_guard_near_token_ergonomics" : command => do
 #pf_near_build Examples.NearTokenErgonomics
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenErgonomics" ==
-  some "ab9da3168e8cd786"
+  some "c2e097e411bbd3b4"
