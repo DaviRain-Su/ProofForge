@@ -25,6 +25,7 @@ Anvil for fixtures inside the verified fragment.
 | Anvil behavior diff (Const) | `runtime-tests/evm/anvil_yulc_const.sh` |
 | Anvil behavior diff (Flag) | `runtime-tests/evm/anvil_yulc_flag.sh` |
 | Anvil behavior diff (Phase) | `runtime-tests/evm/anvil_yulc_phase.sh` |
+| Anvil behavior diff (Wide) | `runtime-tests/evm/anvil_yulc_wide.sh` |
 | Runner | `runtime-tests/evm/yulc.sh` |
 
 **Counter evidence (2026-09-01):** bytecode differs (solc 1694 vs yulc 2426 hex chars) but
@@ -53,7 +54,7 @@ Wide, Flag, Phase, TipJar). Ownable/Token/Vault reject on fragment.
 
 ## Still open
 
-- Expand ladder: Wide, TipJar
+- Expand ladder: TipJar
 - CI optional job `evm-yulc` with yul-compiler Mathlib cache
 - Fragment allowlist table in manifest
 

@@ -6315,19 +6315,19 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned &&
           e.getAppArgs.size ≥ 13 then
         let args := e.getAppArgs
-        let childDeposit := args[args.size - 8]!
-        let callbackDeposit := args[args.size - 4]!
-        match staticNatVal? env args[args.size - 13]!,
-            staticNatVal? env args[args.size - 12]!,
-            staticString? env 64 args[args.size - 11]!,
-            staticString? env 64 args[args.size - 10]!,
-            staticString? env 64 args[args.size - 6]!,
+        let childDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 12]!,
+            staticNatVal? env args[args.size - 11]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) childDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) childDeposit),
-            val env args[args.size - 7]!,
+            val env args[args.size - 5]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
-            val env args[args.size - 3]! with
+            val env args[args.size - 1]! with
         | some childArgsCapacity, some callbackArgsCapacity,
             some receiver, some childMethod, some callbackMethod,
             some childDepositLo, some childDepositHi, some childGas,
@@ -6337,8 +6337,8 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
-              match boundedStorageFrame? env childArgsCapacity args[args.size - 9]!,
-                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 5]! with
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
               | some childArguments, some callbackArguments =>
                   some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
                     childArgsCapacity callbackArgsCapacity childArguments callbackArguments
@@ -6350,33 +6350,33 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
       else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and3Returned &&
           e.getAppArgs.size ≥ 25 then
         let args := e.getAppArgs
-        let leftDeposit := args[args.size - 18]!
-        let midDeposit := args[args.size - 13]!
-        let rightDeposit := args[args.size - 8]!
-        let callbackDeposit := args[args.size - 4]!
-        match staticNatVal? env args[args.size - 25]!,
-            staticNatVal? env args[args.size - 24]!,
+        let leftDeposit := args[args.size - 16]!
+        let midDeposit := args[args.size - 11]!
+        let rightDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 24]!,
             staticNatVal? env args[args.size - 23]!,
             staticNatVal? env args[args.size - 22]!,
-            staticString? env 64 args[args.size - 21]!,
-            staticString? env 64 args[args.size - 20]!,
-            staticString? env 64 args[args.size - 16]!,
-            staticString? env 64 args[args.size - 15]!,
-            staticString? env 64 args[args.size - 11]!,
-            staticString? env 64 args[args.size - 10]!,
-            staticString? env 64 args[args.size - 6]!,
+            staticNatVal? env args[args.size - 21]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
-            val env args[args.size - 17]!,
+            val env args[args.size - 15]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
-            val env args[args.size - 12]!,
+            val env args[args.size - 10]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
-            val env args[args.size - 7]!,
+            val env args[args.size - 5]!,
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
             val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
-            val env args[args.size - 3]! with
+            val env args[args.size - 1]! with
         | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
             some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
             some midMethod, some rightReceiver, some rightMethod, some callbackMethod,
@@ -6394,10 +6394,10 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                 ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
                 ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
-              match boundedStorageFrame? env leftArgsCapacity args[args.size - 19]!,
-                  boundedStorageFrame? env midArgsCapacity args[args.size - 14]!,
-                  boundedStorageFrame? env rightArgsCapacity args[args.size - 9]!,
-                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 5]! with
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
               | some leftArguments, some midArguments, some rightArguments,
                   some callbackArguments =>
                   some (.nearPromiseFunctionCallAnd3ThenReturned

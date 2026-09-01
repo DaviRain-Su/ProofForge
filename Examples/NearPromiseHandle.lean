@@ -54,7 +54,7 @@ def echo (_state : State) (value : UInt64) : UInt64 :=
 /-- Same DAG as `NearPromise.sendAnd3Success`; persisted depth models N13 handle metadata. -/
 @[pf_entry]
 def sendHandleAnd3 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
-  let _ := Promises.callAnd3ThenReturned
+  let _ := promiseRoot.and3Returned
     receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
@@ -64,7 +64,7 @@ def sendHandleAnd3 (state : State) (value : UInt64) : Except Error (State × UIn
 /-- Same DAG as `NearPromise.sendThenSuccess`; persisted depth models N13 handle metadata. -/
 @[pf_entry]
 def sendHandleThen (state : State) (value : UInt64) : Except Error (State × UInt64) :=
-  let _ := Promises.callThenReturned receiver "recordValue" (borshUInt64 123)
+  let _ := promiseRoot.thenReturned receiver "recordValue" (borshUInt64 123)
     ({ w0 := 0, w1 := 0 } : NearToken) callGas
     "callbackSuccess" (borshUInt64 77) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
   .ok ({ state with marker := value, depth := 1 }, value)
@@ -106,7 +106,7 @@ def handleFanInSmoke : Bool :=
 
 #guard handleFanInSmoke
 
--- and3Returned ladder smoke (SDK-only until Extract offsets for handle-prefixed joins land).
+-- and3Returned ladder smoke (SDK + Extract entry bodies use `promiseRoot.and3Returned`).
 def handleAnd3Smoke : Bool :=
   let joined := promiseRoot.and3Returned
     receiver "echo" (borshUInt64 1) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas

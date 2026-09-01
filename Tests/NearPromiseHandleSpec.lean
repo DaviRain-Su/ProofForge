@@ -18,6 +18,14 @@ elab "#pf_guard_near_promise_handle" : command => do
     throwError "NEAR PromiseHandle fixture missing sendHandleThen entry"
   unless program.entries.any (·.ixName == "sendHandleAnd3") do
     throwError "NEAR PromiseHandle fixture missing sendHandleAnd3 entry"
+  let sendHandleThen ← match program.entries.find? (·.ixName == "sendHandleThen") with
+    | some method => pure method
+    | none => throwError "missing sendHandleThen entry"
+  let thenWat ← match ProofForge.Wasm.Near.Emit.emit { program with entries := #[sendHandleThen] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless thenWat.contains "(call $pf_promise_batch_then" do
+    throwError "PromiseHandle thenReturned lost promise_batch_then"
   let sendHandleAnd3 ← match program.entries.find? (·.ixName == "sendHandleAnd3") with
     | some method => pure method
     | none => throwError "missing sendHandleAnd3 entry"

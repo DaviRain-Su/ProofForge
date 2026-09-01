@@ -24,6 +24,7 @@ run_gate anvil-capped "$here/anvil_yulc_capped.sh"
 run_gate anvil-const "$here/anvil_yulc_const.sh"
 run_gate anvil-flag "$here/anvil_yulc_flag.sh"
 run_gate anvil-phase "$here/anvil_yulc_phase.sh"
+run_gate anvil-wide "$here/anvil_yulc_wide.sh"
 
 if [[ "$failed" -ne 0 ]]; then
   echo "evm-yulc: FAIL ($failed failed)" >&2
