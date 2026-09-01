@@ -153,6 +153,13 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-095](tasks/svm-sem-095.md) | E∞ Loader account-12 owner limbs 0/1 after skip chain | **done** |
 | [svm-sem-096](tasks/svm-sem-096.md) | E∞ Loader account-12 owner limbs 2/3 after skip chain | **done** |
 | [svm-sem-097](tasks/svm-sem-097.md) | E∞ Loader account-12 executable/rent after skip chain | **done** |
+| [svm-sem-098](tasks/svm-sem-098.md) | E∞ Loader account-12 → account-13 skip chain | **done** |
+| [svm-sem-099](tasks/svm-sem-099.md) | E∞ Loader account-13 header/key after skip chain | **done** |
+| [svm-sem-100](tasks/svm-sem-100.md) | E∞ Loader account-13 signer/writable after skip chain | **done** |
+| [svm-sem-101](tasks/svm-sem-101.md) | E∞ Loader account-13 lamports/data_len after skip chain | **done** |
+| [svm-sem-102](tasks/svm-sem-102.md) | E∞ Loader account-13 owner limbs 0/1 after skip chain | **done** |
+| [svm-sem-103](tasks/svm-sem-103.md) | E∞ Loader account-13 owner limbs 2/3 after skip chain | **done** |
+| [svm-sem-104](tasks/svm-sem-104.md) | E∞ Loader account-13 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -165,7 +172,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[097](tasks/svm-sem-097.md) | walked `r7` + account-0..12 skip host knives | **doing** — account-12 field arc landed; acc12→acc13 skip open |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[104](tasks/svm-sem-104.md) | walked `r7` + account-0..13 skip host knives | **doing** — account-13 field arc landed; acc13→acc14 skip open |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
