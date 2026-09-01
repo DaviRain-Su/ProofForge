@@ -1625,21 +1625,23 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
     have hnat : xAddress.toNat ≠ 0 := by omega
     apply hnat
     rw [hzero]
+    rfl
   have hyne : yAddress ≠ 0 := by
     intro hzero
     have hnat : yAddress.toNat ≠ 0 := by omega
     apply hnat
     rw [hzero]
+    rfl
   have hinner4 : ¬(4 : UInt64) < innerAddress := by
     show ¬(4 : Nat) < innerAddress.toNat
     omega
   have hparent4 : ¬(4 : UInt64) < parentAddress := by
     show ¬(4 : Nat) < parentAddress.toNat
     omega
-  simp (config := { zeta := true }) only [rotateLeft, hxne, hxi, xi, x, yAddress,
+  simp (config := { zetaDelta := true }) only [rotateLeft, hxne, hxi, xi, x, yAddress,
     hyne, hyi, yi, y, innerAddress, parentAddress, hinner4, hparent4] at h
   by_cases hinner0 : innerAddress = 0
-  · simp only [hinner0, if_pos] at h
+  · simp (config := { zetaDelta := true }) only [hinner0, if_pos] at h
     by_cases hparent0 : parentAddress = 0
     · simp only [hparent0, if_pos, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
@@ -1699,7 +1701,7 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
           { nodes1[yi]! with left := xAddress, parent := parentAddress } hyi hnP
           hxLe hy1.2.1 hparentLe hy1.2.2.2
         exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-  · simp only [hinner0, if_neg] at h
+  · simp (config := { zetaDelta := true }) only [hinner0, if_neg] at h
     have hialloc := hinnerAllocated hinner0
     let innerIndex := (innerAddress.toNat - 1) % 4
     have hii : innerIndex < 4 := Nat.mod_lt _ (by decide)
@@ -1884,21 +1886,23 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
     have hnat : xAddress.toNat ≠ 0 := by omega
     apply hnat
     rw [hzero]
+    rfl
   have hyne : yAddress ≠ 0 := by
     intro hzero
     have hnat : yAddress.toNat ≠ 0 := by omega
     apply hnat
     rw [hzero]
+    rfl
   have hinner4 : ¬(4 : UInt64) < innerAddress := by
     show ¬(4 : Nat) < innerAddress.toNat
     omega
   have hparent4 : ¬(4 : UInt64) < parentAddress := by
     show ¬(4 : Nat) < parentAddress.toNat
     omega
-  simp (config := { zeta := true }) only [rotateRight, hxne, hxi, xi, x, yAddress,
+  simp (config := { zetaDelta := true }) only [rotateRight, hxne, hxi, xi, x, yAddress,
     hyne, hyi, yi, y, innerAddress, parentAddress, hinner4, hparent4] at h
   by_cases hinner0 : innerAddress = 0
-  · simp only [hinner0, if_pos] at h
+  · simp (config := { zetaDelta := true }) only [hinner0, if_pos] at h
     by_cases hparent0 : parentAddress = 0
     · simp only [hparent0, if_pos, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
@@ -1958,7 +1962,7 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
           { nodes1[yi]! with right := xAddress, parent := parentAddress } hyi hnP
           hy1.1 hxLe hparentLe hy1.2.2.2
         exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-  · simp only [hinner0, if_neg] at h
+  · simp (config := { zetaDelta := true }) only [hinner0, if_neg] at h
     have hialloc := hinnerAllocated hinner0
     let innerIndex := (innerAddress.toNat - 1) % 4
     have hii : innerIndex < 4 := Nat.mod_lt _ (by decide)
