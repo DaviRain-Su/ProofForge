@@ -56,10 +56,11 @@ private def emitWords (context : Context) (label : String) (dynamic : Bool)
         output := output ++ (← emitInteger context label dynamic offset 8 (nonce + i) value)
         offset := offset + 8
     | .ascii value =>
-        for j in [0:value.length] do
+        let utf8 := value.toUTF8
+        for j in [0:utf8.size] do
           output := output ++ emitDestinationBase dynamic ++
-            s!"  lddw r1, {value.toList[j]!.toNat}\n  stxb [r9 + {offset + j}], r1\n"
-        offset := offset + value.length
+            s!"  lddw r1, {(utf8.get! j).toNat}\n  stxb [r9 + {offset + j}], r1\n"
+        offset := offset + utf8.size
     | .programId =>
         output := output ++ emitDestinationBase dynamic ++ s!"\
   ldxdw r1, [r10 - {context.headerStack context.accountCount}]

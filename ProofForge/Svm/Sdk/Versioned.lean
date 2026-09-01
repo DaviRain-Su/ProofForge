@@ -16,8 +16,9 @@ and publishes the discriminator last. An already-ready header is an idempotent r
 other state is rejected without a write.
 
 Version movement is deliberately separate. `Transition` describes exactly one compile-time edge
-from a nonzero source version to the header's supported version. It never scans a range, chooses a
-version at runtime, or silently migrates during inspection/initialization.
+from a nonzero source version to the header's supported version. `PayloadTransition` adds exactly
+one compile-time payload-word copy on that same edge. Neither scans a range, chooses a version at
+runtime, nor silently migrates during inspection/initialization.
 -/
 
 namespace ProofForge.Svm.Sdk.Versioned
@@ -157,6 +158,63 @@ repairs malformed state, accepts a foreign discriminator, or upgrades an unliste
     if actualDiscriminator ≠ header.expectedDiscriminator then TransitionResult.rejected
     else if actualVersion = header.supportedVersion then TransitionResult.alreadyCurrent
     else if actualVersion = transition.fromVersion then
+      let _ := write header.versionField 0 header.supportedVersion
+      TransitionResult.transitioned
+    else TransitionResult.rejected
+
+/-! ## Single-edge payload reshape (`svm-sdk-006`)
+
+`PayloadTransition` extends the version edge with exactly one compile-time word copy. It still
+admits no multi-hop graph, no runtime-selected layout, and no silent reshape during inspect/init.
+-/
+
+/-- One explicit version edge that also copies exactly one payload word before publishing the
+target version. -/
+structure PayloadTransition where
+  header : Header
+  fromVersion : UInt64
+  source : Field
+  destination : Field
+  deriving BEq, Repr, Inhabited
+
+attribute [pf_inline] PayloadTransition.header PayloadTransition.fromVersion
+  PayloadTransition.source PayloadTransition.destination
+
+/-- Name a single-edge payload reshape: copy `source → destination`, then publish the header's
+supported version. -/
+@[pf_inline] def PayloadTransition.mkEdge (header : Header) (fromVersion : UInt64)
+    (source destination : Field) : PayloadTransition :=
+  { header, fromVersion, source, destination }
+
+/-- Static contract: valid version edge, two distinct scalar payload words on the same account,
+both strictly after the version word. -/
+def PayloadTransition.wellFormed (transition : PayloadTransition)
+    (accountLimit : Nat := 64) : Bool :=
+  (Transition.from transition.header transition.fromVersion).wellFormed accountLimit &&
+    scalarHeaderWellFormed transition.source
+      transition.header.discriminatorField.region.account accountLimit &&
+    scalarHeaderWellFormed transition.destination
+      transition.header.discriminatorField.region.account accountLimit &&
+    transition.source != transition.destination &&
+    transition.header.versionField.firstWord < transition.source.firstWord &&
+    transition.header.versionField.firstWord < transition.destination.firstWord
+
+/-- Apply the version edge and copy the one named payload word. On replay of an already-current
+header the copy is skipped. Unlisted sources and foreign discriminators remain rejected with no
+writes. -/
+@[pf_inline] def PayloadTransition.apply (transition : PayloadTransition) : UInt64 :=
+  let header := transition.header
+  if header.expectedDiscriminator = 0 || header.supportedVersion = 0 ||
+      transition.fromVersion = 0 || transition.fromVersion = header.supportedVersion then
+    TransitionResult.rejected
+  else
+    let actualDiscriminator := read header.discriminatorField 0
+    let actualVersion := read header.versionField 0
+    if actualDiscriminator ≠ header.expectedDiscriminator then TransitionResult.rejected
+    else if actualVersion = header.supportedVersion then TransitionResult.alreadyCurrent
+    else if actualVersion = transition.fromVersion then
+      let value := read transition.source 0
+      let _ := write transition.destination 0 value
       let _ := write header.versionField 0 header.supportedVersion
       TransitionResult.transitioned
     else TransitionResult.rejected

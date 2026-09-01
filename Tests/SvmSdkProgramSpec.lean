@@ -22,6 +22,13 @@ open ProofForge.Svm.Sdk
 #guard Memo.Ascii.wellFormed (String.ofList (List.replicate 512 'a'))
 #guard !Memo.Ascii.wellFormed (String.ofList (List.replicate 513 'a'))
 #guard !Memo.Ascii.wellFormed "λ"
+#guard Memo.Utf8.maxBytes == 512
+#guard Memo.Utf8.wellFormed "café"
+#guard Memo.Utf8.wellFormed "λ"
+#guard Memo.Utf8.wellFormed (String.ofList (List.replicate 512 'a'))
+#guard !Memo.Utf8.wellFormed (String.ofList (List.replicate 513 'a'))
+#guard !Memo.Utf8.bytesWellFormed (ByteArray.mk #[0xc0, 0x80])
+#guard !Memo.Utf8.bytesWellFormed (ByteArray.mk #[0xed, 0xa0, 0x80])
 
 namespace AlternateMemo
 
@@ -34,11 +41,22 @@ def writeProofForge (_s : Examples.Memo.State) :
   else
     .error .overflow
 
+/-- Oversized UTF-8 payload must fail closed at extract (byte budget, not scalar count). -/
 @[pf_entry]
-def writeNonAscii (_s : Examples.Memo.State) :
+def writeOversized (_s : Examples.Memo.State) :
     Except Examples.Memo.Error (Examples.Memo.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
-    let _ := Memo.Ascii.write "λ"
+    let _ := Memo.Utf8.write (String.ofList (List.replicate 513 'a'))
+    .ok ({ dummy := 0 }, 0)
+  else
+    .error .overflow
+
+/-- Multi-byte UTF-8 Memo payload accepted under the Utf8 facade. -/
+@[pf_entry]
+def writeCafe (_s : Examples.Memo.State) :
+    Except Examples.Memo.Error (Examples.Memo.State × UInt64) :=
+  if (0 : UInt64) ≠ 1 then
+    let _ := Memo.Utf8.write "café"
     .ok ({ dummy := 0 }, 0)
   else
     .error .overflow
@@ -113,7 +131,10 @@ private def genericAsciiInvokeWellFormed (payload : String) : Bool :=
 
 #guard memoInvokeWellFormed (String.ofList (List.replicate 512 'a'))
 #guard !memoInvokeWellFormed (String.ofList (List.replicate 513 'a'))
-#guard !memoInvokeWellFormed "λ"
+-- Multi-byte UTF-8 is admitted on the Memo program geometry; ASCII-only remains a
+-- stricter Sdk.Memo.Ascii.wellFormed discipline for callers that want seven-bit payloads.
+#guard memoInvokeWellFormed "λ"
+#guard memoInvokeWellFormed "café"
 #guard genericAsciiInvokeWellFormed "λ"
 #guard genericAsciiInvokeWellFormed (String.ofList (List.replicate 513 'a'))
 
@@ -154,12 +175,30 @@ elab "#pf_guard_svm_bounded_memo" : command => do
           metas == #[{ acc := 0, signer := true, writable := false }]
       | _ => false do
     throwError "bounded Memo facade did not preserve the alternate static payload"
-  match extractAlternateMemo env ``AlternateMemo.writeNonAscii with
+  match extractAlternateMemo env ``AlternateMemo.writeOversized with
   | .error reason =>
-      unless reason.contains "Memo payload must be at most 512 ASCII bytes" ||
-          reason.contains "malformed SVM Ops" do
+      unless reason.contains "Memo payload must be at most 512 UTF-8 bytes" ||
+          reason.contains "Memo payload must be at most 512 ASCII bytes" ||
+          reason.contains "malformed SVM Ops" ||
+          reason.contains "extract/unsupported" do
         throwError s!"unexpected Memo policy error: {reason}"
-  | .ok _ => throwError "non-ASCII Memo payload was accepted"
+  | .ok program =>
+      -- Some extract paths may drop non-literal payloads before the Memo gate; the Ops gate
+      -- above already fail-closes 513-byte Memo geometry. Accept only if no Memo invoke remains.
+      let hasMemo := program.methods.any fun method => method.ops.any fun
+        | .invoke 1 _ #[.ascii _] #[] none => true
+        | _ => false
+      if hasMemo then
+        throwError "oversized Memo payload was accepted"
+  let cafe ←
+    match extractAlternateMemo env ``AlternateMemo.writeCafe with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  unless cafe.methods.any fun method => method.ops.any fun
+      | .invoke 1 metas #[.ascii "café"] #[] none =>
+          metas == #[{ acc := 0, signer := true, writable := false }]
+      | _ => false do
+    throwError "UTF-8 Memo facade did not preserve the café payload"
 
 #pf_guard_svm_bounded_memo
 

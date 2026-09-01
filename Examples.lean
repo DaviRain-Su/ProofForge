@@ -24,6 +24,7 @@ import Examples.TokenMint
 import Examples.SysAlloc
 import Examples.TokenAcc
 import Examples.Memo
+import Examples.MemoUtf8
 import Examples.CreatePda
 import Examples.TokenApprove
 import Examples.TokenFreeze
@@ -92,6 +93,7 @@ import Examples.MemberDirectory
 import Examples.UniqueRoster
 import Examples.VersionedLedger
 import Examples.VersionedMigrator
+import Examples.VersionedPayloadMigrator
 import Examples.PhoenixV1Layout
 import Examples.Phoenix
 import Examples.PhoenixV1Profile

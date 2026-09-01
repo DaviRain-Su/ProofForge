@@ -1,9 +1,10 @@
 import Examples.VersionedLedger
 import Examples.VersionedMigrator
+import Examples.VersionedPayloadMigrator
 import ProofForge
 
 /-!
-Focused extraction and pure geometry/state checks for the fixed-account version codec. The two
+Focused extraction and pure geometry/state checks for the fixed-account version codec. The three
 examples remain direct imports so integration can add shared umbrellas and registries separately.
 -/
 
@@ -14,16 +15,24 @@ open ProofForge.Svm.Sdk.Versioned
 
 #pf_build Examples.VersionedLedger
 #pf_build Examples.VersionedMigrator
+#pf_build Examples.VersionedPayloadMigrator
 
 #guard (Examples.VersionedLedger.fixed 1).wellFormed
 #guard (Examples.VersionedLedger.fixed 2).wellFormed
 #guard (Examples.VersionedMigrator.fixed 1).wellFormed
 #guard (Examples.VersionedMigrator.fixed 2).wellFormed
+#guard (Examples.VersionedPayloadMigrator.fixed 1).wellFormed
+#guard (Examples.VersionedPayloadMigrator.fixed 2).wellFormed
 
 #guard (Examples.VersionedLedger.fixed 1).header.discriminatorField == Field.scalar 1 1
 #guard (Examples.VersionedLedger.fixed 1).header.versionField == Field.scalar 1 2
 #guard (Examples.VersionedMigrator.fixed 1).migrateV1.fromVersion == 1
 #guard (Examples.VersionedMigrator.fixed 1).header.supportedVersion == 2
+#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.fromVersion == 1
+#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.source ==
+  Field.scalar 1 4
+#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.destination ==
+  Field.scalar 1 5
 
 -- Every logical account state is distinct.
 #guard (Examples.VersionedLedger.fixed 1).header.classify 0 0 == Status.uninitialized

@@ -784,14 +784,15 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
     match seeds[i]! with
     | .ascii value =>
         let start := byteOff
-        for c in value.toList do
-          bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {byteOff}], r1\n"
+        let utf8 := value.toUTF8
+        for j in [0:utf8.size] do
+          bytes := bytes ++ s!"  lddw r1, {(utf8.get! j).toNat}\n  stxb [r8 + {byteOff}], r1\n"
           byteOff := byteOff + 1
         descriptors := descriptors ++ s!"\
   mov64 r1, r8
   add64 r1, {start}
   stxdw [r8 + {descriptor}], r1
-  lddw r1, {value.length}
+  lddw r1, {utf8.size}
   stxdw [r8 + {descriptor + 8}], r1
 "
     | .stateKey =>
@@ -1364,12 +1365,14 @@ private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
       body := body ++ s!"  lddw r1, {tag.toNat}\n  stxb [r9 + {base + off}], r1\n"
       off := off + 1
     | .ascii s =>
-      -- 逐字节；本切片字面量很短。
+      -- Emit UTF-8 bytes so multi-byte Memo payloads match the Utf8 facade contract.
+      -- ASCII-only strings are unchanged (one byte per scalar).
+      let utf8 := s.toUTF8
       let mut i : Nat := 0
-      for c in s.toList do
-        body := body ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {base + off + i}], r1\n"
+      for _ in [0:utf8.size] do
+        body := body ++ s!"  lddw r1, {(utf8.get! i).toNat}\n  stxb [r9 + {base + off + i}], r1\n"
         i := i + 1
-      off := off + s.length
+      off := off + utf8.size
     | .programId =>
       let copy :=
         if IR.usesWalk p then
@@ -1470,7 +1473,7 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (plan : Scratch.Pl
       throw "extract/unsupported: invoke signer seeds cannot be empty"
     let byteCount := seeds.foldl (init := 0) fun total seed =>
       match seed with
-      | .ascii value => total + value.length
+      | .ascii value => total + value.toUTF8.size
       | _ => total
     -- The typed tail establishes copied-byte span, bump alignment, entry count, group offset,
     -- and bank capacity fail-closed; the emitter only writes the planned regions.
@@ -1488,14 +1491,15 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (plan : Scratch.Pl
       match seeds[i]! with
       | .ascii value =>
           let start := byteOff
-          for c in value.toList do
-            bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {byteOff}], r1\n"
+          let utf8 := value.toUTF8
+          for j in [0:utf8.size] do
+            bytes := bytes ++ s!"  lddw r1, {(utf8.get! j).toNat}\n  stxb [r9 + {byteOff}], r1\n"
             byteOff := byteOff + 1
           entries := entries ++ s!"\
   mov64 r1, r9
   add64 r1, {start}
   stxdw [r9 + {seedsArr + 16 * i}], r1
-  lddw r1, {value.length}
+  lddw r1, {utf8.size}
   stxdw [r9 + {seedsArr + 16 * i + 8}], r1
 "
       | .stateKey =>

@@ -23,6 +23,7 @@ import Tests.TokenMintSpec
 import Tests.SysAllocSpec
 import Tests.TokenAccSpec
 import Tests.MemoSpec
+import Tests.MemoUtf8Spec
 import Tests.CreatePdaSpec
 import Tests.TokenApproveSpec
 import Tests.TokenFreezeSpec

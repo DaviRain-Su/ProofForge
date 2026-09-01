@@ -152,7 +152,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001/002/003/004/005 **done** → next Memo / iteration / sliced sysvar
+          · C: svm-sdk-001/002/003/004/005/006 **done** → next iteration / sliced sysvar / app slices
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
 
@@ -177,7 +177,7 @@ Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
 Phase 6   Facade 扫尾 + 序列化/返回政策
           · A: sf-014..sf-015
           · B: svm-rt-005 nested/wide dynamic return（若仍在 ceiling 内）
-          · C: svm-sdk-006 UTF-8 Memo / richer migration payload
+          · C: svm-sdk-006 UTF-8 Memo / richer migration payload（**done**）
 
 Phase 7   收口
           · A: sf-016 形式化审计
@@ -215,7 +215,7 @@ Phase 7   收口
 | [svm-sdk-003](tasks/svm-sdk-003.md) | generic POD transient shapes（超出 Record64/Vector128/256 的下一形状） | F1 | **done**；`VectorPubkey`；digests `8958053c8b1f52ac` / `106f41e98d4dcc9c`；Mollusk 8/8 |
 | [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | **done**；`ResourceManifest` 先行；默认 2；`>2` fail-closed 至 scratch relayout |
 | [svm-sdk-005](tasks/svm-sdk-005.md) | Token-2022 extension 的 **Sdk facade**（对接 rt-002） | F2 | **done**；`Sdk.Token2022` mint-close view/CPI；不把 extension 名写进 Emit |
-| [svm-sdk-006](tasks/svm-sdk-006.md) | UTF-8 Memo + richer account **migration payload** shapes | F1/F2 | strict UTF-8；migration 单边显式 |
+| [svm-sdk-006](tasks/svm-sdk-006.md) | UTF-8 Memo + richer account **migration payload** shapes | F1/F2 | **done**；`Memo.Utf8` ≤512 + `PayloadTransition` 单边；digests `c13eb931ded2755a` / `39327e5abe0c9299`；Mollusk 2+5 |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | 持久容器 insert/remove/**iteration** 有界 API（在现有 Map/Set 上） | F1/F2 | 无 heap iterator object |
 
 > 新 SDK 容器一落地，就在 Track A 追加对应 `sf-*`（或扩展现有片），避免「能跑无证」堆积。
@@ -296,7 +296,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005` + `svm-eng-001` done → 下一刀 **`svm-sdk-006` Memo/migration**（或 `svm-rt-004` sliced sysvar / `svm-sdk-007` iteration）
+1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006` + `svm-eng-001` done → 下一刀 **`svm-sdk-007` iteration**（或 `svm-rt-004` sliced sysvar / `svm-sem-001` / `svm-app-*`）
 2. **并行**：`svm-sem-001`（E1）/ `svm-eng-002`（双矩阵收口）
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
