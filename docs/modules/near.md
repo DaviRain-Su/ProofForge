@@ -383,3 +383,8 @@ CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes
 `assert_valid`。同一 fixture 的 exact `ft_metadata` view 复用 no-args request-ignore wrapper，
 并返回一个按构造满足 `assert_valid` 的固定配置；codec 本身仍不自动验证任意 carrier，且
 bounded capacities 仍意味着不声称完整 NEP-148 ABI。
+
+`NearFungibleLedger` 复用同一个 exact `ft_metadata` carrier/policy，使 BAL2 的
+`ft_total_supply`、`ft_balance_of`、`ft_transfer`、`ft_transfer_call` 与 metadata view 在
+同一 artifact 中可用。metadata view 不读取或修改余额/供应量；其 bounded capacity 与
+serializer-only `assert_valid` 边界保持不变。

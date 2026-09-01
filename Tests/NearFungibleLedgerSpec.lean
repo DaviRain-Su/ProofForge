@@ -31,6 +31,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
   unless methodSteps "mintSelfOne" == #["read.16.72", "write.16.72.16"] &&
       methodSteps "ft_balance_of" == #["read.16.72"] &&
       methodSteps "ft_total_supply" == #[] &&
+      methodSteps "ft_metadata" == #[] &&
       methodSteps "ft_transfer" ==
         #["read.16.72", "read.16.72", "write.16.72.16", "write.16.72.16"] &&
       methodSteps "ft_transfer_call" ==
@@ -54,6 +55,12 @@ elab "#pf_near_fungible_ledger_check" : command => do
     | throwError "missing source ft_total_supply"
   unless sourceSupply.annotations == #["near.no-args-ignore-input.v1"] do
     throwError "ft_total_supply lost its explicit no-args wrapper annotation"
+  let some sourceMetadata := source.methods.find? (·.ixName == "ft_metadata")
+    | throwError "missing source ft_metadata"
+  unless sourceMetadata.annotations == #["near.no-args-ignore-input.v1"] &&
+      sourceMetadata.retSchema == Codec.fungibleTokenMetadataResultSchema &&
+      sourceMetadata.retCount == 70 && sourceMetadata.paramCount == 0 do
+    throwError "integrated ft_metadata lost no-args or exact nominal 70-leaf source frame"
   let duplicateNoArgs := { source with methods := source.methods.map fun candidate =>
     if candidate.ixName == "ft_total_supply" then
       { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
@@ -102,6 +109,14 @@ elab "#pf_near_fungible_ledger_check" : command => do
       supply.outputPolicy == "near-json-u128-string-v1" && supply.paramCount == 0 &&
       supply.tupleArity == some 2 do
     throwError "ft_total_supply lost its no-input quoted-u128 view policy"
+  let some metadata := program.entries.find? (·.ixName == "ft_metadata")
+    | throwError "missing target ft_metadata"
+  unless metadata.kind == .get && metadata.inputSchema == some .unit &&
+      metadata.inputPolicy == "near-no-args-ignore-input-v1" &&
+      metadata.outputSchema == some Codec.fungibleTokenMetadataResultSchema &&
+      metadata.outputPolicy == Codec.OutputPlan.jsonFungibleTokenMetadata.canonical &&
+      metadata.paramCount == 0 && metadata.tupleArity == some 70 do
+    throwError "integrated ft_metadata lost bounded metadata/no-args target composition"
   let some transfer := program.entries.find? (·.ixName == "ft_transfer")
     | throwError "missing target ft_transfer"
   unless transfer.kind == .increment && transfer.entryPolicy == "near.entry.v1:payable" &&
@@ -148,6 +163,7 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"transferCallerToSelfZero\")",
       "(func (export \"ft_balance_of\")",
       "(func (export \"ft_total_supply\")",
+      "(func (export \"ft_metadata\")",
       "(func (export \"ft_transfer\")",
       "(func (export \"ft_transfer_call\")",
       "(func (export \"seedSelfMalformed8\")",
@@ -197,6 +213,17 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !supplyBody.contains "(call $pf_log_utf8" &&
       !supplyBody.contains "(call $pf_promise" do
     throwError "ft_total_supply must ignore request bytes and value_return once without effects"
+  let metadataBody ← match wat.splitOn "(func (export \"ft_metadata\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "ft_metadata must occur exactly once"
+  unless !metadataBody.contains "(call $pf_input" &&
+      (metadataBody.splitOn "(call $pf_value_return").length == 2 &&
+      metadataBody.contains "(call $pf_arena_alloc (i64.const 2929)" &&
+      !metadataBody.contains "(call $pf_storage_write" &&
+      !metadataBody.contains "(call $pf_storage_remove" &&
+      !metadataBody.contains "(call $pf_log_utf8" &&
+      !metadataBody.contains "(call $pf_promise" do
+    throwError "ft_metadata must ignore request bytes and return once without ledger effects"
   let legacyNoArgsBody ← match wat.splitOn "(func (export \"balanceSelfHas\")" with
     | [_before, tail] =>
         match tail.splitOn "\n  )\n" with
@@ -329,6 +356,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "781b002ad40ccf83"
+  some "42755127e5f3053d"
 
 end Tests.NearFungibleLedgerSpec

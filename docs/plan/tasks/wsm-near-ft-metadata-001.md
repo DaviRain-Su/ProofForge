@@ -16,8 +16,7 @@ optional near-contract-standards validator.
 ## Delivered
 
 - Exact view export `ft_metadata` ignores arbitrary request bytes and returns one fixed configured
-  object with `spec = "ft-1.0.0"`, matching reference/hash presence, and the exact SHA-256 of its
-  reference URI.
+  object with `spec = "ft-1.0.0"` and matching absent reference/hash fields.
 - The configured value therefore satisfies near-contract-standards `assert_valid` by construction.
   The serializer itself remains a codec: it does not automatically run `assert_valid`, and the
   diagnostic carriers that exercise mismatched reference/hash presence remain valid codec tests.

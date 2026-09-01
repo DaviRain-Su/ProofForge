@@ -70,6 +70,82 @@ def balanceSelfHas (_state : State) : UInt64 := balances.has Context.self
 def ft_total_supply (state : State) : ProofForge.Core.Value.UInt128 :=
   ⟨state.supplyW0, state.supplyW1⟩
 
+/-- The integrated ledger's bounded NEP-148 metadata view. This fixed configured carrier satisfies
+the optional near-contract-standards validator by construction; capacities remain ProofForge
+product policy rather than authoritative metadata limits. -/
+@[pf_entry, pf_near_no_args]
+def ft_metadata (_state : State) : ProofForge.Wasm.Near.Runtime.FungibleTokenMetadataResult :=
+  { nameLength := 16
+    nameW0 := 0x726f46666f6f7250
+    nameW1 := 0x6e656b6f54206567
+    nameW2 := 0
+    nameW3 := 0
+    nameW4 := 0
+    nameW5 := 0
+    nameW6 := 0
+    nameW7 := 0
+    symbolLength := 2
+    symbolW0 := 0x4650
+    symbolW1 := 0
+    iconPresent := 0
+    iconLength := 0
+    iconW0 := 0
+    iconW1 := 0
+    iconW2 := 0
+    iconW3 := 0
+    iconW4 := 0
+    iconW5 := 0
+    iconW6 := 0
+    iconW7 := 0
+    iconW8 := 0
+    iconW9 := 0
+    iconW10 := 0
+    iconW11 := 0
+    iconW12 := 0
+    iconW13 := 0
+    iconW14 := 0
+    iconW15 := 0
+    iconW16 := 0
+    iconW17 := 0
+    iconW18 := 0
+    iconW19 := 0
+    iconW20 := 0
+    iconW21 := 0
+    iconW22 := 0
+    iconW23 := 0
+    iconW24 := 0
+    iconW25 := 0
+    iconW26 := 0
+    iconW27 := 0
+    iconW28 := 0
+    iconW29 := 0
+    iconW30 := 0
+    iconW31 := 0
+    referencePresent := 0
+    referenceLength := 0
+    referenceW0 := 0
+    referenceW1 := 0
+    referenceW2 := 0
+    referenceW3 := 0
+    referenceW4 := 0
+    referenceW5 := 0
+    referenceW6 := 0
+    referenceW7 := 0
+    referenceW8 := 0
+    referenceW9 := 0
+    referenceW10 := 0
+    referenceW11 := 0
+    referenceW12 := 0
+    referenceW13 := 0
+    referenceW14 := 0
+    referenceW15 := 0
+    referenceHashPresent := 0
+    referenceHashW0 := 0
+    referenceHashW1 := 0
+    referenceHashW2 := 0
+    referenceHashW3 := 0
+    decimals := 18 }
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

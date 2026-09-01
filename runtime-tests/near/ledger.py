@@ -84,6 +84,21 @@ def _json_supply(client: NearClient, wire: bytes = b"") -> int:
     return value
 
 
+def _metadata_wire() -> bytes:
+    return json.dumps(
+        {
+            "spec": "ft-1.0.0",
+            "name": "ProofForge Token",
+            "symbol": "PF",
+            "icon": None,
+            "reference": None,
+            "reference_hash": None,
+            "decimals": 18,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def _receipt_logs(response: dict) -> list[str]:
     return [
         log
@@ -324,6 +339,13 @@ def main() -> None:
         raise AssertionError("ft_balance_of missing account did not return quoted zero")
     if _json_supply(client) != 0:
         raise AssertionError("ft_total_supply initial value was not quoted zero")
+    metadata_before = client.view_state_values()
+    expected_metadata = _metadata_wire()
+    for wire in (b"", b"{}", b'{"unused":0}', b"not-json", b"{}"):
+        if client.view("ft_metadata", wire) != expected_metadata:
+            raise AssertionError("integrated ft_metadata request-ignore or exact bytes mismatch")
+    if client.view_state_values() != metadata_before:
+        raise AssertionError("integrated ft_metadata changed ledger state")
     for wire in (b"{}", b"not-json", b"\xff" * 4096):
         if _json_supply(client, wire) != 0:
             raise AssertionError("ft_total_supply no-args wrapper changed result for ignored bytes")
@@ -342,7 +364,7 @@ def main() -> None:
             f"zero mint must validate missing-as-zero without a ledger mutation: "
             f"before={before!r}, after={after!r}"
         )
-    print("near-ledger: missing/zero policy and zero no-ledger-mutation ok")
+    print("near-ledger: metadata, missing/zero policy, and zero no-ledger-mutation ok")
 
     _call(client, "fixturePutSelfZeroNoSupply")
     present_zero = client.view_state_values()

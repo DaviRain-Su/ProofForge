@@ -454,6 +454,7 @@ lookup_anchors = (
 ledger_anchors = (
     '(func (export "ft_balance_of")',
     '(func (export "ft_total_supply")',
+    '(func (export "ft_metadata")',
     '(func (export "ft_transfer")',
     '(func (export "mintSelfOne")',
     '(func (export "mintSelfTwo64")',

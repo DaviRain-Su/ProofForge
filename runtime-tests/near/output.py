@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import struct
@@ -134,8 +133,8 @@ def main() -> None:
         "ProofForge Token",
         "PF",
         None,
-        "ipfs://x",
-        hashlib.sha256(b"ipfs://x").digest(),
+        None,
+        None,
         18,
     )
     for request in (b"", b"{}", b'{"unused":0}', b"ignored metadata request bytes", b"{}"):

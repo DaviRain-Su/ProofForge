@@ -354,10 +354,15 @@ asynchronous; dynamic handles and multi-action builders are absent.
    `assert_valid` or couple reference/hash presence.
    **NEAR-FT-METADATA (wsm-near-ft-metadata-001 done):** exact `ft_metadata` composes that bounded
    serializer with the opt-in near-sdk no-args request-ignore wrapper. Its fixed configured value
-   has `ft-1.0.0`, matching reference/hash presence and the reference URI's exact SHA-256, so it satisfies
+   has `ft-1.0.0` and matching absent reference/hash fields, so it satisfies
    near-contract-standards' optional `assert_valid` by construction. The codec still does not
    automatically validate arbitrary carriers; product string capacities prevent a full general
    NEP-148 ABI claim.
+   **NEAR-FT-LEDGER-METADATA (wsm-near-ft-ledger-metadata-001 done):** the integrated `BAL2`
+   fungible-ledger artifact now exposes that same exact bounded `ft_metadata` view alongside its
+   NEP-141-shaped balance, supply, transfer, transfer-call, and resolver methods. The view ignores
+   request bytes and has no balance/supply/map/log/Promise effects; this closes artifact-level
+   composition without widening the metadata codec's product subset.
    **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
    fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
    success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;
