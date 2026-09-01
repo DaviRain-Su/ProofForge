@@ -322,6 +322,27 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
     callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAnd5ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd5ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+      fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+      rightArguments fourthArguments fifthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 

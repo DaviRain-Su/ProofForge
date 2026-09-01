@@ -133,6 +133,18 @@ inductive OpExt (V : Type) where
       (rightDepositLo rightDepositHi rightGas : V)
       (fourthDepositLo fourthDepositHi fourthGas : V)
       (callbackDepositLo callbackDepositHi callbackGas : V)
+  | promiseFunctionCallAnd5ThenReturned
+      (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+        fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod : String)
+      (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+        callbackArgsCapacity : Nat)
+      (leftArguments midArguments rightArguments fourthArguments fifthArguments callbackArguments : Array V)
+      (leftDepositLo leftDepositHi leftGas : V)
+      (midDepositLo midDepositHi midGas : V)
+      (rightDepositLo rightDepositHi rightGas : V)
+      (fourthDepositLo fourthDepositHi fourthGas : V)
+      (fifthDepositLo fifthDepositHi fifthGas : V)
+      (callbackDepositLo callbackDepositHi callbackGas : V)
   | promiseResultRead (capacity : Nat) (index : V)
   | transientBuffer64Begin (capacity : Nat)
   | transientBuffer64Set (capacity : Nat) (index value : V)
@@ -280,6 +292,30 @@ def OpExt.wellFormed : OpExt Val → Bool
         #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
           rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
           callbackDepositLo, callbackDepositHi, callbackGas].all (·.wellFormed ValKind.arity)
+  | .promiseFunctionCallAnd5ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+      fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity leftArguments midArguments rightArguments
+      fourthArguments fifthArguments callbackArguments leftDepositLo leftDepositHi leftGas
+      midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas fourthDepositLo
+      fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas callbackDepositLo
+      callbackDepositHi callbackGas =>
+      Codec.accountIdLiteralValid leftReceiver && Codec.promiseMethodLiteralValid leftMethod &&
+        Codec.accountIdLiteralValid midReceiver && Codec.promiseMethodLiteralValid midMethod &&
+        Codec.accountIdLiteralValid rightReceiver && Codec.promiseMethodLiteralValid rightMethod &&
+        Codec.accountIdLiteralValid fourthReceiver && Codec.promiseMethodLiteralValid fourthMethod &&
+        Codec.accountIdLiteralValid fifthReceiver && Codec.promiseMethodLiteralValid fifthMethod &&
+        Codec.promiseMethodLiteralValid callbackMethod &&
+        storageFrameWellFormed leftArgsCapacity leftArguments &&
+        storageFrameWellFormed midArgsCapacity midArguments &&
+        storageFrameWellFormed rightArgsCapacity rightArguments &&
+        storageFrameWellFormed fourthArgsCapacity fourthArguments &&
+        storageFrameWellFormed fifthArgsCapacity fifthArguments &&
+        storageFrameWellFormed callbackArgsCapacity callbackArguments &&
+        #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+          rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
+          fifthDepositLo, fifthDepositHi, fifthGas, callbackDepositLo, callbackDepositHi,
+          callbackGas].all (·.wellFormed ValKind.arity)
   | .promiseResultRead capacity index =>
       Codec.storageCapacityValid capacity && index.wellFormed ValKind.arity
   | .transientBuffer64Begin capacity | .transientBuffer64Finish capacity =>
@@ -397,6 +433,26 @@ private def mapCfgPayload (mapValue : Val → Val) : OpExt Val → OpExt Val
         (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
         (mapValue fourthDepositLo) (mapValue fourthDepositHi) (mapValue fourthGas)
         (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas)
+  | .promiseFunctionCallAnd5ThenReturned
+      leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+      fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity leftArguments midArguments rightArguments
+      fourthArguments fifthArguments callbackArguments leftDepositLo leftDepositHi leftGas
+      midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas fourthDepositLo
+      fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas callbackDepositLo
+      callbackDepositHi callbackGas =>
+      .promiseFunctionCallAnd5ThenReturned
+        leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+        fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+        fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity
+        (leftArguments.map mapValue) (midArguments.map mapValue) (rightArguments.map mapValue)
+        (fourthArguments.map mapValue) (fifthArguments.map mapValue) (callbackArguments.map mapValue)
+        (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+        (mapValue midDepositLo) (mapValue midDepositHi) (mapValue midGas)
+        (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+        (mapValue fourthDepositLo) (mapValue fourthDepositHi) (mapValue fourthGas)
+        (mapValue fifthDepositLo) (mapValue fifthDepositHi) (mapValue fifthGas)
+        (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas)
   | .promiseResultRead capacity index => .promiseResultRead capacity (mapValue index)
   | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
   | .transientBuffer64Set capacity index value =>
@@ -467,6 +523,17 @@ private def cfgPayloadValues : OpExt Val → Array Val
         #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
           rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
           callbackDepositLo, callbackDepositHi, callbackGas]
+  | .promiseFunctionCallAnd5ThenReturned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+      leftArguments midArguments rightArguments fourthArguments fifthArguments callbackArguments
+      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+      rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+      fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi callbackGas =>
+      leftArguments ++ midArguments ++ rightArguments ++ fourthArguments ++ fifthArguments ++
+        callbackArguments ++
+        #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+          rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
+          fifthDepositLo, fifthDepositHi, fifthGas, callbackDepositLo, callbackDepositHi,
+          callbackGas]
   | .promiseResultRead _ index => #[index]
   | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
   | .transientBuffer64Set _ index value => #[index, value]

@@ -439,6 +439,32 @@ def main() -> None:
         "near-promise: failed fourth child in 4-way join retained successful left/middle/right results"
     )
 
+    joined5_success = _call_u64(client, "sendAnd5Success", 611)
+    if NearClient.success_value_bytes(joined5_success) != NearClient.encode_u64_le(555):
+        raise AssertionError("5-way joined callback did not forward the successful fifth result")
+    if client.view_u64("get") != 87:
+        raise AssertionError("5-way joined callback did not commit its independent argument 87")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("5-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 5-way join exposed five successful child results to one callback")
+
+    joined5_fifth_failure = _call_u64(
+        client, "sendAnd5FifthMissing", 612, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined5_fifth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("5-way fifth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 88:
+        raise AssertionError("5-way fifth-child failure did not run and commit callback argument 88")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("5-way fifth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed fifth child in 5-way join retained successful left/middle/right/fourth results"
+    )
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
     if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")

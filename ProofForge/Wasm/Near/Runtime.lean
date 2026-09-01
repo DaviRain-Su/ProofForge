@@ -665,6 +665,69 @@ preserve left/middle/right/fourth input order even when any child fails. -/
   let _ := callbackGas
   0
 
+/-- Schedule five ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..4
+preserve left/middle/right/fourth/fifth input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd5ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (fifthArguments : ProofForge.Core.Value.BoundedBytes fifthArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (fifthDepositLo fifthDepositHi fifthGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := fifthArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := fifthReceiver
+  let _ := fifthMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := fifthArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := fifthDepositLo
+  let _ := fifthDepositHi
+  let _ := fifthGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
 /-!
 Callback-result foundation. `promiseResultsCount` is immutable invocation context. Every
 `promiseResultRead` replaces one invocation-local bounded descriptor. Status is the exact nearcore
