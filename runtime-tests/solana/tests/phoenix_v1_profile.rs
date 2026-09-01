@@ -3978,6 +3978,76 @@ fn official_raw_cancel_by_id_free_funds_cancels_two_owned_bids_in_one_vec() {
 }
 
 #[test]
+fn official_raw_cancel_by_id_free_funds_cancels_owned_bid_and_ask_in_one_vec() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let sequence_bid = !31u64;
+    let sequence_ask = 32u64;
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 1, 0);
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 290);
+    // Bid quote lock 5*3=15; ask base lock = size 4. Inserts do not adjust trader words here.
+    write_word(&mut market, 8320, 15);
+    write_word(&mut market, 8321, 2);
+    write_word(&mut market, 8322, 4);
+    write_word(&mut market, 8323, 1);
+    market = run_market_write(
+        "insertBid512",
+        market,
+        true,
+        &[5, sequence_bid, 1, 3, 0, 0],
+        &[Check::success()],
+    );
+    market = run_market_write(
+        "insertAsk512",
+        market,
+        true,
+        &[7, sequence_ask, 1, 4, 0, 0],
+        &[Check::success()],
+    );
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let data = raw_cancel_by_id_data(11, &[(0, 5, sequence_bid), (1, 7, sequence_ask)]);
+    assert_eq!(data.len(), 39);
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 291);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, ASK_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 0);
+    assert_eq!(read_word(&market, 8321), 17);
+    assert_eq!(read_word(&market, 8322), 0);
+    assert_eq!(read_word(&market, 8323), 5);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_cancel_all_batch(
+        &payloads[0],
+        11,
+        290,
+        market_key,
+        trader_key,
+        &[(0, sequence_bid, 5, 3), (0, sequence_ask, 7, 4)],
+    );
+}
+
+#[test]
 fn official_raw_cancel_by_id_skips_missing_side_mismatch_and_foreign_owner() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
     let foreign_key = Pubkey::new_unique();

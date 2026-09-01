@@ -1137,4 +1137,70 @@ theorem walkArg_eq_absArg_stack :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 2 - two consecutive walked `r7` args (`svm-sem-007`)
+
+EntryAdapter Borsh decode walks multiple fields through the same cursor. This second
+host knife stages arg0 then arg1 via two `walkArgU64?` steps and proves each staged
+word matches absolute E1 `.arg` materialization, with `r7` advanced by 16. Still not
+Loader/syscall/CPI/ELF.
+-/
+
+/-- Absolute input-region offset of a second Counter-shaped u64 arg (arg0 + 8). -/
+def counterArg1Offset : Nat := counterArg0Offset + 8
+
+/-- Absolute address of the LHS staged stack slot (`[r10 - 8]`). -/
+def lhsStackAddr : U64 :=
+  counterFramePointer - 8
+
+/-- Seed Loader input memory with Counter `value`, arg0, and arg1 words. -/
+def counterInputMem2 (value arg0 arg1 : U64) : Option Mem := do
+  let m₁ ← counterInputMem value arg0
+  storev .m64 m₁ (mmInputStart + BitVec.ofNat 64 counterArg1Offset) (.vlong arg1)
+
+/-- Walk arg0 into RHS then arg1 into LHS through the shared `r7` cursor. -/
+def evalWalkTwoArgsToStack? (memory : Mem) : Option (RegMap × Mem) := do
+  let frag0 ← walkArgU64? rhsStackOffset
+  let frag1 ← walkArgU64? lhsStackOffset
+  let state0 := initBpfState counterWalkedArgRegs memory 64 version
+  let after := runDecodedFrom 0 (frag0 ++ frag1) state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute E1 materialize of Counter arg1 into the LHS stack slot. -/
+def evalAbsArg1ToStack? (memory : Mem) : Option (RegMap × Mem) := do
+  let frag ← materializeOperand? (.arg counterArg1Offset) lhsStackOffset
+  let state0 := initBpfState counterStraightlineRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Concrete two-arg walk: arg0=5 / arg1=9 stage correctly and advance `r7` by 16. -/
+theorem evalWalkTwoArgs_arg0_5_arg1_9 :
+    (do
+      let mem ← counterInputMem2 7 5 9
+      let (regs, finalMem) ← evalWalkTwoArgsToStack? mem
+      pure (loadv .m64 finalMem rhsStackAddr == some (.vlong 5) &&
+        loadv .m64 finalMem lhsStackAddr == some (.vlong 9) &&
+        regs .br1 == 9 &&
+        regs .br7 == mmInputStart + BitVec.ofNat 64 (counterArg0Offset + 16))) =
+      some true := by
+  native_decide
+
+/-- Walked two-arg pipeline agrees with absolute E1 `.arg` materialization on both staged words. -/
+theorem walkTwoArgs_eq_absArgs_stack :
+    (do
+      let mem ← counterInputMem2 7 5 9
+      let (_, walkedMem) ← evalWalkTwoArgsToStack? mem
+      let (_, abs0Mem) ← evalAbsArgToStack? mem
+      let (_, abs1Mem) ← evalAbsArg1ToStack? mem
+      pure (loadv .m64 walkedMem rhsStackAddr == loadv .m64 abs0Mem rhsStackAddr &&
+        loadv .m64 walkedMem lhsStackAddr == loadv .m64 abs1Mem lhsStackAddr &&
+        loadv .m64 walkedMem rhsStackAddr == some (.vlong 5) &&
+        loadv .m64 walkedMem lhsStackAddr == some (.vlong 9))) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

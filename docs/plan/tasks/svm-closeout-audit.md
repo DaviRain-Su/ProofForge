@@ -27,7 +27,7 @@ plan: ../svm-work-plan.md
 | F eng | `svm-eng-001`…`002` | **all done** |
 
 Post-closeout knives (outside original A–F ledger, still on this PR):
-`svm-app-004` (CancelMultiple cap 1→2), `svm-sem-006` (E∞ walked `r7`).
+`svm-app-004` (CancelMultiple cap 1→2 + mixed bid/ask), `svm-sem-006`/`007` (E∞ walked `r7`).
 
 Plan index/matrix rows scrubbed of leftover `todo` for these ids (2026-09-01 audit).
 

@@ -18,14 +18,14 @@ depends-on: [svm-app-001]
 1. `Examples/PhoenixV1Profile.lean`：capacity=2；逐 id skip/cancel；非空 vec 仍一次
    sequence bump + batch；tag 10 聚合 quote/base release 后 claim/withdraw
 2. Spec：`minDataLen==5`、`maxDataLen==39`（5 + 17×2）
-3. Mollusk：`raw_cancel_by_id_data` 接受 `len≤2`；新增双 bid free-funds 成功例
+3. Mollusk：`raw_cancel_by_id_data` 接受 `len≤2`；双 bid + mixed bid/ask free-funds 成功例
 4. digest 纪律；无 Phoenix 名进入 `ProofForge/Svm`
 
 ## Evidence
 
 - Lean entries tags 10/11 with `BoundedVec CancelOrderParams 2`
 - `Tests/PhoenixV1ProfileSpec.lean` adapter maxDataLen 39
-- `runtime-tests/solana/tests/phoenix_v1_profile.rs` dual-id test
+- `runtime-tests/solana/tests/phoenix_v1_profile.rs` dual-id + mixed bid/ask tests
 - Registry digest `2dc1e143994eca61`
 
 ## 仍未覆盖

@@ -245,6 +245,7 @@ Phase 7   收口
 | [svm-sem-004](tasks/svm-sem-004.md) | E4 | Track A `AccountWords` ↔ typed `storev` 内存桥 | **done** — Counter value word；roundtrip/OOB/`evalStaticStore` |
 | [svm-sem-005](tasks/svm-sem-005.md) | E5 | 选定容器例全函数（Queue empty-push） | **done** — TicketLine 布局；三写 storev 投影 |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ knife | walked `r7` arg cursor ↔ E1 absolute `.arg` | **done** — first host knife |
+| [svm-sem-007](tasks/svm-sem-007.md) | E∞ knife 2 | two consecutive walked `r7` u64 args ↔ E1 | **done** — multi-field cursor |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

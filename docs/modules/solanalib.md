@@ -86,6 +86,7 @@ Solanalib 当前没有为本仓提供：
 已覆盖 E5（`svm-sem-005`）：BoundedQueue empty-push 三写 ↔ typed `storev`/`loadv` 投影。
 
 E∞ 第一刀（`svm-sem-006`）：walked `r7` Counter arg0 cursor ↔ E1 绝对 `.arg` staged word。
+E∞ 第二刀（`svm-sem-007`）：同一 `r7` 连续 walk 两个 u64 ↔ 两个绝对 `.arg` staged word。
 仍不覆盖：Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests

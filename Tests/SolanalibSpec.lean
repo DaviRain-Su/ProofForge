@@ -287,4 +287,28 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 2: two consecutive walked r7 args (`svm-sem-007`)
+#guard
+  match (do
+      let mem ← counterInputMem2 7 5 9
+      let (regs, finalMem) ← evalWalkTwoArgsToStack? mem
+      pure (loadv .m64 finalMem rhsStackAddr == some (.vlong 5) &&
+        loadv .m64 finalMem lhsStackAddr == some (.vlong 9) &&
+        regs .br1 == 9 &&
+        regs .br7 == mmInputStart + BitVec.ofNat 64 (counterArg0Offset + 16))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← counterInputMem2 7 5 9
+      let (_, walkedMem) ← evalWalkTwoArgsToStack? mem
+      let (_, abs0Mem) ← evalAbsArgToStack? mem
+      let (_, abs1Mem) ← evalAbsArg1ToStack? mem
+      pure (loadv .m64 walkedMem rhsStackAddr == loadv .m64 abs0Mem rhsStackAddr &&
+        loadv .m64 walkedMem lhsStackAddr == loadv .m64 abs1Mem lhsStackAddr &&
+        loadv .m64 walkedMem rhsStackAddr == some (.vlong 5) &&
+        loadv .m64 walkedMem lhsStackAddr == some (.vlong 9))) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
