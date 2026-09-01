@@ -803,5 +803,28 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 26: Loader account-3 lamports/data_len after skip chain (`svm-sem-031`)
+#guard (walkAccount3BudgetAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account3BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64
+          0xE5 0xF6 0x17 0x28 1 0xEE account0NonDupMarker 0x73 1 1 3000 96
+      let (regs, finalMem) ← evalWalkAccount3BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 3000 && regs .br2 == 96 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 3000))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account3BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96
+      let (regs, _) ← evalWalkAccount3BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount3Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 3000 && dataLen == 96)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
