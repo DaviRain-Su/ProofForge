@@ -28,4 +28,4 @@ depends-on: [svm-sem-010]
 
 ## 仍未覆盖
 
-owner limbs 2–3；完整 account 向量；syscall/CPI/sysvar；ELF accept。
+owner limbs 2–3（见 `svm-sem-012`）；完整 account 向量；syscall/CPI/sysvar；ELF accept。

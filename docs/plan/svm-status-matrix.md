@@ -49,18 +49,20 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 
 | ID | Slice | Status |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1; see app-004→2, app-005→4, app-007→8); digest `6f982832bc7101b4` |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1; see app-004→2, app-005→4, app-007→8); digest `72e24d00aee1781c` |
 | [svm-app-002](tasks/svm-app-002.md) | Matching / fee / remainder | **done** |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id + mixed bid/ask |
 | [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id + reject len=5 |
 | [svm-app-006](tasks/svm-app-006.md) | Phoenix CancelMultipleById tag-10 four-id withdraw | **done** — Mollusk aggregate quote claim |
-| [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141; tag10 stays 73; Mollusk eight-id free-funds + reject len=9 | **done** — tag11 maxDataLen 141; tag10 stays 73; Mollusk eight-id free-funds + reject len=9 |
+| [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141; Mollusk eight-id free-funds + reject len=9 |
+| [svm-app-008](tasks/svm-app-008.md) | Phoenix CancelMultipleById tag-10 capacity 4→5 | **done** — maxDataLen 90; digest `72e24d00aee1781c`; Mollusk five-id + reject len=6 |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
 | [svm-sem-009](tasks/svm-sem-009.md) | E∞ Loader account-0 signer/writable flags | **done** |
 | [svm-sem-010](tasks/svm-sem-010.md) | E∞ Loader account-0 lamports/data_len | **done** |
 | [svm-sem-011](tasks/svm-sem-011.md) | E∞ Loader account-0 owner limbs 0/1 | **done** |
+| [svm-sem-012](tasks/svm-sem-012.md) | E∞ Loader account-0 owner limbs 2/3 | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
@@ -73,7 +75,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[011](tasks/svm-sem-011.md) | walked `r7` + account-0 host knives | **done** — `r7` + account-0 header/key/flags/lamports/data_len/owner0-1 |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[012](tasks/svm-sem-012.md) | walked `r7` + account-0 host knives | **done** — `r7` + account-0 header/key/flags/lamports/data_len/owner0-3 |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)

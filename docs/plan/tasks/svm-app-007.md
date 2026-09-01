@@ -26,7 +26,7 @@ depends-on: [svm-app-006]
 - Lean: tag 11 `BoundedVec CancelOrderParams 8`; tag 10 stays capacity 4
 - Spec: tag 11 maxDataLen 141 + `jgt r2, 141`; tag 10 maxDataLen 73 + `jgt r2, 73`
 - Mollusk: `official_raw_cancel_by_id_free_funds_cancels_eight_owned_bids_in_one_vec`
-- Registry digest `6f982832bc7101b4`
+- Registry digest `72e24d00aee1781c`
 
 ## 仍未覆盖
 

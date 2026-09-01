@@ -227,12 +227,13 @@ Phase 7   收口
 
 | ID | 内容 | 验收 |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=8；见 app-004/005/007）；digest `6f982832bc7101b4`；CancelById Mollusk 含八 id |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=8；见 app-004/005/007）；digest `72e24d00aee1781c`；CancelById Mollusk 含八 id |
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | **done** — tag 3 matching/fee/remainder |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id |
 | [svm-app-005](tasks/svm-app-005.md) | Phoenix CancelMultipleById Vec capacity 2→4 | **done** — maxDataLen 73; Mollusk four-id |
 | [svm-app-006](tasks/svm-app-006.md) | Phoenix CancelMultipleById tag-10 four-id withdraw | **done** — Mollusk aggregate quote claim |
-| [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141; tag10 stays 73 | **done** — tag11 maxDataLen 141; tag10 stays 73 |
+| [svm-app-007](tasks/svm-app-007.md) | Phoenix CancelMultipleById tag-11 capacity 4→8 | **done** — tag11 maxDataLen 141 |
+| [svm-app-008](tasks/svm-app-008.md) | Phoenix CancelMultipleById tag-10 capacity 4→5 | **done** — maxDataLen 90; digest `72e24d00aee1781c` |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -253,6 +254,7 @@ Phase 7   收口
 | [svm-sem-009](tasks/svm-sem-009.md) | E∞ knife 4 | Loader account-0 signer/writable flags ↔ abs load | **done** — Emit gate bytes |
 | [svm-sem-010](tasks/svm-sem-010.md) | E∞ knife 5 | Loader account-0 lamports/data_len ↔ abs load | **done** — Emit budget words |
 | [svm-sem-011](tasks/svm-sem-011.md) | E∞ knife 6 | Loader account-0 owner limbs 0/1 ↔ abs load | **done** — Emit ACC0_OWNER words |
+| [svm-sem-012](tasks/svm-sem-012.md) | E∞ knife 7 | Loader account-0 owner limbs 2/3 ↔ abs load | **done** — Emit ACC0_OWNER+16/+24 |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
