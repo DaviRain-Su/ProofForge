@@ -67,6 +67,8 @@ elab "#pf_near_output_check" : command => do
     | throwError "missing source jsonBase64Hash32"
   let some sourceMetadata := source.methods.find? (·.ixName == "jsonMetadataDecimals")
     | throwError "missing source jsonMetadataDecimals"
+  let some sourceFtMetadata := source.methods.find? (·.ixName == "ft_metadata")
+    | throwError "missing source ft_metadata"
   unless sourceBytes.retSchema == .boundedBytes 8 && sourceBytes.retCount == 9 &&
       sourceValues.retSchema == .boundedArray 4 (.scalar .uint16) &&
       sourceValues.retCount == 5 && sourceJson.retSchema == .scalar .uint128 &&
@@ -74,10 +76,17 @@ elab "#pf_near_output_check" : command => do
       sourceHash.retSchema == Codec.base64Hash32ResultSchema && sourceHash.retCount == 4 &&
       sourceMetadata.retSchema == Codec.fungibleTokenMetadataResultSchema &&
       sourceMetadata.retCount == 70 && sourceMetadata.paramCount == 1 &&
+      sourceFtMetadata.annotations == #["near.no-args-ignore-input.v1"] &&
+      sourceFtMetadata.kind == .get && sourceFtMetadata.paramCount == 0 &&
+      sourceFtMetadata.retSchema == Codec.fungibleTokenMetadataResultSchema &&
+      sourceFtMetadata.retCount == 70 &&
       (match sourceJson.ops[0]!, sourceJson.ops[1]! with
         | .returnU64 (.lit 2), .returnU64 (.lit 1) => true
         | _, _ => false) do
-    throwError "extractor did not retain bounded output schemas/frames"
+    throwError s!"extractor did not retain bounded output schemas/frames: ft_metadata annotations=" ++
+      s!"{repr sourceFtMetadata.annotations}, kind={repr sourceFtMetadata.kind}, " ++
+      s!"params={sourceFtMetadata.paramCount}, retCount={sourceFtMetadata.retCount}, " ++
+      s!"retSchema={repr sourceFtMetadata.retSchema}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -96,6 +105,8 @@ elab "#pf_near_output_check" : command => do
     | throwError "missing target jsonBase64Hash32"
   let some metadata := program.entries.find? (·.ixName == "jsonMetadataDecimals")
     | throwError "missing target jsonMetadataDecimals"
+  let some ftMetadata := program.entries.find? (·.ixName == "ft_metadata")
+    | throwError "missing target ft_metadata"
   unless bytes.outputSchema == some (.boundedBytes 8) &&
       bytes.outputPolicy == "near-borsh-output-bytes-v1(capacity=8,width=1)" &&
       bytes.tupleArity == some 9 && returnCount bytes == 9 &&
@@ -111,8 +122,15 @@ elab "#pf_near_output_check" : command => do
       metadata.outputSchema == some Codec.fungibleTokenMetadataResultSchema &&
       metadata.outputPolicy == Codec.OutputPlan.jsonFungibleTokenMetadata.canonical &&
       metadata.tupleArity == some 70 && returnCount metadata == 70 &&
+      ftMetadata.inputPolicy == "near-no-args-ignore-input-v1" &&
+      ftMetadata.outputPolicy == Codec.OutputPlan.jsonFungibleTokenMetadata.canonical &&
+      ftMetadata.kind == .get && ftMetadata.paramCount == 0 &&
+      ftMetadata.tupleArity == some 70 && returnCount ftMetadata == 70 &&
       returnCount json == 2 do
-    throwError "NEAR target lost bounded output metadata or fixed return leaves"
+    throwError s!"NEAR target lost bounded output metadata or fixed return leaves: ft_metadata " ++
+      s!"input={ftMetadata.inputPolicy}, output={ftMetadata.outputPolicy}, " ++
+      s!"entry={ftMetadata.entryPolicy}, params={ftMetadata.paramCount}, " ++
+      s!"tuple={repr ftMetadata.tupleArity}, returns={returnCount ftMetadata}"
   let malformedCount := { source with methods := source.methods.map fun method =>
     if method.ixName == "staticBytes" then { method with retCount := 8 } else method }
   match IR.fromExtracted malformedCount with
@@ -217,6 +235,22 @@ elab "#pf_near_output_check" : command => do
       !metadataBody.contains "$pf_storage_write" && !metadataBody.contains "$pf_log_utf8" &&
       !metadataBody.contains "$pf_promise_return" do
     throwError "bounded metadata output lost its one-return, arena, validation, or view-only policy"
+  let ftMetadataParts := wat.splitOn "(func (export \"ft_metadata\")"
+  unless ftMetadataParts.length == 2 do
+    throwError "missing exact unique ft_metadata export"
+  let ftMetadataBody := (ftMetadataParts[1]!).splitOn "(func (export \"" |>.head!
+  unless (ftMetadataBody.splitOn "(call $pf_value_return").length == 2 &&
+      ftMetadataBody.contains "(call $pf_arena_alloc (i64.const 2929)" &&
+      !ftMetadataBody.contains "(call $pf_input" &&
+      !ftMetadataBody.contains "$pf_storage_write" &&
+      !ftMetadataBody.contains "$pf_log_utf8" &&
+      !ftMetadataBody.contains "$pf_promise_return" do
+    throwError s!"ft_metadata lost request-ignore, one-return, or effect-free view policy: " ++
+      s!"returns={(ftMetadataBody.splitOn "(call $pf_value_return").length}, " ++
+      s!"arena={ftMetadataBody.contains "(call $pf_arena_alloc (i64.const 2929)"}, " ++
+      s!"input={ftMetadataBody.contains "(call $pf_input"}, " ++
+      s!"write={ftMetadataBody.contains "$pf_storage_write"}, " ++
+      s!"log={ftMetadataBody.contains "$pf_log_utf8"}, promise={ftMetadataBody.contains "$pf_promise_return"}"
   let jsonParts := wat.splitOn "(func (export \"jsonU128Asymmetric\")"
   unless jsonParts.length == 2 do
     throwError "missing unique JSON u128 export body"

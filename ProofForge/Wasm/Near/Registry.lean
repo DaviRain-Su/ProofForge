@@ -15,7 +15,7 @@ def entries : Array Entry := #[
   { name := "NearTokenArithmetic", digest := "f85fa4f3182ec1eb" },
   { name := "NearTokenStorage", digest := "92e4c2bf2a7f74a0" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
-  { name := "NearOutput", digest := "f1f7ff307055a85c" },
+  { name := "NearOutput", digest := "4097b07e66ce1632" },
   { name := "NearStorageBalanceOutput", digest := "b2d60a785206c3ea" },
   { name := "NearStorageBalanceBoundsOutput", digest := "90c5a63e12bc6219" },
   { name := "NearJsonUnitOutput", digest := "8c2a34289ce004b8" },

@@ -351,7 +351,13 @@ asynchronous; dynamic handles and multi-action builders are absent.
    explicit null/Some option values, the shared exact-32-byte STANDARD Base64 hash, and bare u8
    decimals in near-contract-standards field order. Product capacities are 64/16/256/128 decoded
    bytes and are not authoritative NEP-148 limits. The codec deliberately does not call
-   `assert_valid` or couple reference/hash presence; `ft_metadata` remains a separate integration.
+   `assert_valid` or couple reference/hash presence.
+   **NEAR-FT-METADATA (wsm-near-ft-metadata-001 done):** exact `ft_metadata` composes that bounded
+   serializer with the opt-in near-sdk no-args request-ignore wrapper. Its fixed configured value
+   has `ft-1.0.0`, matching reference/hash presence and the reference URI's exact SHA-256, so it satisfies
+   near-contract-standards' optional `assert_valid` by construction. The codec still does not
+   automatically validate arbitrary carriers; product string capacities prevent a full general
+   NEP-148 ABI claim.
    **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
    fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
    success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;

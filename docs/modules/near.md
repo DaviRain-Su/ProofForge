@@ -380,4 +380,6 @@ CLI：`pf build --target near`。当前注册 `Counter`、`NearCtx`、`NearBytes
 `spec,name,symbol,icon,reference,reference_hash,decimals`，Option 显式 `null`，32-byte hash
 复用 RFC4648 STANDARD Base64。name/symbol/icon/reference 的 64/16/256/128 UTF-8 byte caps
 是 ProofForge 产品边界，不是 near-contract-standards 的权威限制；codec 不自动调用
-`assert_valid`，也不导出 `ft_metadata` 或声称完整 NEP-148 ABI。
+`assert_valid`。同一 fixture 的 exact `ft_metadata` view 复用 no-args request-ignore wrapper，
+并返回一个按构造满足 `assert_valid` 的固定配置；codec 本身仍不自动验证任意 carrier，且
+bounded capacities 仍意味着不声称完整 NEP-148 ABI。

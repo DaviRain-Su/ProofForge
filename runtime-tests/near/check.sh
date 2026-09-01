@@ -150,6 +150,7 @@ output_anchors = (
     '(func (export "jsonMetadataMax")',
     '(func $pf_metadata_stage_byte',
     '(func $pf_metadata_append_byte',
+    '(func (export "ft_metadata")',
     '(call $pf_arena_alloc (i64.const 2929) (i64.const 1))',
     '(func (export "staticBytes")',
     '(func (export "staticString")',

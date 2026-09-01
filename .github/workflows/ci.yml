@@ -239,7 +239,7 @@ jobs:
       - name: Run NEAR sandbox memory arena gate
         run: runtime-tests/near/memory.sh
 
-      - name: Run NEAR sandbox Borsh, JSON-u128, and JSON-null output gate
+      - name: Run NEAR sandbox Borsh, JSON-u128, JSON-null, and bounded ft_metadata output gate
         run: runtime-tests/near/output.sh
 
       - name: Run NEAR sandbox StorageBalance option JSON output gate

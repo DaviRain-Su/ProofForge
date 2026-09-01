@@ -132,7 +132,7 @@ macro_rules
       } :
       FungibleTokenMetadataResult))
 
-/-- Diagnostic bounded NEP-148 fixtures; none exports the standard `ft_metadata` name. -/
+/-- Diagnostic bounded NEP-148 serializer fixtures. -/
 @[pf_entry] def jsonMetadataDecimals (_state : State) (decimals : UInt64) :
     FungibleTokenMetadataResult :=
   metadataResult%(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, decimals)
@@ -154,6 +154,16 @@ macro_rules
 
 @[pf_entry] def jsonMetadataBothEmpty (_state : State) : FungibleTokenMetadataResult :=
   metadataResult%(0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 100)
+
+/-- Public-shaped bounded metadata view. The configured value satisfies the optional
+near-contract-standards `assert_valid` checks by construction, but the output codec deliberately
+remains serialization-only and does not apply that validator to every metadata carrier. -/
+@[pf_entry, pf_near_no_args]
+def ft_metadata (_state : State) : FungibleTokenMetadataResult :=
+  metadataResult%(16, 0x726f46666f6f7250, 0x6e656b6f54206567, 2, 0x4650,
+    0, 0, 0, 1, 8, 0x782f2f3a73667069, 1,
+    0xfc8b236a565a0dbe, 0xce0449127bebb7e3,
+    0x152a02836a1fe23a, 0x2bdf127c6bda494d, 18)
 
 @[pf_entry] def jsonMetadataNameLength (_state : State) (length : UInt64) :
     FungibleTokenMetadataResult :=

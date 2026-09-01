@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import struct
@@ -129,6 +130,16 @@ def main() -> None:
     _expect(client, "jsonMetadataHashOnly", b"", metadata_wire(reference_hash=bytes(32), decimals=99))
     _expect(client, "jsonMetadataBothEmpty", b"",
         metadata_wire(icon="", reference="", reference_hash=bytes(32), decimals=100))
+    ft_metadata = metadata_wire(
+        "ProofForge Token",
+        "PF",
+        None,
+        "ipfs://x",
+        hashlib.sha256(b"ipfs://x").digest(),
+        18,
+    )
+    for request in (b"", b"{}", b'{"unused":0}', b"ignored metadata request bytes", b"{}"):
+        _expect(client, "ft_metadata", request, ft_metadata)
     before_metadata_views = client.view_state_values()
     for decimals in (0, 9, 10, 99, 100, 255):
         _expect(client, "jsonMetadataDecimals", NearClient.encode_u64_le(decimals),
@@ -172,7 +183,7 @@ def main() -> None:
     _expect(client, "jsonMetadataDecimals", NearClient.encode_u64_le(0), metadata_wire())
     if client.view_state_values() != before_metadata_views:
         raise AssertionError("bounded metadata output view changed contract state")
-    print("near-output: bounded metadata options/UTF-8/Base64/decimals/max/fail-closed matrix ok")
+    print("near-output: bounded metadata, ft_metadata, UTF-8/Base64/max/fail-closed matrix ok")
 
     for raw in (b"", b"x", bytes(range(8))):
         wire = NearClient.borsh_bytes(raw)
