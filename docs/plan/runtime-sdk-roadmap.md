@@ -128,6 +128,7 @@ R1-028 shared UInt64 ceiling logarithms/root、
 R1-029 shared full-precision UInt64 mulDiv、
 R1-030 shared full-precision UInt64 ceiling mulDiv、
 R1-031 shared scaled UInt64 fixed-point policy、
+R1-032 shared bounded bytes/String active-prefix equality、
 R3-026 persistent SVM BitSet、
 R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
 transient wide vectors，以及 R2-010 checked
@@ -162,7 +163,8 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R3-029](tasks/r3-029.md)、[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md)、
 [R1-023](tasks/r1-023.md)、[R1-024](tasks/r1-024.md)、[R1-025](tasks/r1-025.md)、
 [R1-026](tasks/r1-026.md)、[R1-027](tasks/r1-027.md)、[R1-028](tasks/r1-028.md)、
-[R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md) 和 [R1-031](tasks/r1-031.md)。
+[R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md)、[R1-031](tasks/r1-031.md) 和
+[R1-032](tasks/r1-032.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -337,6 +339,14 @@ R1-031 已完成 shared scaled UInt64 fixed-point policy：`Core.FixedPoint.UInt
 overflow。SVM/EVM consumer 各自拥有 state/error policy；不新增 Runtime/Ops/IR/CFG/Component/
 Emit、allocation、pointer 或 shared physical layout。typed fixed-point values/scale/casts、signed/
 wider fixed point 继续 fail closed。详见 [R1-031](tasks/r1-031.md)。
+
+R1-032 已完成 shared bounded bytes/String equality：`BoundedBytes.equals` 用 compile-time
+bounded scan 比较 canonical active prefix；`BoundedString.equals` 通过 compiler-erased byte
+view 复用同一个 scan。它忽略 inactive fixed slots，并在扫描前拒绝 over-capacity 或 unequal
+length。String validity 由 checked constructor 与 target codec 持有，比较本身不重复 UTF-8
+validation，也不做 normalization/locale policy。RawEntry/EvmBounded 分别验证双 Borsh frame
+与双 adjacent ABI dynamic tail；不新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer
+或 shared wire。详见 [R1-032](tasks/r1-032.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。

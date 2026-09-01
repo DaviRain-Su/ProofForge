@@ -49,6 +49,27 @@ call_packed() {
   "$cast" call --rpc-url "$rpc" "$addr" --data "$(packed_data "$signature" "$hex_bytes")"
 }
 
+packed_pair_data() {
+  local signature="$1"
+  local left="$2"
+  local right="$3"
+  local first_offset="${4:-64}"
+  local second_offset="${5:-}"
+  local packed_selector
+  packed_selector="$("$cast" sig "$signature")"
+  "$python" -I -S -c \
+    "import sys
+left = bytes.fromhex(sys.argv[2])
+right = bytes.fromhex(sys.argv[3])
+pad = lambda value: value + bytes((-len(value)) % 32)
+tail_left = bytes.fromhex(f'{len(left):064x}') + pad(left)
+tail_right = bytes.fromhex(f'{len(right):064x}') + pad(right)
+first = int(sys.argv[4])
+second = int(sys.argv[5]) if sys.argv[5] else 64 + len(tail_left)
+print(sys.argv[1] + f'{first:064x}{second:064x}' + tail_left.hex() + tail_right.hex())" \
+    "$packed_selector" "$left" "$right" "$first_offset" "$second_offset"
+}
+
 for case in \
   'boundedBytes(bytes)|' \
   'boundedBytes(bytes)|0b0d' \
@@ -62,6 +83,45 @@ for case in \
     *) expected=56 ;;
   esac
   solana_lean_require_uint "$result" "$expected" "canonical packed bytes $hex_bytes"
+done
+
+for case in \
+  'bytesEqual(bytes,bytes)|616263|616263|1' \
+  'bytesEqual(bytes,bytes)|616263|616264|0' \
+  'bytesEqual(bytes,bytes)|616263|6162|0' \
+  'stringsEqual(string,string)|e282ac|e282ac|1' \
+  'stringsEqual(string,string)|c2a2|e282ac|0'; do
+  signature="${case%%|*}"
+  rest="${case#*|}"
+  left="${rest%%|*}"
+  rest="${rest#*|}"
+  right="${rest%%|*}"
+  expected="${rest#*|}"
+  result="$("$cast" call --rpc-url "$rpc" "$addr" \
+    --data "$(packed_pair_data "$signature" "$left" "$right")")"
+  solana_lean_require_uint "$result" "$expected" "bounded active-prefix equality $signature"
+done
+
+# Both dynamic tails are independently canonical and adjacent. Aliasing, gaps, and wrong first
+# offsets fail before the source-level comparison observes either fixed local frame.
+for malformed in \
+  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 96)" \
+  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 64 64)" \
+  "$(packed_pair_data 'bytesEqual(bytes,bytes)' 616263 616263 64 160)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: noncanonical bounded equality ABI offsets unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+for invalid_pair in 'c080|616263' '616263|eda080'; do
+  left="${invalid_pair%%|*}"
+  right="${invalid_pair#*|}"
+  malformed="$(packed_pair_data 'stringsEqual(string,string)' "$left" "$right")"
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: invalid UTF-8 bounded equality input unexpectedly succeeded" >&2
+    exit 1
+  fi
 done
 
 for case in \

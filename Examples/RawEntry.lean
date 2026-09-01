@@ -183,4 +183,15 @@ Runtime operation, allocation, pointer, or emitter recipe. -/
 @[pf_entry, pf_svm_raw 26 2 0]
 def echoPubkey (_s : State) (key : Pubkey) : Pubkey := key
 
+/-- Active-prefix bytes compare independently of inactive fixed-frame slots. Both operands retain
+their own canonical Borsh length prefix and no target byte operation is introduced. -/
+@[pf_entry, pf_svm_raw 27 2 0]
+def bytesEqual (_s : State) (left right : BoundedBytes 8) : Bool :=
+  left.equals right
+
+/-- Strictly validated UTF-8 inputs compare by their canonical byte sequence. -/
+@[pf_entry, pf_svm_raw 28 2 0]
+def stringsEqual (_s : State) (left right : BoundedString 8) : Bool :=
+  left.equals right
+
 end Examples.RawEntry

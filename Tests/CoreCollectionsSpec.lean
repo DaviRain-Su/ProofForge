@@ -242,6 +242,21 @@ private def outOfRange : BoundedBytes 4 :=
 private def malformedLength : BoundedBytes 4 :=
   { length := 5, values := #v[0x61, 0x62, 0x63, 0x64] }
 
+private def asciiWithDirtyTail : BoundedBytes 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0xff] }
+
+private def abd : BoundedBytes 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x64, 0] }
+
+private def asciiText : BoundedString 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0] }
+
+private def dirtyAsciiText : BoundedString 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0xff] }
+
+private def invalidText : BoundedString 4 :=
+  { length := 2, values := #v[0xc0, 0x80, 0, 0] }
+
 #guard ascii.wellFormed
 #guard ascii.size == 3
 #guard ascii.get? 1 == some 0x62
@@ -256,6 +271,15 @@ private def malformedLength : BoundedBytes 4 :=
 #guard !truncated.isValidUtf8
 #guard !outOfRange.isValidUtf8
 #guard !malformedLength.isValidUtf8
+#guard ascii.equals asciiWithDirtyTail
+#guard asciiWithDirtyTail.equals ascii
+#guard !ascii.equals cent
+#guard !ascii.equals abd
+#guard !malformedLength.equals malformedLength
+#guard asciiText.equals dirtyAsciiText
+#guard dirtyAsciiText.equals asciiText
+#guard !asciiText.equals invalidText
+#guard invalidText.equals invalidText
 #guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true
 #guard (BoundedString.ofBytes? surrogate).isNone
 

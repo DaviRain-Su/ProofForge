@@ -29,6 +29,8 @@ const MAKE_BOUNDED_STRING_TAG: u8 = 23;
 const ECHO_OPTION_TAG: u8 = 24;
 const ECHO_TAGGED_TAG: u8 = 25;
 const ECHO_PUBKEY_TAG: u8 = 26;
+const BYTES_EQUAL_TAG: u8 = 27;
+const STRINGS_EQUAL_TAG: u8 = 28;
 
 fn raw_data(small: u8, wide: u64) -> Vec<u8> {
     let mut data = vec![TAG, small];
@@ -107,6 +109,13 @@ fn bounded_bytes_data(tag: u8, bytes: &[u8]) -> Vec<u8> {
     let mut data = vec![tag];
     data.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
     data.extend_from_slice(bytes);
+    data
+}
+
+fn bounded_bytes_pair_data(tag: u8, left: &[u8], right: &[u8]) -> Vec<u8> {
+    let mut data = bounded_bytes_data(tag, left);
+    data.extend_from_slice(&(right.len() as u32).to_le_bytes());
+    data.extend_from_slice(right);
     data
 }
 
@@ -540,6 +549,53 @@ fn bounded_string_enforces_strict_utf8_before_source_observation() {
             program_account.clone(),
             true,
             &bounded_bytes_data(BOUNDED_STRING_TAG, &malformed),
+        );
+    }
+}
+
+#[test]
+fn bounded_bytes_and_strings_compare_canonical_active_prefixes() {
+    let (program_id, mollusk) = harness("RawEntry", "PF_RAW_ENTRY_SO");
+    let signer = Pubkey::new_unique();
+    let program_account = create_program_account_loader_v3(&program_id);
+    for (tag, left, right, expected) in [
+        (BYTES_EQUAL_TAG, vec![], vec![], 1u8),
+        (BYTES_EQUAL_TAG, b"abc".to_vec(), b"abc".to_vec(), 1),
+        (BYTES_EQUAL_TAG, b"abc".to_vec(), b"abd".to_vec(), 0),
+        (BYTES_EQUAL_TAG, b"abc".to_vec(), b"ab".to_vec(), 0),
+        (
+            STRINGS_EQUAL_TAG,
+            vec![0xe2, 0x82, 0xac],
+            vec![0xe2, 0x82, 0xac],
+            1,
+        ),
+        (
+            STRINGS_EQUAL_TAG,
+            vec![0xc2, 0xa2],
+            vec![0xe2, 0x82, 0xac],
+            0,
+        ),
+    ] {
+        let data = bounded_bytes_pair_data(tag, &left, &right);
+        let ix = raw_instruction(program_id, program_id, signer, true, &data, None);
+        mollusk.process_and_validate_instruction(
+            &ix,
+            &raw_accounts(program_id, program_account.clone(), signer, None),
+            &[Check::success(), Check::return_data(&[expected])],
+        );
+    }
+
+    for (left, right) in [
+        (vec![0xc0, 0x80], b"abc".to_vec()),
+        (b"abc".to_vec(), vec![0xed, 0xa0, 0x80]),
+    ] {
+        expect_raw_error(
+            &mollusk,
+            program_id,
+            program_id,
+            program_account.clone(),
+            true,
+            &bounded_bytes_pair_data(STRINGS_EQUAL_TAG, &left, &right),
         );
     }
 }

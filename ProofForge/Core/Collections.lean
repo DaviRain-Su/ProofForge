@@ -144,6 +144,22 @@ def pop? {n : Nat} (bytes : BoundedBytes n) : Option (BoundedBytes n × UInt8) :
 def clear {n : Nat} (bytes : BoundedBytes n) : BoundedBytes n :=
   ofVec bytes.asVec.clear
 
+/-- Active-prefix byte equality for one bounded byte type. Both frames must be canonical, inactive
+backing bytes are ignored, and the scan is bounded by compile-time capacity rather than input. -/
+@[pf_inline] def equals {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then false
+  else if UInt64.ofNat capacity < right.length.toUInt64 then false
+  else if left.length != right.length then false
+  else Id.run do
+    let mut equal : UInt64 := 1
+    let mut visited : UInt64 := 0
+    for i in [0:capacity] do
+      let byteEqual : UInt64 := if left.values[i]! == right.values[i]! then 1 else 0
+      equal := equal &&& if UInt64.ofNat i < left.length.toUInt64 then byteEqual else 1
+      visited := visited + 1
+    return equal == 1 && visited == UInt64.ofNat capacity
+
 private def isContinuation (byte : Nat) : Bool := 0x80 ≤ byte && byte ≤ 0xbf
 
 /-- Strict Unicode scalar UTF-8 validation over the active prefix. It rejects truncated,
@@ -195,7 +211,7 @@ end ProofForge.Core.Value.BoundedBytes
 
 namespace ProofForge.Core.Value.BoundedString
 
-def asBytes (text : BoundedString capacity) : BoundedBytes capacity :=
+@[pf_inline] def asBytes (text : BoundedString capacity) : BoundedBytes capacity :=
   { length := text.length, values := text.values }
 
 def wellFormed (text : BoundedString capacity) : Bool := text.asBytes.isValidUtf8
@@ -203,6 +219,13 @@ def size (text : BoundedString capacity) : UInt64 := text.length.toUInt64
 def isEmpty (text : BoundedString capacity) : Bool := text.length == 0
 def getByte? (text : BoundedString capacity) (index : UInt64) : Option UInt8 :=
   text.asBytes.get? index
+
+/-- Unicode-string equality is active-prefix byte equality. As with Rust `String`, validity is a
+carrier invariant enforced by checked constructors and boundary codecs, not work repeated by each
+comparison. No normalization or locale policy is inferred. -/
+@[pf_inline] def equals {capacity : Nat}
+    (left right : BoundedString capacity) : Bool :=
+  left.asBytes.equals right.asBytes
 
 /-- Checked conversion keeps the byte and string carriers physically independent in source while
 reusing one strict UTF-8 contract. -/

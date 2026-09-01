@@ -30,8 +30,16 @@ private def shortBytes : BoundedBytes 8 :=
 private def fullString : BoundedString 8 :=
   { length := 8, values := #v[97, 98, 99, 100, 101, 102, 103, 104] }
 
+private def equalBytes : BoundedBytes 4 :=
+  { length := 2, values := #v[11, 13, 0, 0] }
+
+private def equalString : BoundedString 4 :=
+  { length := 3, values := #v[97, 98, 99, 0] }
+
 #guard boundedBytes (init 0) shortBytes == 13
 #guard boundedString (init 0) fullString == 209
+#guard bytesEqual (init 0) equalBytes equalBytes
+#guard stringsEqual (init 0) equalString equalString
 
 elab "#pf_guard_evm_bounded_abi" : command => do
   let env ← getEnv
@@ -59,6 +67,10 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing bounded string result entry"
   let some makeString := program.entries.find? (·.ixName == "makeBoundedString")
     | throwError "missing constructed bounded string result entry"
+  let some bytesEqual := program.entries.find? (·.ixName == "bytesEqual")
+    | throwError "missing bounded bytes equality entry"
+  let some stringsEqual := program.entries.find? (·.ixName == "stringsEqual")
+    | throwError "missing bounded string equality entry"
   unless bounded.logicalParamCount == 1 && bounded.paramCount == 5 &&
       bounded.paramTypes == #[.uint32, .uint64, .uint64, .uint64, .uint64] &&
       bounded.selector == ProofForge.Crypto.Keccak.selector "boundedValues" #["uint64[]"] &&
@@ -94,6 +106,18 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       makeString.paramCount == 9 && makeString.outputPlan == echoString.outputPlan do
     throwError s!"wrong EVM bounded ABI methods: {repr bounded}, {repr combined}, " ++
       s!"{repr bytes}, {repr text}"
+  unless bytesEqual.logicalParamCount == 2 && bytesEqual.paramCount == 10 &&
+      bytesEqual.selector == ProofForge.Crypto.Keccak.selector "bytesEqual" #["bytes", "bytes"] &&
+      bytesEqual.inputPolicy ==
+        "0=packed-bytes-v1(bytes;capacity=4;utf8=false)," ++
+        "1=packed-bytes-v1(bytes;capacity=4;utf8=false)" &&
+      stringsEqual.logicalParamCount == 2 && stringsEqual.paramCount == 10 &&
+      stringsEqual.selector ==
+        ProofForge.Crypto.Keccak.selector "stringsEqual" #["string", "string"] &&
+      stringsEqual.inputPolicy ==
+        "0=packed-bytes-v1(string;capacity=4;utf8=true)," ++
+        "1=packed-bytes-v1(string;capacity=4;utf8=true)" do
+    throwError "bounded bytes/string equality lost its two canonical dynamic inputs"
   let yul ←
     match ProofForge.Evm.Emit.emitYul program with
     | .ok yul => pure yul
