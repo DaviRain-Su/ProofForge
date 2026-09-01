@@ -822,6 +822,50 @@ theorem mQueuePush_empty_readback (mem : AccountWords) (q : BoundedQueue) (value
     rw [hsize] at h2
     exact h2.2
 
+
+/-! ### push 非空分支（nowrap）-/
+
+/-- 通用 UInt64 加法无回绕桥。 -/
+private theorem u64toNatAdd {a b : UInt64} (h : a.toNat + b.toNat < 4294967296*4294967296) :
+    (a + b).toNat = a.toNat + b.toNat := by
+  rw [UInt64.toNat_add]
+  have h2 : (2:Nat)^64 = 4294967296*4294967296 := by decide
+  rw [h2]
+  exact Nat.mod_eq_of_lt h
+
+/-- **非空推链接（nowrap）**：head ≠ 0、head + size ≤ cap 时，
+`mQueuePush` 整体 = `mQueuePushAt` 的三写组合（tail = head + size、
+head 写回自身）。 -/
+theorem mQueuePush_nowrap_links (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hnowrap : ¬ (BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0)) :
+    mQueuePush mem q value =
+      (mQueuePushAt mem q
+        (mReadField mem q.head 0 + mReadField mem q.count 0) value
+        (mReadField mem q.head 0) (mReadField mem q.count 0),
+        mReadField mem q.head 0 + mReadField mem q.count 0) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  -- 守卫：size < cap
+  have hguard : ¬ (BoundedQueue.capacity q ≤ mReadField mem q.count 0) := by
+    intro hh
+    have h1 := (UInt64.le_iff_toNat_le).mp hh
+    rw [hcapnat] at h1
+    omega
+  -- 加法无回绕
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+      have := hsize
+      have := hheadb
+      omega)
+  unfold mQueuePush
+  simp only [if_neg hguard, if_neg hhead, if_neg hnowrap]
+
 end QueueProofs
 
 end ProofForge.Svm.Sdk.StorageModel
