@@ -393,3 +393,7 @@ serializer-only `assert_valid` 边界保持不变。
 registration/balance key，按 active AccountId 长度加 64-byte canonical overhead 计价，
 available 恒为零，2..64-byte bounds 为 66..128 bytes。集成 fixture 使用显式 immutable
 1 yocto/byte profile；这不是网络 storage price，也不扩大 bounded JSON 或 NEP-145 claim。
+
+`storage_deposit` 也已组合到该 artifact：new registration 写入同一 BAL2 present-zero key，
+按真实 storage_usage delta × fixture price 留存并把 excess refund 给 predecessor；duplicate
+refund 全额 deposit。该操作不改变 supply，bounded parser/fixture price 差异继续明确保留。

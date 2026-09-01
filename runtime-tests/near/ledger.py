@@ -114,6 +114,26 @@ def _receipt_logs(response: dict) -> list[str]:
     ]
 
 
+def _assert_transfer_receipt(
+    client: NearClient, outcome: dict, receiver: str, amount: int
+) -> None:
+    for record in outcome.get("receipts_outcome", ()):
+        receipt_id = record.get("id")
+        if not receipt_id:
+            continue
+        receipt = client.rpc_call("EXPERIMENTAL_receipt", {"receipt_id": receipt_id})
+        if receipt.get("receiver_id") != receiver:
+            continue
+        actions = receipt.get("receipt", {}).get("Action", {}).get("actions", ())
+        if any(
+            isinstance(action, dict)
+            and int(action.get("Transfer", {}).get("deposit", -1)) == amount
+            for action in actions
+        ):
+            return
+    raise AssertionError(f"missing refund transfer to {receiver} for {amount}")
+
+
 def _ft_args(receiver: str, amount: int, memo: object = _MISSING) -> bytes:
     fields: dict[str, object] = {"receiver_id": receiver, "amount": str(amount)}
     if memo is not _MISSING:
@@ -378,6 +398,51 @@ def main() -> None:
             f"zero mint must validate missing-as-zero without a ledger mutation: "
             f"before={before!r}, after={after!r}"
         )
+    before_underfunded = client.view_state_values()
+    client.call_on(
+        client.account_id, "storage_deposit", b"{}", signer=client.account_id,
+        deposit=1, expect_success=False,
+    )
+    if client.view_state_values() != before_underfunded or self_key in client.view_state_values():
+        raise AssertionError("underfunded storage_deposit did not roll back speculative BAL2 write")
+    self_cost = len(client.account_id.encode()) + 64
+    deposit = 10_000
+    registered = client.call_on(
+        client.account_id, "storage_deposit", b"{}", signer=client.account_id,
+        deposit=deposit,
+    )
+    expected_registration = f'{{"total":"{self_cost}","available":"0"}}'.encode()
+    if NearClient.success_value_bytes(registered) != expected_registration:
+        raise AssertionError("integrated storage_deposit new-account output mismatch")
+    _assert_transfer_receipt(client, registered, client.account_id, deposit - self_cost)
+    if _storage_balance(client, client.account_id) != expected_registration:
+        raise AssertionError("integrated storage_deposit did not create BAL2 registration")
+    duplicate = client.call_on(
+        client.account_id, "storage_deposit", b'{"registration_only":true}',
+        signer=client.account_id, deposit=7,
+    )
+    _assert_transfer_receipt(client, duplicate, client.account_id, 7)
+    before_bad_deposit = client.view_state_values()
+    client.call_on(
+        client.account_id, "storage_deposit", b'{"unknown":null}',
+        signer=client.account_id, deposit=100, expect_success=False,
+    )
+    if client.view_state_values() != before_bad_deposit:
+        raise AssertionError("malformed integrated storage_deposit changed ledger state")
+    _call(client, "fixtureResetSelf")
+    if _storage_balance(client, client.account_id) != b"null":
+        raise AssertionError("storage_deposit registration did not share BAL2 lifecycle")
+    explicit = client.call_on(
+        client.account_id, "storage_deposit",
+        b'{"account_id":"aa","registration_only":true}',
+        signer=client.account_id, deposit=100,
+    )
+    if NearClient.success_value_bytes(explicit) != b'{"total":"66","available":"0"}':
+        raise AssertionError("explicit integrated storage_deposit result mismatch")
+    _assert_transfer_receipt(client, explicit, client.account_id, 34)
+    if _storage_balance(client, "aa") != b'{"total":"66","available":"0"}':
+        raise AssertionError("explicit storage_deposit did not use canonical BAL2 account key")
+    _call(client, "fixtureRemoveViewAccounts")
     print("near-ledger: metadata, missing/zero policy, and zero no-ledger-mutation ok")
 
     _call(client, "fixturePutSelfZeroNoSupply")

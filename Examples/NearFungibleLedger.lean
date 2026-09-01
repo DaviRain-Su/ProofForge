@@ -190,6 +190,75 @@ def storage_balance_bounds (_state : State) :
   else
     { min := ⟨0, 0⟩, hasMax := 2, max := ⟨0, 0⟩ }
 
+/-- Payable bounded registration over the exact BAL2 ledger namespace. New accounts are inserted
+as present zero, charged their measured live storage delta at the immutable one-yocto fixture
+price, and refund positive excess to the predecessor. Duplicate registrations refund the complete
+deposit. The bounded JSON grammar and fixture price remain narrower than stock NEP-145. -/
+@[pf_entry, pf_near_payable]
+def storage_deposit (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageDepositArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.StorageBalanceResult) :=
+  let caller := Context.caller
+  let mask := (0 : UInt64) - args.accountPresent
+  let account : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := (args.accountId.length &&& mask) ||| (caller.length &&& ~~~mask)
+      w0 := (args.accountId.w0 &&& mask) ||| (caller.w0 &&& ~~~mask)
+      w1 := (args.accountId.w1 &&& mask) ||| (caller.w1 &&& ~~~mask)
+      w2 := (args.accountId.w2 &&& mask) ||| (caller.w2 &&& ~~~mask)
+      w3 := (args.accountId.w3 &&& mask) ||| (caller.w3 &&& ~~~mask)
+      w4 := (args.accountId.w4 &&& mask) ||| (caller.w4 &&& ~~~mask)
+      w5 := (args.accountId.w5 &&& mask) ||| (caller.w5 &&& ~~~mask)
+      w6 := (args.accountId.w6 &&& mask) ||| (caller.w6 &&& ~~~mask)
+      w7 := (args.accountId.w7 &&& mask) ||| (caller.w7 &&& ~~~mask) }
+  let storagePrice : NearToken := ⟨1, 0⟩
+  if DirectAccountNearTokenMap.accountLengthValid account &&
+      Registration.trustedCostValid storagePrice then
+    let _ := balances.read account
+    if Registration.readWasMissing then
+      let before := ProofForge.Wasm.Near.Runtime.storageUsage
+      let writeStatus := balances.put account (⟨0, 0⟩ : NearToken)
+      if writeStatus ≤ 1 then
+        let after := ProofForge.Wasm.Near.Runtime.storageUsage
+        if Registration.usageDeltaValid before after then
+          let delta := after - before
+          if NearToken.canMulUInt64 storagePrice delta then
+            let cost : NearToken :=
+              ⟨NearToken.mulUInt64W0 storagePrice delta,
+                NearToken.mulUInt64W1 storagePrice delta⟩
+            let deposit := Context.attachedDeposit
+            if Registration.depositCovers deposit cost then
+              let excess : NearToken :=
+                ⟨NearToken.subW0 deposit cost, NearToken.subW1 deposit cost⟩
+              let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+                { registered := 1, total := ⟨cost.w0, cost.w1⟩,
+                  available := ⟨0, 0⟩ }
+              if Registration.tokenIsZero excess then
+                .ok (⟨state.supplyW0, state.supplyW1, writeStatus⟩, result)
+              else
+                let _ := Promises.transferAccountDetached caller excess
+                .ok (⟨state.supplyW0, state.supplyW1, writeStatus⟩, result)
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else if Registration.readWasValidPresent then
+      let bytes := Registration.variableAccountEntryBytes account
+      if NearToken.canMulUInt64 storagePrice bytes then
+        let cost : NearToken :=
+          ⟨NearToken.mulUInt64W0 storagePrice bytes,
+            NearToken.mulUInt64W1 storagePrice bytes⟩
+        let deposit := Context.attachedDeposit
+        let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+          { registered := 1, total := ⟨cost.w0, cost.w1⟩, available := ⟨0, 0⟩ }
+        if Registration.tokenIsZero deposit then
+          .ok (state, result)
+        else
+          let _ := Promises.transferAccountDetached caller deposit
+          .ok (state, result)
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

@@ -493,5 +493,11 @@ geometry observable (66..128 retained bytes) without pretending to source nearco
 price. Bounded AccountId grammar and variable economics remain explicit compatibility differences;
 no mutation lifecycle is added by this slice.
 
+**NEAR-INTEGRATED-STORAGE-DEPOSIT (wsm-near-ft-ledger-storage-deposit-001 done):** payable bounded
+`storage_deposit` now inserts present-zero registration balances into that same BAL2 namespace,
+measures live storage delta, retains delta × the immutable fixture price, refunds predecessor
+excess, and leaves supply unchanged. Duplicate registration refunds the complete deposit. The
+bounded input and non-network fixture price remain explicit compatibility boundaries.
+
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.
