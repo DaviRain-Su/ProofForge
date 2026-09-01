@@ -4121,4 +4121,127 @@ theorem walkAccount4FlagsAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 33 - Loader account-4 lamports/data_len after skip chain (`svm-sem-038`)
+
+Knife 32 covers account-4 signer/writable after the skip chain. Emit then reads account-4
+lamports and data_len from the same advanced header cursor (`+0x48` / `+0x50`). This knife
+composes that skip chain with those word loads and proves agreement with absolute `r6`-relative
+loads. Still not owner/executable/rent for account-4, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offsets/VAs for account-4 lamports and data_len. -/
+def account4LamportsOffset : Nat :=
+  account4HeaderOffset + (account0LamportsOffset - account0HeaderOffset)
+def account4DataLenOffset : Nat :=
+  account4HeaderOffset + (account0DataLenOffset - account0HeaderOffset)
+def account4LamportsAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account4LamportsOffset
+def account4DataLenAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account4DataLenOffset
+
+/-- Seed quadruple-skip+account-4 flags layout plus lamports and data_len words. -/
+def account4BudgetInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen : U64) :
+    Option Mem := do
+  let m₁ ← account4FlagsInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable
+  let m₂ ← storev .m64 m₁ account4LamportsAddr (.vlong acc4Lamports)
+  storev .m64 m₂ account4DataLenAddr (.vlong acc4DataLen)
+
+/-- Typed quadruple skip then account-4 budget: `ldxdw r1,[r2+0x48]`; `ldxdw r2,[r2+0x50]`. -/
+def walkAccount4BudgetAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let lamportsOff ← positiveOffset? (account0LamportsOffset - account0HeaderOffset)
+  let accDataLenOff ← positiveOffset? (account0DataLenOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 lamportsOff,
+    .ldx .m64 .br4 .br2 accDataLenOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run quadruple skip+account-4 budget walk against seeded input memory. -/
+def evalWalkAccount4BudgetAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount4BudgetAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-4 lamports and data_len. -/
+def evalAbsAccount4Budget? (memory : Mem) : Option (U64 × U64) := do
+  let lamports ← loadv .m64 memory account4LamportsAddr
+  let dataLen ← loadv .m64 memory account4DataLenAddr
+  match lamports, dataLen with
+  | .vlong l, .vlong d => some (l, d)
+  | _, _ => none
+
+/-- Walked account-4-budget-after-skip-chain assembly is well-formed. -/
+theorem walkAccount4BudgetAfterSkipChain_verified :
+    (walkAccount4BudgetAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete quadruple skip+budget: lamports=`4000`, data_len=`112`, lamports staged at `[r10-16]`. -/
+theorem evalWalkAccount4_after_skip_lamports_4000_dataLen_112 :
+    (do
+      let mem ← account4BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112
+      let (regs, finalMem) ← evalWalkAccount4BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 4000 && regs .br2 == 112 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 4000))) =
+      some true := by
+  native_decide
+
+/-- Walked account-4 budget after skip chain agrees with absolute `r6`-relative loads. -/
+theorem walkAccount4BudgetAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account4BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112
+      let (regs, _) ← evalWalkAccount4BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount4Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 4000 && dataLen == 112)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

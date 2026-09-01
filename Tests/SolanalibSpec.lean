@@ -964,5 +964,28 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 33: Loader account-4 lamports/data_len after skip chain (`svm-sem-038`)
+#guard (walkAccount4BudgetAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account4BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112
+      let (regs, finalMem) ← evalWalkAccount4BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 4000 && regs .br2 == 112 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 4000))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account4BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112
+      let (regs, _) ← evalWalkAccount4BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount4Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 4000 && dataLen == 112)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
