@@ -7673,7 +7673,8 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
 can compare or transform the result. Ordinary scalar lets remain eligible for direct substitution. -/
 private def isSequencedScalarProducer (env : Environment) (type value : Expr) : Bool :=
   type.consumeMData.getAppFn.constName? == some ``UInt64 &&
-    (mentionsSvmEffect env 16 value || (findForIn env value).isSome ||
+    (mentionsSvmEffect env 16 value || mentionsNearEffect env 16 value ||
+      (findForIn env value).isSome ||
       (findForBodyExpr env value).isSome)
 
 /-- Find one effect-free UInt64 helper below a pure expression wrapper whose bounded control must

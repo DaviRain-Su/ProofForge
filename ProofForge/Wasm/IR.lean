@@ -253,6 +253,8 @@ private partial def lowerOpsList {ValExt : Type} {OpExt : Type → Type} :
       return #[.errorOverflow] ++ (← lowerOpsList rest)
   | .errorNamed n :: rest =>
       return #[.errorNamed n] ++ (← lowerOpsList rest)
+  | .errorTyped _ :: _ =>
+      throw "extract/unsupported: wasm v0 rejects typed errors"
   | .ext payload :: rest =>
       return #[.ext payload] ++ (← lowerOpsList rest)
 
@@ -476,6 +478,10 @@ partial def opsCanon {ValExt : Type} {OpExt : Type → Type}
     | .okState value => s!"ok({valCanon extValCanon value})"
     | .errorOverflow => "ovf"
     | .errorNamed name => s!"err.{name}"
+    | .errorTyped frame =>
+        let args := frame.args.toList.map fun arg =>
+          s!"{arg.name}:{repr arg.type}({String.intercalate "," (arg.parts.map (valCanon extValCanon)).toList})"
+        s!"err.{frame.constructor}({String.intercalate "," args})"
     | .returnU64 value => s!"retu({valCanon extValCanon value})"
     | .returnState value => s!"rets({valCanon extValCanon value})"
     | .ext payload => extOpCanon payload

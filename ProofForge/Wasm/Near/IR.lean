@@ -99,6 +99,7 @@ private partial def opUsesSourceState (paramCount : Nat) : Wasm.IR.Op Ops.ValKin
   | .ext payload =>
       (Ops.cfgDialect.values payload).any (valUsesSourceState paramCount)
   | .joinLocal _ | .errorOverflow | .errorNamed _ => false
+  | .errorTyped frame => frame.values.any (valUsesSourceState paramCount)
 
 def entryPolicyOf (method : Method) : Except String EntryPolicy := do
   let policy ← EntryPolicy.ofCanonical method.entryPolicy

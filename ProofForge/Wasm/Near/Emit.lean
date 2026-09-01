@@ -2710,6 +2710,7 @@ private partial def opUsesArena : Op ValKind OpExt → Bool
       valUsesArena lhs || valUsesArena rhs || thn.any opUsesArena || els.any opUsesArena
   | .forBody _ body => body.any opUsesArena
   | .joinLocal _ | .errorOverflow | .errorNamed _ => false
+  | .errorTyped frame => frame.values.any valUsesArena
 
 private def methodUsesArena (method : Method ValKind OpExt) : Bool :=
   !method.outputPolicy.isEmpty || method.inputSchema == some Codec.accountIdSchema ||
