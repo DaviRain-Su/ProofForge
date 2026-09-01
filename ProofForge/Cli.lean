@@ -516,14 +516,29 @@ private def runInit (opts : Options) : IO UInt32 := do
   if proc.exitCode != 0 then
     IO.eprintln s!"pf: cp failed\n{proc.stderr}"
     return 1
-  -- Rewrite template `require … from ".." / ".."` (templates/* → repo root) to a
-  -- path relative to the new project directory (usually `..` when init runs at repo root).
+  -- Rewrite template `require … from ".." / ".."` (templates/* → repo root).
+  -- Sibling of the checkout → `from ".."`; otherwise absolute path to this checkout
+  -- so `pf init /tmp/demo` still resolves the SDK (prod-003 temp-dir acceptance).
   let lakefile := dst / "lakefile.lean"
   if ← lakefile.pathExists then
+    let repoRoot ← IO.currentDir
+    let dstAbs ←
+      try
+        IO.FS.realPath dst
+      catch _ =>
+        pure (repoRoot / dst)
+    let parentAbs ←
+      match dstAbs.parent with
+      | some p =>
+        try IO.FS.realPath p catch _ => pure p
+      | none => pure dstAbs
+    let requireFrom :=
+      if parentAbs == repoRoot then ".."
+      else repoRoot.toString
     let old ← IO.FS.readFile lakefile
     let rewritten :=
-      old.replace "from \"..\" / \"..\"" "from \"..\""
-        |>.replace "from \"../..\"" "from \"..\""
+      old.replace "from \"..\" / \"..\"" s!"from \"{requireFrom}\""
+        |>.replace "from \"../..\"" s!"from \"{requireFrom}\""
     IO.FS.writeFile lakefile rewritten
   let tipModule := if targetName == "svm" then "MyProgram.Counter" else "MyContract.Counter"
   IO.println s!"initialized {dst} (target={targetName})"

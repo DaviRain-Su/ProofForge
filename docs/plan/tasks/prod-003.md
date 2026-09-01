@@ -41,5 +41,6 @@ prod-002。解锁 prod-004。同一 PR #11。
 - [x] `pf init <name> --target svm|evm`
 - [x] templates 可 `lake build`；只 import Attr + Sdk
 - [x] `pf.toml` `[[program]]` 驱动 build
-- [ ] 完整 assemble 制品依赖本机 `sbpf`/`solc`
+- [x] 完整 assemble 制品依赖本机 `sbpf`/`solc`（本机钉已验证）
 - [x] 本地：`pf init`→`lake build`→`pf build` 产出 `.so`/`.bin`（svm+evm）
+- [x] 临时绝对路径目录：`pf init /tmp/…` 将 require 改写为 checkout 绝对路径，可 `lake build` + assemble

@@ -243,6 +243,7 @@ my-program/
 - [x] 生成物：`lakefile.lean`、`lean-toolchain`、`pf.toml`、最小合约、`README.md`
 - [x] 模板 path-`require` monorepo；合约只 import 对应 `*Sdk`（git tag 钉死见 P3）
 - [x] 验收：`pf init` → `lake build` 绿；`lake exe pf -- build` 产出 `.so`/`.bin`（本机已装 `sbpf`/`solc` 钉）
+- [x] 验收：绝对路径临时目录 `pf init /tmp/…`（require 指向本 checkout）→ `lake build` → assemble `.so`
 - [ ] （后续）near / xrpl 模板等 WASM SDK facade 稳定后再加
 
 ### 待做 · P3（prod-004）— Release 打包

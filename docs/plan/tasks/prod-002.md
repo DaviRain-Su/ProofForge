@@ -42,6 +42,7 @@ prod-001。解锁 prod-003。同一 PR #11。
 - [x] Lake libs：`ProofForgeSvmSdk` / `ProofForgeEvmSdk` / `ProofForge`（compiler）+ `ProofForgeCore`
 - [x] CLI：`--module` + `pf.toml`；Examples 硬编码仅作 Registry 回退
 - [x] import-closure CI：`scripts/check_sdk_import_closure.py`
-- [ ] 全量 CI 回归 digest（交 GitHub Actions）
+- [ ] 全量 CI 回归 digest（交 GitHub Actions；HEAD 含 Examples Lake globs）
 - [x] 本地：`Examples.Counter` SVM/EVM assemble 通过 Registry digest 钉（sbpf/solc 已装）
-- [x] 本地全量 Registry：SVM 70 / EVM 44 assemble + artifact manifest ok
+- [x] 本地全量 Registry：SVM 70 / EVM 44 / XRPL 23 / NEAR 38 assemble + artifact manifest ok
+- [x] `lean_lib Examples`：`globs := #[.one, .submodules]`；xrpl/near 走 `--module`/`pf.toml` resolveUnits
