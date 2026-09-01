@@ -157,7 +157,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | **done** | [sf-005](tasks/sf-005.md) |
 | SF-4a | TransientModel + Vector64 | L2 | **done** | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | done | [sf-007](tasks/sf-007.md) |
-| SF-5a | Allocator alloc/free 往返 | L2 | todo | [sf-008](tasks/sf-008.md) |
+| SF-5a | Allocator alloc/free 往返 | L2 | **partial** | [sf-008](tasks/sf-008.md) |
 | SF-5b | OrderedMap find/insert/remove | L2 | todo | [sf-009](tasks/sf-009.md) |
 | SF-6 | EnumerableSet | L2 | todo | [sf-010](tasks/sf-010.md) |
 | SF-7 | Tree 全树 wf 保持 | L2 | todo | [sf-011](tasks/sf-011.md) |

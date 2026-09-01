@@ -308,7 +308,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-005](tasks/sf-005.md) | todo | StorageBitSet mask 代数 + 账户桥 |
 | [sf-006](tasks/sf-006.md) | todo | TransientModel + Vector64 |
 | [sf-007](tasks/sf-007.md) | todo | Bytes + Record64 + WideVec |
-| [sf-008](tasks/sf-008.md) | todo | Allocator alloc/free 往返 |
+| [sf-008](tasks/sf-008.md) | partial | Allocator alloc/free 往返（mAlloc/mFree + 满/invalid 定理） |
 | [sf-009](tasks/sf-009.md) | todo | OrderedMap find/insert/remove 模型 |
 | [sf-010](tasks/sf-010.md) | todo | StorageEnumerableSet |
 | [sf-011](tasks/sf-011.md) | todo | Tree 全树 wf 保持 |

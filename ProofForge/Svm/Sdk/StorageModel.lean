@@ -1452,4 +1452,77 @@ theorem mQueuePush_pop_roundtrip_empty (mem : AccountWords) (q : BoundedQueue) (
 
 end QueueProofs
 
+/-! ## One-based allocator algebra -/
+
+/-- Slot column for free-list links (word 0 of each one-based slot). -/
+def mAllocSlotsField (alloc : Allocator) : Field :=
+  { region := alloc.slots }
+
+def mAllocLiveCountField (alloc : Allocator) : Field :=
+  @OneBasedAllocator.liveCount alloc
+
+def mAllocLiveCount (mem : AccountWords) (alloc : Allocator) : UInt64 :=
+  mReadField mem (mAllocLiveCountField alloc) 0
+
+def mAllocCursor (mem : AccountWords) (alloc : Allocator) : UInt64 :=
+  mReadField mem alloc.cursor 0
+
+def mAllocBump (mem : AccountWords) (alloc : Allocator) : UInt64 :=
+  mAllocCursor mem alloc &&& 0xffffffff
+
+def mAllocFreeHead (mem : AccountWords) (alloc : Allocator) : UInt64 :=
+  mAllocCursor mem alloc >>> 32
+
+/-- Mirror `Allocator.alloc`: reuse the free-list head when present, otherwise bump. -/
+def mAlloc (mem : AccountWords) (alloc : Allocator) : AccountWords × UInt64 :=
+  let capacity := UInt64.ofNat alloc.slots.capacity
+  let count := mAllocLiveCount mem alloc
+  let bump := mAllocBump mem alloc
+  let freeHead := mAllocFreeHead mem alloc
+  if capacity ≤ count then (mem, 0)
+  else if freeHead ≠ 0 then
+    let next := mReadField mem (mAllocSlotsField alloc) freeHead
+    let mem := mWriteField mem alloc.cursor 0 (bump ||| (next <<< 32))
+    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count + 1)
+    (mem, freeHead)
+  else if bump < capacity then
+    let mem := mWriteField mem alloc.cursor 0 ((bump + (1 : UInt64)) ||| (freeHead <<< 32))
+    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count + 1)
+    (mem, bump + 1)
+  else (mem, 0)
+
+/-- Mirror `Allocator.free`: thread the slot through word 0 onto the free list. -/
+def mFree (mem : AccountWords) (alloc : Allocator) (slot : UInt64) : AccountWords × UInt64 :=
+  let capacity := UInt64.ofNat alloc.slots.capacity
+  let count := mAllocLiveCount mem alloc
+  let bump := mAllocBump mem alloc
+  let freeHead := mAllocFreeHead mem alloc
+  if slot = 0 ∨ bump < slot ∨ capacity < slot ∨ count = 0 then (mem, 0)
+  else
+    let mem := mWriteField mem (mAllocSlotsField alloc) slot freeHead
+    let mem := mWriteField mem alloc.cursor 0 (bump ||| (slot <<< 32))
+    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count - 1)
+    (mem, slot)
+
+/-! ### Allocator algebra theorems -/
+
+/-- **满分配返回 0 且不改内存**。 -/
+theorem mAlloc_full_noop (mem : AccountWords) (alloc : Allocator)
+    (hfull : UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem alloc) :
+    mAlloc mem alloc = (mem, 0) := by
+  unfold mAlloc
+  rw [if_pos hfull]
+
+/-- **空槽 / 未 bump / 越界 / 空计数 free 返回 0 且不改内存**。 -/
+theorem mFree_invalid_noop (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
+    (h : slot = 0 ∨ mAllocBump mem alloc < slot ∨
+      UInt64.ofNat alloc.slots.capacity < slot ∨ mAllocLiveCount mem alloc = 0) :
+    mFree mem alloc slot = (mem, 0) := by
+  unfold mFree
+  rcases h with h | h | h | h
+  · rw [if_pos (Or.inl h)]
+  · rw [if_pos (Or.inr (Or.inl h))]
+  · rw [if_pos (Or.inr (Or.inr (Or.inl h)))]
+  · rw [if_pos (Or.inr (Or.inr (Or.inr h)))]
+
 end ProofForge.Svm.Sdk.StorageModel
