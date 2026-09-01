@@ -455,6 +455,8 @@ ledger_anchors = (
     '(func (export "ft_balance_of")',
     '(func (export "ft_total_supply")',
     '(func (export "ft_metadata")',
+    '(func (export "storage_balance_of")',
+    '(func (export "storage_balance_bounds")',
     '(func (export "ft_transfer")',
     '(func (export "mintSelfOne")',
     '(func (export "mintSelfTwo64")',

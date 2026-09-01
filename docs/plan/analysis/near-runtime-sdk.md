@@ -486,5 +486,12 @@ asynchronous; dynamic handles and multi-action builders are absent.
     reads, converts explicit old split keys, persists transformed fields, and advances the current
     envelope last. The sandbox gate performs a genuine Counter V1 → two-field V2 code upgrade.
 
+**NEAR-INTEGRATED-STORAGE-VIEWS (wsm-near-ft-ledger-storage-views-001 done):** the real
+`NearFungibleLedger` artifact composes `storage_balance_of` and `storage_balance_bounds` directly
+over its BAL2 balances. The immutable one-yocto-per-byte fixture profile makes 2..64-byte variable
+geometry observable (66..128 retained bytes) without pretending to source nearcore's network
+price. Bounded AccountId grammar and variable economics remain explicit compatibility differences;
+no mutation lifecycle is added by this slice.
+
 Each task must pin host imports, memory ranges, bounds, view legality, canonical IR, assembly, and a
 near-sandbox scene. Mainnet/testnet deployment remains a separate lifecycle gate.

@@ -30,6 +30,8 @@ elab "#pf_near_fungible_ledger_check" : command => do
     (source.methods.find? (·.ixName == name)).map (storageSteps ·.ops) |>.getD #[]
   unless methodSteps "mintSelfOne" == #["read.16.72", "write.16.72.16"] &&
       methodSteps "ft_balance_of" == #["read.16.72"] &&
+      methodSteps "storage_balance_of" == #["read.16.72"] &&
+      methodSteps "storage_balance_bounds" == #[] &&
       methodSteps "ft_total_supply" == #[] &&
       methodSteps "ft_metadata" == #[] &&
       methodSteps "ft_transfer" ==
@@ -61,6 +63,18 @@ elab "#pf_near_fungible_ledger_check" : command => do
       sourceMetadata.retSchema == Codec.fungibleTokenMetadataResultSchema &&
       sourceMetadata.retCount == 70 && sourceMetadata.paramCount == 0 do
     throwError "integrated ft_metadata lost no-args or exact nominal 70-leaf source frame"
+  let some sourceStorageBalance := source.methods.find? (·.ixName == "storage_balance_of")
+    | throwError "missing source storage_balance_of"
+  let some sourceStorageBounds := source.methods.find? (·.ixName == "storage_balance_bounds")
+    | throwError "missing source storage_balance_bounds"
+  unless sourceStorageBalance.paramSchemas == #[Codec.accountIdSchema] &&
+      sourceStorageBalance.retSchema == Codec.storageBalanceResultSchema &&
+      sourceStorageBalance.retCount == 5 &&
+      sourceStorageBounds.annotations == #["near.no-args-ignore-input.v1"] &&
+      sourceStorageBounds.paramCount == 0 &&
+      sourceStorageBounds.retSchema == Codec.storageBalanceBoundsResultSchema &&
+      sourceStorageBounds.retCount == 5 do
+    throwError "integrated storage views lost their exact nominal source frames"
   let duplicateNoArgs := { source with methods := source.methods.map fun candidate =>
     if candidate.ixName == "ft_total_supply" then
       { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
@@ -117,6 +131,23 @@ elab "#pf_near_fungible_ledger_check" : command => do
       metadata.outputPolicy == Codec.OutputPlan.jsonFungibleTokenMetadata.canonical &&
       metadata.paramCount == 0 && metadata.tupleArity == some 70 do
     throwError "integrated ft_metadata lost bounded metadata/no-args target composition"
+  let some storageBalance := program.entries.find? (·.ixName == "storage_balance_of")
+    | throwError "missing target storage_balance_of"
+  unless storageBalance.inputSchema == some Codec.accountIdSchema &&
+      storageBalance.inputPolicy ==
+        "near-json-account-id-object-bounded-v1(max-wire=433,ws=32,keys=canonical,unknown=reject)" &&
+      storageBalance.outputSchema == some Codec.storageBalanceResultSchema &&
+      storageBalance.outputPolicy == "near-json-storage-balance-option-v1" &&
+      storageBalance.tupleArity == some 5 do
+    throwError "integrated storage_balance_of lost specialized input/output policies"
+  let some storageBounds := program.entries.find? (·.ixName == "storage_balance_bounds")
+    | throwError "missing target storage_balance_bounds"
+  unless storageBounds.inputSchema == some .unit &&
+      storageBounds.inputPolicy == "near-no-args-ignore-input-v1" &&
+      storageBounds.outputSchema == some Codec.storageBalanceBoundsResultSchema &&
+      storageBounds.outputPolicy == "near-json-storage-balance-bounds-v1" &&
+      storageBounds.paramCount == 0 && storageBounds.tupleArity == some 5 do
+    throwError "integrated storage_balance_bounds lost exact target policies"
   let some transfer := program.entries.find? (·.ixName == "ft_transfer")
     | throwError "missing target ft_transfer"
   unless transfer.kind == .increment && transfer.entryPolicy == "near.entry.v1:payable" &&
@@ -164,6 +195,8 @@ elab "#pf_near_fungible_ledger_check" : command => do
       "(func (export \"ft_balance_of\")",
       "(func (export \"ft_total_supply\")",
       "(func (export \"ft_metadata\")",
+      "(func (export \"storage_balance_of\")",
+      "(func (export \"storage_balance_bounds\")",
       "(func (export \"ft_transfer\")",
       "(func (export \"ft_transfer_call\")",
       "(func (export \"seedSelfMalformed8\")",
@@ -224,6 +257,25 @@ elab "#pf_near_fungible_ledger_check" : command => do
       !metadataBody.contains "(call $pf_log_utf8" &&
       !metadataBody.contains "(call $pf_promise" do
     throwError "ft_metadata must ignore request bytes and return once without ledger effects"
+  let storageBalanceBody ← match wat.splitOn "(func (export \"storage_balance_of\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "storage_balance_of must occur exactly once"
+  unless (storageBalanceBody.splitOn "(call $pf_input").length == 2 &&
+      storageBalanceBody.contains "(call $pf_storage_read" &&
+      !storageBalanceBody.contains "(call $pf_storage_write" &&
+      !storageBalanceBody.contains "(call $pf_storage_remove" &&
+      !storageBalanceBody.contains "(call $pf_log_utf8" &&
+      !storageBalanceBody.contains "(call $pf_promise" do
+    throwError "storage_balance_of must parse/read/return without mutation or effects"
+  let storageBoundsBody ← match wat.splitOn "(func (export \"storage_balance_bounds\")" with
+    | [_before, tail] => pure ((tail.splitOn "\n  (func (export").headD "")
+    | _ => throwError "storage_balance_bounds must occur exactly once"
+  unless storageBoundsBody.contains "(call $pf_value_return" &&
+      !storageBoundsBody.contains "(call $pf_storage_write" &&
+      !storageBoundsBody.contains "(call $pf_storage_remove" &&
+      !storageBoundsBody.contains "(call $pf_log_utf8" &&
+      !storageBoundsBody.contains "(call $pf_promise" do
+    throwError "storage_balance_bounds must return without ledger mutation/effects"
   let legacyNoArgsBody ← match wat.splitOn "(func (export \"balanceSelfHas\")" with
     | [_before, tail] =>
         match tail.splitOn "\n  )\n" with
@@ -356,6 +408,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "42755127e5f3053d"
+  some "96ee0b3cb03f65b"
 
 end Tests.NearFungibleLedgerSpec

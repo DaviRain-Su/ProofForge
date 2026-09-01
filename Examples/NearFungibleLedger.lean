@@ -146,6 +146,50 @@ def ft_metadata (_state : State) : ProofForge.Wasm.Near.Runtime.FungibleTokenMet
     referenceHashW3 := 0
     decimals := 18 }
 
+/-- Variable-cost registration view over the ledger's canonical `BAL2` balance namespace. The
+bounded AccountId wrapper and immutable one-yocto fixture price are explicit ProofForge policy,
+not a complete NEP-145 compatibility claim. -/
+@[pf_entry]
+def storage_balance_of (_state : State)
+    (account : ProofForge.Wasm.Near.Runtime.AccountId) :
+    ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+  let storagePrice : NearToken := ⟨1, 0⟩
+  let _ := balances.read account
+  if Registration.readWasMissing then
+    { registered := 0, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+  else if Registration.readWasValidPresent then
+    let bytes := Registration.variableAccountEntryBytes account
+    if Registration.trustedCostValid storagePrice &&
+        NearToken.canMulUInt64 storagePrice bytes then
+      { registered := 1,
+        total := ⟨NearToken.mulUInt64W0 storagePrice bytes,
+          NearToken.mulUInt64W1 storagePrice bytes⟩,
+        available := ⟨0, 0⟩ }
+    else
+      { registered := 2, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+  else
+    { registered := 2, total := ⟨0, 0⟩, available := ⟨0, 0⟩ }
+
+/-- Truthful extrema for the accepted 2..64-byte AccountId registration geometry. Request bytes
+are ignored like near-sdk's no-argument wrapper; the variable bounds differ from stock fixed-cost
+fungible-token economics. -/
+@[pf_entry, pf_near_no_args]
+def storage_balance_bounds (_state : State) :
+    ProofForge.Wasm.Near.Runtime.StorageBalanceBoundsResult :=
+  let storagePrice : NearToken := ⟨1, 0⟩
+  let minBytes := Registration.minimumAccountEntryBytes
+  let maxBytes := Registration.maximumAccountEntryBytes
+  if Registration.trustedCostValid storagePrice &&
+      NearToken.canMulUInt64 storagePrice minBytes &&
+      NearToken.canMulUInt64 storagePrice maxBytes then
+    { min := ⟨NearToken.mulUInt64W0 storagePrice minBytes,
+        NearToken.mulUInt64W1 storagePrice minBytes⟩,
+      hasMax := 1,
+      max := ⟨NearToken.mulUInt64W0 storagePrice maxBytes,
+        NearToken.mulUInt64W1 storagePrice maxBytes⟩ }
+  else
+    { min := ⟨0, 0⟩, hasMax := 2, max := ⟨0, 0⟩ }
+
 /-- Public-shaped view fixture over the closed ledger namespace. Its input grammar remains the
 bounded ProofForge AccountId object subset rather than a generic near-sdk serde wrapper. -/
 @[pf_entry]

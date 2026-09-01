@@ -99,6 +99,13 @@ def _metadata_wire() -> bytes:
     ).encode("utf-8")
 
 
+def _storage_balance(client: NearClient, account_id: str) -> bytes:
+    return client.view(
+        "storage_balance_of",
+        json.dumps({"account_id": account_id}, separators=(",", ":")).encode(),
+    )
+
+
 def _receipt_logs(response: dict) -> list[str]:
     return [
         log
@@ -346,6 +353,13 @@ def main() -> None:
             raise AssertionError("integrated ft_metadata request-ignore or exact bytes mismatch")
     if client.view_state_values() != metadata_before:
         raise AssertionError("integrated ft_metadata changed ledger state")
+    if client.view("storage_balance_bounds", b"") != b'{"min":"66","max":"128"}':
+        raise AssertionError("integrated storage_balance_bounds geometry mismatch")
+    for wire in (b"{}", b"not-json", b"\xff" * 4096):
+        if client.view("storage_balance_bounds", wire) != b'{"min":"66","max":"128"}':
+            raise AssertionError("integrated storage bounds did not ignore request bytes")
+    if _storage_balance(client, "aa") != b"null":
+        raise AssertionError("integrated storage_balance_of missing account was not null")
     for wire in (b"{}", b"not-json", b"\xff" * 4096):
         if _json_supply(client, wire) != 0:
             raise AssertionError("ft_total_supply no-args wrapper changed result for ignored bytes")
@@ -368,6 +382,12 @@ def main() -> None:
 
     _call(client, "fixturePutSelfZeroNoSupply")
     present_zero = client.view_state_values()
+    expected_self_cost = len(client.account_id.encode()) + 64
+    expected_self_balance = (
+        f'{{"total":"{expected_self_cost}","available":"0"}}'.encode()
+    )
+    if _storage_balance(client, client.account_id) != expected_self_balance:
+        raise AssertionError("integrated storage_balance_of present-zero cost mismatch")
     if self_key not in present_zero or len(present_zero[self_key]) != 16:
         raise AssertionError("fixture present-zero balance was not stored exactly")
     if _view(client, "balanceSelfHas") != 1 or _json_balance(client, self_id.encode()) != 0:
@@ -379,9 +399,13 @@ def main() -> None:
     _call(client, "fixturePutShortNoSupply")
     if _json_balance(client, short_id.encode()) != (1 << 64) + 3:
         raise AssertionError("short AccountId lookup included inactive carrier padding")
+    if _storage_balance(client, short_id) != b'{"total":"66","available":"0"}':
+        raise AssertionError("short registration geometry did not use active AccountId bytes")
     _call(client, "fixturePutMaxAccountNoSupply")
     if _json_balance(client, max_id.encode()) != MAX_U128:
         raise AssertionError("maximum asymmetric AccountId/u128 lookup mismatch")
+    if _storage_balance(client, max_id) != b'{"total":"128","available":"0"}':
+        raise AssertionError("maximum registration geometry mismatch")
     if _json_balance(client, max_id.replace("a", "\\u0061", 1).encode()) != MAX_U128:
         raise AssertionError("escaped maximum AccountId lookup mismatch")
     _call(client, "fixtureRemoveViewAccounts")
@@ -395,6 +419,12 @@ def main() -> None:
     if len(malformed8[self_key]) != 8:
         raise AssertionError("malformed-short seed geometry mismatch")
     _json_balance_fails(client, self_id.encode(), "malformed-short balance")
+    try:
+        _storage_balance(client, self_id)
+    except NearRpcError:
+        pass
+    else:
+        raise AssertionError("malformed-short storage_balance_of did not fail closed")
     _fail_unchanged(client, "mintSelfOne", "malformed-short balance")
     if client.view_state_values() != malformed8:
         raise AssertionError("malformed-short rejection lost exact snapshot")
@@ -405,6 +435,12 @@ def main() -> None:
     if len(malformed20[self_key]) != 20:
         raise AssertionError("malformed-long seed geometry mismatch")
     _json_balance_fails(client, self_id.encode(), "malformed-long balance")
+    try:
+        _storage_balance(client, self_id)
+    except NearRpcError:
+        pass
+    else:
+        raise AssertionError("malformed-long storage_balance_of did not fail closed")
     _fail_unchanged(client, "burnSelfZero", "malformed-long zero burn")
     if client.view_state_values() != malformed20:
         raise AssertionError("malformed-long rejection exposed partial/stale data")

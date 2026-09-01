@@ -242,6 +242,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [wsm-near-json-ft-metadata-output-001](tasks/wsm-near-json-ft-metadata-output-001.md) | done | bounded seven-field NEP-148 metadata object output prerequisite |
 | [wsm-near-ft-metadata-001](tasks/wsm-near-ft-metadata-001.md) | done | bounded public-shaped `ft_metadata` view with explicit assert-valid boundary |
 | [wsm-near-ft-ledger-metadata-001](tasks/wsm-near-ft-ledger-metadata-001.md) | done | compose bounded `ft_metadata` into the integrated BAL2 fungible-ledger artifact |
+| [wsm-near-ft-ledger-storage-views-001](tasks/wsm-near-ft-ledger-storage-views-001.md) | done | compose variable-cost NEP-145-shaped views into the integrated BAL2 ledger artifact |
 | [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
 | [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
 | [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |

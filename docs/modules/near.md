@@ -388,3 +388,8 @@ bounded capacities 仍意味着不声称完整 NEP-148 ABI。
 `ft_total_supply`、`ft_balance_of`、`ft_transfer`、`ft_transfer_call` 与 metadata view 在
 同一 artifact 中可用。metadata view 不读取或修改余额/供应量；其 bounded capacity 与
 serializer-only `assert_valid` 边界保持不变。
+
+同一 artifact 也组合 `storage_balance_of` 与 `storage_balance_bounds`：直接查询 BAL2
+registration/balance key，按 active AccountId 长度加 64-byte canonical overhead 计价，
+available 恒为零，2..64-byte bounds 为 66..128 bytes。集成 fixture 使用显式 immutable
+1 yocto/byte profile；这不是网络 storage price，也不扩大 bounded JSON 或 NEP-145 claim。
