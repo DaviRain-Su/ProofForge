@@ -2077,8 +2077,11 @@ private def linksAllocated (s : State) : Prop :=
 
 private theorem allocated_mono {s t : State} {a : UInt64}
     (ha : allocated s a) (hbump : s.bumpIndex ≤ t.bumpIndex) : allocated t a := by
-  unfold allocated at *
-  exact ⟨ha.1, by omega⟩
+  refine ⟨ha.1, ?_⟩
+  show a.toNat < t.bumpIndex.toNat
+  have ha' : a.toNat < s.bumpIndex.toNat := ha.2
+  have hbump' : s.bumpIndex.toNat ≤ t.bumpIndex.toNat := hbump
+  omega
 
 /-- `fixInserted` 不改 allocator 元数据；颜色翻转和 N=4 紧凑重接线只写入
 哨兵或已分配地址，因此保持 `wf`。 -/
@@ -2152,7 +2155,9 @@ private theorem fixInserted_wf (before s : State)
         · rw [if_pos huncleRed] at h
           have huncle0 : uncleAddress ≠ 0 := by
             intro hzero
-            simp only [hzero, if_pos, OfNat.zero_ne_ofNat] at huncleRed
+            have h01 : (0 : UInt64) ≠ 1 := by decide
+            apply h01
+            simpa only [hzero, if_pos] using huncleRed
           have huncleBefore : allocated before uncleAddress := by
             rcases hgrandLinks.2.1 with hzero | halloc
             · exact (huncle0 hzero).elim
@@ -2262,7 +2267,9 @@ private theorem fixInserted_wf (before s : State)
         · rw [if_pos huncleRed] at h
           have huncle0 : uncleAddress ≠ 0 := by
             intro hzero
-            simp only [hzero, if_pos, OfNat.zero_ne_ofNat] at huncleRed
+            have h01 : (0 : UInt64) ≠ 1 := by decide
+            apply h01
+            simpa only [hzero, if_pos] using huncleRed
           have huncleBefore : allocated before uncleAddress := by
             rcases hgrandLinks.1 with hzero | halloc
             · exact (huncle0 hzero).elim
