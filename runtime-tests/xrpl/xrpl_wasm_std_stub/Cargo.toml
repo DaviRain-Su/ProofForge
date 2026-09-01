@@ -1,0 +1,9 @@
+[package]
+name = "xrpl_wasm_std"
+version = "0.0.0-stub"
+edition = "2021"
+
+# Local compilation stub of the xrpl_wasm_std surface ProofForge v0 emits against
+# (get_current_contract_call / get_data / set_data). NOT the real crate at
+# Transia-RnD/craft rev ffbe88da26df27e59a72b6202883f42f696933cc; this gate only
+# type-checks generated sources, it makes no claim about the real XRPL host.

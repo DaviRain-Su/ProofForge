@@ -1,0 +1,19 @@
+primitives = ["contract"]
+
+[project]
+name = "Counter"
+version = "0.1.0"
+
+[build]
+source = "contract/src/lib.rs"
+target = "wasm32-unknown-unknown"
+
+[networks.local]
+url = "ws://localhost:6006"
+network_id = 100
+faucet_url = "http://localhost:8080/faucet"
+
+[local_node]
+docker_image = "lejamon/rippled_smart_contract_vault_x86"
+config_dir = ".bedrock/node-config"
+ledger_interval = 1000

@@ -5,12 +5,79 @@ import ProofForge.Attr
 import ProofForge.Core.Value
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
+import ProofForge.Wasm.Near.Runtime
+import ProofForge.Wasm.Near.Sdk.Promise
+import ProofForge.Wasm.Near.Sdk.Store.AccountTokenLookup
+import ProofForge.Wasm.Near.Sdk.Transient
+import ProofForge.Wasm.Near.Sdk.Storage
 import ProofForge.Evm.Codec
+import ProofForge.Wasm.Xrpl.Runtime
 import ProofForge.Extract.Lexical
 
 open Lean
 
 namespace ProofForge.Extract
+
+/-- NEAR Runtime host reads. Matched by const name before any empty-arg UInt64
+unfold that would bake the irreducible stub body `0` into a literal. -/
+private def nearRuntimeLeaf? (e : Expr) : Option Ops.Val :=
+  if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockIndex then
+    some Ops.Val.nearBlockIndex
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.blockTimestamp then
+    some Ops.Val.nearBlockTimestamp
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageUsage then
+    some Ops.Val.nearStorageUsage
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessor then
+    some Ops.Val.nearPredecessor
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorLen then
+    some Ops.Val.nearPredecessorLen
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW1 then
+    some Ops.Val.nearPredecessorW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW2 then
+    some Ops.Val.nearPredecessorW2
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW3 then
+    some Ops.Val.nearPredecessorW3
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW4 then
+    some Ops.Val.nearPredecessorW4
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW5 then
+    some Ops.Val.nearPredecessorW5
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW6 then
+    some Ops.Val.nearPredecessorW6
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.predecessorW7 then
+    some Ops.Val.nearPredecessorW7
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDeposit then
+    some Ops.Val.nearAttachedDeposit
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDepositW0 then
+    some Ops.Val.nearAttachedDepositW0
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.attachedDepositW1 then
+    some Ops.Val.nearAttachedDepositW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalance then
+    some Ops.Val.nearAccountBalance
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalanceW0 then
+    some Ops.Val.nearAccountBalanceW0
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountBalanceW1 then
+    some Ops.Val.nearAccountBalanceW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountId then
+    some Ops.Val.nearCurrentAccountId
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdLen then
+    some Ops.Val.nearCurrentAccountIdLen
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW1 then
+    some Ops.Val.nearCurrentAccountIdW1
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW2 then
+    some Ops.Val.nearCurrentAccountIdW2
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW3 then
+    some Ops.Val.nearCurrentAccountIdW3
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW4 then
+    some Ops.Val.nearCurrentAccountIdW4
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW5 then
+    some Ops.Val.nearCurrentAccountIdW5
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW6 then
+    some Ops.Val.nearCurrentAccountIdW6
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.currentAccountIdW7 then
+    some Ops.Val.nearCurrentAccountIdW7
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultsCount then
+    some Ops.Val.nearPromiseResultsCount
+  else none
 
 set_option maxRecDepth 2048 in
 mutual
@@ -92,7 +159,149 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     Option Ops.Val :=
   let field := n.toString
   let user := isUserName env n || isBoundaryProjectionName env n
-  if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
+  if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64Ok ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W1) &&
+      e.getAppArgs.size ≥ 3 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 3]!, asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some valueLo, some valueHi, some factor =>
+        if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64Ok then
+          some (.nearTokenMulU64Ok valueLo valueHi factor)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenMulU64W0 then
+          some (.nearTokenMulU64W0 valueLo valueHi factor)
+        else
+          some (.nearTokenMulU64W1 valueLo valueHi factor)
+    | _, _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW1 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubOk ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW1) &&
+      e.getAppArgs.size ≥ 4 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 4]!, asVal env fuel args[args.size - 3]!,
+        asVal env fuel args[args.size - 2]!, asVal env fuel args[args.size - 1]! with
+    | some leftLo, some leftHi, some rightLo, some rightHi =>
+        if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddOk then
+          some (.nearTokenAddOk leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW0 then
+          some (.nearTokenAddW0 leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenAddW1 then
+          some (.nearTokenAddW1 leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubOk then
+          some (.nearTokenSubOk leftLo leftHi rightLo rightHi)
+        else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nearTokenSubW0 then
+          some (.nearTokenSubW0 leftLo leftHi rightLo rightHi)
+        else
+          some (.nearTokenSubW1 leftLo leftHi rightLo rightHi)
+    | _, _, _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Get &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity.toNat then
+          some (.nearTransientBuffer64Get capacity.toNat index)
+        else none
+    | _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultStatus ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultLength ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultFits) &&
+      e.getAppArgs.size ≥ 1 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 1]!
+    match asStaticLit env fuel capacityExpr with
+    | some (.lit capacity) =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultStatus then
+            some (.nearStorageResultStatus capacity)
+          else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultLength then
+            some (.nearStorageResultLength capacity)
+          else
+            some (.nearStorageResultFits capacity)
+        else none
+    | _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultByte &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearStorageResultByte capacity index)
+        else none
+    | _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultNearTokenW0Strict then
+    some .nearStorageResultNearTokenW0Strict
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageResultNearTokenW1Strict then
+    some .nearStorageResultNearTokenW1Strict
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultStatus ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultLength ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultFits) &&
+      e.getAppArgs.size ≥ 1 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 1]!
+    match asStaticLit env fuel capacityExpr with
+    | some (.lit capacity) =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultStatus then
+            some (.nearPromiseResultStatus capacity)
+          else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultLength then
+            some (.nearPromiseResultLength capacity)
+          else
+            some (.nearPromiseResultFits capacity)
+        else none
+    | _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultByte &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some index =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearPromiseResultByte capacity index)
+        else none
+    | _, _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultBorshUInt64D &&
+      e.getAppArgs.size ≥ 2 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 2]!
+    match asStaticLit env fuel capacityExpr, asVal env fuel args[args.size - 1]! with
+    | some (.lit capacity), some fallback =>
+        let capacity := capacity.toNat
+        if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+          some (.nearPromiseResultBorshUInt64D capacity fallback)
+        else none
+    | _, _ => none
+  else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultQuotedU128Valid ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultQuotedU128W0 ||
+      isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultQuotedU128W1) &&
+      e.getAppArgs.size ≥ 1 then
+    let args := e.getAppArgs
+    let capacityExpr := unfoldUserHelpers env 8 args[args.size - 1]!
+    match asStaticLit env fuel capacityExpr with
+    | some (.lit capacity) =>
+        let capacity := capacity.toNat
+        if capacity == 41 then
+          if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultQuotedU128Valid then
+            some (.nearPromiseResultQuotedU128Valid capacity)
+          else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultQuotedU128W0 then
+            some (.nearPromiseResultQuotedU128W0 capacity)
+          else
+            some (.nearPromiseResultQuotedU128W1 capacity)
+        else none
+    | _ => none
+  else if let some leaf := nearRuntimeLeaf? e then
+    some leaf
+  else if (isConstNamed e ``Eq || isConstNamed e ``BEq.beq || isConstNamed e ``Ne ||
       isConstNamed e ``bne ||
       isConstNamed e ``LT.lt || isConstNamed e ``LE.le || isConstNamed e ``GT.gt ||
       isConstNamed e ``GE.ge || endsWith e ".ge" || endsWith e ".hGe") &&
@@ -171,6 +380,44 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
     | .lit (.strVal s) => some (.sha256Lit s)
     | _ => none
+  else if isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSha512HalfLit &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplSha512HalfLit s)
+    | _ => none
+  else if (endsWith e ".xrplAccountLitW0" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW0) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW0 s)
+    | _ => none
+  else if (endsWith e ".xrplAccountLitW1" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW1) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW1 s)
+    | _ => none
+  else if (endsWith e ".xrplAccountLitW2" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLitW2) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplAccountLitW2 s)
+    | _ => none
+  else if (endsWith e ".xrplLitBalanceDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplLitBalanceDrops) &&
+      e.getAppArgs.size ≥ 1 then
+    match strip e.getAppArgs[e.getAppArgs.size - 1]! with
+    | .lit (.strVal s) => some (.xrplLitBalanceDrops s)
+    | _ => none
+  else if (endsWith e ".xrplStoreOwner" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplStoreOwner) &&
+      e.getAppArgs.size ≥ 3 then
+    let args := e.getAppArgs
+    match asVal env fuel args[args.size - 3]!,
+        asVal env fuel args[args.size - 2]!,
+        asVal env fuel args[args.size - 1]! with
+    | some w0, some w1, some w2 => some (.xrplStoreOwner w0 w1 w2)
+    | _, _, _ => none
   else if (endsWith e ".keccak256Lit" || isConstNamed e ``ProofForge.Svm.Runtime.keccak256Lit) &&
       e.getAppArgs.size ≥ 1 then
     match strip e.getAppArgs[e.getAppArgs.size - 1]! with
@@ -720,7 +967,15 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
             some (.ext (.evm (.component (.wideWord query))) #[a0, a1, a2, a3, amount])
           | _, _ => none
       | none, none, none =>
-        if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
+        if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.attachedDeposit128 then
+          if leaf == "w0" then some Ops.Val.nearAttachedDepositW0
+          else if leaf == "w1" then some Ops.Val.nearAttachedDepositW1
+          else none
+        else if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.accountBalance128 then
+          if leaf == "w0" then some Ops.Val.nearAccountBalanceW0
+          else if leaf == "w1" then some Ops.Val.nearAccountBalanceW1
+          else none
+        else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmMapGetAddr256 ||
             endsWith baseE ".evmMapGetAddr256" then
           let gargs := baseE.getAppArgs
           if gargs.size < 2 then none
@@ -884,6 +1139,36 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
               match strip baseE with
               | .bvar i => some (flattenField (.arg i) leaf)
               | _ => none
+  else if let some leaf := nearAccountIdProjLeaf n then
+    let args := e.getAppArgs
+    if args.isEmpty then none
+    else
+      let baseE := unfoldUserHelpers env 8 args[args.size - 1]!
+      if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.predecessorAccountId ||
+          endsWith baseE ".predecessorAccountId" then
+        some (match leaf with
+          | "length" => .nearPredecessorLen
+          | "w0" => .nearPredecessor
+          | "w1" => .nearPredecessorW1 | "w2" => .nearPredecessorW2
+          | "w3" => .nearPredecessorW3 | "w4" => .nearPredecessorW4
+          | "w5" => .nearPredecessorW5 | "w6" => .nearPredecessorW6
+          | _ => .nearPredecessorW7)
+      else if isConstNamed baseE ``ProofForge.Wasm.Near.Runtime.selfAccountId ||
+          endsWith baseE ".selfAccountId" then
+        some (match leaf with
+          | "length" => .nearCurrentAccountIdLen
+          | "w0" => .nearCurrentAccountId
+          | "w1" => .nearCurrentAccountIdW1 | "w2" => .nearCurrentAccountIdW2
+          | "w3" => .nearCurrentAccountIdW3 | "w4" => .nearCurrentAccountIdW4
+          | "w5" => .nearCurrentAccountIdW5 | "w6" => .nearCurrentAccountIdW6
+          | _ => .nearCurrentAccountIdW7)
+      else
+        match asVal env fuel baseE with
+        | some b => some (flattenField b leaf)
+        | none =>
+          match strip baseE with
+          | .bvar i => some (flattenField (.arg i) leaf)
+          | _ => none
   else if let some leaf := addr20ProjLeaf n then
     let args := e.getAppArgs
     if args.isEmpty then none
@@ -893,6 +1178,21 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           endsWith baseE ".evmCaller20" then
         some (match leaf with
           | "w0" => .evmCallerW0 | "w1" => .evmCallerW1 | _ => .evmCallerW2)
+      else if isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplCaller20 ||
+          endsWith baseE ".xrplCaller20" then
+        some (match leaf with
+          | "w0" => .xrplCallerW0 | "w1" => .xrplCallerW1 | _ => .xrplCallerW2)
+      else if (isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLit ||
+          endsWith baseE ".xrplAccountLit") && baseE.getAppArgs.size ≥ 1 then
+        match strip baseE.getAppArgs[baseE.getAppArgs.size - 1]! with
+        | .lit (.strVal s) =>
+          some (match leaf with
+            | "w0" => .xrplAccountLitW0 s | "w1" => .xrplAccountLitW1 s | _ => .xrplAccountLitW2 s)
+        | _ => none
+      else if isConstNamed baseE ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 ||
+          endsWith baseE ".xrplSelf20" then
+        some (match leaf with
+          | "w0" => .xrplSelfW0 | "w1" => .xrplSelfW1 | _ => .xrplSelfW2)
       else if isConstNamed baseE ``ProofForge.Evm.Runtime.evmSelf20 ||
           endsWith baseE ".evmSelf20" then
         some (match leaf with
@@ -921,6 +1221,12 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
           | .bvar i => some (flattenField (.arg i) leaf)
           | _ => none
   else if endsWith e ".evmCaller20" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller20 then
+    none
+  else if endsWith e ".xrplCaller20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCaller20 then
+    none
+  else if endsWith e ".xrplAccountLit" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplAccountLit then
+    none
+  else if endsWith e ".xrplSelf20" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelf20 then
     none
   else if endsWith e ".evmSelf20" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelf20 then
     none
@@ -1189,6 +1495,8 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
   else if endsWith e ".evmCalldataSize" ||
       isConstNamed e ``ProofForge.Evm.Runtime.evmCalldataSize then
     some (.ext (.evm (.component (.environment .calldataSize))) #[])
+  else if let some leaf := nearRuntimeLeaf? e then
+    some leaf
   else if endsWith e ".evmCaller" || isConstNamed e ``ProofForge.Evm.Runtime.evmCaller then
     some .evmCaller
   else if endsWith e ".evmBlockNumber" || isConstNamed e ``ProofForge.Evm.Runtime.evmBlockNumber then
@@ -1209,6 +1517,47 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some .evmCallerW1
   else if endsWith e ".evmCallerW2" || isConstNamed e ``ProofForge.Evm.Runtime.evmCallerW2 then
     some .evmCallerW2
+  else if endsWith e ".xrplCallerW0" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW0 then
+    some .xrplCallerW0
+  else if endsWith e ".xrplCallerW1" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW1 then
+    some .xrplCallerW1
+  else if endsWith e ".xrplCallerW2" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerW2 then
+    some .xrplCallerW2
+  else if endsWith e ".xrplSelfW0" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW0 then
+    some .xrplSelfW0
+  else if endsWith e ".xrplSelfW1" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW1 then
+    some .xrplSelfW1
+  else if endsWith e ".xrplSelfW2" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplSelfW2 then
+    some .xrplSelfW2
+  else if endsWith e ".xrplLedgerSqn" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplLedgerSqn then
+    some .xrplLedgerSqn
+  else if endsWith e ".xrplParentTime" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplParentTime then
+    some .xrplParentTime
+  else if endsWith e ".xrplParentHashW0" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplParentHashW0 then
+    some .xrplParentHashW0
+  else if endsWith e ".xrplBaseFee" || isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplBaseFee then
+    some .xrplBaseFee
+  else if endsWith e ".xrplCallerBalanceDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerBalanceDrops then
+    some .xrplCallerBalanceDrops
+  else if endsWith e ".xrplCallerSequence" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerSequence then
+    some .xrplCallerSequence
+  else if endsWith e ".xrplCallerFlags" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerFlags then
+    some .xrplCallerFlags
+  else if endsWith e ".xrplCallerOwnerCount" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplCallerOwnerCount then
+    some .xrplCallerOwnerCount
+  else if endsWith e ".xrplTxSequence" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxSequence then
+    some .xrplTxSequence
+  else if endsWith e ".xrplTxFeeDrops" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxFeeDrops then
+    some .xrplTxFeeDrops
+  else if endsWith e ".xrplTxFlags" ||
+      isConstNamed e ``ProofForge.Wasm.Xrpl.Runtime.xrplTxFlags then
+    some .xrplTxFlags
   else if endsWith e ".evmSelfW0" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW0 then
     some .evmSelfW0
   else if endsWith e ".evmSelfW1" || isConstNamed e ``ProofForge.Evm.Runtime.evmSelfW1 then
@@ -1564,12 +1913,38 @@ private partial def valNodeCount : Ops.Val → Nat
   | .ext _ operands =>
       1 + operands.foldl (init := 0) fun total operand => total + valNodeCount operand
 
+private partial def readsMutableNearResult : Ops.Val → Bool
+  | .arg _ | .local _ | .lit _ | .loopIx => false
+  | .field base _ | .bitNot base => readsMutableNearResult base
+  | .bitAnd lhs rhs | .bitOr lhs rhs | .bitXor lhs rhs
+  | .shiftL lhs rhs | .shiftR lhs rhs | .addU64 lhs rhs | .subU64 lhs rhs
+  | .mulU64 lhs rhs | .divU64 lhs rhs | .modU64 lhs rhs =>
+      readsMutableNearResult lhs || readsMutableNearResult rhs
+  | .indexGet base _ index _ _ =>
+      readsMutableNearResult base || readsMutableNearResult index
+  | .select _ lhs rhs thn els =>
+      readsMutableNearResult lhs || readsMutableNearResult rhs ||
+        readsMutableNearResult thn || readsMutableNearResult els
+  | .ext (.near (.storageResultStatus _)) _
+  | .ext (.near (.storageResultLength _)) _
+  | .ext (.near (.storageResultFits _)) _
+  | .ext (.near (.storageResultByte _)) _
+  | .ext (.near (.promiseResultStatus _)) _
+  | .ext (.near (.promiseResultLength _)) _
+  | .ext (.near (.promiseResultFits _)) _
+  | .ext (.near (.promiseResultByte _)) _
+  | .ext (.near (.promiseResultBorshUInt64D _)) _
+  | .ext (.near (.promiseResultQuotedU128Valid _)) _
+  | .ext (.near (.promiseResultQuotedU128W0 _)) _
+  | .ext (.near (.promiseResultQuotedU128W1 _)) _ => true
+  | .ext _ operands => operands.any readsMutableNearResult
+
 /-- Materialize scalar source values whose substitution would duplicate bounded control flow or
 re-evaluate a target read after a later effect. -/
 private def shouldMaterializeLocal (_type : Expr) (value : Ops.Val) : Bool :=
   match value with
   | .field .. | .indexGet .. | .select .. | .ext .. => true
-  | value => valNodeCount value ≥ 1024
+  | value => readsMutableNearResult value || valNodeCount value ≥ 1024
 
 private def localScalarValue? (env : Environment) (fuel : Nat) (value : Expr) : Option Ops.Val :=
   let rec go (fuel : Nat) (value : Expr) : Option Ops.Val :=
@@ -1976,7 +2351,9 @@ private def findListVals (env : Environment) (fuel : Nat) (e : Expr) : Option (A
   | fuel' + 1 =>
     let e := strip e
     if isConstNamed e ``List.cons || endsWith e ".cons" then
-      some (collectListVals env 16 e)
+      -- Recognition may traverse the largest internal raw-storage key literal. Acceptance remains
+      -- owned by each consumer's capacity predicate after this syntax-only flattening step.
+      some (collectListVals env 80 e)
     else
       e.getAppArgs.findSome? (findListVals env fuel')
 
@@ -2004,6 +2381,21 @@ private def asBoundedCtorFields (env : Environment) (e : Expr) : Option (Array O
   let values ← asVectorLits env args[args.size - 1]!
   return #[length] ++ values
 
+/-- Compiler-owned fixed-width scalar constructors are boundary values, not persistent State.
+Expose their ordered limbs directly so target codecs see the same frame as projected wide values. -/
+private def asWideCtorFields (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let e := substLets 32 (strip e)
+  let ctor ← e.getAppFn.constName?
+  let .ctorInfo info ← env.find? ctor | none
+  unless info.induct == addr20Name || info.induct == uint128Name ||
+      info.induct == uint256Name || info.induct == fixedBytesName do none
+  let args := e.getAppArgs
+  unless info.numFields ≤ args.size do none
+  let fields := args.extract (args.size - info.numFields) args.size
+  let values ← fields.mapM (val env)
+  unless values.size == info.numFields do none
+  return values
+
 /-- A reusable compiler-owned `@[pf_boundary]` value is source data, not persistent State.
 Unfold only explicitly bounded helpers to its constructor and expose every scalar field through
 the ordinary fixed return frame. Schema validation and target codecs still decide whether that
@@ -2017,8 +2409,16 @@ private def asRegisteredBoundaryCtorFields (env : Environment) (e : Expr) :
   let args := e.getAppArgs
   unless info.numFields ≤ args.size do none
   let fields := args.extract (args.size - info.numFields) args.size
-  let values ← fields.mapM (val env)
-  unless values.size == info.numFields do none
+  let mut values : Array Ops.Val := #[]
+  for field in fields do
+    -- Boundary records may contain an exact compiler-owned wide scalar. Preserve every ordered
+    -- limb instead of letting generic `val` turn the nested constructor into a field projection
+    -- rooted at persistent State (for example `total_w0`).
+    match asWideCtorFields env field with
+    | some limbs => values := values ++ limbs
+    | none =>
+        let value ← val env field
+        values := values.push value
   return values
 
 /-- `xs.set i v`：只抽出被改的那一叶。 -/
@@ -2268,8 +2668,12 @@ private def unfoldNullaryValue? (env : Environment) (e : Expr) : Option Expr :=
   if !e.getAppArgs.isEmpty then none
   else do
     let name ← e.getAppFn.constName?
-    let .defnInfo info ← env.find? name | none
-    return info.value
+    -- Keep `@[irreducible]` runtime leaves (caller/self/ledger) as named constants.
+    -- Unfolding them here would turn `xrplCallerW0` into the host stub `0`.
+    if Lean.getReducibilityStatusCore env name == .irreducible then none
+    else
+      let .defnInfo info ← env.find? name | none
+      return info.value
 
 /-- Explicit source fields of one user-defined structure constructor. -/
 private def userCtorFields (env : Environment) (e : Expr) : Option (Array Expr) :=
@@ -2588,13 +2992,18 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
   | 0 => none
   | fuel' + 1 =>
     let e := strip e
-    if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
+    if let .letE _ _ value body _ := e then
+      scalarResultValues env fuel' (body.instantiate1 value)
+    else if isConstNamed e ``Unit.unit || isConstNamed e ``PUnit.unit then
+      some #[]
+    else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then do
       let args := e.getAppArgs
       let left ← scalarResultValues env fuel' args[args.size - 2]!
       let right ← scalarResultValues env fuel' args[args.size - 1]!
       return left ++ right
     else
-      (asBoolVal env fuel e <|> val env e).map (#[·])
+      asWideCtorFields env e <|> asRegisteredBoundaryCtorFields env e <|>
+        (asBoolVal env fuel e <|> val env e).map (#[·])
 
 /-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
 existing sequence of scalar returns. CFG lowering already joins that sequence into `returnU64s`. -/
@@ -2605,7 +3014,10 @@ private def effectfulResultOps (env : Environment) (e : Expr) : Option (Array Op
   else if values.size > 1 then
     return values.map fun value => .returnU64 value
   else
-    none
+    -- Core's historical success terminal carries one scalar even when the logical result has no
+    -- leaves. This zero is control-only: target output codecs must use the retained `.unit` schema
+    -- rather than exposing it as a public result.
+    return #[.okState (.lit 0)]
 
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr)
@@ -2663,6 +3075,28 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | none =>
             match val env st with
             | some (.clockSlot) => some .clockSlot
+            | some (.nearBlockIndex) => some .nearBlockIndex
+            | some (.nearBlockTimestamp) => some .nearBlockTimestamp
+            | some (.nearPredecessor) => some .nearPredecessor
+            | some (.nearPredecessorLen) => some .nearPredecessorLen
+            | some (.nearPredecessorW1) => some .nearPredecessorW1
+            | some (.nearPredecessorW2) => some .nearPredecessorW2
+            | some (.nearPredecessorW3) => some .nearPredecessorW3
+            | some (.nearPredecessorW4) => some .nearPredecessorW4
+            | some (.nearPredecessorW5) => some .nearPredecessorW5
+            | some (.nearPredecessorW6) => some .nearPredecessorW6
+            | some (.nearPredecessorW7) => some .nearPredecessorW7
+            | some (.nearAttachedDeposit) => some .nearAttachedDeposit
+            | some (.nearAccountBalance) => some .nearAccountBalance
+            | some (.nearCurrentAccountId) => some .nearCurrentAccountId
+            | some (.nearCurrentAccountIdLen) => some .nearCurrentAccountIdLen
+            | some (.nearCurrentAccountIdW1) => some .nearCurrentAccountIdW1
+            | some (.nearCurrentAccountIdW2) => some .nearCurrentAccountIdW2
+            | some (.nearCurrentAccountIdW3) => some .nearCurrentAccountIdW3
+            | some (.nearCurrentAccountIdW4) => some .nearCurrentAccountIdW4
+            | some (.nearCurrentAccountIdW5) => some .nearCurrentAccountIdW5
+            | some (.nearCurrentAccountIdW6) => some .nearCurrentAccountIdW6
+            | some (.nearCurrentAccountIdW7) => some .nearCurrentAccountIdW7
             | some (.clockEpoch) => some .clockEpoch
             | some (.unixTime) => some .unixTime
             | some (.slotsPerEpoch) => some .slotsPerEpoch
@@ -2701,7 +3135,8 @@ private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
             | some (.signerKeyN a) => some (.signerKeyN a)
             | some (.ownerIsSelf a) => some (.ownerIsSelf a)
             | some v =>
-              if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then some v else none
+              if Ops.hasEvmLeaf #[.returnU64 v] || Ops.hasXrplLeaf #[.returnU64 v] ||
+                  Ops.isLangLeaf v then some v else none
             | _ =>
               match asVectorSet env (strip st) <|>
                   (strip st).getAppArgs.findSome? (asVectorSet env) with
@@ -2767,7 +3202,18 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
                         | _ => false
                       else false
                 | none => false
-              if reconstructedFromOneBinder then
+              let reconstructedUnchanged :=
+                let leaves := flattenLeaves env "" state
+                match userCtorFields env state with
+                | some fields =>
+                  -- A reconstructed multi-field State can be entirely projections of the input.
+                  -- `flattenLeaves` then has no writes; preserve an independent wide result rather
+                  -- than letting the scalar state fallback expose the final State field.
+                  !fields.isEmpty && leaves.isEmpty &&
+                    (scalarResultValues env 16 pairArgs[pairArgs.size - 1]).any
+                      (·.size > 1)
+                | none => false
+              if reconstructedFromOneBinder || reconstructedUnchanged then
                 scalarResultValues env 16 pairArgs[pairArgs.size - 1]
               else none
         else none
@@ -2887,8 +3333,22 @@ private def natOfVal : Ops.Val → Option Nat
   | .lit n => some n.toNat
   | _ => none
 
+private partial def staticNatTerm? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      let e := substLets fuel' (strip e)
+      if let some value := natLiteral? e then
+        some value
+      else if let some reduced := reduceCtorProjectionFuel? env fuel' e then
+        staticNatTerm? env fuel' reduced
+      else
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => staticNatTerm? env fuel' (substLets fuel' unfolded)
+        | none => none
+
 private def staticNatVal? (env : Environment) (e : Expr) : Option Nat :=
-  (val env e >>= natOfVal) <|> do
+  staticNatTerm? env 64 e <|> (val env e >>= natOfVal) <|> do
     let .lit value ← asStaticLit env 64 e | none
     some value.toNat
 
@@ -5277,6 +5737,785 @@ private def decodeEvmEffect (env : Environment) (e : Expr) : Option (Array Ops.O
   else
     collectEvmQueryOps env e
 
+/-- Flatten one logical bounded byte value into `length, byte₀ … byteₙ₋₁`. Constructors already
+carry literal leaves; a parameter or local root is projected so the target input binder can later
+rewrite it to canonical scalar locals. -/
+private def normalizeBoundedParameterFrame (capacity : Nat) (values : Array Ops.Val) :
+    Array Ops.Val := Id.run do
+  unless values.size == capacity + 1 do return values
+  let .field _ "length" := values[0]! | return values
+  let mut normalized : Array Ops.Val := #[values[0]!]
+  for position in [0:capacity] do
+    match values[position + 1]! with
+    | .indexGet base "values" (.local index) length elementOffset =>
+        unless index == position && (length == 0 || length == capacity) &&
+            elementOffset == 0 do
+          return values
+        normalized := normalized.push
+          (.indexGet base "values" (.lit (UInt64.ofNat position)) capacity 0)
+    | _ => return values
+  return normalized
+
+private def nearAccountIdFrame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.length) e)
+  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w0) e)
+  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w1) e)
+  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w2) e)
+  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w3) e)
+  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w4) e)
+  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w5) e)
+  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w6) e)
+  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.AccountId.w7) e)
+  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
+
+private def nearBoundedMessage64Frame? (env : Environment) (e : Expr) : Option (Array Ops.Val) := do
+  let length ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.length) e)
+  let w0 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w0) e)
+  let w1 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w1) e)
+  let w2 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w2) e)
+  let w3 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w3) e)
+  let w4 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w4) e)
+  let w5 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w5) e)
+  let w6 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w6) e)
+  let w7 ← val env (mkApp (mkConst ``ProofForge.Wasm.Near.Runtime.BoundedMessage64.w7) e)
+  return #[length, w0, w1, w2, w3, w4, w5, w6, w7]
+
+private partial def staticAccountTokenTag? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  staticNatVal? env e <|>
+    match fuel, strip e with
+    | fuel' + 1, .const name _ =>
+        match env.find? name with
+        | some (.defnInfo info) => staticAccountTokenTag? env fuel' info.value
+        | _ => none
+    | _, _ => none
+
+private def accountTokenStorageKeyFrame (tag : Ops.Val) (account : Array Ops.Val) : Array Ops.Val := Id.run do
+  let length := account[0]!
+  let byte (word : Ops.Val) (shift : Nat) : Ops.Val :=
+    .bitAnd (.shiftR word (.lit (UInt64.ofNat shift))) (.lit 0xff)
+  let mut values : Array Ops.Val := #[.addU64 length (.lit 8)]
+  for index in [0:4] do
+    values := values.push (byte tag (index * 8))
+  for index in [0:4] do
+    values := values.push (byte length (index * 8))
+  for wordIndex in [0:8] do
+    for byteIndex in [0:8] do
+      values := values.push (byte account[wordIndex + 1]! (byteIndex * 8))
+  values
+
+private def accountTokenLengthAdmissible (account : Array Ops.Val) : Bool :=
+  match staticUInt64? account[0]! with
+  | some length => 2 ≤ length && length ≤ 64
+  | none => true
+
+private def nearTokenStorageValueFrame (lo hi : Ops.Val) : Array Ops.Val := Id.run do
+  let byte (word : Ops.Val) (shift : Nat) : Ops.Val :=
+    .bitAnd (.shiftR word (.lit (UInt64.ofNat shift))) (.lit 0xff)
+  let mut values : Array Ops.Val := #[.lit 16]
+  for word in #[lo, hi] do
+    for byteIndex in [0:8] do
+      values := values.push (byte word (byteIndex * 8))
+  values
+
+private def boundedStorageFrame? (env : Environment) (capacity : Nat) (e : Expr) :
+    Option (Array Ops.Val) := do
+  let e := substLets 32 (strip (unfoldUserHelpers env 8 e))
+  if let some values := asBoundedCtorFields env e then
+    if values.size == capacity + 1 then
+      return normalizeBoundedParameterFrame capacity values
+    else none
+  let root ← val env e
+  let mut values : Array Ops.Val := #[.field root "length"]
+  for index in [0:capacity] do
+    values := values.push (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0)
+  return values
+
+/-- Preserve source lets that sequence NEAR effects before generic zeta reduction. Otherwise an
+ignored UInt64 sequencing result would erase the host/log or guest-memory mutation before
+`decodeExpr` can turn it into a typed effect. -/
+partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
+  | 0, _ => false
+  | fuel + 1, e =>
+      e.getUsedConstantsAsSet.toList.any fun name =>
+        name == ``ProofForge.Wasm.Near.Runtime.logUtf8 ||
+        name == ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageUnregisteredLog ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep297StringData ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtMint ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurn ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtMintMemo ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtTransferMemo ||
+        name == ``ProofForge.Wasm.Near.Runtime.nep141FtBurnMemo ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferThenResolveReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAndThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
+        name == ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageRead ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageWrite ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageRemove ||
+        name == ``ProofForge.Wasm.Near.Runtime.storageHasKey ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenWrite ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenRemove ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey ||
+        name == ``ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put ||
+        name == ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferThenResolveReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAndThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountDetached ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountDetached ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set ||
+        name == ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.read ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.write ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.remove ||
+        name == ``ProofForge.Wasm.Near.Sdk.Storage.ResultBuffer.hasKey ||
+        (Attr.isInline env name &&
+          match env.find? name with
+          | some (.defnInfo info) => mentionsNearEffect env fuel info.value
+          | _ => false)
+
+/-- NEAR logging and invocation-memory mutations stay effects so CFG rewrites cannot duplicate,
+discard, or reorder them as pure scalar expressions. Buffer capacities remain compile-time. -/
+private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  let rec find (fuel : Nat) (e : Expr) : Option Ops.Op :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let e := strip e
+      if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
+        (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 2]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              (boundedStorageFrame? env capacity args[args.size - 1]!).map fun message =>
+                .nearLogUtf8Bounded capacity message
+            else none
+        | none => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageUnregisteredLog &&
+          e.getAppArgs.size ≥ 1 then
+        (nearAccountIdFrame? env e.getAppArgs.back!).map Ops.Op.nearStorageUnregisteredLog
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep297StringData &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 5]!,
+            staticString? env 64 args[args.size - 4]!,
+            staticString? env 64 args[args.size - 3]!,
+            staticString? env 64 args[args.size - 2]! with
+        | some capacity, some standard, some version, some event =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              (boundedStorageFrame? env capacity args[args.size - 1]!).map fun data =>
+                .nearNep297StringData standard version event capacity data
+            else none
+        | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtMint &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let owner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env owner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some owner, some amountLo, some amountHi =>
+            some (.nearNep141FtMint owner amountLo amountHi)
+        | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtTransfer &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let oldOwner := args[args.size - 3]!
+        let newOwner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env oldOwner, nearAccountIdFrame? env newOwner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some oldOwner, some newOwner, some amountLo, some amountHi =>
+            some (.nearNep141FtTransfer oldOwner newOwner amountLo amountHi)
+        | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtBurn &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let owner := args[args.size - 2]!
+        let amount := args[args.size - 1]!
+        match nearAccountIdFrame? env owner,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some owner, some amountLo, some amountHi =>
+            some (.nearNep141FtBurn owner amountLo amountHi)
+        | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtMintMemo &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some owner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtMintMemo memoCapacity owner amountLo amountHi memo
+            else none
+        | _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtTransferMemo &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 5]!,
+            nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some oldOwner, some newOwner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtTransferMemo memoCapacity oldOwner newOwner amountLo amountHi memo
+            else none
+        | _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.nep141FtBurnMemo &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some memoCapacity, some owner, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid memoCapacity then
+              (boundedStorageFrame? env memoCapacity args[args.size - 1]!).map fun memo =>
+                .nearNep141FtBurnMemo memoCapacity owner amountLo amountHi memo
+            else none
+        | _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 1]!
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned
+        match staticString? env 64 args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some receiver, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver then
+              some (if returned then
+                .nearPromiseTransferReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned
+        match staticString? env 64 args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some receiver, some amountLo, some amountHi =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver then
+              some (if returned then
+                .nearPromiseTransferReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 1]!
+        let returned := isConstNamed e
+          ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountReturned
+        match nearAccountIdFrame? env args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount) with
+        | some receiver, some amountLo, some amountHi =>
+            if accountTokenLengthAdmissible receiver then
+              some (if returned then
+                .nearPromiseTransferAccountReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferAccountDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e
+          ``ProofForge.Wasm.Near.Runtime.promiseTransferAccountReturned
+        match nearAccountIdFrame? env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some receiver, some amountLo, some amountHi =>
+            if accountTokenLengthAdmissible receiver then
+              some (if returned then
+                .nearPromiseTransferAccountReturned receiver amountLo amountHi
+              else
+                .nearPromiseTransferAccountDetached receiver amountLo amountHi)
+            else none
+        | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferReturned &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount),
+            nearBoundedMessage64Frame? env args[args.size - 1]! with
+        | some receiver, some sender, some amountLo, some amountHi, some message =>
+            if accountTokenLengthAdmissible receiver && accountTokenLengthAdmissible sender then
+              some (.nearPromiseFtOnTransferReturned receiver sender amountLo amountHi
+                message)
+            else none
+        | _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferReturned &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount),
+            nearBoundedMessage64Frame? env args[args.size - 1]! with
+        | some receiver, some sender, some amountLo, some amountHi, some message =>
+            if accountTokenLengthAdmissible receiver && accountTokenLengthAdmissible sender then
+              some (.nearPromiseFtOnTransferReturned receiver sender amountLo amountHi
+                message)
+            else none
+        | _, _, _, _, _ => none
+      else if (isConstNamed e
+          ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferThenResolveReturned ||
+          isConstNamed e
+            ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferThenResolveReturned) &&
+          e.getAppArgs.size ≥ 4 then
+        let args := e.getAppArgs
+        let amount := args[args.size - 2]!
+        match nearAccountIdFrame? env args[args.size - 4]!,
+            nearAccountIdFrame? env args[args.size - 3]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) amount),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) amount),
+            nearBoundedMessage64Frame? env args[args.size - 1]! with
+        | some receiver, some sender, some amountLo, some amountHi, some message =>
+            if accountTokenLengthAdmissible receiver && accountTokenLengthAdmissible sender then
+              some (.nearPromiseFtOnTransferThenResolveReturned receiver sender amountLo amountHi
+                message)
+            else none
+        | _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned &&
+          e.getAppArgs.size ≥ 11 then
+        let args := e.getAppArgs
+        let childDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 11]!,
+            staticNatVal? env args[args.size - 10]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) childDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) childDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some childArgsCapacity, some callbackArgsCapacity,
+            some receiver, some childMethod, some callbackMethod,
+            some childDepositLo, some childDepositHi, some childGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some childArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
+                    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                    childDepositLo childDepositHi childGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAndThenReturned &&
+          e.getAppArgs.size ≥ 17 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 11]!
+        let rightDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 17]!,
+            staticNatVal? env args[args.size - 16]!,
+            staticNatVal? env args[args.size - 15]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some rightArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some rightReceiver, some rightMethod,
+            some callbackMethod, some leftDepositLo, some leftDepositHi, some leftGas,
+            some rightDepositLo, some rightDepositHi, some rightGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some rightArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAndThenReturned
+                    leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                    leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                    leftArguments rightArguments callbackArguments
+                    leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned) &&
+          e.getAppArgs.size ≥ 6 then
+        let args := e.getAppArgs
+        let deposit := args[args.size - 2]!
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned
+        match staticNatVal? env args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) deposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) deposit),
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 3]!).map fun arguments =>
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned) &&
+          e.getAppArgs.size ≥ 7 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned
+        match staticNatVal? env args[args.size - 7]!,
+            staticString? env 64 args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 4]!).map fun arguments =>
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned &&
+          e.getAppArgs.size ≥ 13 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 13]!,
+            staticNatVal? env args[args.size - 12]!,
+            staticString? env 64 args[args.size - 11]!,
+            staticString? env 64 args[args.size - 10]!,
+            staticString? env 64 args[args.size - 9]!,
+            val env args[args.size - 6]!, val env args[args.size - 5]!,
+            val env args[args.size - 4]!, val env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some childArgsCapacity, some callbackArgsCapacity,
+            some receiver, some childMethod, some callbackMethod,
+            some childDepositLo, some childDepositHi, some childGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 8]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 7]! with
+              | some childArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
+                    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                    childDepositLo childDepositHi childGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAndThenReturned &&
+          e.getAppArgs.size ≥ 20 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 20]!,
+            staticNatVal? env args[args.size - 19]!,
+            staticNatVal? env args[args.size - 18]!,
+            staticString? env 64 args[args.size - 17]!,
+            staticString? env 64 args[args.size - 16]!,
+            staticString? env 64 args[args.size - 15]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            val env args[args.size - 9]!, val env args[args.size - 8]!,
+            val env args[args.size - 7]!, val env args[args.size - 6]!,
+            val env args[args.size - 5]!, val env args[args.size - 4]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some rightArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some rightReceiver, some rightMethod,
+            some callbackMethod, some leftDepositLo, some leftDepositHi, some leftGas,
+            some rightDepositLo, some rightDepositHi, some rightGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 11]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 10]! with
+              | some leftArguments, some rightArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAndThenReturned
+                    leftReceiver leftMethod rightReceiver rightMethod callbackMethod
+                    leftArgsCapacity rightArgsCapacity callbackArgsCapacity
+                    leftArguments rightArguments callbackArguments
+                    leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some capacity, some index =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid capacity then
+              some (.nearPromiseResultRead capacity index)
+            else none
+        | _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Begin ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.begin) &&
+          e.getAppArgs.size ≥ 1 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 1]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Begin capacity)
+            else none
+        | none => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Set ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.set) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some capacity, some index, some value =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Set capacity index value)
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.transientBuffer64Finish ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Transient.Buffer64.finish) &&
+          e.getAppArgs.size ≥ 1 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 1]! with
+        | some capacity =>
+            if ProofForge.Wasm.Near.Memory.buffer64CapacityValid capacity then
+              some (.nearTransientBuffer64Finish capacity)
+            else none
+        | none => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match staticAccountTokenTag? env 8 args[args.size - 2]!,
+            nearAccountIdFrame? env args[args.size - 1]! with
+        | some tag, some account =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account then
+              let key := accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account
+              some (if isConstNamed e
+                  ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read then
+                .nearStorageRead 16 72 key
+              else if isConstNamed e
+                  ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has then
+                .nearStorageHasKey 16 72 key
+              else
+                .nearStorageRemove 16 72 key)
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let value := args[args.size - 1]!
+        let tag? := staticAccountTokenTag? env 8 args[args.size - 3]!
+        let account? := nearAccountIdFrame? env args[args.size - 2]!
+        let lo? := val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) value)
+        let hi? := val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) value)
+        match tag?, account?, lo?, hi? with
+        | some tag, some account, some lo, some hi =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account then
+              some (.nearStorageWrite 16 72 16
+                (accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account)
+                (nearTokenStorageValueFrame lo hi))
+            else none
+        | _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRemove) &&
+          e.getAppArgs.size ≥ 2 then
+        let args := e.getAppArgs
+        match val env args[args.size - 2]!,
+            nearAccountIdFrame? env args[args.size - 1]! with
+        | some tag, some account =>
+            if accountTokenLengthAdmissible account then
+              let key := accountTokenStorageKeyFrame tag account
+              some (if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenRead then
+                .nearStorageRead 16 72 key
+              else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenHasKey then
+                .nearStorageHasKey 16 72 key
+              else
+                .nearStorageRemove 16 72 key)
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.accountNearTokenWrite &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        let value := args[args.size - 1]!
+        match val env args[args.size - 3]!,
+            nearAccountIdFrame? env args[args.size - 2]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) value),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) value) with
+        | some tag, some account, some lo, some hi =>
+            if accountTokenLengthAdmissible account then
+              some (.nearStorageWrite 16 72 16
+                (accountTokenStorageKeyFrame tag account)
+                (nearTokenStorageValueFrame lo hi))
+            else none
+        | _, _, _, _ => none
+      else if isConstNamed e
+          ``ProofForge.Wasm.Near.Runtime.accountNearTokenFixtureWriteMalformed &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticAccountTokenTag? env 8 args[args.size - 3]!,
+            nearAccountIdFrame? env args[args.size - 2]!,
+            staticNatVal? env args[args.size - 1]! with
+        | some tag, some account, some length =>
+            if tag ≤ 0xffffffff && accountTokenLengthAdmissible account && length ≤ 20 then
+              let value := (#[.lit (UInt64.ofNat length)] ++
+                (Array.range 20).map fun index => .lit (UInt64.ofNat (0xa0 + index)))
+              some (.nearStorageWrite 16 72 20
+                (accountTokenStorageKeyFrame (.lit (UInt64.ofNat tag)) account) value)
+            else none
+        | _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRead &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!,
+            staticNatVal? env args[args.size - 2]! with
+        | some resultCapacity, some keyCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity then
+              (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
+                .nearStorageRead resultCapacity keyCapacity key
+            else none
+        | _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageWrite &&
+          e.getAppArgs.size ≥ 5 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 5]!,
+            staticNatVal? env args[args.size - 4]!,
+            staticNatVal? env args[args.size - 3]! with
+        | some resultCapacity, some keyCapacity, some valueCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid valueCapacity then
+              match boundedStorageFrame? env keyCapacity args[args.size - 2]!,
+                  boundedStorageFrame? env valueCapacity args[args.size - 1]! with
+              | some key, some value =>
+                  some (.nearStorageWrite resultCapacity keyCapacity valueCapacity key value)
+              | _, _ => none
+            else none
+        | _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRemove ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageHasKey) &&
+          e.getAppArgs.size ≥ 3 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 3]!,
+            staticNatVal? env args[args.size - 2]! with
+        | some resultCapacity, some keyCapacity =>
+            if ProofForge.Wasm.Near.Codec.storageCapacityValid resultCapacity &&
+                ProofForge.Wasm.Near.Codec.rawStorageKeyCapacityValid keyCapacity then
+              (boundedStorageFrame? env keyCapacity args[args.size - 1]!).map fun key =>
+                if isConstNamed e ``ProofForge.Wasm.Near.Runtime.storageRemove then
+                  .nearStorageRemove resultCapacity keyCapacity key
+                else
+                  .nearStorageHasKey resultCapacity keyCapacity key
+            else none
+        | _, _ => none
+      else
+        match unfoldUserHelper env e with
+        | some (_, unfolded) => find fuel' unfolded
+        | none => none
+  match find 8 e with
+  | some effect =>
+      let e := strip e
+      let result : Ops.Val :=
+        if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.read ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.has ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.put ||
+            isConstNamed e ``ProofForge.Wasm.Near.Sdk.Store.DirectAccountNearTokenMap.remove then
+          Ops.Val.nearStorageResultStatus 16
+        else
+          .lit 0
+      some #[effect, .returnU64 result]
+  | none => none
+
 /-- A vector root is not a scalar slot. Mixed static/dynamic writeback can see an inline
 helper's vector parameter as a changed structure field; discard that synthetic root store. -/
 private def dropVectorRootStores (dynamic stores : Array Ops.Op) : Array Ops.Op :=
@@ -5426,7 +6665,7 @@ def zetaPureHeadLets (env : Environment) (fuel : Nat) (e : Expr) : Expr :=
     | .letE _ _ value body _ =>
         let effectful :=
           (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
-            (decodeEvmEffect env value).isSome ||
+            (decodeNearEffect env value).isSome || (decodeEvmEffect env value).isSome ||
             (findForIn env value).isSome || (findForBodyExpr env value).isSome
         -- A scalar captured before a CPI must remain a local: substituting its state-field read
         -- through the call can move that read after a later state write.
@@ -6167,6 +7406,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.component call, .returnU64 (.lit 0)]
   else if let some inv := findInvoke env 16 e then
     invokeOpsWithRet env e inv
+  else if let some ops := decodeNearEffect env e then
+    .ok ops
   else if let some ops := decodeEvmEffect env e then
     .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
   else if let some (n, addend) := findForIn env e then
@@ -6215,7 +7456,9 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     -- the tag width and wire layout; extraction only preserves both source leaves through joins.
     .ok #[.returnU64 tag, .returnU64 payload]
   else if let some values := asOkNoop env e then
-    if stateful && values.size == 1 then
+    if stateful && values.isEmpty then
+      .ok #[.okState (.lit 0)]
+    else if stateful && values.size == 1 then
       .ok #[.okState values[0]!]
     else
       .ok (values.map fun value => .returnU64 value)
@@ -6227,6 +7470,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     .ok #[.okState v]
   else if let some vs := asBoundedCtorFields env e then
     .ok (returnStatesOf vs)
+  else if let some vs := asWideCtorFields env e then
+    .ok (vs.map fun value => .returnU64 value)
   else if let some vs := asRegisteredBoundaryCtorFields env e then
     .ok (vs.map fun value => .returnU64 value)
   else if let some vs := asStateFields env e then
@@ -6283,6 +7528,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
         | none => false) then
     let (w0, w1, w2, w3) := uint256Leaves env e
     .ok #[.returnU64 w0, .returnU64 w1, .returnU64 w2, .returnU64 w3]
+  else if let some leaf := nearRuntimeLeaf? e then
+    .ok #[.returnU64 leaf]
   else if let some v := val env e then
     match v with
     | .field _ _ => .ok #[.returnU64 v]
@@ -6297,6 +7544,23 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .byteSwap64 _
     | .accKeyWord _ _ | .accOwnerWord _ _ | .accDataWord _ _ | .accDataWordAt ..
     | .ext (.svm (.component _)) _
+    | .nearBlockIndex | .nearBlockTimestamp | .nearPredecessor
+    | .nearPredecessorLen
+    | .nearPredecessorW1 | .nearPredecessorW2 | .nearPredecessorW3 | .nearPredecessorW4
+    | .nearPredecessorW5 | .nearPredecessorW6 | .nearPredecessorW7
+    | .nearAttachedDeposit | .nearAttachedDepositW0 | .nearAttachedDepositW1
+    | .nearAccountBalance | .nearAccountBalanceW0 | .nearAccountBalanceW1
+    | .nearTokenAddOk .. | .nearTokenAddW0 .. | .nearTokenAddW1 ..
+    | .nearTokenSubOk .. | .nearTokenSubW0 .. | .nearTokenSubW1 ..
+    | .nearTokenMulU64Ok .. | .nearTokenMulU64W0 .. | .nearTokenMulU64W1 ..
+    | .nearCurrentAccountId
+    | .nearCurrentAccountIdLen
+    | .nearCurrentAccountIdW1 | .nearCurrentAccountIdW2 | .nearCurrentAccountIdW3
+    | .nearCurrentAccountIdW4 | .nearCurrentAccountIdW5 | .nearCurrentAccountIdW6
+    | .nearCurrentAccountIdW7
+    | .nearTransientBuffer64Get _ _
+    | .nearStorageResultStatus _ | .nearStorageResultLength _ | .nearStorageResultFits _
+    | .nearStorageResultByte _ _
     | .accLamportsN _ | .accDataLenN _ | .isSignerN _ | .isWritableN _ | .isExecutableN _
     | .signerKeyN _ | .ownerIsSelf _ | .findPdaSeeds _ | .checkPdaSeeds _ _ =>
         .ok #[.returnU64 v]
@@ -6306,7 +7570,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
     | .bitAnd .. | .bitOr .. | .bitXor .. | .bitNot .. | .shiftL .. | .shiftR .. =>
         .ok #[.returnU64 v]
     | v =>
-      if Ops.hasEvmLeaf #[.returnU64 v] || Ops.isLangLeaf v then .ok #[.returnU64 v]
+      if Ops.hasEvmLeaf #[.returnU64 v] || Ops.hasXrplLeaf #[.returnU64 v] ||
+          Ops.isLangLeaf v then .ok #[.returnU64 v]
       else .error "extract/unsupported: body"
   else
     .error "extract/unsupported: body"
@@ -6417,7 +7682,8 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
 can compare or transform the result. Ordinary scalar lets remain eligible for direct substitution. -/
 private def isSequencedScalarProducer (env : Environment) (type value : Expr) : Bool :=
   type.consumeMData.getAppFn.constName? == some ``UInt64 &&
-    (mentionsSvmEffect env 16 value || (findForIn env value).isSome ||
+    (mentionsSvmEffect env 16 value || mentionsNearEffect env 16 value ||
+      (findForIn env value).isSome ||
       (findForBodyExpr env value).isSome)
 
 /-- Find one effect-free UInt64 helper below a pure expression wrapper whose bounded control must
@@ -6488,11 +7754,12 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       let ignoredInlineEffect :=
         if body.hasLooseBVar 0 then false
         else
-          match unfoldUserHelper env value with
-          | some (_, unfolded) =>
-              mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
-                mentionsSvmEffect env 64 unfolded
-          | none => false
+          (decodeNearEffect env value).isSome ||
+            match unfoldUserHelper env value with
+            | some (_, unfolded) =>
+                mentionsSvmRuntime env 8 unfolded || (findInvoke env 64 unfolded).isSome ||
+                  mentionsSvmEffect env 64 unfolded || mentionsNearEffect env 64 unfolded
+            | none => false
       if ignoredInlineEffect then
         match decodeExpr env fuel' value (preserveLocals := preserveLocals)
               (localDepth := localDepth) (stateType? := stateType?)
@@ -6507,6 +7774,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         | _, .error reason => return .error reason
       let effectful :=
         (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
+          mentionsNearEffect env 16 value || (decodeNearEffect env value).isSome ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
       let scalarControlProducer := isSequencedScalarProducer env ty value
@@ -6718,6 +7986,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       return .ok #[.component call, .returnU64 (.lit 0)]
     else if let some inv := findInvoke env 16 e then
       return invokeOpsWithRet env e inv
+    else if let some ops := decodeNearEffect env e then
+      return .ok ops
     else if let some ops := decodeEvmEffect env e then
       return .ok (mergeEvmStores localDepth ops (evmEffectStores env e))
     else if let some (n, addend) := findForIn env e then
@@ -6756,11 +8026,15 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       -- materialize them before a later account write, component call, or CPI consumes them.
       -- Substituting here would embed the read into the effect operand and could re-read mutated
       -- storage; it also prevents reusable storage-query facades from composing with components.
+      -- NEAR effects need the same treatment: zeta-reducing an ignored raw-storage result here
+      -- would silently erase the host mutation before the arm is decoded.
       let t :=
-        if containsStructuredStateLet env 64 t || mentionsSvmEffect env 64 t then t
+        if containsStructuredStateLet env 64 t || mentionsSvmEffect env 64 t ||
+            mentionsNearEffect env 64 t then t
         else substIteLets 64 t
       let f :=
-        if containsStructuredStateLet env 64 f || mentionsSvmEffect env 64 f then f
+        if containsStructuredStateLet env 64 f || mentionsSvmEffect env 64 f ||
+            mentionsNearEffect env 64 f then f
         else substIteLets 64 f
       let checkedSubMatches (candidate : Expr) : Bool :=
         match asCheckedSubGuard env candidate with
@@ -6834,6 +8108,24 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             -- recursively decoded sequence over `asStoreFields`, which only sees the final state
             -- value and would otherwise erase ignored writes preceding `.ok`.
             if hasAccDataWrite 8 thn then
+              match asCmp env condE with
+              | some (cmp, lv, rv) =>
+                  return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
+              | none => pure ()
+            let rec hasNearEffect (fuel : Nat) (ops : Array Ops.Op) : Bool :=
+              match fuel with
+              | 0 => false
+              | fuel' + 1 => ops.any fun op =>
+                  match op with
+                  | .ext (.near _) => true
+                  | .ite _ _ _ nestedThen nestedElse =>
+                      hasNearEffect fuel' nestedThen || hasNearEffect fuel' nestedElse
+                  | .forBody _ body => hasNearEffect fuel' body
+                  | _ => false
+            -- A state-producing arm may also contain an ignored NEAR storage/log/memory result.
+            -- Prefer the recursively decoded sequence over `asStoreFields`; the latter sees only
+            -- the final state constructor and would silently discard the preceding host effect.
+            if hasNearEffect 8 thn then
               match asCmp env condE with
               | some (cmp, lv, rv) =>
                   return .ok #[.ite cmp lv rv thn #[.errorOverflow]]
@@ -7066,6 +8358,8 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
           return .error (if stateful then s!"state loop then: {r}" else s!"ite then: {r}")
         | _, .error r =>
           return .error (if stateful then s!"state loop else: {r}" else s!"ite else: {r}")
+    else if let some ops := decodeNearEffect env e then
+      return .ok ops
     else if let some ops := decodeEvmEffect env e then
       return .ok ops
     else if let some call := decodeComponentCall env e <|> findComponentCall env 8 e then

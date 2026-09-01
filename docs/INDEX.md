@@ -16,6 +16,7 @@
 | [plan/svm-work-plan.md](plan/svm-work-plan.md) | **当前主线**：SVM 全面工作计划（能力+应用+语义+工程+形式化） |
 | [plan/svm-formalization-plan.md](plan/svm-formalization-plan.md) | SVM 形式化 Track A 详案（sf-000..sf-016；**L1/L2 已收口**） |
 | [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
+| [plan/productization.md](plan/productization.md) | **产品化拆分**：CLI / SDK 可单独导入、init 模板、Release 打包 |
 | [plan/capability-matrix.md](plan/capability-matrix.md) | source API → owner → component → target effect → 物理状态能力矩阵 |
 | [plan/mainstream-parity.md](plan/mainstream-parity.md) | 对照 Solana Rust SDK 与 Solidity/OpenZeppelin 的双目标能力基线和 F0–F3 优先级 |
 | [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
@@ -30,5 +31,11 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
+| [modules/wasm.md](modules/wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
+| [modules/xrpl.md](modules/xrpl.md) | WASM 家族成员：XRPL Bedrock Lean → WAT → `.wasm` |
+| [plan/analysis/xrpl-runtime.md](plan/analysis/xrpl-runtime.md) | XRPL Runtime 排期：向 EVM/SVM 学分层，不学物理模型 |
+| [plan/analysis/xrpl-model.md](plan/analysis/xrpl-model.md) | XRPL WASM 账本模型 vs EVM / SVM / NEAR；为什么生态不像 NEAR |
+| [plan/analysis/xrpl-xls.md](plan/analysis/xrpl-xls.md) | XLS-30 等协议对象 vs WASM：不要用合约重写主网 amendment |
+| [modules/near.md](modules/near.md) | WASM 家族成员：NEAR Protocol Lean → WAT → `.wasm`（raw-u64） |
 
 当前阶段：**SVM Track A（L1/L2）已收口**；继续 Track B–F（`svm-rt-*` / `svm-sdk-*` / `svm-app-*` / `svm-sem-*` / `svm-eng-*`），见 [plan/svm-work-plan.md](plan/svm-work-plan.md)。WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。

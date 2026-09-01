@@ -44,6 +44,9 @@ jobs:
       - name: Check Runtime / SDK ownership boundaries
         run: python3 scripts/check_ownership.py
 
+      - name: Check SDK import-closure (no Emit/Assemble/Registry)
+        run: python3 scripts/check_sdk_import_closure.py
+
       - name: Check artifact manifest
         run: python3 scripts/check_artifact_manifest.py --self-test
 
@@ -55,8 +58,7 @@ jobs:
 
       - name: Build formalization gate modules
         run: |
-          # Named Track A / L3 bridge targets (svm-eng-001). Failures name the
-          # module instead of only surfacing inside the aggregate Tests build.
+          lake build ProofForgeSvmSdk ProofForgeEvmSdk
           lake build Tests.ProofSpec Tests.SolanalibSpec Tests.SemanticsSpec
 
       - name: Build Lean test suite
@@ -163,22 +165,188 @@ jobs:
       - name: Check EVM artifact manifest
         run: python3 scripts/check_artifact_manifest.py --target evm --out build/evm
 
+      - name: Build all XRPL programs
+        run: lake exe pf -- build --target xrpl --out build/xrpl
+
+      - name: Run XRPL Bedrock wasm gate
+        run: runtime-tests/xrpl/check.sh
+
+      - name: Run XRPL local-node Counter gate
+        run: runtime-tests/xrpl/counter.sh
+
+      - name: Run XRPL local-node XrplCtx gate
+        run: runtime-tests/xrpl/ctx.sh
+
+      - name: Run XRPL local-node XrplOwn gate
+        run: runtime-tests/xrpl/own.sh
+
+      - name: Run XRPL local-node XrplHash gate
+        run: runtime-tests/xrpl/hash.sh
+
+      - name: Run XRPL local-node XrplRt2 gate
+        run: runtime-tests/xrpl/rt2.sh
+
+      - name: Run XRPL local-node XrplVec gate
+        run: runtime-tests/xrpl/vec.sh
+
       - name: Run Anvil integration suite
         run: runtime-tests/evm/anvil.sh
 
-  # Preserve the original required-check identity while making proof/guard, SVM, and EVM failures
-  # independently observable. This job fails unless all lanes complete successfully.
+  near:
+    name: NEAR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            ~/.local/bin
+            .lake/packages
+            runtime-tests/near/.venv
+          key: near-toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup', 'runtime-tests/near/requirements.txt') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build Lean libraries and guards
+        run: |
+          lake build
+          lake build Tests
+
+      - name: Build all NEAR programs
+        run: lake exe pf -- build --target near --out build/near
+
+      - name: Run NEAR wasm gate
+        run: runtime-tests/near/check.sh
+
+      - name: Run NEAR sandbox Counter gate
+        run: runtime-tests/near/counter.sh
+
+      - name: Run NEAR sandbox Context gate
+        run: runtime-tests/near/context.sh
+
+      - name: Run NEAR sandbox Borsh bytes gate
+        run: runtime-tests/near/bytes.sh
+
+      - name: Run NEAR sandbox NEP-141 event gate
+        run: runtime-tests/near/ft_event.sh
+
+      - name: Run NEAR sandbox checked u128 gate
+        run: runtime-tests/near/token_arithmetic.sh
+
+      - name: Run NEAR sandbox Borsh u128 storage-value gate
+        run: runtime-tests/near/token_storage.sh
+
+      - name: Run NEAR sandbox memory arena gate
+        run: runtime-tests/near/memory.sh
+
+      - name: Run NEAR sandbox Borsh, JSON-u128, JSON-null, and bounded ft_metadata output gate
+        run: runtime-tests/near/output.sh
+
+      - name: Run NEAR sandbox StorageBalance option JSON output gate
+        run: runtime-tests/near/storage_balance_output.sh
+
+      - name: Run NEAR sandbox StorageBalanceBounds JSON output gate
+        run: runtime-tests/near/storage_balance_bounds_output.sh
+
+      - name: Run NEAR sandbox bounded AccountId JSON input gate
+        run: runtime-tests/near/json_account_input.sh
+
+      - name: Run NEAR sandbox canonical quoted-u128 amount JSON input gate
+        run: runtime-tests/near/json_amount_input.sh
+
+      - name: Run NEAR sandbox optional bounded memo JSON input gate
+        run: runtime-tests/near/json_memo_input.sh
+
+      - name: Run NEAR sandbox required bounded message JSON input gate
+        run: runtime-tests/near/json_message_input.sh
+
+      - name: Run NEAR sandbox combined bounded FT transfer argument gate
+        run: runtime-tests/near/json_ft_transfer_input.sh
+
+      - name: Run NEAR sandbox combined bounded FT transfer-call argument gate
+        run: runtime-tests/near/json_ft_transfer_call_input.sh
+
+      - name: Run NEAR sandbox bounded FT receiver argument gate
+        run: runtime-tests/near/json_ft_on_transfer_input.sh
+
+      - name: Run NEAR sandbox immediate-value FT receiver gate
+        run: runtime-tests/near/ft_receiver_value.sh
+
+      - name: Run NEAR sandbox Promise-or-U128 terminal gate
+        run: runtime-tests/near/promise_or_value.sh
+
+      - name: Run NEAR sandbox bounded FT resolver argument gate
+        run: runtime-tests/near/json_ft_resolve_input.sh
+
+      - name: Run NEAR sandbox bounded storage-deposit argument gate
+        run: runtime-tests/near/json_storage_deposit_input.sh
+
+      - name: Run NEAR sandbox bounded storage-unregister argument gate
+        run: runtime-tests/near/json_storage_unregister_input.sh
+
+      - name: Run NEAR sandbox bounded storage-withdraw argument gate
+        run: runtime-tests/near/json_storage_withdraw_input.sh
+
+      - name: Run NEAR sandbox mutating JSON Boolean output gate
+        run: runtime-tests/near/json_boolean_mutation.sh
+
+      - name: Run NEAR sandbox raw storage gate
+        run: runtime-tests/near/storage.sh
+
+      - name: Run NEAR sandbox storage economics gate
+        run: runtime-tests/near/storage_economics.sh
+
+      - name: Run NEAR sandbox closed storage-registration gate
+        run: runtime-tests/near/storage_registration.sh
+
+      - name: Run NEAR sandbox direct Vector gate
+        run: runtime-tests/near/vector.sh
+
+      - name: Run NEAR sandbox direct LookupMap/LookupSet gate
+        run: runtime-tests/near/lookup.sh
+
+      - name: Run NEAR sandbox closed fungible-ledger gate
+        run: runtime-tests/near/ledger.sh
+
+      - name: Run NEAR sandbox bounded Queue gate
+        run: runtime-tests/near/queue.sh
+
+      - name: Run NEAR sandbox Identity IterableMap/IterableSet gate
+        run: runtime-tests/near/iterable.sh
+
+      - name: Run NEAR sandbox detached Promise function-call gate
+        run: runtime-tests/near/promise.sh
+
+  # Preserve the original required-check identity while making proof/guard and target failures
+  # independently observable. This job fails unless every lane completes, including after an error.
   test:
     if: always()
-    needs: [lean, svm, evm]
+    needs: [lean, svm, evm, near]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require Lean, SVM, and EVM lanes
+      - name: Require Lean, SVM, EVM, and NEAR lanes
         env:
           LEAN_RESULT: ${{ needs.lean.result }}
           SVM_RESULT: ${{ needs.svm.result }}
           EVM_RESULT: ${{ needs.evm.result }}
+          NEAR_RESULT: ${{ needs.near.result }}
         run: |
           test "$LEAN_RESULT" = success
           test "$SVM_RESULT" = success
           test "$EVM_RESULT" = success
+          test "$NEAR_RESULT" = success

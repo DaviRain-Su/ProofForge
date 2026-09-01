@@ -10,9 +10,13 @@
 |---|---|
 | `ProofForge.Svm.Runtime` | sysvar、AccountInfo、CPI、PDA、hash syscall |
 | `ProofForge.Evm.Runtime` | 环境 opcode、Addr20、LOG、hashed Map、封闭 ERC-20 |
+| `ProofForge.Wasm.Xrpl.Runtime` | XRPL `host_lib` 环境叶：`xrplCaller20` / `xrplSelf20` / `xrplLedgerSqn` / `xrplParentTime` |
+| `ProofForge.Wasm.Near.Runtime` | `block_index` / `block_timestamp` / predecessor / attached_deposit / account_balance / `current_account_id` |
 
-根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime` 或
-`open ProofForge.Evm.Runtime`，抽出器也只识别对应的具名 runtime。
+根层不再提供混合 façade。合约必须按 target 明确 `open ProofForge.Svm.Runtime`、
+`open ProofForge.Evm.Runtime`、`open ProofForge.Wasm.Xrpl.Runtime` 或
+`open ProofForge.Wasm.Near.Sdk`。抽出器只识别对应的具名 Runtime stub（NEAR SDK
+名字经 `@[pf_inline]` 消去）。XRPL 叶子不是 `clockSlot`，也不是 `evmCaller`。
 
 协议入口和持久容器分两层：`Svm.EntryAdapter` 负责 target-owned wire decode、physical
 account contract 与 raw/generated dispatch；`Svm.AccountStorage` 负责 fixed-capacity

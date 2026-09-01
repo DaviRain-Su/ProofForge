@@ -7,12 +7,14 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 当前边界：[Runtime / SDK capability matrix](capability-matrix.md)。
 主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
+产品化拆分：[CLI / SDK / 模板 / Release](productization.md)（`prod-001`…`prod-004`）。
 
 **当前主线（SVM 全轨）**：[SVM 全面工作计划](svm-work-plan.md)
 （能力 Runtime/SDK + 应用 + 语义桥 + 工程 + 形式化）。
 形式化子计划：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
 状态收口页：[svm-status-matrix.md](svm-status-matrix.md)（`svm-eng-002`；`python3 scripts/svm_status_summary.py`）。
 WASM PR #4/#5 继续开着，不阻塞本轨。
+产品化与能力主线 **并行**：先冻结 SDK import 表面与 Lake 包边界，再做 `pf init` 与 release。
 
 任务：
 
@@ -178,6 +180,108 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [p-003](tasks/p-003.md) | done | asVal 巨石拆分 + Tree 结构不变量证明 |
 | [p-004](tasks/p-004.md) | done | removeNode size 守恒 + wf 良构谓词第一批切片 |
 | [p-005](tasks/p-005.md) | done | SDK 组件验证：三层策略 + 几何安全定理第一批 |
+| [wsm-001](tasks/wsm-001.md) | done | WASM 家族 + XRPL Bedrock 方言 Rust 源 v0 竖切（过渡；产物不是 `.wasm`） |
+| [wsm-002](tasks/wsm-002.md) | done | Lean → WAT → `.wasm`；XRPL 拥有 `host_lib` import 与存储布局 |
+| [wsm-003](tasks/wsm-003.md) | done | XRPL 本地链工程门：起节点、部署 Counter、四场景 |
+| [wsm-004](tasks/wsm-004.md) | done | WASM 家族第二条链：NEAR Protocol Lean → WAT → `.wasm`（raw-u64）+ sandbox Counter 四场景 |
+| [wsm-005](tasks/wsm-005.md) | done | XRPL-RT：AccountId + caller/self/ledger host 叶子 |
+| [wsm-006](tasks/wsm-006.md) | done | XRPL-CMP：三叶 AccountId 比较，unauthorized = 3 |
+| [wsm-007](tasks/wsm-007.md) | done | XRPL-HASH：`compute_sha512_half` ASCII 字面量，首个小端 UInt64 |
+| [wsm-008](tasks/wsm-008.md) | done | XRPL-SDK：`pf_inline` 转到 Runtime，Ownable 仍是源码 if |
+| [wsm-009](tasks/wsm-009.md) | done | XRPL-SDK-EQ：可组合 `AccountId.eq`，Ownable 走 helper |
+| [wsm-010](tasks/wsm-010.md) | done | XRPL-SDK-ACCESS：`requireOwner`，Ownable 走门面 |
+| [wsm-011](tasks/wsm-011.md) | done | XRPL-RT-2：parent hash 首 u64 + base fee |
+| [wsm-012](tasks/wsm-012.md) | done | XRPL-VEC-1：编译期命名槽；活网 `setAt(1,5)` → `xs_1=5` |
+| [wsm-013](tasks/wsm-013.md) | done | XRPL-ALPHANET：XLS-0102 host 表 |
+| [wsm-014](tasks/wsm-014.md) | done | AlphaNet 零参数烟测 + 本仓 deploy/call；带参见 `alphanet-counter.sh` |
+| [wsm-015](tasks/wsm-015.md) | done | AlphaNet 零参数 Ownable（XrplGate + `pf deploy`/`pf call`） |
+| [wsm-016](tasks/wsm-016.md) | done | XRPL-SDK-PAUSE：零参数 Pausable（XrplHold，状态码 4） |
+| [wsm-017](tasks/wsm-017.md) | done | XRPL-SDK-MARK：owner 门后写 SHA-512Half（XrplMark） |
+| [wsm-018](tasks/wsm-018.md) | planned | 复杂合约缺口排期（[xrpl-next.md](analysis/xrpl-next.md)） |
+| [wsm-021](tasks/wsm-021.md) | done | 探针 `trace_num`（AlphaNet 绿；不开 Sdk.Log） |
+| [wsm-023](tasks/wsm-023.md) | done | 探针 `cache_le`（import 在；零 id → -10；不开 AccountRoot） |
+| [wsm-026](tasks/wsm-026.md) | blocked | 公开合约卡 -22；本地 2.6.1 注资后可写；caller 卡公开已绿 |
+| [wsm-032](tasks/wsm-032.md) | done | 本地 emit 绿；公开 3.3.0 注资绿、pokeEmit 仍 -196 tefBAD_AUTH；不开 Sdk.Payments |
+| [wsm-027](tasks/wsm-027.md) | done | 每用户一张卡（XrplBal）：A=2 / B=1，不是单用户金库 |
+| [wsm-029](tasks/wsm-029.md) | done | 探针读 AccountRoot.Balance（accountroot_id+cache_le+le_field） |
+| [wsm-033](tasks/wsm-033.md) | done | Runtime 叶 `callerBalanceDrops`（XrplBalRt，对账 account_info） |
+| [wsm-near-rt-001](tasks/wsm-near-rt-001.md) | done | NEAR Runtime 叶子 + 薄 SDK（block/time/caller/deposit/balance） |
+| [wsm-019](tasks/wsm-019.md) | done | NEAR `current_account_id`（view-safe self，UInt64 前 8 字节） |
+| [wsm-020](tasks/wsm-020.md) | done | NEAR lossless AccountId + full equality/self-call guard |
+| [wsm-near-u128-001](tasks/wsm-near-u128-001.md) | done | NEAR lossless u128 deposit/balance context |
+| [wsm-near-u128-arithmetic-001](tasks/wsm-near-u128-arithmetic-001.md) | done | NEAR checked two-limb NearToken add/sub prerequisite |
+| [wsm-near-u128-mul-001](tasks/wsm-near-u128-mul-001.md) | done | exact checked NearToken × UInt64 cost arithmetic prerequisite |
+| [wsm-near-u128-storage-001](tasks/wsm-near-u128-storage-001.md) | done | exact 16-byte Borsh NearToken storage-value codec |
+| [wsm-near-account-token-map-001](tasks/wsm-near-account-token-map-001.md) | done | specialized Prefix4 Identity AccountId-to-NearToken map |
+| [wsm-near-fungible-ledger-001](tasks/wsm-near-fungible-ledger-001.md) | done | closed checked balance/total-supply mint/burn/transfer policy |
+| [wsm-near-storage-economics-001](tasks/wsm-near-storage-economics-001.md) | done | real dynamic `storage_usage`; storage byte price remains explicit network config |
+| [wsm-near-storage-registration-001](tasks/wsm-near-storage-registration-001.md) | done | closed caller-only measured registration and excess refund policy |
+| [wsm-near-storage-unregister-001](tasks/wsm-near-storage-unregister-001.md) | done | closed caller-only exact-zero unregister and live reclaim refund |
+| [wsm-near-storage-force-unregister-001](tasks/wsm-near-storage-force-unregister-001.md) | done | caller-only force unregister with exact balance/supply burn |
+| [wsm-near-storage-key-001](tasks/wsm-near-storage-key-001.md) | done | exact 72-byte internal raw-storage key budget prerequisite |
+| [wsm-near-log-001](tasks/wsm-near-log-001.md) | done | NEAR static UTF-8 logging effect |
+| [wsm-near-log-dynamic-001](tasks/wsm-near-log-dynamic-001.md) | done | NEAR bounded dynamic UTF-8 logging through guest arena |
+| [wsm-near-event-001](tasks/wsm-near-event-001.md) | done | exact bounded NEP-297 string-data envelope + JSON escaping |
+| [wsm-near-nep141-event-001](tasks/wsm-near-nep141-event-001.md) | done | exact no-memo NEP-141 v1.0.0 `ft_mint` event |
+| [wsm-near-nep141-event-002](tasks/wsm-near-nep141-event-002.md) | done | exact no-memo NEP-141 v1.0.0 transfer/burn events |
+| [wsm-near-nep141-event-003](tasks/wsm-near-nep141-event-003.md) | done | bounded NEP-141 mint/transfer/burn memo variants |
+| [wsm-near-bytes-001](tasks/wsm-near-bytes-001.md) | done | NEAR canonical Borsh bounded bytes/string input + strict UTF-8 |
+| [wsm-near-memory-001](tasks/wsm-near-memory-001.md) | done | NEAR invocation-local checked Wasm arena + SDK `Buffer64` |
+| [wsm-near-output-001](tasks/wsm-near-output-001.md) | done | NEAR allocator-backed canonical bounded Borsh view output |
+| [wsm-near-json-u128-output-001](tasks/wsm-near-json-u128-output-001.md) | done | output-only canonical quoted-decimal full-u128 JSON scalar |
+| [wsm-near-storage-balance-output-001](tasks/wsm-near-storage-balance-output-001.md) | done | output-only exact bounded optional StorageBalance JSON object |
+| [wsm-near-storage-balance-of-001](tasks/wsm-near-storage-balance-of-001.md) | done | closed variable-cost `storage_balance_of` view over the canonical BAL2 map |
+| [wsm-near-storage-balance-bounds-output-001](tasks/wsm-near-storage-balance-bounds-output-001.md) | done | output-only exact bounded StorageBalanceBounds JSON object |
+| [wsm-near-storage-balance-bounds-001](tasks/wsm-near-storage-balance-bounds-001.md) | done | closed variable-cost global `storage_balance_bounds` view |
+| [wsm-near-json-storage-deposit-input-001](tasks/wsm-near-json-storage-deposit-input-001.md) | done | bounded optional AccountId/registration-only JSON input prerequisite |
+| [wsm-near-storage-deposit-001](tasks/wsm-near-storage-deposit-001.md) | done | payable variable-cost `storage_deposit` over canonical BAL2 registration keys |
+| [wsm-near-json-storage-unregister-input-001](tasks/wsm-near-json-storage-unregister-input-001.md) | done | bounded optional force JSON input prerequisite |
+| [wsm-near-json-boolean-mutation-output-001](tasks/wsm-near-json-boolean-mutation-output-001.md) | done | exact state-persisting JSON Boolean result prerequisite |
+| [wsm-near-storage-unregister-integration-001](tasks/wsm-near-storage-unregister-integration-001.md) | done | bounded public-shaped storage unregister over canonical BAL2 balances |
+| [wsm-near-json-storage-withdraw-input-001](tasks/wsm-near-json-storage-withdraw-input-001.md) | done | bounded optional quoted-u128 storage-withdraw argument prerequisite |
+| [wsm-near-storage-withdraw-001](tasks/wsm-near-storage-withdraw-001.md) | done | payable zero-available storage withdraw over canonical BAL2 registration |
+| [wsm-near-no-args-input-001](tasks/wsm-near-no-args-input-001.md) | done | opt-in near-sdk no-args request-ignore boundary for standard views |
+| [wsm-near-json-base64-hash32-output-001](tasks/wsm-near-json-base64-hash32-output-001.md) | done | exact quoted STANDARD Base64 output for NEP-148 32-byte hashes |
+| [wsm-near-json-ft-metadata-output-001](tasks/wsm-near-json-ft-metadata-output-001.md) | done | bounded seven-field NEP-148 metadata object output prerequisite |
+| [wsm-near-ft-metadata-001](tasks/wsm-near-ft-metadata-001.md) | done | bounded public-shaped `ft_metadata` view with explicit assert-valid boundary |
+| [wsm-near-ft-ledger-metadata-001](tasks/wsm-near-ft-ledger-metadata-001.md) | done | compose bounded `ft_metadata` into the integrated BAL2 fungible-ledger artifact |
+| [wsm-near-ft-ledger-storage-views-001](tasks/wsm-near-ft-ledger-storage-views-001.md) | done | compose variable-cost NEP-145-shaped views into the integrated BAL2 ledger artifact |
+| [wsm-near-ft-ledger-storage-deposit-001](tasks/wsm-near-ft-ledger-storage-deposit-001.md) | done | compose payable bounded registration into the integrated BAL2 ledger artifact |
+| [wsm-near-ft-ledger-storage-withdraw-001](tasks/wsm-near-ft-ledger-storage-withdraw-001.md) | done | compose closed zero-available withdrawal into the integrated BAL2 ledger artifact |
+| [wsm-near-ft-ledger-storage-unregister-001](tasks/wsm-near-ft-ledger-storage-unregister-001.md) | done | compose caller-only force removal/refund into the integrated BAL2 ledger artifact |
+| [wsm-near-json-u128-mutation-output-001](tasks/wsm-near-json-u128-mutation-output-001.md) | done | state-persisting canonical quoted-u128 mutation result |
+| [wsm-near-json-message-input-001](tasks/wsm-near-json-message-input-001.md) | done | required bounded UTF-8 message JSON input for transfer-call composition |
+| [wsm-near-json-ft-transfer-call-input-001](tasks/wsm-near-json-ft-transfer-call-input-001.md) | done | bounded four-field transfer-call argument parser |
+| [wsm-near-json-ft-on-transfer-input-001](tasks/wsm-near-json-ft-on-transfer-input-001.md) | done | bounded three-field FT receiver callback parser |
+| [wsm-near-ft-receiver-value-001](tasks/wsm-near-ft-receiver-value-001.md) | done | exact immediate-value `ft_on_transfer` reject-all receiver boundary |
+| [wsm-near-promise-or-value-u128-001](tasks/wsm-near-promise-or-value-u128-001.md) | done | explicit mutating quoted-u128 or returned-Promise terminal policy |
+| [wsm-near-ft-receiver-dual-001](tasks/wsm-near-ft-receiver-dual-001.md) | done | runtime immediate-U128/returned-Promise `ft_on_transfer` integration |
+| [wsm-near-ft-transfer-call-001](tasks/wsm-near-ft-transfer-call-001.md) | done | integrated BAL2 transfer, weighted child, and private resolver returned call |
+| [wsm-near-storage-001](tasks/wsm-near-storage-001.md) | done | NEAR bounded raw binary storage + exact host status/register semantics |
+| [wsm-near-vector-001](tasks/wsm-near-vector-001.md) | done | NEAR bounded direct-write Vector64 element layout foundation |
+| [wsm-near-lookup-001](tasks/wsm-near-lookup-001.md) | done | NEAR direct Identity LookupMap64 / LookupSet64 layout foundation |
+| [wsm-near-queue-001](tasks/wsm-near-queue-001.md) | done | ProofForge bounded persistent NEAR Queue64 |
+| [wsm-near-iterable-001](tasks/wsm-near-iterable-001.md) | done | NEAR bounded Identity IterableMap64 / IterableSet64 |
+| [wsm-near-promise-001](tasks/wsm-near-promise-001.md) | done | NEAR detached static Promise function call |
+| [wsm-near-promise-002](tasks/wsm-near-promise-002.md) | done | NEAR returned static Promise function call |
+| [wsm-near-promise-result-001](tasks/wsm-near-promise-result-001.md) | done | NEAR bounded callback-result substrate |
+| [wsm-near-promise-then-001](tasks/wsm-near-promise-then-001.md) | done | NEAR static self-callback edge |
+| [wsm-near-promise-codec-001](tasks/wsm-near-promise-codec-001.md) | done | NEAR strict callback Borsh UInt64 decode |
+| [wsm-near-promise-private-001](tasks/wsm-near-promise-private-001.md) | done | NEAR full-AccountId private self-callback guard |
+| [wsm-near-promise-transfer-001](tasks/wsm-near-promise-transfer-001.md) | done | NEAR detached/returned static native transfer |
+| [wsm-near-promise-account-transfer-001](tasks/wsm-near-promise-account-transfer-001.md) | done | NEAR detached/returned full-AccountId native transfer |
+| [wsm-near-promise-ft-on-transfer-001](tasks/wsm-near-promise-ft-on-transfer-001.md) | done | specialized dynamic weighted `ft_on_transfer` child call and exact payload |
+| [wsm-near-promise-json-u128-result-001](tasks/wsm-near-promise-json-u128-result-001.md) | done | strict canonical quoted-u128 Promise-result decoder |
+| [wsm-near-json-ft-resolve-input-001](tasks/wsm-near-json-ft-resolve-input-001.md) | done | bounded two-AccountId/private-resolver argument parser |
+| [wsm-near-ft-resolve-transfer-001](tasks/wsm-near-ft-resolve-transfer-001.md) | done | private integrated NEP-141 refund/burn resolver |
+| [wsm-near-promise-ft-resolve-chain-001](tasks/wsm-near-promise-ft-resolve-chain-001.md) | done | weighted dynamic FT child to private resolver returned chain |
+| [wsm-near-promise-and-001](tasks/wsm-near-promise-and-001.md) | done | NEAR ordered two-child Promise join + self callback |
+| [wsm-near-init-001](tasks/wsm-near-init-001.md) | done | NEAR one-time explicit initialization marker |
+| [wsm-near-payable-001](tasks/wsm-near-payable-001.md) | done | NEAR non-payable-by-default entry guards |
+| [wsm-near-entry-policy-001](tasks/wsm-near-entry-policy-001.md) | done | NEAR explicit private/payable entry metadata |
+| [wsm-near-uninitialized-001](tasks/wsm-near-uninitialized-001.md) | done | NEAR fail-closed ordinary entry lifecycle |
+| [wsm-near-state-envelope-001](tasks/wsm-near-state-envelope-001.md) | done | NEAR versioned STATE schema envelope |
+| [wsm-near-migration-001](tasks/wsm-near-migration-001.md) | done | NEAR authenticated split-key state migration |
 
 ## SVM 全面工作计划（当前主线）
 
@@ -214,6 +318,17 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-015](tasks/sf-015.md) | done | Token / ATA / Pda / System / Memo 扫尾 |
 | [sf-016](tasks/sf-016.md) | done | SVM 形式化收口审计（L1/L2 已收口；WASM #4/#5 仍开放） |
 
+### Productization — CLI / SDK / 模板 / Release
+
+权威方案：[productization.md](productization.md)。与 SVM 能力主线并行，默认不改 IR digest。
+
+| ID | 状态 | 内容 |
+|---|---|---|
+| [prod-001](tasks/prod-001.md) | done | P0：SDK 推荐 import + CI 伞模块/Sdk→Emit 守卫 |
+| [prod-002](tasks/prod-002.md) | todo | P1：Lake 拆 `*Sdk` / Compiler；CLI 去 `Examples.*` 硬编码 |
+| [prod-003](tasks/prod-003.md) | todo | P2：`pf init` + `templates/svm-counter` / `evm-counter` |
+| [prod-004](tasks/prod-004.md) | todo | P3：Release 打包 CLI 二进制 + SDK tag |
+
 ### Track B–F — 能力 / 应用 / 语义 / 工程
 
 | ID | 状态 | 内容 |
@@ -247,3 +362,5 @@ WASM PR #4/#5 仍开着不阻塞。
 
 积压：[backlog.md](backlog.md)
 历史 SDK 表面盘点：[analysis/sdk-surface.md](analysis/sdk-surface.md)
+XRPL 账本模型 vs EVM/SVM/NEAR：[analysis/xrpl-model.md](analysis/xrpl-model.md)
+XLS 协议对象 vs 本仓 WASM：[analysis/xrpl-xls.md](analysis/xrpl-xls.md)

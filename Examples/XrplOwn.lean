@@ -1,0 +1,49 @@
+import ProofForge
+
+namespace Examples.XrplOwn
+
+open ProofForge.Wasm.Xrpl.Sdk
+
+/-- owner 是三叶 AccountId，不是 8 字节身份。value 只有 owner 能改。 -/
+structure State where
+  owner0 : UInt64
+  owner1 : UInt64
+  owner2 : UInt64
+  value : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  | unauthorized
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+def u64Max : UInt64 := ~~~(0 : UInt64)
+
+/-- 把当前 `ContractCall` 的 caller 三叶写成 owner。 -/
+@[pf_entry]
+def init (_seed : UInt64) : State :=
+  { owner0 := Context.callerW0, owner1 := Context.callerW1, owner2 := Context.callerW2, value := 0 }
+
+/-- 只有 owner 能加。门面是 SDK `Access.requireOwner`（展开成三叶 `eq`）。 -/
+@[pf_entry]
+def bump (s : State) : Except Error (State × UInt64) :=
+  if Access.requireOwner (AccountId.ofLimbs s.owner0 s.owner1 s.owner2) then
+    if s.value ≤ u64Max - 1 then
+      -- Public result is dropped on the status ABI; a shared `let next` becomes
+      -- wasm-v0-rejected `letLocal`. Write the slot, return a literal.
+      .ok ({ owner0 := s.owner0, owner1 := s.owner1, owner2 := s.owner2,
+             value := s.value + 1 }, (0 : UInt64))
+    else
+      .error .overflow
+  else
+    .error .unauthorized
+
+@[pf_entry]
+def get (s : State) : UInt64 :=
+  s.value
+
+@[pf_entry]
+def ownerLo (s : State) : UInt64 :=
+  s.owner0
+
+end Examples.XrplOwn
