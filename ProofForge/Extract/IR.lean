@@ -237,6 +237,34 @@ def OpExt.mapValues (mapValue : Val → Val) : OpExt Val → OpExt Val
             (mapValue sixthDepositLo) (mapValue sixthDepositHi) (mapValue sixthGas)
             (mapValue seventhDepositLo) (mapValue seventhDepositHi) (mapValue seventhGas)
             (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas))
+      | .promiseFunctionCallAnd8ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+          eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+          fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+          leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+          seventhArguments eighthArguments callbackArguments leftDepositLo leftDepositHi leftGas
+          midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas fourthDepositLo
+          fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi
+          sixthGas seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          .near (.promiseFunctionCallAnd8ThenReturned
+            leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+            fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+            eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+            fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+            (leftArguments.map mapValue) (midArguments.map mapValue) (rightArguments.map mapValue)
+            (fourthArguments.map mapValue) (fifthArguments.map mapValue) (sixthArguments.map mapValue)
+            (seventhArguments.map mapValue) (eighthArguments.map mapValue) (callbackArguments.map mapValue)
+            (mapValue leftDepositLo) (mapValue leftDepositHi) (mapValue leftGas)
+            (mapValue midDepositLo) (mapValue midDepositHi) (mapValue midGas)
+            (mapValue rightDepositLo) (mapValue rightDepositHi) (mapValue rightGas)
+            (mapValue fourthDepositLo) (mapValue fourthDepositHi) (mapValue fourthGas)
+            (mapValue fifthDepositLo) (mapValue fifthDepositHi) (mapValue fifthGas)
+            (mapValue sixthDepositLo) (mapValue sixthDepositHi) (mapValue sixthGas)
+            (mapValue seventhDepositLo) (mapValue seventhDepositHi) (mapValue seventhGas)
+            (mapValue eighthDepositLo) (mapValue eighthDepositHi) (mapValue eighthGas)
+            (mapValue callbackDepositLo) (mapValue callbackDepositHi) (mapValue callbackGas))
       | .promiseResultRead capacity index =>
           .near (.promiseResultRead capacity (mapValue index))
       | .transientBuffer64Begin capacity => .near (.transientBuffer64Begin capacity)
@@ -352,6 +380,25 @@ def OpExt.values : OpExt Val → Array Val
               fifthDepositLo, fifthDepositHi, fifthGas, sixthDepositLo, sixthDepositHi, sixthGas,
               seventhDepositLo, seventhDepositHi, seventhGas, callbackDepositLo, callbackDepositHi,
               callbackGas]
+      | .promiseFunctionCallAnd8ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+          eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+          fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+          leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+          seventhArguments eighthArguments callbackArguments
+          leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+          rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+          fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+          seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          leftArguments ++ midArguments ++ rightArguments ++ fourthArguments ++ fifthArguments ++
+            sixthArguments ++ seventhArguments ++ eighthArguments ++ callbackArguments ++
+            #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+              rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
+              fifthDepositLo, fifthDepositHi, fifthGas, sixthDepositLo, sixthDepositHi, sixthGas,
+              seventhDepositLo, seventhDepositHi, seventhGas, eighthDepositLo, eighthDepositHi, eighthGas,
+              callbackDepositLo, callbackDepositHi, callbackGas]
       | .promiseResultRead _ index => #[index]
       | .transientBuffer64Begin _ | .transientBuffer64Finish _ => #[]
       | .transientBuffer64Set _ index value => #[index, value]
@@ -682,6 +729,59 @@ def OpExt.wellFormed : OpExt Val → Bool
                 fifthDepositLo, fifthDepositHi, fifthGas, sixthDepositLo, sixthDepositHi, sixthGas,
                 seventhDepositLo, seventhDepositHi, seventhGas, callbackDepositLo, callbackDepositHi,
                 callbackGas]).all (·.wellFormed ValKind.arity)
+      | .promiseFunctionCallAnd8ThenReturned
+          leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+          fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+          eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+          fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+          leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+          seventhArguments eighthArguments callbackArguments leftDepositLo leftDepositHi leftGas
+          midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas fourthDepositLo
+          fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi
+          sixthGas seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+          callbackDepositLo callbackDepositHi callbackGas =>
+          Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid seventhReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid seventhMethod &&
+            Wasm.Near.Codec.accountIdLiteralValid eighthReceiver &&
+            Wasm.Near.Codec.promiseMethodLiteralValid eighthMethod &&
+            Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+            Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid seventhArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid eighthArgsCapacity &&
+            Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity &&
+            leftArguments.size == leftArgsCapacity + 1 &&
+            midArguments.size == midArgsCapacity + 1 &&
+            rightArguments.size == rightArgsCapacity + 1 &&
+            fourthArguments.size == fourthArgsCapacity + 1 &&
+            fifthArguments.size == fifthArgsCapacity + 1 &&
+            sixthArguments.size == sixthArgsCapacity + 1 &&
+            seventhArguments.size == seventhArgsCapacity + 1 &&
+            eighthArguments.size == eighthArgsCapacity + 1 &&
+            callbackArguments.size == callbackArgsCapacity + 1 &&
+            (leftArguments ++ midArguments ++ rightArguments ++ fourthArguments ++ fifthArguments ++
+              sixthArguments ++ seventhArguments ++ eighthArguments ++ callbackArguments ++
+              #[leftDepositLo, leftDepositHi, leftGas, midDepositLo, midDepositHi, midGas,
+                rightDepositLo, rightDepositHi, rightGas, fourthDepositLo, fourthDepositHi, fourthGas,
+                fifthDepositLo, fifthDepositHi, fifthGas, sixthDepositLo, sixthDepositHi, sixthGas,
+                seventhDepositLo, seventhDepositHi, seventhGas, eighthDepositLo, eighthDepositHi, eighthGas,
+                callbackDepositLo, callbackDepositHi, callbackGas]).all (·.wellFormed ValKind.arity)
       | .promiseResultRead capacity index =>
           Wasm.Near.Codec.storageCapacityValid capacity &&
             index.wellFormed ValKind.arity

@@ -517,6 +517,32 @@ def main() -> None:
         "near-promise: failed seventh child in 7-way join retained successful left/middle/right/fourth/fifth/sixth results"
     )
 
+    joined8_success = _call_u64(client, "sendAnd8Success", 617)
+    if NearClient.success_value_bytes(joined8_success) != NearClient.encode_u64_le(888):
+        raise AssertionError("8-way joined callback did not forward the successful eighth result")
+    if client.view_u64("get") != 93:
+        raise AssertionError("8-way joined callback did not commit its independent argument 93")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("8-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 8-way join exposed eight successful child results to one callback")
+
+    joined8_eighth_failure = _call_u64(
+        client, "sendAnd8EighthMissing", 618, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined8_eighth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("8-way eighth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 94:
+        raise AssertionError("8-way eighth-child failure did not run and commit callback argument 94")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("8-way eighth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed eighth child in 8-way join retained successful left/middle/right/fourth/fifth/sixth/seventh results"
+    )
+
     _call_u64(client, "sendThenFail", 111, expect_success=False)
     if client.view_u64("get") != 82:
         raise AssertionError("caller panic did not roll back caller state")

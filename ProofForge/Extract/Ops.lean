@@ -395,6 +395,36 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
     seventhDepositLo seventhDepositHi seventhGas callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAnd8ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+      eighthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments eighthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (sixthDepositLo sixthDepositHi sixthGas : Val)
+    (seventhDepositLo seventhDepositHi seventhGas : Val)
+    (eighthDepositLo eighthDepositHi eighthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd8ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+      eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+      fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments eighthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+    seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 
