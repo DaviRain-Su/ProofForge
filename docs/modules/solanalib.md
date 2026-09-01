@@ -90,7 +90,8 @@ E∞ 第二刀（`svm-sem-007`）：同一 `r7` 连续 walk 两个 u64 ↔ 两�
 E∞ 第三刀（`svm-sem-008`）：Loader account-0 header/key walk（non-dup `0xff` + key limb）↔ 绝对 `r6` 输入区加载。
 E∞ 第四刀（`svm-sem-009`）：account-0 signer/writable 标志字节 walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_HEADER+1/+2` 门控）。
 E∞ 第五刀（`svm-sem-010`）：account-0 lamports/data_len walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_LAMPORTS`/`ACC0_DATA_LEN`）。
-仍不覆盖：owner limbs、完整 account 向量、Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
+E∞ 第六刀（`svm-sem-011`）：account-0 owner 前两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER`/`+8`）。
+仍不覆盖：owner limbs 2–3、完整 account 向量、Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests
 

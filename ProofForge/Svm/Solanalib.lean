@@ -1440,4 +1440,83 @@ theorem walkAccount0Budget_eq_absLoad :
       some true := by
   native_decide
 
+
+/-!
+## E-infinity knife 6 - Loader account-0 owner limbs (`svm-sem-011`)
+
+Emit validates account-0 ownership via absolute `ldxdw` of `ACC0_OWNER` (`0x30`) and
+`ACC0_OWNER+8`. This knife walks the first two owner limbs from the same `r8` header cursor
+and proves agreement with absolute `r6`-relative loads. Still not remaining owner limbs, full
+account vector, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute input offsets matching `Emit` `.equ ACC0_OWNER` / `ACC0_OWNER+8`. -/
+def account0Owner0Offset : Nat := 0x30
+def account0Owner1Offset : Nat := 0x38
+
+/-- Absolute VAs for account-0 owner limbs 0 and 1. -/
+def account0Owner0Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0Owner0Offset
+def account0Owner1Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0Owner1Offset
+
+/-- Seed Loader input with account-0 meta plus the first two owner limbs. -/
+def account0OwnerInputMem (value arg0 keyLimb owner0 owner1 : U64) : Option Mem := do
+  let m₁ ← account0MetaInputMem value arg0 keyLimb
+  let m₂ ← storev .m64 m₁ account0Owner0Addr (.vlong owner0)
+  storev .m64 m₂ account0Owner1Addr (.vlong owner1)
+
+/-- Typed walk from header cursor: ldxdw r1,[r8+0x28]; ldxdw r2,[r8+0x30]; stxdw [r10+off],r1. -/
+def walkAccount0Owner? (stackOff : U16) : Option EbpfAsm := do
+  let owner0Off ← positiveOffset? (account0Owner0Offset - account0HeaderOffset)
+  let owner1Off ← positiveOffset? (account0Owner1Offset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 owner0Off,
+    .ldx .m64 .br2 .br8 owner1Off,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run the walked account-0 owner-limb load against seeded input memory. -/
+def evalWalkAccount0OwnerToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0Owner? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-0 owner limbs 0 and 1. -/
+def evalAbsAccount0Owner? (memory : Mem) : Option (U64 × U64) := do
+  let owner0 ← loadv .m64 memory account0Owner0Addr
+  let owner1 ← loadv .m64 memory account0Owner1Addr
+  match owner0, owner1 with
+  | .vlong a, .vlong b => some (a, b)
+  | _, _ => none
+
+/-- Walked account-0 owner assembly is well-formed. -/
+theorem walkAccount0Owner_verified :
+    (walkAccount0Owner? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walk: owner0=`0xA1`, owner1=`0xB2`, owner0 staged at `[r10-16]`. -/
+theorem evalWalkAccount0_owner0_0xA1_owner1_0xB2 :
+    (do
+      let mem ← account0OwnerInputMem 7 5 0x42 0xA1 0xB2
+      let (regs, finalMem) ← evalWalkAccount0OwnerToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xA1 && regs .br2 == 0xB2 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xA1))) =
+      some true := by
+  native_decide
+
+/-- Walked account-0 owner limbs agree with absolute `r6`-relative loads. -/
+theorem walkAccount0Owner_eq_absLoad :
+    (do
+      let mem ← account0OwnerInputMem 7 5 0x42 0xA1 0xB2
+      let (regs, _) ← evalWalkAccount0OwnerToStack? rhsStackOffset mem
+      let (owner0, owner1) ← evalAbsAccount0Owner? mem
+      pure (regs .br1 == owner0 && regs .br2 == owner1 &&
+        owner0 == 0xA1 && owner1 == 0xB2)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
