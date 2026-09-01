@@ -53,8 +53,8 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 
 1. ~~`PromiseHandle` + create/then with depth gate~~ — **landed** in
    `ProofForge/Wasm/Near/Sdk/Promise.lean` (`createReturned`, `thenReturned`, `depthOk`);
-   compile-time smoke in `Examples/NearPromiseHandle.handleDepthSmoke`; Extract of handle-typed
-   entry bodies remains follow-up
+   compile-time smoke in `Examples/NearPromiseHandle.handleDepthSmoke`; **`sendHandleThen` /
+   `sendHandleAnd3` now use `promiseRoot.thenReturned` / `and3Returned`** (Extract decode landed)
 2. ~~Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)~~ — **landed** for N=3..**8**:
    `And3ThenReturned` / `And4ThenReturned` / `And5ThenReturned` / `And6ThenReturned` /
    **`And7ThenReturned`** / **`And8ThenReturned`**,
@@ -71,7 +71,7 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 ## Still open
 
 - Generic compile-time `andN` beyond the fixed opcode ladder (N>8 needs new ops)
-- Extract of handle-typed entry bodies
+- ~~Extract of handle-typed entry bodies~~ — **landed** (`PromiseHandle.and3Returned` + Extract offsets)
 
 ## Deliverables
 

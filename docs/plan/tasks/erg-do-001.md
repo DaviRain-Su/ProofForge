@@ -1,7 +1,7 @@
 ---
 id: erg-do-001
 scope: shared
-status: partial
+status: done
 depends-on: []
 ---
 
