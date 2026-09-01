@@ -13,6 +13,9 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 形式化子计划：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
 WASM PR #4/#5 继续开着，不阻塞本轨。
 
+**三 target 总图（EVM · SVM · NEAR + 人体工程学）**：[multi-target-strategy.md](multi-target-strategy.md)
+（含 powdr-labs 三仓库作为 EVM Feature B 的引入方案）。
+
 任务：
 
 | ID | 状态 | 内容 |

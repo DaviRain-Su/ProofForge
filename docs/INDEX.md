@@ -16,6 +16,7 @@
 | [plan/svm-work-plan.md](plan/svm-work-plan.md) | **当前主线**：SVM 全面工作计划（能力+应用+语义+工程+形式化） |
 | [plan/svm-formalization-plan.md](plan/svm-formalization-plan.md) | SVM 形式化轨道详案（sf-000..sf-016） |
 | [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
+| [plan/multi-target-strategy.md](plan/multi-target-strategy.md) | **三 target 推进战略**：EVM Feature A/B（powdr）、SVM、NEAR、人体工程学 |
 | [plan/capability-matrix.md](plan/capability-matrix.md) | source API → owner → component → target effect → 物理状态能力矩阵 |
 | [plan/mainstream-parity.md](plan/mainstream-parity.md) | 对照 Solana Rust SDK 与 Solidity/OpenZeppelin 的双目标能力基线和 F0–F3 优先级 |
 | [plan/analysis/authority.md](plan/analysis/authority.md) | 补全对谁对齐（官方 runtime，不是 SDK crate） |
