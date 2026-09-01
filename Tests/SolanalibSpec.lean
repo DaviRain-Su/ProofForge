@@ -1125,5 +1125,97 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 40: Loader account-5 lamports/data_len after skip chain (`svm-sem-045`)
+#guard (walkAccount5BudgetAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account5BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128
+      let (regs, finalMem) ← evalWalkAccount5BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 5000 && regs .br2 == 128 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 5000))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account5BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128
+      let (regs, _) ← evalWalkAccount5BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount5Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 5000 && dataLen == 128)) with
+  | some true => true
+  | _ => false
+
+-- E∞ knife 41: Loader account-5 owner limbs 0/1 after skip chain (`svm-sem-046`)
+#guard (walkAccount5OwnerAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account5OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9
+      let (regs, finalMem) ← evalWalkAccount5OwnerAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xE8 && regs .br2 == 0xF9 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xE8))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account5OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9
+      let (regs, _) ← evalWalkAccount5OwnerAfterSkipChainToStack? rhsStackOffset mem
+      let (owner0, owner1) ← evalAbsAccount5Owner? mem
+      pure (regs .br1 == owner0 && regs .br2 == owner1 &&
+        owner0 == 0xE8 && owner1 == 0xF9)) with
+  | some true => true
+  | _ => false
+
+-- E∞ knife 42: Loader account-5 owner limbs 2/3 after skip chain (`svm-sem-047`)
+#guard (walkAccount5OwnerHiAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account5OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B
+      let (regs, finalMem) ← evalWalkAccount5OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0x1A && regs .br2 == 0x2B &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x1A))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account5OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B
+      let (regs, _) ← evalWalkAccount5OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      let (owner2, owner3) ← evalAbsAccount5OwnerHi? mem
+      pure (regs .br1 == owner2 && regs .br2 == owner3 &&
+        owner2 == 0x1A && owner3 == 0x2B)) with
+  | some true => true
+  | _ => false
+
+-- E∞ knife 43: Loader account-5 executable/rent after skip chain (`svm-sem-048`)
+#guard (walkAccount5ExecRentAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account5ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0
+      let (regs, finalMem) ← evalWalkAccount5ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xF0 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account5ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0
+      let (regs, _) ← evalWalkAccount5ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      let (executable, rent) ← evalAbsAccount5ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rent &&
+        executable == 1 && rent == 0xF0)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
