@@ -135,7 +135,7 @@ def evalAbsAccount9Meta? (memory : Mem) : Option (U8 × U64) := do
 theorem evalWalkAccount9_after_skip_key_0x79 :
     (do
       let mem ← account9MetaInputMem {POS_BASE}
-          account0NonDupMarker 0x79
+          0x79
       let (regs, finalMem) ← evalWalkAccount9MetaAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
         regs .br2 == 0x79 &&
@@ -204,7 +204,7 @@ def evalAbsAccount9Flags? (memory : Mem) : Option (U8 × U8) := do
 theorem evalWalkAccount9_after_skip_signer_writable_1 :
     (do
       let mem ← account9FlagsInputMem {POS_BASE}
-          account0NonDupMarker 0x79 1 1
+          0x79 1 1
       let (regs, finalMem) ← evalWalkAccount9FlagsAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == 1 && regs .br2 == 1 &&
         loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
@@ -277,7 +277,7 @@ def evalAbsAccount9Budget? (memory : Mem) : Option (U64 × U64) := do
 theorem evalWalkAccount9_after_skip_lamports_9000_dataLen_192 :
     (do
       let mem ← account9BudgetInputMem {POS_BASE}
-          account0NonDupMarker 0x79 1 1 9000 192
+          0x79 1 1 9000 192
       let (regs, finalMem) ← evalWalkAccount9BudgetAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == 9000 && regs .br2 == 192 &&
         loadv .m64 finalMem rhsStackAddr == some (.vlong 9000))) =
@@ -352,7 +352,7 @@ def evalAbsAccount9Owner? (memory : Mem) : Option (U64 × U64) := do
 theorem evalWalkAccount9_after_skip_owner0_0xEC_owner1_0xFD :
     (do
       let mem ← account9OwnerInputMem {POS_BASE}
-          account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD
+          0x79 1 1 9000 192 0xEC 0xFD
       let (regs, finalMem) ← evalWalkAccount9OwnerAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == 0xEC && regs .br2 == 0xFD &&
         loadv .m64 finalMem rhsStackAddr == some (.vlong 0xEC))) =
@@ -428,7 +428,7 @@ def evalAbsAccount9OwnerHi? (memory : Mem) : Option (U64 × U64) := do
 theorem evalWalkAccount9_after_skip_owner2_0x1E_owner3_0x2F :
     (do
       let mem ← account9OwnerHiInputMem {POS_BASE}
-          account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F
+          0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F
       let (regs, finalMem) ← evalWalkAccount9OwnerHiAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == 0x1E && regs .br2 == 0x2F &&
         loadv .m64 finalMem rhsStackAddr == some (.vlong 0x1E))) =
@@ -504,7 +504,7 @@ def evalAbsAccount9ExecRent? (memory : Mem) : Option (U8 × U64) := do
 theorem evalWalkAccount9_after_skip_executable_1_rent_0xF4 :
     (do
       let mem ← account9ExecRentInputMem {POS_BASE}
-          account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4
+          0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4
       let (regs, finalMem) ← evalWalkAccount9ExecRentAfterSkipChainToStack? rhsStackOffset mem
       pure (regs .br1 == 1 && regs .br2 == 0xF4 &&
         loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
@@ -531,37 +531,37 @@ with open("/workspace/tmp_account9_knives.lean", "w") as f:
 spec_entries = [
     ("66", "071", "Meta", "header/key", "walkAccount9MetaAfterSkipChain?",
      "account9MetaInputMem", "evalWalkAccount9MetaAfterSkipChainToStack?", "evalAbsAccount9Meta?",
-     "account0NonDupMarker 0x79", "0xB6 0x79",
+     "0x79", "0xB6 0x79",
      "(regs .br1 == account0NonDupMarker.setWidth 64 &&\n        regs .br2 == 0x79 &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x79))",
      "(regs .br1 == dup.setWidth 64 && regs .br2 == key &&\n        dup == 0xB6 && key == 0x79)",
      "let (dup, key) ← evalAbsAccount9Meta? mem"),
     ("67", "072", "Flags", "signer/writable", "walkAccount9FlagsAfterSkipChain?",
      "account9FlagsInputMem", "evalWalkAccount9FlagsAfterSkipChainToStack?", "evalAbsAccount9Flags?",
-     "account0NonDupMarker 0x79 1 1", "0xB6 0x79 1 0",
+     "0x79 1 1", "0xB6 0x79 1 0",
      "(regs .br1 == 1 && regs .br2 == 1 &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))",
      "(regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&\n        signer == 1 && writable == 0)",
      "let (signer, writable) ← evalAbsAccount9Flags? mem"),
     ("68", "073", "Budget", "lamports/data_len", "walkAccount9BudgetAfterSkipChain?",
      "account9BudgetInputMem", "evalWalkAccount9BudgetAfterSkipChainToStack?", "evalAbsAccount9Budget?",
-     "account0NonDupMarker 0x79 1 1 9000 192", "0xB6 0x79 1 0 9000 192",
+     "0x79 1 1 9000 192", "0xB6 0x79 1 0 9000 192",
      "(regs .br1 == 9000 && regs .br2 == 192 &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 9000))",
      "(regs .br1 == lamports && regs .br2 == dataLen &&\n        lamports == 9000 && dataLen == 192)",
      "let (lamports, dataLen) ← evalAbsAccount9Budget? mem"),
     ("69", "074", "Owner", "owner limbs 0/1", "walkAccount9OwnerAfterSkipChain?",
      "account9OwnerInputMem", "evalWalkAccount9OwnerAfterSkipChainToStack?", "evalAbsAccount9Owner?",
-     "account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD", "0xB6 0x79 1 0 9000 192 0xEC 0xFD",
+     "0x79 1 1 9000 192 0xEC 0xFD", "0xB6 0x79 1 0 9000 192 0xEC 0xFD",
      "(regs .br1 == 0xEC && regs .br2 == 0xFD &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xEC))",
      "(regs .br1 == owner0 && regs .br2 == owner1 &&\n        owner0 == 0xEC && owner1 == 0xFD)",
      "let (owner0, owner1) ← evalAbsAccount9Owner? mem"),
     ("70", "075", "OwnerHi", "owner limbs 2/3", "walkAccount9OwnerHiAfterSkipChain?",
      "account9OwnerHiInputMem", "evalWalkAccount9OwnerHiAfterSkipChainToStack?", "evalAbsAccount9OwnerHi?",
-     "account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F", "0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F",
+     "0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F", "0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F",
      "(regs .br1 == 0x1E && regs .br2 == 0x2F &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x1E))",
      "(regs .br1 == owner2 && regs .br2 == owner3 &&\n        owner2 == 0x1E && owner3 == 0x2F)",
      "let (owner2, owner3) ← evalAbsAccount9OwnerHi? mem"),
     ("71", "076", "ExecRent", "executable/rent", "walkAccount9ExecRentAfterSkipChain?",
      "account9ExecRentInputMem", "evalWalkAccount9ExecRentAfterSkipChainToStack?", "evalAbsAccount9ExecRent?",
-     "account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4", "0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4",
+     "0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4", "0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4",
      "(regs .br1 == 1 && regs .br2 == 0xF4 &&\n        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))",
      "(regs .br1 == executable.setWidth 64 && regs .br2 == rent &&\n        executable == 1 && rent == 0xF4)",
      "let (executable, rent) ← evalAbsAccount9ExecRent? mem"),
