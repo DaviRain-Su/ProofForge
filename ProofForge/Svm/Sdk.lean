@@ -16,6 +16,7 @@ import ProofForge.Svm.Sdk.Queue
 import ProofForge.Svm.Sdk.Pda
 import ProofForge.Svm.Sdk.System
 import ProofForge.Svm.Sdk.Token
+import ProofForge.Svm.Sdk.Token2022
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Sysvar

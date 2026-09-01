@@ -2864,6 +2864,9 @@ private def asAccountDataPolicy (e : Expr) :
           endsWith k ".account" then
         some (some (.token2022Base .account))
       else none
+    else if isConstNamed p ``ProofForge.Svm.Cpi.TokenTlv.Policy.token2022MintClose ||
+        endsWith p ".token2022MintClose" then
+      some (some .token2022MintClose)
     else none
   else none
 

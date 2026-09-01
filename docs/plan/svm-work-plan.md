@@ -165,7 +165,7 @@ Phase 4   Map/Tree 证明 + Token-2022 + 内存桥
           · A: sf-008..sf-011（Allocator/Map/EnumerableSet/Tree）
           · E: svm-sem-004 AccountWords ↔ typed storev 桥
           · B/C: svm-rt-002 + svm-sdk-005 Token-2022 第一批 extension
-                （transfer-fee 或 mint-close-authority，选一个有双 consumer 的）
+                （已选 `MintCloseAuthority`；双 consumer + fail-closed 已落地）
 
 Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
           · A: sf-012..sf-013（FifoCancel / BatchRecorder）
@@ -200,7 +200,7 @@ Phase 7   收口
 | ID | 内容 | 优先级 | 验收 |
 |---|---|---|---|
 | [svm-rt-001](tasks/svm-rt-001.md) | Clock **signed** timestamp 视图（与 unsigned 字段并存；明确布局） | F1 | **done**；Lean + Mollusk 12/12；digest `19039a4899e65b6d` |
-| [svm-rt-002](tasks/svm-rt-002.md) | Token-2022 **第一个** typed extension 语义（建议 transfer-fee **或** mint-close-authority） | F2 | 双 consumer；未知 extension 仍原子拒绝 |
+| [svm-rt-002](tasks/svm-rt-002.md) | Token-2022 **第一个** typed extension：`MintCloseAuthority`（非 transfer-fee） | F2 | **done**；CPI `Token2022MintClose` + Sdk host parse；fee/hook/未知仍 fail-closed；digest `607b3786fb54eaee` |
 | [svm-rt-003](tasks/svm-rt-003.md) | AccountView 与 direct mutation 共用时的 **alias-aware** 变量 walk | F1 | 别名/只读/owner 矩阵；无 persistent pointer |
 | [svm-rt-004](tasks/svm-rt-004.md) | Instructions / sliced sysvar（有界） | F2 | 按需；无通用任意切片 |
 | [svm-rt-005](tasks/svm-rt-005.md) | nested / constructed / wide dynamic **return** 政策（仍有界） | F0/F1 | 与 codec budget 一致；超界 fail closed |
@@ -213,7 +213,7 @@ Phase 7   收口
 | [svm-sdk-002](tasks/svm-sdk-002.md) | **owner-reassign** 生命周期（或书面永久 fail-closed + 矩阵 n/a） | F1 | 政策二选一，禁止半开 |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | generic POD transient shapes（超出 Record64/Vector128/256 的下一形状） | F1 | 同 slot 生命周期复用；双 consumer |
 | [svm-sdk-004](tasks/svm-sdk-004.md) | 更多 manifest-bounded transient **handles**（>2 需 resource manifest） | F1 | manifest 先行；默认仍 2 |
-| [svm-sdk-005](tasks/svm-sdk-005.md) | Token-2022 extension 的 **Sdk facade**（对接 rt-002） | F2 | 不把 extension 名写进 Emit |
+| [svm-sdk-005](tasks/svm-sdk-005.md) | Token-2022 extension 的 **Sdk facade**（对接 rt-002） | F2 | **done**；`Sdk.Token2022` mint-close view/CPI；不把 extension 名写进 Emit |
 | [svm-sdk-006](tasks/svm-sdk-006.md) | UTF-8 Memo + richer account **migration payload** shapes | F1/F2 | strict UTF-8；migration 单边显式 |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | 持久容器 insert/remove/**iteration** 有界 API（在现有 Map/Set 上） | F1/F2 | 无 heap iterator object |
 
@@ -295,8 +295,8 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001` done → **`svm-rt-002` Token-2022 typed extension**
-2. **并行**：`svm-sem-001`（E1）/ `svm-sdk-001` / `svm-eng-001`
+1. **主线能力**：`svm-rt-001`/`svm-rt-002`/`svm-sdk-005` done → **`svm-rt-003` alias-aware walk**（或 `svm-sdk-001` rent top-up）
+2. **并行**：`svm-sem-001`（E1）/ `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。

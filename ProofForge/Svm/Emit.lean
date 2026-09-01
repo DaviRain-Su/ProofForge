@@ -1386,10 +1386,7 @@ private def emitCpiAccountDataChecks (label : String) (metas : Array Ops.CpiMeta
   jne r1, {expected}, {err}
 "
       | none, some policy =>
-        match ProofForge.Svm.Cpi.TokenTlv.planFor policy with
-        | .error reason => throw reason
-        | .ok plan =>
-          ProofForge.Svm.Cpi.TokenTlv.Emit.emitPreflight { headerStack } label physical plan
+        ProofForge.Svm.Cpi.TokenTlv.Emit.emitPreflight { headerStack } label physical policy
       | _, _ =>
         throw "extract/unsupported: CPI meta has conflicting account-data policies"
     return "  ; validate typed CPI account-data policies\n" ++ String.join parts ++ s!"

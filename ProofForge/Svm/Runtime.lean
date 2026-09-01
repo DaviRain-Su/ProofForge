@@ -634,6 +634,22 @@ def token2022TransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
+Token-2022 `TransferChecked` whose mint may carry exactly one official `MintCloseAuthority`
+extension (ordinal 3). Source/destination accounts still use the closed base TLV policy; every
+other mint extension remains fail closed.
+-/
+def token2022TransferCheckedMintClose (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
+      { acc := 2, signer := false, writable := false,
+        accountData := some .token2022MintClose },
+      { acc := 3, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
+
+/--
 Token `TransferChecked` with a statically indexed outer account recipe. Every index must reduce
 to a literal during extraction. This is the multi-vault form of `tokenTransferChecked`; the
 authority is an ordinary transaction signer.

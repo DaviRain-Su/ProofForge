@@ -956,6 +956,7 @@ private partial def opsCanon (ops : Array Op) : String :=
             match entry.accountData with
             | some (.token2022Base .mint) => "~t22mint"
             | some (.token2022Base .account) => "~t22acct"
+            | some .token2022MintClose => "~t22mintclose"
             | none => ""
           s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}{dataLen}{policy}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=

@@ -13,7 +13,6 @@ use {
     solana_native_token::LAMPORTS_PER_SOL,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_rent::Rent,
     spl_token_2022_interface::extension::transfer_fee::TransferFee,
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
 };
@@ -39,7 +38,8 @@ fn instruction_data(params: &[u64]) -> Vec<u8> {
 }
 
 fn harness() -> (Pubkey, Mollusk) {
-    let (program_id, mut mollusk) = common::harness("Token2022", "PF_TOKEN_2022_SO");
+    let (program_id, mut mollusk) =
+        common::harness("Token2022MintClose", "PF_TOKEN_2022_MINT_CLOSE_SO");
     token2022::add_program(&mut mollusk);
     (program_id, mollusk)
 }
@@ -66,6 +66,43 @@ fn extension_mint_data(authority: Pubkey) -> Token2022Mint {
         is_initialized: true,
         freeze_authority: None.into(),
     }
+}
+
+fn mint_close_authority_mint(authority: Pubkey) -> Account {
+    create_account_for_mint_with_extensions(
+        extension_mint_data(authority),
+        &[MintExtension::MintCloseAuthority(MintCloseAuthority {
+            close_authority: Some(authority).try_into().unwrap(),
+        })],
+    )
+}
+
+fn transfer_fee_mint(authority: Pubkey) -> Account {
+    let fee = TransferFee {
+        epoch: 0.into(),
+        maximum_fee: 5_000.into(),
+        transfer_fee_basis_points: 100.into(),
+    };
+    create_account_for_mint_with_extensions(
+        extension_mint_data(authority),
+        &[MintExtension::TransferFeeConfig(TransferFeeConfig {
+            transfer_fee_config_authority: Some(authority).try_into().unwrap(),
+            withdraw_withheld_authority: Some(authority).try_into().unwrap(),
+            withheld_amount: 0.into(),
+            older_transfer_fee: fee,
+            newer_transfer_fee: fee,
+        })],
+    )
+}
+
+fn transfer_hook_mint(authority: Pubkey) -> Account {
+    create_account_for_mint_with_extensions(
+        extension_mint_data(authority),
+        &[MintExtension::TransferHook(TransferHook {
+            authority: Some(authority).try_into().unwrap(),
+            program_id: Some(Pubkey::new_unique()).try_into().unwrap(),
+        })],
+    )
 }
 
 fn base_token_account(mint: Pubkey, owner: Pubkey, amount: u64) -> Account {
@@ -108,7 +145,7 @@ fn build_ix(
 }
 
 #[test]
-fn token_2022_base_transfer_checked_moves_exact_amount() {
+fn token_2022_mint_close_base_mint_still_transfers() {
     let (program_id, mollusk) = harness();
     let authority = Pubkey::new_unique();
     let source = Pubkey::new_unique();
@@ -145,194 +182,11 @@ fn token_2022_base_transfer_checked_moves_exact_amount() {
 }
 
 #[test]
-fn token_2022_missing_authority_signer_fails() {
-    let (program_id, mollusk) = harness();
+fn token_2022_mint_close_authority_mint_transfers() {
     let authority = Pubkey::new_unique();
-    let source = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
-    let destination = Pubkey::new_unique();
-    let ix = build_ix(program_id, authority, source, mint, destination, false);
-    mollusk.process_and_validate_instruction(
-        &ix,
-        &[
-            (
-                common::dummy_state_key(&program_id),
-                common::dummy_state_account(&program_id),
-            ),
-            (authority, funded()),
-            (source, base_token_account(mint, authority, INITIAL)),
-            (mint, base_mint_account(authority)),
-            (
-                destination,
-                base_token_account(mint, Pubkey::new_unique(), 0),
-            ),
-            token2022::keyed_account(),
-        ],
-        &[
-            Check::err(ProgramError::Custom(1)),
-            Check::account(&source)
-                .data_slice(64, &INITIAL.to_le_bytes())
-                .build(),
-            Check::account(&destination)
-                .data_slice(64, &0u64.to_le_bytes())
-                .build(),
-        ],
-    );
-}
-
-fn transfer_fee_mint(authority: Pubkey) -> Account {
-    let fee = TransferFee {
-        epoch: 0.into(),
-        maximum_fee: 5_000.into(),
-        transfer_fee_basis_points: 100.into(),
-    };
-    create_account_for_mint_with_extensions(
-        extension_mint_data(authority),
-        &[MintExtension::TransferFeeConfig(TransferFeeConfig {
-            transfer_fee_config_authority: Some(authority).try_into().unwrap(),
-            withdraw_withheld_authority: Some(authority).try_into().unwrap(),
-            withheld_amount: 0.into(),
-            older_transfer_fee: fee,
-            newer_transfer_fee: fee,
-        })],
-    )
-}
-
-fn transfer_hook_mint(authority: Pubkey) -> Account {
-    create_account_for_mint_with_extensions(
-        extension_mint_data(authority),
-        &[MintExtension::TransferHook(TransferHook {
-            authority: Some(authority).try_into().unwrap(),
-            program_id: Some(Pubkey::new_unique()).try_into().unwrap(),
-        })],
-    )
-}
-
-fn mint_close_authority_mint(authority: Pubkey) -> Account {
-    create_account_for_mint_with_extensions(
-        extension_mint_data(authority),
-        &[MintExtension::MintCloseAuthority(MintCloseAuthority {
-            close_authority: Some(authority).try_into().unwrap(),
-        })],
-    )
-}
-
-fn assert_extension_mint_rejected(mint_account: Account) {
+    let mint_account = mint_close_authority_mint(authority);
     assert!(mint_account.data.len() > 82);
     let (program_id, mollusk) = harness();
-    let authority = Pubkey::new_unique();
-    let source = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
-    let destination = Pubkey::new_unique();
-    let ix = build_ix(program_id, authority, source, mint, destination, true);
-    mollusk.process_and_validate_instruction(
-        &ix,
-        &[
-            (
-                common::dummy_state_key(&program_id),
-                common::dummy_state_account(&program_id),
-            ),
-            (authority, funded()),
-            (source, base_token_account(mint, authority, INITIAL)),
-            (mint, mint_account),
-            (
-                destination,
-                base_token_account(mint, Pubkey::new_unique(), 0),
-            ),
-            token2022::keyed_account(),
-        ],
-        &[
-            Check::err(ProgramError::Custom(1)),
-            Check::account(&source)
-                .data_slice(64, &INITIAL.to_le_bytes())
-                .build(),
-            Check::account(&destination)
-                .data_slice(64, &0u64.to_le_bytes())
-                .build(),
-        ],
-    );
-}
-
-#[test]
-fn token_2022_transfer_fee_mint_fails_closed() {
-    let authority = Pubkey::new_unique();
-    assert_extension_mint_rejected(transfer_fee_mint(authority));
-}
-
-#[test]
-fn token_2022_transfer_hook_mint_fails_closed() {
-    let authority = Pubkey::new_unique();
-    assert_extension_mint_rejected(transfer_hook_mint(authority));
-}
-
-/// Base Token2022 consumer stays closed to `MintCloseAuthority`; the typed-open consumer is
-/// `Token2022MintClose` (`token_2022_mint_close.rs`).
-#[test]
-fn token_2022_mint_close_authority_mint_fails_closed() {
-    let authority = Pubkey::new_unique();
-    assert_extension_mint_rejected(mint_close_authority_mint(authority));
-}
-
-/// Hand-built extension-form mint: official 82-byte base, 83 zero padding bytes, the
-/// `AccountType::Mint` byte at 165, then raw TLV bytes.
-fn raw_extension_mint(authority: Pubkey, tlv: &[u8]) -> Account {
-    let base = base_mint_account(authority);
-    let mut data = vec![0u8; 166 + tlv.len()];
-    data[..82].copy_from_slice(&base.data[..82]);
-    data[165] = 1; // AccountType::Mint
-    data[166..].copy_from_slice(tlv);
-    Account {
-        lamports: Rent::default().minimum_balance(data.len()),
-        data,
-        owner: token2022::ID,
-        executable: false,
-        rent_epoch: 0,
-    }
-}
-
-fn assert_raw_extension_mint(mint_account: Account, expected: Check) {
-    let (program_id, mollusk) = harness();
-    let authority = Pubkey::new_unique();
-    let source = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
-    let destination = Pubkey::new_unique();
-    let ix = build_ix(program_id, authority, source, mint, destination, true);
-    mollusk.process_and_validate_instruction(
-        &ix,
-        &[
-            (
-                common::dummy_state_key(&program_id),
-                common::dummy_state_account(&program_id),
-            ),
-            (authority, funded()),
-            (source, base_token_account(mint, authority, INITIAL)),
-            (mint, mint_account),
-            (
-                destination,
-                base_token_account(mint, Pubkey::new_unique(), 0),
-            ),
-            token2022::keyed_account(),
-        ],
-        &[
-            expected,
-            Check::account(&source)
-                .data_slice(64, &INITIAL.to_le_bytes())
-                .build(),
-            Check::account(&destination)
-                .data_slice(64, &0u64.to_le_bytes())
-                .build(),
-        ],
-    );
-}
-
-/// An extension-form mint whose TLV region holds only the official `Uninitialized` end form
-/// behaves exactly like a base mint: the bounded cursor accepts it and the transfer succeeds.
-#[test]
-fn token_2022_padding_only_tlv_mint_transfers_as_base() {
-    let authority = Pubkey::new_unique();
-    let mint_account = raw_extension_mint(authority, &[0, 0, 0, 0]);
-    assert_eq!(mint_account.data.len(), 170);
-    let (program_id, mollusk) = harness();
     let source = Pubkey::new_unique();
     let mint = Pubkey::new_unique();
     let destination = Pubkey::new_unique();
@@ -366,27 +220,74 @@ fn token_2022_padding_only_tlv_mint_transfers_as_base() {
     );
 }
 
-/// A TLV value that overruns the account data is rejected atomically, before any CPI.
 #[test]
-fn token_2022_malformed_tlv_mint_fails_closed() {
+fn token_2022_mint_close_transfer_fee_still_fails_closed() {
     let authority = Pubkey::new_unique();
-    // TransferFeeConfig type with a length that claims 64 KiB of value bytes.
-    let mint_account = raw_extension_mint(authority, &[1, 0, 0xff, 0xff]);
-    assert_raw_extension_mint(mint_account, Check::err(ProgramError::Custom(1)));
+    let (program_id, mollusk) = harness();
+    let source = Pubkey::new_unique();
+    let mint = Pubkey::new_unique();
+    let destination = Pubkey::new_unique();
+    let ix = build_ix(program_id, authority, source, mint, destination, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
+            (authority, funded()),
+            (source, base_token_account(mint, authority, INITIAL)),
+            (mint, transfer_fee_mint(authority)),
+            (
+                destination,
+                base_token_account(mint, Pubkey::new_unique(), 0),
+            ),
+            token2022::keyed_account(),
+        ],
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&source)
+                .data_slice(64, &INITIAL.to_le_bytes())
+                .build(),
+            Check::account(&destination)
+                .data_slice(64, &0u64.to_le_bytes())
+                .build(),
+        ],
+    );
 }
 
-/// A truncated two-byte TLV remainder with a non-end type is rejected atomically.
 #[test]
-fn token_2022_truncated_tlv_header_fails_closed() {
+fn token_2022_mint_close_transfer_hook_still_fails_closed() {
     let authority = Pubkey::new_unique();
-    let mint_account = raw_extension_mint(authority, &[1, 0]);
-    assert_raw_extension_mint(mint_account, Check::err(ProgramError::Custom(1)));
-}
-
-/// An ordinal outside the official `ExtensionType` set is rejected atomically.
-#[test]
-fn token_2022_unknown_extension_mint_fails_closed() {
-    let authority = Pubkey::new_unique();
-    let mint_account = raw_extension_mint(authority, &[0x99, 0x99, 4, 0, 1, 2, 3, 4]);
-    assert_raw_extension_mint(mint_account, Check::err(ProgramError::Custom(1)));
+    let (program_id, mollusk) = harness();
+    let source = Pubkey::new_unique();
+    let mint = Pubkey::new_unique();
+    let destination = Pubkey::new_unique();
+    let ix = build_ix(program_id, authority, source, mint, destination, true);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (
+                common::dummy_state_key(&program_id),
+                common::dummy_state_account(&program_id),
+            ),
+            (authority, funded()),
+            (source, base_token_account(mint, authority, INITIAL)),
+            (mint, transfer_hook_mint(authority)),
+            (
+                destination,
+                base_token_account(mint, Pubkey::new_unique(), 0),
+            ),
+            token2022::keyed_account(),
+        ],
+        &[
+            Check::err(ProgramError::Custom(1)),
+            Check::account(&source)
+                .data_slice(64, &INITIAL.to_le_bytes())
+                .build(),
+            Check::account(&destination)
+                .data_slice(64, &0u64.to_le_bytes())
+                .build(),
+        ],
+    );
 }

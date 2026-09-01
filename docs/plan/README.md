@@ -218,7 +218,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | ID | 状态 | 内容 |
 |---|---|---|
 | [svm-rt-001](tasks/svm-rt-001.md) | done | Clock signed timestamp |
-| [svm-rt-002](tasks/svm-rt-002.md) | todo | Token-2022 第一个 typed extension |
+| [svm-rt-002](tasks/svm-rt-002.md) | done | Token-2022 第一个 typed extension（MintCloseAuthority） |
 | [svm-rt-003](tasks/svm-rt-003.md) | todo | AccountView+mutation alias-aware walk |
 | [svm-rt-004](tasks/svm-rt-004.md) | todo | Instructions / sliced sysvar |
 | [svm-rt-005](tasks/svm-rt-005.md) | todo | nested/wide dynamic return 政策 |
@@ -226,7 +226,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sdk-002](tasks/svm-sdk-002.md) | todo | owner-reassign 政策 |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | todo | generic POD transient shapes |
 | [svm-sdk-004](tasks/svm-sdk-004.md) | todo | 更多 manifest-bounded handles |
-| [svm-sdk-005](tasks/svm-sdk-005.md) | todo | Token-2022 extension Sdk facade |
+| [svm-sdk-005](tasks/svm-sdk-005.md) | done | Token-2022 extension Sdk facade（MintCloseAuthority） |
 | [svm-sdk-006](tasks/svm-sdk-006.md) | todo | UTF-8 Memo + migration payload |
 | [svm-sdk-007](tasks/svm-sdk-007.md) | todo | 持久容器有界 iteration |
 | [svm-app-001](tasks/svm-app-001.md) | todo | Phoenix-v1 下一组 instruction |
@@ -240,7 +240,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
 | [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
 
-本周默认：Track A 已收口；`svm-rt-001` signed Clock **done** → 下一刀 **`svm-rt-002`**（Token-2022 首个 typed extension）或并行 `svm-sem-001` / `svm-sdk-001` / `svm-eng-001`。
+本周默认：Track A 已收口；`svm-rt-001`/`svm-rt-002`/`svm-sdk-005` **done** → 下一刀 **`svm-rt-003`**（alias-aware walk）或并行 `svm-sdk-001` / `svm-sem-001` / `svm-eng-001`。
 WASM PR #4/#5 仍开着不阻塞。
 
 

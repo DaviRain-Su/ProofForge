@@ -27,6 +27,7 @@ def entries : Array Entry := #[
   { name := "Create", digest := "6ee1719e05c53163" },
   { name := "TokenXfer", digest := "c9edc88528b425dd" },
   { name := "Token2022", digest := "d3b11a73adabded8" },
+  { name := "Token2022MintClose", digest := "607b3786fb54eaee" },
   { name := "Ata", digest := "574dc90c21ca9723" },
   { name := "Rent", digest := "831e5502b9b3cfe5" },
   { name := "TokenMint", digest := "f7535d90750f9692" },
