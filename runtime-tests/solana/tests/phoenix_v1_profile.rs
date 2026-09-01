@@ -631,10 +631,10 @@ fn raw_cancel_up_to_data(
 }
 
 /// Official Borsh `CancelMultipleOrdersByIdParams`: `tag || u32 len || CancelOrderParams*`.
-/// This profile slice accepts at most four ids (`len ∈ {0,1,2,3,4}`; max wire 73 bytes).
+/// This profile slice accepts at most eight ids (`len ∈ {0..=8}`; max wire 141 bytes).
 fn raw_cancel_by_id_data(tag: u8, orders: &[(u8, u64, u64)]) -> Vec<u8> {
     assert!(tag == 10 || tag == 11);
-    assert!(orders.len() <= 4);
+    assert!(orders.len() <= 8);
     let mut data = vec![tag];
     data.extend_from_slice(&(orders.len() as u32).to_le_bytes());
     for &(side, price, sequence) in orders {
@@ -642,7 +642,7 @@ fn raw_cancel_by_id_data(tag: u8, orders: &[(u8, u64, u64)]) -> Vec<u8> {
         data.extend_from_slice(&price.to_le_bytes());
         data.extend_from_slice(&sequence.to_le_bytes());
     }
-    assert!((5..=73).contains(&data.len()));
+    assert!((5..=141).contains(&data.len()));
     data
 }
 
@@ -4046,6 +4046,76 @@ fn official_raw_cancel_by_id_free_funds_cancels_four_owned_bids_in_one_vec() {
     );
 }
 
+
+#[test]
+fn official_raw_cancel_by_id_free_funds_cancels_eight_owned_bids_in_one_vec() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let sequences = [!41u64, !42u64, !43u64, !44u64, !45u64, !46u64, !47u64, !48u64];
+    let prices = [5u64, 6, 7, 8, 9, 10, 11, 12];
+    let sizes = [1u64, 1, 1, 1, 1, 1, 1, 1];
+    let locked: u64 = prices
+        .iter()
+        .zip(sizes.iter())
+        .map(|(p, s)| p * s)
+        .sum();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 1, 0);
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 400);
+    write_word(&mut market, 8320, locked);
+    write_word(&mut market, 8321, 9);
+    for i in 0..8 {
+        market = run_market_write(
+            "insertBid512",
+            market,
+            true,
+            &[prices[i], sequences[i], 1, sizes[i], 0, 0],
+            &[Check::success()],
+        );
+    }
+
+    let (mollusk, log_key) = raw_reduce_harness();
+    let orders: Vec<(u8, u64, u64)> = (0..8).map(|i| (0, prices[i], sequences[i])).collect();
+    let data = raw_cancel_by_id_data(11, &orders);
+    assert_eq!(data.len(), 141);
+    let instruction = raw_reduce_instruction(
+        &data,
+        PHOENIX_PROGRAM,
+        log_key,
+        false,
+        market_key,
+        true,
+        trader_key,
+        true,
+        false,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &raw_reduce_accounts(PHOENIX_PROGRAM, log_key, market_key, market, trader_key),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 401);
+    assert_eq!(read_word(&market, BID_TREE_WORD + 2), 0);
+    assert_eq!(read_word(&market, 8320), 0);
+    assert_eq!(read_word(&market, 8321), 9 + locked);
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    let expected: Vec<(u16, u64, u64, u64)> = (0..8)
+        .map(|i| (0, sequences[i], prices[i], sizes[i]))
+        .collect();
+    assert_cancel_all_batch(
+        &payloads[0],
+        11,
+        400,
+        market_key,
+        trader_key,
+        &expected,
+    );
+}
+
 #[test]
 fn official_raw_cancel_by_id_free_funds_cancels_owned_bid_and_ask_in_one_vec() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
@@ -4336,19 +4406,13 @@ fn official_raw_cancel_by_id_rejects_noncanonical_wire_and_invalid_side_atomical
     write_word(&mut market, MARKET_SEQUENCE_WORD, 280);
     let before = market.data.clone();
     for data in [
-        // length=5 exceeds profile capacity 4 / maxDataLen 73.
+        // length=9 exceeds profile capacity 8 / maxDataLen 141.
         {
-            let mut over = vec![11, 5, 0, 0, 0];
-            for (side, price, sequence) in [
-                (0u8, 1u64, !1u64),
-                (0u8, 2u64, !2u64),
-                (0u8, 3u64, !3u64),
-                (0u8, 4u64, !4u64),
-                (0u8, 5u64, !5u64),
-            ] {
-                over.push(side);
-                over.extend_from_slice(&price.to_le_bytes());
-                over.extend_from_slice(&sequence.to_le_bytes());
+            let mut over = vec![11, 9, 0, 0, 0];
+            for i in 1u64..=9u64 {
+                over.push(0u8);
+                over.extend_from_slice(&i.to_le_bytes());
+                over.extend_from_slice(&( !i ).to_le_bytes());
             }
             over
         },

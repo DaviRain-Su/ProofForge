@@ -1361,4 +1361,83 @@ theorem walkAccount0Flags_eq_absLoad :
       some true := by
   native_decide
 
+
+/-!
+## E-infinity knife 5 - Loader account-0 lamports/data_len (`svm-sem-010`)
+
+Emit loads account-0 `ACC0_LAMPORTS` (`0x50`) and `ACC0_DATA_LEN` (`0x58`) as absolute
+`r6`-relative u64 words. This knife walks those two fields from the same `r8` header cursor
+(`ACC0_HEADER`) and proves agreement with absolute loads. Still not owner limbs, full account
+vector, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute input offsets matching `Emit` `.equ ACC0_LAMPORTS` / `ACC0_DATA_LEN`. -/
+def account0LamportsOffset : Nat := 0x50
+def account0DataLenOffset : Nat := 0x58
+
+/-- Absolute VAs for account-0 lamports and data_len words. -/
+def account0LamportsAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0LamportsOffset
+def account0DataLenAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account0DataLenOffset
+
+/-- Seed Loader input with account-0 meta plus lamports and data_len words. -/
+def account0BudgetInputMem (value arg0 keyLimb lamports dataLen : U64) : Option Mem := do
+  let m₁ ← account0MetaInputMem value arg0 keyLimb
+  let m₂ ← storev .m64 m₁ account0LamportsAddr (.vlong lamports)
+  storev .m64 m₂ account0DataLenAddr (.vlong dataLen)
+
+/-- Typed walk from header cursor: ldxdw r1,[r8+0x48]; ldxdw r2,[r8+0x50]; stxdw [r10+off],r1. -/
+def walkAccount0Budget? (stackOff : U16) : Option EbpfAsm := do
+  let lamportsOff ← positiveOffset? (account0LamportsOffset - account0HeaderOffset)
+  let dataLenOff ← positiveOffset? (account0DataLenOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 lamportsOff,
+    .ldx .m64 .br2 .br8 dataLenOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run the walked account-0 lamports/data_len load against seeded input memory. -/
+def evalWalkAccount0BudgetToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount0Budget? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative loads of account-0 lamports and data_len. -/
+def evalAbsAccount0Budget? (memory : Mem) : Option (U64 × U64) := do
+  let lamports ← loadv .m64 memory account0LamportsAddr
+  let dataLen ← loadv .m64 memory account0DataLenAddr
+  match lamports, dataLen with
+  | .vlong l, .vlong d => some (l, d)
+  | _, _ => none
+
+/-- Walked account-0 budget assembly is well-formed. -/
+theorem walkAccount0Budget_verified :
+    (walkAccount0Budget? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walk: lamports=`1000`, data_len=`128`, lamports staged at `[r10-16]`. -/
+theorem evalWalkAccount0_lamports_1000_dataLen_128 :
+    (do
+      let mem ← account0BudgetInputMem 7 5 0x42 1000 128
+      let (regs, finalMem) ← evalWalkAccount0BudgetToStack? rhsStackOffset mem
+      pure (regs .br1 == 1000 && regs .br2 == 128 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1000))) =
+      some true := by
+  native_decide
+
+/-- Walked account-0 budget agrees with absolute `r6`-relative loads. -/
+theorem walkAccount0Budget_eq_absLoad :
+    (do
+      let mem ← account0BudgetInputMem 7 5 0x42 1000 128
+      let (regs, _) ← evalWalkAccount0BudgetToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount0Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 1000 && dataLen == 128)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

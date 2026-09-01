@@ -2649,13 +2649,13 @@ def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
 
 /--
 Official Phoenix `CancelMultipleOrdersByIdWithFreeFunds` tag 11 wire:
-`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **four** order ids
-(`BoundedVec` capacity = 4; max wire 73 bytes). Empty vectors are a no-op. Each id is cancelled through the shared
+`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **eight** order ids
+(`BoundedVec` capacity = 8; max wire 141 bytes). Empty vectors are a no-op. Each id is cancelled through the shared
 per-id helper; collateral stays in free funds.
 -/
 @[pf_entry, pf_svm_raw 11 4 0]
 def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
-    (orders : BoundedVec CancelOrderParams 4) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 8) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
         checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
@@ -2679,7 +2679,23 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
       orders.length ≤ 3 ||
         orders.values[3]!.side.toUInt64 = 0 ||
         orders.values[3]!.side.toUInt64 = 1
-    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok then
+    let side4ok :=
+      orders.length ≤ 4 ||
+        orders.values[4]!.side.toUInt64 = 0 ||
+        orders.values[4]!.side.toUInt64 = 1
+    let side5ok :=
+      orders.length ≤ 5 ||
+        orders.values[5]!.side.toUInt64 = 0 ||
+        orders.values[5]!.side.toUInt64 = 1
+    let side6ok :=
+      orders.length ≤ 6 ||
+        orders.values[6]!.side.toUInt64 = 0 ||
+        orders.values[6]!.side.toUInt64 = 1
+    let side7ok :=
+      orders.length ≤ 7 ||
+        orders.values[7]!.side.toUInt64 = 0 ||
+        orders.values[7]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok || !side4ok || !side5ok || !side6ok || !side7ok then
       .error .overflow
     else
       let layout := Examples.PhoenixV1.small 2
@@ -2707,8 +2723,40 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
             let _ ←
               cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
                 o3.side.toUInt64 o3.price o3.sequence
-            let _ := finishMarketBatch
-            .ok (_s, 0)
+            if orders.length ≥ 5 then
+              let o4 := orders.values[4]!
+              let _ ←
+                cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                  o4.side.toUInt64 o4.price o4.sequence
+              if orders.length ≥ 6 then
+                let o5 := orders.values[5]!
+                let _ ←
+                  cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                    o5.side.toUInt64 o5.price o5.sequence
+                if orders.length ≥ 7 then
+                  let o6 := orders.values[6]!
+                  let _ ←
+                    cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                      o6.side.toUInt64 o6.price o6.sequence
+                  if orders.length ≥ 8 then
+                    let o7 := orders.values[7]!
+                    let _ ←
+                      cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+                        o7.side.toUInt64 o7.price o7.sequence
+                    let _ := finishMarketBatch
+                    .ok (_s, 0)
+                  else
+                    let _ := finishMarketBatch
+                    .ok (_s, 0)
+                else
+                  let _ := finishMarketBatch
+                  .ok (_s, 0)
+              else
+                let _ := finishMarketBatch
+                .ok (_s, 0)
+            else
+              let _ := finishMarketBatch
+              .ok (_s, 0)
           else
             let _ := finishMarketBatch
             .ok (_s, 0)
@@ -2885,6 +2933,7 @@ def cancelMultipleOrdersById (_s : State)
           .ok (_s, 0)
         else
           .error .overflow
+
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
