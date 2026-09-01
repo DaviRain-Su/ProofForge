@@ -296,6 +296,7 @@ Phase 7   收口
 | [svm-sem-046](tasks/svm-sem-046.md) | E∞ knife | Loader account-5 owner limbs 0/1 after skip chain | **done** — knife 41; acc5 owner lo |
 | [svm-sem-047](tasks/svm-sem-047.md) | E∞ knife | Loader account-5 owner limbs 2/3 after skip chain | **done** — knife 42; acc5 owner hi |
 | [svm-sem-048](tasks/svm-sem-048.md) | E∞ knife | Loader account-5 executable/rent after skip chain | **done** — knife 43; acc5 exec/rent |
+| [svm-sem-049](tasks/svm-sem-049.md) | E∞ knife | Loader account-5 → account-6 skip chain | **done** — knife 44; acc6 skip |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

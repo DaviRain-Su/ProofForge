@@ -5523,4 +5523,134 @@ theorem walkAccount5ExecRentAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 44 - Loader account-5 → account-6 marker skip chain (`svm-sem-049`)
+
+Knife 43 completes account-5 fields after the skip chain. Emit chains the same
+`emitSkipAccount` geometry from the account-5 header cursor to reach the next dup marker.
+This knife composes the account-0/1/2/3/4/5 skip chain with an account-5 zero-dataLen skip and
+proves the loaded account-6 marker matches an absolute `r6`-relative load. Still not
+account-6 meta fields, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-6 dup marker after account-5 zero-dataLen rent. -/
+def account6HeaderOffset : Nat := account5RentEpochOffset + 8
+def account6HeaderAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account6HeaderOffset
+
+/-- Seed account-0/1/2/3/4/5 layout plus account-5 zero data_len and account-6 dup marker. -/
+def account5SkipNextInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) : Option Mem := do
+  let m₁ ← account5ExecRentInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+  let m₂ ← storev .m64 m₁ account5DataLenAddr (.vlong 0)
+  storev .m8 m₂ account6HeaderAddr (.vbyte acc6Marker)
+
+/-- Typed sextuple skip: account-0/1/2/3/4/5 zero-dataLen skips land on account-6 marker. -/
+def walkAccount5SkipNextAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained account-0/1/2/3/4/5 skip-to-account-6-marker walk against seeded input memory. -/
+def evalWalkAccount5SkipNextAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount5SkipNextAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative load of the account-6 dup marker. -/
+def evalAbsAccount6Marker? (memory : Mem) : Option U8 := do
+  let marker ← loadv .m8 memory account6HeaderAddr
+  match marker with
+  | .vbyte m => some m
+  | _ => none
+
+/-- Walked account-5→account-6 skip-chain assembly is well-formed. -/
+theorem walkAccount5SkipNextAfterSkipChain_verified :
+    (walkAccount5SkipNextAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete chained skip: account-6 marker=`0xff`, staged at `[r10-16]`. -/
+theorem evalWalkAccount5_skip_next_marker_0xff :
+    (do
+      let mem ← account5SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker
+      let (regs, finalMem) ← evalWalkAccount5SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) =
+      some true := by
+  native_decide
+
+/-- Chained skip marker agrees with absolute `r6`-relative load at account-6 header. -/
+theorem walkAccount5SkipNextAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account5SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB0
+      let (regs, _) ← evalWalkAccount5SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount6Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xB0)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib
