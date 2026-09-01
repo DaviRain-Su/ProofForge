@@ -1671,8 +1671,7 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
         nodes1[yi]!.right ≤ s.bumpIndex ∧
         nodes1[yi]!.parent ≤ s.bumpIndex ∧ nodes1[yi]!.color ≤ 1 at hy1
       split at h
-      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
+      · obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }
         have hnP : ∀ a : UInt64, 1 ≤ a → a < s.bumpIndex →
@@ -1688,8 +1687,7 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt64
           hxLe hy1.2.1 hparentLe hy1.2.2.2
         refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
         simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
-      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
+      · obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }
         have hnP : ∀ a : UInt64, 1 ≤ a → a < s.bumpIndex →
@@ -1939,8 +1937,7 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
         nodes1[yi]!.right ≤ s.bumpIndex ∧
         nodes1[yi]!.parent ≤ s.bumpIndex ∧ nodes1[yi]!.color ≤ 1 at hy1
       split at h
-      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
+      · obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with left := yAddress }
         have hnP : ∀ a : UInt64, 1 ≤ a → a < s.bumpIndex →
@@ -1956,8 +1953,7 @@ theorem rotateRight_wf (s : State) (xAddress : UInt64) {t : State} {yRet : UInt6
           hy1.1 hxLe hparentLe hy1.2.2.2
         refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
         simpa (config := { zetaDelta := true }) only [hinner0] using hfinal
-      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
+      · obtain ⟨rfl, rfl⟩ := h
         let nodesP :=
           nodes1.set parentIndex { nodes1[parentIndex]! with right := yAddress }
         have hnP : ∀ a : UInt64, 1 ≤ a → a < s.bumpIndex →
