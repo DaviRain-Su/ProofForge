@@ -22,7 +22,7 @@
 Lean 4 本身就是可执行语言 + 证明器。ProofForge 只补链上缺的那一层剖面：
 
 | 原则 | 含义 |
-|---|---|
+| --- | --- |
 | **同一主语** | 定理钉在用户 `def` 上，编译走同一抽出 IR。禁止「证的是 A，编的是 B」。 |
 | **Fail-closed 子集** | Profile 只放行能降到链上的东西。`IO`、`partial`、`sorry`、`@[extern]`、`@[implemented_by]`、无界递归是拒绝，不是警告。 |
 | **两个剖面，一条 Core** | SVM 与 EVM 共享 Lean / Profile / Extract / CFG，**不**共享物理存储模型。 |
@@ -61,7 +61,7 @@ sBPF / .so   Yul / .bin
 ```
 
 | 工具 | 版本 | 用途 |
-|---|---|
+| --- | --- | --- |
 | Lean 4 | `v4.31.0` | 源语言与 kernel |
 | sbpf | `0.2.2` | `.s` 汇编成 Solana `.so` |
 | solc | `0.8.34` | Yul 汇编成 EVM `.bin` |
@@ -92,9 +92,9 @@ lake exe pf -- build --target evm --out build/evm Counter
 `--target svm` 也可写成 `solana` 或 `sbpf`。不写程序名则构建该目标下全部已登记模块。详见 `lake exe pf -- --help`。
 
 | 目标 | 制品 | 布局 |
-|---|---|
-| SVM | `.so` `.s` `.idl.json` | Solana IDL spec 0.1.0，Loader V3 |
-| EVM | `.bin` `.yul` `.abi.json` | selector / storage slot / ABI |
+| --- | --- | --- |
+| SVM | `.so` / `.s` / `.idl.json` | Solana IDL spec 0.1.0，Loader V3 |
+| EVM | `.bin` / `.yul` / `.abi.json` | selector / storage slot / ABI |
 
 ## 写合约
 
@@ -182,7 +182,7 @@ SVM 拥有账户几何、CPI 和 IDL。持久 Map / Queue 是账户 bytes 上的
 [`Examples/PhoenixV1Profile.lean`](Examples/PhoenixV1Profile.lean) 是这条边界的压力测试，不是编译器特判。
 
 | 区域 | 仓库里有什么 |
-|---|---|
+| --- | --- |
 | 存储 | 128-seat trader tree 与双 512-node order book 直接驻留账户 bytes。槽位 one-based（`0` 为哨兵）。不用 heap `Map`、detached node、copied tree 或账户外 pointer。 |
 | 撮合 | 固定容量 Sokoban 插入/删除、trader get-or-register deposit、bid/ask `ReduceOrderWithFreeFunds`（partial / full）、collateral unlock、checked preflight。 |
 | 官方 tag 4–7 | Tag 6/7 `FifoCancel` 按 bids→asks 与各侧 FIFO 原位取消，带 owner 过滤、unlock、event index、released-lot 累加器。Tag 6 再按 quote→base claim/withdraw。Tag 7 完全不进 Token CPI。 |
@@ -206,7 +206,7 @@ descriptor 在抽取期消去，不进入 storage。`Examples.Token` / `Examples
 ## 信任边界
 
 | 声明 | 含义 |
-|---|---|
+| --- | --- |
 | **弱声明（对外 v0）** | Kernel 接受了关于用户 `def` / 抽出 IR 的定理。TCB = Lean kernel + 主语绑定。 |
 | **工程声明** | 同一 IR 经发射器 + 钉死的 `sbpf` / `solc`，在 Mollusk 或 Anvil 上与夹具一致。 |
 | **不做的声明** | `.so` / loader / 全 SVM refinement / 定理 ⇒ 已部署程序。定理不蕴含公网部署正确。 |
@@ -238,7 +238,7 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 从 [docs/INDEX.md](docs/INDEX.md) 进。
 
 | 文档 | 作用 |
-|---|---|
+| --- | --- |
 | [01-prd.md](docs/01-prd.md) | 做 / 不做 |
 | [02-architecture.md](docs/02-architecture.md) | 模块边界与信任边界 |
 | [modules/README.md](docs/modules/README.md) | 各模块合同 |

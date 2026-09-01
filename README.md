@@ -22,7 +22,7 @@ Current targets: **Solana sBPF** (`.so` / IDL) and **EVM Yul** (`.bin` / ABI).
 Lean 4 is already an executable language and a proof assistant. ProofForge only adds the on-chain profile:
 
 | Principle | What it means |
-|---|---|
+| --- | --- |
 | **One subject** | Theorems pin the user `def`. Compile walks the same extracted IR. You never prove A and emit B. |
 | **Fail-closed subset** | Profile admits only what can lower on-chain. `IO`, `partial`, `sorry`, `@[extern]`, `@[implemented_by]`, and unbounded recursion are refusals, not warnings. |
 | **Two profiles, one Core** | SVM and EVM share Lean / Profile / Extract / CFG. They do **not** share a physical store. |
@@ -61,7 +61,7 @@ Do not substitute a random assembler from `PATH`. Install the locked versions wi
 ```
 
 | Tool | Version | Role |
-|---|---|
+| --- | --- | --- |
 | Lean 4 | `v4.31.0` | Source language and kernel |
 | sbpf | `0.2.2` | Assemble `.s` → Solana `.so` |
 | solc | `0.8.34` | Assemble Yul → EVM `.bin` |
@@ -92,9 +92,9 @@ lake exe pf -- build --target evm --out build/evm Counter
 `--target svm` also accepts `solana` or `sbpf`. Omit the program name to build every registered module for that target. See `lake exe pf -- --help`.
 
 | Target | Artifacts | Layout |
-|---|---|
-| SVM | `.so` `.s` `.idl.json` | Solana IDL spec 0.1.0, Loader V3 |
-| EVM | `.bin` `.yul` `.abi.json` | Selector / storage slots / ABI |
+| --- | --- | --- |
+| SVM | `.so` / `.s` / `.idl.json` | Solana IDL spec 0.1.0, Loader V3 |
+| EVM | `.bin` / `.yul` / `.abi.json` | Selector / storage slots / ABI |
 
 ## Write a contract
 
@@ -182,7 +182,7 @@ Compiler boundary:
 [`Examples/PhoenixV1Profile.lean`](Examples/PhoenixV1Profile.lean) is the current stress test of that boundary — not a special-case compiler.
 
 | Area | What is in tree |
-|---|---|
+| --- | --- |
 | Storage | 128-seat trader tree and two 512-node order books live in account bytes. Slots are one-based (`0` is sentinel). No heap `Map`, detached node, copied tree, or out-of-account pointer. |
 | Matching | Fixed-capacity Sokoban insert/remove, trader get-or-register deposit, bid/ask `ReduceOrderWithFreeFunds` (partial and full), collateral unlock, checked preflight. |
 | Official tags 4–7 | Tag 6/7 `FifoCancel` cancels in place (bids→asks, per-side FIFO) with owner filter, unlock, event index, and released-lot accumulator. Tag 6 then claim/withdraw quote→base. Tag 7 never enters Token CPI. |
@@ -206,7 +206,7 @@ Descriptors erase at extract time and never enter storage. `Examples.Token` and 
 ## Trust boundary
 
 | Claim | Meaning |
-|---|---|
+| --- | --- |
 | **Weak (public v0)** | The kernel accepted theorems about the user `def` / extracted IR. TCB = Lean kernel + subject binding. |
 | **Engineering** | The same IR, through the emitter and pinned `sbpf` / `solc`, matches fixtures on Mollusk or Anvil. |
 | **Not claimed** | `.so` / loader / full SVM refinement / theorem ⇒ deployed program. A theorem does not imply a correct public deployment. |
@@ -238,7 +238,7 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 Start at [docs/INDEX.md](docs/INDEX.md).
 
 | Doc | Role |
-|---|---|
+| --- | --- |
 | [01-prd.md](docs/01-prd.md) | In / out of scope |
 | [02-architecture.md](docs/02-architecture.md) | Module and trust boundaries |
 | [modules/README.md](docs/modules/README.md) | Per-module contracts |
