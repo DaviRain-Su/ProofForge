@@ -558,5 +558,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 15: Loader account-1 executable/rent after skip (`svm-sem-020`)
+#guard (walkAccount1ExecRentAfterSkip? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account1ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE
+      let (regs, finalMem) ← evalWalkAccount1ExecRentAfterSkipToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xEE &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account1ExecRentInputMem 7 5 0x42 0xAB 0xEE 0x71 1 0 1000 128 0xA1 0xB2 0xC3 0xD4 0 0xEE
+      let (regs, _) ← evalWalkAccount1ExecRentAfterSkipToStack? rhsStackOffset mem
+      let (executable, rentEpoch) ← evalAbsAccount1ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rentEpoch &&
+        executable == 0 && rentEpoch == 0xEE)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
