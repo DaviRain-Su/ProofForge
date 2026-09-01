@@ -199,7 +199,7 @@ Phase 7   收口
 
 | ID | 内容 | 优先级 | 验收 |
 |---|---|---|---|
-| [svm-rt-001](tasks/svm-rt-001.md) | Clock **signed** timestamp 视图（与 unsigned 字段并存；明确布局） | F1 | Lean + Mollusk；错误布局 fail closed |
+| [svm-rt-001](tasks/svm-rt-001.md) | Clock **signed** timestamp 视图（与 unsigned 字段并存；明确布局） | F1 | **done**；Lean + Mollusk 12/12；digest `19039a4899e65b6d` |
 | [svm-rt-002](tasks/svm-rt-002.md) | Token-2022 **第一个** typed extension 语义（建议 transfer-fee **或** mint-close-authority） | F2 | 双 consumer；未知 extension 仍原子拒绝 |
 | [svm-rt-003](tasks/svm-rt-003.md) | AccountView 与 direct mutation 共用时的 **alias-aware** 变量 walk | F1 | 别名/只读/owner 矩阵；无 persistent pointer |
 | [svm-rt-004](tasks/svm-rt-004.md) | Instructions / sliced sysvar（有界） | F2 | 按需；无通用任意切片 |
@@ -257,7 +257,7 @@ Phase 7   收口
 | 轨道 | 片 | 状态 |
 |---|---|---|
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
-| B | svm-rt-001 … 005 | todo（下一主刀） |
+| B | svm-rt-001 … 005 | svm-rt-001 **done**；002–005 todo |
 | C | svm-sdk-001 … 007 | todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：Track A 已收口 → **`svm-rt-001` signed Clock**
+1. **主线能力**：`svm-rt-001` done → **`svm-rt-002` Token-2022 typed extension**
 2. **并行**：`svm-sem-001`（E1）/ `svm-sdk-001` / `svm-eng-001`
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

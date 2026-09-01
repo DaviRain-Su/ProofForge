@@ -16,7 +16,7 @@ def entries : Array Entry := #[
   { name := "Window", digest := "2d13510bc7111128" },
   { name := "Phase", digest := "927b7fa633bd223" },
   { name := "Choice", digest := "77dcaa9d61a2a535" },
-  { name := "Clock", digest := "e55d1f77fe147ef7" },
+  { name := "Clock", digest := "19039a4899e65b6d" },
   { name := "Transfer", digest := "f2da40e6199ba343" },
   { name := "Ping", digest := "2d14206f60b0cbd6" },
   { name := "Call", digest := "d61ef848389e963a" },

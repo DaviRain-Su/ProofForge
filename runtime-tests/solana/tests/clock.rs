@@ -243,6 +243,71 @@ fn leader_era_tracks_clock_leader_schedule_epoch() {
     );
 }
 
+
+#[test]
+fn epoch_start_tracks_clock_epoch_start_timestamp() {
+    let expected: i64 = -1_700_000_000;
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.clock.epoch_start_timestamp = expected;
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("epochStart", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&(expected as u64).to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn unix_tracks_signed_clock_unix_timestamp_bits() {
+    let expected: i64 = -42;
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.clock.unix_timestamp = expected;
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("unix", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&(expected as u64).to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+#[test]
+fn unix_tracks_positive_clock_unix_timestamp() {
+    let expected: i64 = 1_700_000_123;
+    let (program_id, mut mollusk) = harness();
+    mollusk.sysvars.clock.unix_timestamp = expected;
+    let state_key = Pubkey::new_unique();
+    let disc = instruction_discriminator("unix", 0);
+    let ix = build_ix(program_id, state_key, &disc, &[], false, false);
+    let pre = clock_state(true, 7);
+    let account = state_account(&program_id, pre.clone());
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[(state_key, account)],
+        &[
+            Check::success(),
+            Check::return_data(&(expected as u64).to_le_bytes()),
+            Check::account(&state_key).data(&pre).build(),
+        ],
+    );
+}
+
+
 #[test]
 fn stamp_stores_current_slot_then_get_reads_it() {
     let slot = 123_456u64;

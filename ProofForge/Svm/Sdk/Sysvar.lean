@@ -23,12 +23,25 @@ namespace Clock
 /-- Current epoch (`Clock.epoch`). -/
 @[pf_inline] def epoch : UInt64 := ProofForge.Svm.Runtime.clockEpoch
 
+/-- Native `Clock.epoch_start_timestamp` (`i64` bits at offset 8) carried as `UInt64`. -/
+@[pf_inline] def epochStartTimestamp : UInt64 :=
+  ProofForge.Svm.Runtime.clockEpochStartTimestamp
+
 /-- Future epoch whose leader schedule was most recently calculated. -/
 @[pf_inline] def leaderScheduleEpoch : UInt64 :=
   ProofForge.Svm.Runtime.clockLeaderScheduleEpoch
 
-/-- Current `Clock.unix_timestamp`, exposed as the existing unsigned 64-bit bit pattern. -/
+/-- Native `Clock.unix_timestamp` (`i64` bits at offset 32) carried as `UInt64`. -/
 @[pf_inline] def unixTimestamp : UInt64 := ProofForge.Svm.Runtime.unixTime
+
+/-- Two's-complement `Int` view of a native Clock `i64` field. Not extracted; host/on-chain
+values stay the raw 64-bit pattern returned by the Runtime leaves above. -/
+def asSigned (bits : UInt64) : Int :=
+  let n := bits.toNat
+  if n < 0x8000000000000000 then
+    Int.ofNat n
+  else
+    -Int.ofNat (0x10000000000000000 - n)
 
 end Clock
 

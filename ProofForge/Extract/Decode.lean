@@ -1147,6 +1147,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some (.ext (.svm (.component (.sysvar (.clock .slot)))) #[])
   else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
     some (.ext (.svm (.component (.sysvar (.clock .epoch)))) #[])
+  else if endsWith e ".clockEpochStartTimestamp" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.clockEpochStartTimestamp then
+    some (.ext (.svm (.component (.sysvar (.clock .epochStartTimestamp)))) #[])
   else if endsWith e ".clockLeaderScheduleEpoch" ||
       isConstNamed e ``ProofForge.Svm.Runtime.clockLeaderScheduleEpoch then
     some (.ext (.svm (.component (.sysvar (.clock .leaderScheduleEpoch)))) #[])

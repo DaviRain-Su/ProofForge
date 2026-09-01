@@ -15,9 +15,15 @@ namespace ProofForge.Svm.Runtime
 /--
 当前 epoch。抽出器认这个名字，发射 `sol_get_clock_sysvar` 后读
 `Clock.epoch`（偏移 16）。宿主侧是不可约 stub。
-`epoch_start_timestamp` 本剖面 fail closed。
 -/
 @[irreducible] def clockEpoch : UInt64 := 0
+
+/--
+`Clock.epoch_start_timestamp` at native `repr(C)` offset 8. Official layout stores this as
+`i64`; the Runtime leaf carries the same 64-bit pattern in a `UInt64` register. Signed
+interpretation is `Sdk.Sysvar.Clock.asSigned`. The host stub is irreducible.
+-/
+@[irreducible] def clockEpochStartTimestamp : UInt64 := 0
 
 /--
 Future epoch for which the leader schedule was most recently calculated. Extracted programs read
@@ -27,8 +33,8 @@ Future epoch for which the leader schedule was most recently calculated. Extract
 
 /--
 当前 unix 时间戳。抽出后发射 `sol_get_clock_sysvar`，读
-`Clock.unix_timestamp`（偏移 32）为无符号 `u64`。
-宿主侧是不可约 stub。有符号语义本剖面不建模。
+`Clock.unix_timestamp`（偏移 32）的原生 `i64` 位型，装在 `UInt64` 寄存器里。
+有符号解读见 `Sdk.Sysvar.Clock.asSigned`。宿主侧是不可约 stub。
 -/
 @[irreducible] def unixTime : UInt64 := 0
 
