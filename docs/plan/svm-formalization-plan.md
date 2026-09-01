@@ -52,7 +52,7 @@
 `mQueuePop_clear_*` / `mQueuePop_advance_*` / `mQueuePop_wrap_advance_*`（链接+读回）、
 `mQueuePeek_*`、`mQueueInitialize_zero_headers`、`mQueuePush_pop_roundtrip_empty`。
 
-下一形式化刀：SF-4a TransientModel + Vector64（`sf-006`）。
+下一形式化刀：SF-4b Bytes + Record64 + WideVec（`sf-007`）。
 ---
 
 ## 4. 组件清单
@@ -154,7 +154,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 | SF-2a | BoundedVec pop + setAt | L2 | **done** | [sf-003](tasks/sf-003.md) |
 | SF-2b | Versioned classify/initialize/apply | L1+L2 | **done** | [sf-004](tasks/sf-004.md) |
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | **done** | [sf-005](tasks/sf-005.md) |
-| SF-4a | TransientModel + Vector64 | L2 | todo | [sf-006](tasks/sf-006.md) |
+| SF-4a | TransientModel + Vector64 | L2 | **done** | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | todo | [sf-007](tasks/sf-007.md) |
 | SF-5a | Allocator alloc/free 往返 | L2 | todo | [sf-008](tasks/sf-008.md) |
 | SF-5b | OrderedMap find/insert/remove | L2 | todo | [sf-009](tasks/sf-009.md) |
@@ -193,7 +193,7 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md) → **done**  
 3. [sf-001](tasks/sf-001.md) / [sf-002](tasks/sf-002.md) → **done**（Queue 收口）  
-4. 下一刀 [sf-006](tasks/sf-006.md)（TransientModel + Vector64），按波次向下，每片更新矩阵  
+4. 下一刀 [sf-007](tasks/sf-007.md)（Bytes + Record64 + WideVec），按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
 WASM PR #4 / #5：继续开着；本轨不要求它们先合。

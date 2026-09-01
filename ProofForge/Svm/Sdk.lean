@@ -18,6 +18,7 @@ import ProofForge.Svm.Sdk.Memo
 import ProofForge.Svm.Sdk.Sysvar
 import ProofForge.Svm.Sdk.Transient
 import ProofForge.Svm.Sdk.TransientVec
+import ProofForge.Svm.Sdk.TransientModel
 import ProofForge.Svm.Sdk.TransientRecord64
 import ProofForge.Svm.Sdk.TransientWideVec
 import ProofForge.Svm.Sdk.TransientBytes

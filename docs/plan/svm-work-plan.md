@@ -101,7 +101,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 
 | 来源 | 变更 | 对本轨影响 |
 |---|---|---|
-| **Phase 1** Queue 收口 | wrap push/pop + 读回 + peek/initialize/空往返 | **SF-0/1a/1b done**；下一刀 `sf-006` Transient；勿重证已落定理 |
+| **Phase 1** Queue 收口 | wrap push/pop + 读回 + peek/initialize/空往返 | **SF-0/1a/1b done**；下一刀 `sf-007`；勿重证已落定理 |
 | **main** R1-024…031 | shared UInt64 math + fixed-point | Track D fee/matching **少造轮子**；不新增 Runtime leaf |
 | **main** R5-022/023 | SafeCast→UInt8/16 | 共享层；非 blocker |
 | **main** docs | backlog / roadmap / capability / parity 刷新 | 本分支已 merge；总图入口保留 |
@@ -142,7 +142,7 @@ Phase 0   导航对齐
           · 确认 WASM PR 不阻塞
 
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
-          · A: sf-000..sf-005 **done** → **sf-006 TransientModel**（下一刀）
+          · A: sf-000..sf-006 **done** → **sf-007 TransientBytes/Record/Wide**（下一刀）
             （nowrap push / pop clear·advance 已在 main，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（可并行）
           · B: svm-rt-001 signed Clock（可并行）
@@ -256,7 +256,7 @@ Phase 7   收口
 
 | 轨道 | 片 | 状态 |
 |---|---|---|
-| A | sf-000 … sf-016 | SF-0..SF-3 = **done**；下一刀 SF-4a（sf-006）；其余 todo |
+| A | sf-000 … sf-016 | SF-0..SF-4a = **done**；下一刀 SF-4b（sf-007）；其余 todo |
 | B | svm-rt-001 … 005 | todo |
 | C | svm-sdk-001 … 007 | todo |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
@@ -295,7 +295,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周，merge main 之后）
 
-1. **主线证明**：SF-0..SF-3 已收口；下一刀 `sf-006` TransientModel  
+1. **主线证明**：SF-0..SF-4a 已收口；下一刀 `sf-007` TransientBytes/Record/Wide  
 2. **并行可选**：`svm-sem-001` / `svm-rt-001` / `svm-eng-001`   
 3. **主线 L3**：`svm-sem-001`（E1）  
 4. **并行可选**：`svm-rt-001` 或 `svm-sdk-001`  
