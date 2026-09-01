@@ -28,6 +28,17 @@ def _balance_args(account: str) -> bytes:
     return json.dumps({"account_id": account}, separators=(",", ":")).encode()
 
 
+def _deposit_args(
+    account: str | None = None, registration_only: bool | None = None
+) -> bytes:
+    value: dict[str, object] = {}
+    if account is not None:
+        value["account_id"] = account
+    if registration_only is not None:
+        value["registration_only"] = registration_only
+    return json.dumps(value, separators=(",", ":")).encode()
+
+
 def _expect_storage_balance(
     client: NearClient, contract: str, account: str, total: int | None
 ) -> None:
@@ -89,6 +100,23 @@ def _result_u64(outcome: dict) -> int:
     if raw is None or len(raw) != 8:
         raise AssertionError(f"expected exact u64 success value, got {raw!r}")
     return NearClient.decode_u64_le(raw)
+
+
+def _expect_deposit_result(outcome: dict, total: int, scene: str) -> None:
+    got = NearClient.success_value_bytes(outcome)
+    expected = f'{{"total":"{total}","available":"0"}}'.encode("ascii")
+    if got != expected:
+        raise AssertionError(f"{scene}: expected {expected!r}, got {got!r}")
+
+
+def _storage_deposit(
+    client: NearClient, contract: str, caller: str, wire: bytes, deposit: int,
+    *, success: bool = True,
+) -> dict:
+    return client.call_on(
+        contract, "storage_deposit", wire, signer=caller, deposit=deposit,
+        expect_success=success,
+    )
 
 
 def _register(client: NearClient, contract: str, caller: str, deposit: int,
@@ -185,10 +213,72 @@ def _assert_force_reclaim(
         raise AssertionError("force unregister did not deliver refund and remove balance key")
 
 
+def _run_storage_deposit_scenes(
+    client: NearClient, wasm: Path, contract: str, caller: str, target: str,
+    malformed: str, per_byte: int,
+) -> None:
+    client.deploy_to(contract, wasm)
+    client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
+    baseline = client.view_state_values(contract)
+
+    caller_cost = (len(caller) + 64) * per_byte
+    target_cost = (len(target) + 64) * per_byte
+    _storage_deposit(
+        client, contract, caller, _deposit_args(caller, True), caller_cost - 1,
+        success=False,
+    )
+    if client.view_state_values(contract) != baseline:
+        raise AssertionError("storage_deposit insufficient explicit deposit left state/key residue")
+
+    default = _storage_deposit(client, contract, caller, b"{}", caller_cost)
+    _expect_deposit_result(default, caller_cost, "default-caller exact storage_deposit")
+    state = client.view_state_values(contract)
+    if state.get(_key(caller)) != b"\0" * 16:
+        raise AssertionError("storage_deposit missing account_id did not register exact caller key")
+    if client.view_u64_on(contract, "lastDelta") != len(caller) + 64:
+        raise AssertionError("storage_deposit state delta aliased its structured JSON result")
+    if (
+        client.view_u64_on(contract, "lastCostW0") != (caller_cost & ((1 << 64) - 1))
+        or client.view_u64_on(contract, "lastCostW1") != (caller_cost >> 64)
+        or client.view_u64_on(contract, "get") != len(caller) + 64
+    ):
+        raise AssertionError("storage_deposit state limbs aliased its independent structured result")
+    _expect_storage_balance(client, contract, caller, caller_cost)
+
+    duplicate_amount = 10**22
+    duplicate = _storage_deposit(
+        client, contract, caller,
+        b'{"account_id":null,"registration_only":false}', duplicate_amount,
+    )
+    _expect_deposit_result(duplicate, caller_cost, "null/default duplicate storage_deposit")
+    _assert_transfer_receipt(client, duplicate, caller, duplicate_amount)
+
+    excess = 10**22
+    explicit = _storage_deposit(
+        client, contract, caller, _deposit_args(target, True), target_cost + excess,
+    )
+    _expect_deposit_result(explicit, target_cost, "explicit variable-cost storage_deposit")
+    _assert_transfer_receipt(client, explicit, caller, excess)
+    state = client.view_state_values(contract)
+    if state.get(_key(target)) != b"\0" * 16:
+        raise AssertionError("storage_deposit explicit account used a noncanonical BAL2 key")
+    _expect_storage_balance(client, contract, target, target_cost)
+
+    client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
+    malformed_before = client.view_state_values(contract)
+    _storage_deposit(
+        client, contract, caller, _deposit_args(malformed, None), 10**24,
+        success=False,
+    )
+    if client.view_state_values(contract) != malformed_before:
+        raise AssertionError("storage_deposit malformed target rejection changed storage/state")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
     contract = "reg.test.near"
+    deposit_contract = "deposit-reg.test.near"
     short = "a.test.near"
     long = "x" * (64 - len(".test.near")) + ".test.near"
     malformed = "bad.test.near"
@@ -199,12 +289,16 @@ def main() -> None:
     zero_cost = "zero.test.near"
 
     for account in (
-        contract, short, long, malformed, nonzero, forced, overflow, add_overflow, zero_cost
+        contract, deposit_contract, short, long, malformed, nonzero, forced, overflow,
+        add_overflow, zero_cost
     ):
         client.create_subaccount_with_key(account, 10**27)
     client.deploy_to(contract, wasm)
     per_byte = 10**19
     client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
+    _run_storage_deposit_scenes(
+        client, wasm, deposit_contract, short, long, malformed, per_byte
+    )
 
     baseline_state = client.view_state_values(contract)
     _expect_storage_bounds(client, contract, per_byte)
@@ -384,6 +478,12 @@ def main() -> None:
     _expect_storage_balance_failure(
         client, overflow, short, "registration-cost multiply overflow query"
     )
+    _storage_deposit(
+        client, overflow, short, _deposit_args(malformed, True), 0,
+        success=False,
+    )
+    if client.view_state_values(overflow) != overflow_before or _key(malformed) in overflow_before:
+        raise AssertionError("storage_deposit multiply overflow did not roll back speculative key")
     _force_unregister(client, overflow, short, 1, success=False)
     if client.view_state_values(overflow) != overflow_before or _key(short) not in overflow_before:
         raise AssertionError("reclaim-cost overflow did not roll back speculative removal")
@@ -405,6 +505,12 @@ def main() -> None:
     client.call_on(zero_cost, "initialize", NearClient.encode_u64_le(0), signer=zero_cost)
     zero_before = client.view_state_values(zero_cost)
     _expect_storage_bounds_failure(client, zero_cost, b"", "zero trusted cost bounds")
+    _storage_deposit(
+        client, zero_cost, short, _deposit_args(malformed, False), 0,
+        success=False,
+    )
+    if client.view_state_values(zero_cost) != zero_before:
+        raise AssertionError("storage_deposit zero trusted cost changed storage/state")
     _register(client, zero_cost, short, 0, success=False)
     if client.view_state_values(zero_cost) != zero_before:
         raise AssertionError("zero trusted cost was not rejected before storage effects")

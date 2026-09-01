@@ -59,13 +59,17 @@ elab "#pf_near_storage_balance_output_check" : command => do
       unless reason.contains "output frame does not match its StorageBalance plan" do
         throwError s!"wrong malformed StorageBalance frame rejection: {reason}"
   | .ok _ => throwError "malformed StorageBalance frame was accepted"
-  let mutating := { source with methods := source.methods.map fun method =>
+  let mutatingSource := { source with methods := source.methods.map fun method =>
     if method.ixName == "someAsymmetric" then { method with kind := .increment } else method }
-  match IR.fromExtracted mutating with
-  | .error reason =>
-      unless reason.contains "StorageBalance output currently requires a view" do
-        throwError s!"wrong mutating StorageBalance rejection: {reason}"
-  | .ok _ => throwError "mutating StorageBalance output was accepted"
+  let mutating ← match IR.fromExtracted mutatingSource with
+    | .ok program => pure program
+    | .error reason => throwError s!"exact mutating StorageBalance output rejected: {reason}"
+  let some mutatingAsymmetric := mutating.entries.find? (·.ixName == "someAsymmetric")
+    | throwError "missing mutating someAsymmetric"
+  unless mutatingAsymmetric.outputSchema == some Codec.storageBalanceResultSchema &&
+      mutatingAsymmetric.outputPolicy == "near-json-storage-balance-option-v1" &&
+      mutatingAsymmetric.tupleArity == some 5 do
+    throwError "mutating StorageBalance output lost its exact compiler-owned policy"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat

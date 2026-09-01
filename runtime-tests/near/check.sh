@@ -338,6 +338,7 @@ storage_economics_anchors = (
     '(call $pf_storage_remove',
 )
 storage_registration_anchors = (
+    '(func (export "storage_deposit")',
     '(func (export "registerCaller")',
     '(func (export "unregisterCaller")',
     '(func (export "forceUnregisterCaller")',
@@ -362,6 +363,10 @@ storage_registration_anchors = (
     '(call $pf_promise_batch_action_transfer',
     '(call $pf_mul64_lo',
     '(call $pf_mul64_hi',
+    '(func $pf_json_storage_deposit_args',
+    '(func $pf_u128_decimal',
+    '(call $pf_arena_alloc (i64.const 459) (i64.const 1))',
+    '(call $pf_arena_alloc (i64.const 105) (i64.const 1))',
     '(call $pf_arena_alloc (i64.const 72) (i64.const 1))',
     '(call $pf_arena_alloc (i64.const 16) (i64.const 8))',
 )

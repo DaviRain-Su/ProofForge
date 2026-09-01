@@ -26,10 +26,12 @@ decimal routine. wsm-near-json-u128-mutation-output-001 extends that same exact 
 an `Except Error (State × UInt128)` mutation: all state fields persist before one return, while a
 failed branch traps and rolls back. Other two-field records and Promise-return combinations reject.
 wsm-near-storage-balance-output-001 separately binds only the exact compiler-owned five-leaf
-`StorageBalanceResult` view to `null` or declaration-order quoted-u128 `total`/`available` JSON.
+`StorageBalanceResult` to `null` or declaration-order quoted-u128 `total`/`available` JSON.
 Absent frames require zero inactive limbs; the exact maximum object is 105 bytes. This is an
 output-only prerequisite: it exports no NEP-145 method and deliberately does not choose between
 ProofForge's variable AccountId-key economics and near-sdk's configured fixed registration cost.
+The later deposit integration admits the same exact frame on a mutation and persists state before
+the JSON terminal; ordinary records remain unbound.
 wsm-near-storage-balance-of-001 composes that output with the bounded AccountId input and one
 strict read of the same `BAL2` registration map. Missing returns `null`; present exact-16 returns
 the account's checked actual `(AccountId.length + 64) × trustedPerByteCost` total and zero available.
@@ -53,6 +55,12 @@ an exact eleven-leaf optional AccountId plus optional Boolean carrier and one an
 Its 459-byte bound covers a 64-byte maximally escaped account, `false`, and 32 whitespace bytes;
 missing/null options and inactive AccountId leaves are zero. Unknown/escaped keys reject, unlike
 near-sdk's default unknown-field acceptance, so it remains a named bounded canonical subset.
+wsm-near-storage-deposit-001 composes that parser with the canonical `BAL2` map and mutating exact
+StorageBalance output. Missing/null accounts select the predecessor; explicit accounts use their
+own exact variable geometry, while every duplicate/excess refund targets the predecessor. New
+insertion is speculative and all synchronous post-write failures rely on receipt rollback. The
+stock FT instead uses one configured fixed cost, and its serde wrapper is broader, so this exact
+export is not claimed as complete NEP-145 ABI/economic compatibility.
 wsm-near-json-account-input-001 separately binds only the exact
 compiler-owned `AccountId` parameter schema, on one-parameter views, to a bounded one-field
 `{"account_id":"..."}` object subset. It is not a generic JSON codec or a public method claim.
@@ -155,6 +163,10 @@ policy also emits no event and does not claim complete NEP-141/145 compliance.
 wsm-near-storage-balance-of-001 exposes the corresponding write-free status/cost view over that
 same map. It does not add a withdraw path: registration immediately refunds all excess, so the
 reported available balance is necessarily zero.
+wsm-near-storage-deposit-001 now exposes payable caller-default or explicit-account registration
+over that same map, still with immediate excess refund and zero available balance. It accepts but
+ignores `registration_only` like the stock FT; malformed entries and arithmetic/config failures
+panic before success, while asynchronous refund failure cannot roll back a completed receipt.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

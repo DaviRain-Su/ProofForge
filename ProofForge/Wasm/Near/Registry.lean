@@ -34,7 +34,7 @@ def entries : Array Entry := #[
   { name := "NearJsonStorageDepositInput", digest := "d592930fd54837e9" },
   { name := "NearStorage", digest := "cd97bb762dac8be3" },
   { name := "NearStorageEconomics", digest := "9c98eca433f99470" },
-  { name := "NearStorageRegistration", digest := "c0b52ece5f4da6bf" },
+  { name := "NearStorageRegistration", digest := "5ef5aae5a559d252" },
   { name := "NearVector", digest := "cd60fb0f3ce40ade" },
   { name := "NearLookup", digest := "d14778ca02c69012" },
   { name := "NearQueue", digest := "a8bf10c3476ef45f" },

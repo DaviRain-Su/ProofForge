@@ -2999,7 +2999,8 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
       let right ← scalarResultValues env fuel' args[args.size - 1]!
       return left ++ right
     else
-      asWideCtorFields env e <|> (asBoolVal env fuel e <|> val env e).map (#[·])
+      asWideCtorFields env e <|> asRegisteredBoundaryCtorFields env e <|>
+        (asBoolVal env fuel e <|> val env e).map (#[·])
 
 /-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
 existing sequence of scalar returns. CFG lowering already joins that sequence into `returnU64s`. -/

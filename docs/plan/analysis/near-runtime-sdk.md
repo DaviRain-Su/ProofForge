@@ -169,7 +169,7 @@ asynchronous; dynamic handles and multi-action builders are absent.
 | N8 callbacks | **bounded result count/status/read, strict UInt64 decode, full-AccountId private guard, and genuine chained result scenes done in wsm-near-promise-result/then/codec/private-001**; broader codecs remain | success/failure/oversized/result-auth rollback scenes |
 | N9 lifecycle | **repeated-init, private/payable wrappers, fail-closed entries, versioned schema envelope, and authenticated migration done** in wsm-near-init/payable/entry-policy/uninitialized/state-envelope/migration-001 | private/deposit/state ordering, real V1→V2 migration fixture |
 | N10 standards | exact NEP-141 mint/transfer/burn events with no-memo and bounded-memo APIs complete; closed checked ledger plus specialized bounded `ft_balance_of`/`ft_total_supply` views complete; no fully near-sdk-compatible token contract | standard-specific integration suites |
-| N11 storage economics | real invocation-dynamic `storage_usage`, caller-only measured registration, exact-zero unregister, and supply-integrated force unregister complete; byte price remains explicit trusted config | variable AccountId-key cost/reclaim, speculative rollback, exact refunds; no public NEP-145 ABI |
+| N11 storage economics | real invocation-dynamic `storage_usage`, caller-only lifecycle, supply-integrated force unregister, and bounded payable `storage_deposit` over the canonical map complete; byte price remains explicit trusted config | variable AccountId-key cost/reclaim, speculative rollback, exact refunds; narrower input/fixed-cost divergence means no full NEP-145 claim |
 
 ## 6. Near-term task cuts
 
@@ -243,7 +243,15 @@ asynchronous; dynamic handles and multi-action builders are absent.
    either field order. Missing/null, false, and true remain distinct; account values reuse the
    2..64-byte decoder and inactive words are zero. The exact wire cap is 459 with ws32. Duplicate,
    unknown, escaped keys and malformed/trailing input fail closed. This is parser-only and narrower
-   than near-sdk serde's default unknown-field behavior; no `storage_deposit` export exists yet.
+   than near-sdk serde's default unknown-field behavior.
+   **NEAR-STORAGE-DEPOSIT (wsm-near-storage-deposit-001 done):** the payable exact export now
+   defaults missing/null accounts to predecessor, accepts/ignores `registration_only`, and registers
+   the explicit or default account as present zero in `BAL2`. New keys use speculative live-delta
+   measurement, checked full-u128 variable cost, exact retention and positive excess refund;
+   duplicates refund the full deposit. Refunds always target predecessor. The exact StorageBalance
+   result persists independent state fields first. The bounded parser and variable-cost economics
+   remain deliberately narrower/different from stock near-contract-standards, so this is not a full
+   NEP-145 compatibility claim.
 5. **NEAR-BORSH-OUTPUT (wsm-near-output-001 done):** allocator-backed bounded bytes/String/unsigned-array view
    output has an independent plan and canonical active prefix; nested/tagged and JSON objects/input
    remain later.

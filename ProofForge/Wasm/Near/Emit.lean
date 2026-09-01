@@ -2068,7 +2068,8 @@ private partial def emitRegion (p : Program ValKind OpExt)
         let region ← emitRegion p outputPlan view echo level defaultSlot tail staged.st
         return { lines := lines ++ region.lines, st := region.st, terminal := region.terminal }
     | .returnU64 value =>
-        unless view || outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 do
+        unless view || outputPlan == some .jsonU128 || outputPlan == some .promiseOrJsonU128 ||
+            outputPlan == some .jsonStorageBalanceOption do
           throw "extract/unsupported: near v0 mutating region cannot return a value"
         let (values, skipped) := collectReturnU64s value tail
         unless skipped.all isExitOp do

@@ -927,8 +927,8 @@ private def bindOutput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
       retCount := 1 }, some {
         ixName := method.ixName, schema := .scalar .uint128, plan })
   if method.retSchema == Codec.storageBalanceResultSchema then
-    unless method.kind == .get do
-      throw s!"near/codec: {method.ixName} StorageBalance output currently requires a view"
+    unless method.kind == .get || method.kind == .increment do
+      throw s!"near/codec: {method.ixName} StorageBalance output requires a view or mutating entry"
     let plan := Codec.OutputPlan.jsonStorageBalanceOption
     unless method.retCount == plan.sourceValueCount do
       throw s!"near/codec: {method.ixName} output frame does not match its StorageBalance plan"

@@ -42,6 +42,9 @@ elab "#pf_near_storage_registration_check" : command => do
   let bounds ← match source.methods.find? (·.ixName == "storage_balance_bounds") with
     | some method => pure method
     | none => throwError "missing storage_balance_bounds"
+  let deposit ← match source.methods.find? (·.ixName == "storage_deposit") with
+    | some method => pure method
+    | none => throwError "missing storage_deposit"
   let steps := registrationSteps register.ops
   unless steps == #["read", "usage", "write", "usage", "refund", "refund"] do
     throwError s!"registration effect order changed: {steps}"
@@ -58,6 +61,10 @@ elab "#pf_near_storage_registration_check" : command => do
   unless registrationSteps bounds.ops == #[] && bounds.paramSchemas.isEmpty &&
       bounds.retSchema == Codec.storageBalanceBoundsResultSchema && bounds.retCount == 5 do
     throwError "storage_balance_bounds lost its no-effect/no-arg exact bounds source contract"
+  unless registrationSteps deposit.ops == #["read", "usage", "write", "usage", "refund", "refund"] &&
+      deposit.paramSchemas == #[Codec.storageDepositArgsSchema] &&
+      deposit.retSchema == Codec.storageBalanceResultSchema && deposit.retCount == 5 do
+    throwError "storage_deposit lost its parser/map/refund/StorageBalance source contract"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -80,6 +87,17 @@ elab "#pf_near_storage_registration_check" : command => do
       targetBounds.outputPolicy == "near-json-storage-balance-bounds-v1" &&
       targetBounds.paramCount == 0 && targetBounds.tupleArity == some 5 do
     throwError "storage_balance_bounds lost its no-input exact bounds output policy"
+  let targetDeposit ← match program.entries.find? (·.ixName == "storage_deposit") with
+    | some method => pure method
+    | none => throwError "missing target storage_deposit"
+  unless targetDeposit.inputSchema == some Codec.storageDepositArgsSchema &&
+      targetDeposit.inputPolicy ==
+        "near-json-storage-deposit-args-bounded-v1(max-wire=459,ws=32,order=any,keys=raw,unknown=reject)" &&
+      targetDeposit.outputSchema == some Codec.storageBalanceResultSchema &&
+      targetDeposit.outputPolicy == "near-json-storage-balance-option-v1" &&
+      targetDeposit.entryPolicy == "near.entry.v1:payable" &&
+      targetDeposit.tupleArity == some 5 do
+    throwError "storage_deposit lost its exact mutating input/output/payable target policies"
   let wat ←
     match Emit.emit program with
     | .ok wat => pure wat
@@ -90,6 +108,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(func (export \"forceUnregisterCaller\")",
       "(func (export \"storage_balance_of\")",
       "(func (export \"storage_balance_bounds\")",
+      "(func (export \"storage_deposit\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
       "(func (export \"fixtureSeedCallerMixedSupply\")",
       "(func (export \"fixtureSeedCallerMaxSupply\")",
@@ -129,6 +148,28 @@ elab "#pf_near_storage_registration_check" : command => do
       !boundsBody.contains "(call $pf_log_utf8" &&
       !boundsBody.contains "(call $pf_promise_" do
     throwError "storage_balance_bounds must enforce empty input and return one branch without effects"
+  let depositParts := wat.splitOn "(func (export \"storage_deposit\")"
+  unless depositParts.length == 2 do
+    throwError "missing unique storage_deposit export body"
+  let depositBody := (depositParts[1]!).splitOn "(func (export \"" |>.head!
+  unless depositBody.contains "(i64.const 459)" &&
+      depositBody.contains "(call $pf_json_storage_deposit_args" &&
+      depositBody.contains "(call $pf_storage_read" &&
+      depositBody.contains "(call $pf_storage_write" &&
+      depositBody.contains "(call $pf_promise_batch_action_transfer" &&
+      depositBody.contains "(call $pf_u128_decimal" &&
+      depositBody.contains "(call $pf_value_return" &&
+      !depositBody.contains "(call $pf_storage_remove" &&
+      !depositBody.contains "(call $pf_log_utf8" do
+    throwError "storage_deposit lost bounded parse/read-write/refund/exact JSON terminal structure"
+  let beforeFirstReturn := depositBody.splitOn "(call $pf_value_return" |>.head!
+  for stateStore in #[
+      "(call $pf_storage_write (i64.const 9) (i64.const 1050)",
+      "(call $pf_storage_write (i64.const 10) (i64.const 1059)",
+      "(call $pf_storage_write (i64.const 10) (i64.const 1069)",
+      "(call $pf_storage_write (i64.const 8) (i64.const 1105)"] do
+    unless beforeFirstReturn.contains stateStore do
+      throwError s!"storage_deposit state persistence was not before its JSON terminal: {stateStore}"
   logInfo m!"proofforge-near-storage-registration: digest = {IR.digestHex program}"
 
 #pf_near_storage_registration_check
@@ -141,6 +182,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "c0b52ece5f4da6bf"
+  some "5ef5aae5a559d252"
 
 end Tests.NearStorageRegistrationSpec

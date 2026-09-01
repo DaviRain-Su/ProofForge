@@ -89,6 +89,83 @@ def storage_balance_bounds (state : State) :
   else
     { min := ⟨0, 0⟩, hasMax := 2, max := ⟨0, 0⟩ }
 
+/-- Bounded canonical `storage_deposit` integration over the same `BAL2` registration/balance map.
+Missing or null `account_id` selects the caller; an explicit account registers that exact key, but
+all refunds still go to the caller. `registration_only` is accepted and ignored like the stock FT
+implementation. A new key is inserted speculatively so nearcore can report its exact live storage
+delta. Any subsequent synchronous failure panics and relies on receipt atomicity to roll back the
+key, state, deposit, and staged refund receipt. The input rejects unknown fields and has bounded
+whitespace, so the exact export is deliberately narrower than near-sdk's generated serde wrapper. -/
+@[pf_entry, pf_near_payable]
+def storage_deposit (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageDepositArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.StorageBalanceResult) :=
+  let caller := Context.caller
+  /- The input policy emits only 0/1 presence. Select all nominal leaves without introducing a
+  composite conditional, preserving exact inactive-zero parser semantics. -/
+  let mask := (0 : UInt64) - args.accountPresent
+  let account : ProofForge.Wasm.Near.Runtime.AccountId :=
+    { length := (args.accountId.length &&& mask) ||| (caller.length &&& ~~~mask)
+      w0 := (args.accountId.w0 &&& mask) ||| (caller.w0 &&& ~~~mask)
+      w1 := (args.accountId.w1 &&& mask) ||| (caller.w1 &&& ~~~mask)
+      w2 := (args.accountId.w2 &&& mask) ||| (caller.w2 &&& ~~~mask)
+      w3 := (args.accountId.w3 &&& mask) ||| (caller.w3 &&& ~~~mask)
+      w4 := (args.accountId.w4 &&& mask) ||| (caller.w4 &&& ~~~mask)
+      w5 := (args.accountId.w5 &&& mask) ||| (caller.w5 &&& ~~~mask)
+      w6 := (args.accountId.w6 &&& mask) ||| (caller.w6 &&& ~~~mask)
+      w7 := (args.accountId.w7 &&& mask) ||| (caller.w7 &&& ~~~mask) }
+  let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+  if DirectAccountNearTokenMap.accountLengthValid account then
+    if Registration.trustedCostValid perByteCost then
+      let _ := registrations.read account
+      if Registration.readWasMissing then
+        let before := ProofForge.Wasm.Near.Runtime.storageUsage
+        let writeStatus := registrations.put account (⟨0, 0⟩ : NearToken)
+        if writeStatus ≤ 1 then
+          let after := ProofForge.Wasm.Near.Runtime.storageUsage
+          if Registration.usageDeltaValid before after then
+            let delta := after - before
+            if NearToken.canMulUInt64 perByteCost delta then
+              let cost : NearToken :=
+                ⟨NearToken.mulUInt64W0 perByteCost delta,
+                  NearToken.mulUInt64W1 perByteCost delta⟩
+              let deposit := Context.attachedDeposit
+              if Registration.depositCovers deposit cost then
+                let excess : NearToken :=
+                  ⟨NearToken.subW0 deposit cost, NearToken.subW1 deposit cost⟩
+                let next : State :=
+                  ⟨state.perByteCostW0, state.perByteCostW1, delta, cost.w0, cost.w1,
+                    state.totalSupplyW0, state.totalSupplyW1, delta⟩
+                let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+                  { registered := 1, total := ⟨cost.w0, cost.w1⟩, available := ⟨0, 0⟩ }
+                if Registration.tokenIsZero excess then
+                  .ok (next, result)
+                else
+                  let _ := Promises.transferAccountDetached caller excess
+                  .ok (next, result)
+              else .error .overflow
+            else .error .overflow
+          else .error .overflow
+        else .error .overflow
+      else if Registration.readWasValidPresent then
+        let bytes := Registration.variableAccountEntryBytes account
+        if NearToken.canMulUInt64 perByteCost bytes then
+          let cost : NearToken :=
+            ⟨NearToken.mulUInt64W0 perByteCost bytes,
+              NearToken.mulUInt64W1 perByteCost bytes⟩
+          let deposit := Context.attachedDeposit
+          let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+            { registered := 1, total := ⟨cost.w0, cost.w1⟩, available := ⟨0, 0⟩ }
+          if Registration.tokenIsZero deposit then
+            .ok (state, result)
+          else
+            let _ := Promises.transferAccountDetached caller deposit
+            .ok (state, result)
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 @[pf_entry]
 def probeCaller (state : State) : Except Error (State × UInt64) :=
   let status := registrations.has Context.caller
