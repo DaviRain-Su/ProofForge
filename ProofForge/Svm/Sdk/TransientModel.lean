@@ -369,4 +369,31 @@ theorem mVec128Push_first_rejected (tw : TransientWords) (slot : Fin 2) (cap : N
     mVec64Push tw slot cap w0 = (tw, boundsCode) :=
   mVec64Push_full tw slot cap w0 hact hfull
 
+/-- Two-limb record append with room: both limbs written, length +2, no partial prefix. -/
+theorem mRecordAppend2_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (v0 v1 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 2 ≤ cap) :
+    (mVec64Push tw slot cap v0).2 = okCode ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).2 = okCode ∧
+    (mVec64Push tw slot cap v0).1.words slot (tw.bank slot).length = v0 ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.words slot
+      ((tw.bank slot).length + 1) = v1 ∧
+    ((mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.bank slot).length =
+      (tw.bank slot).length + 2 := by
+  have hroom0 : (tw.bank slot).length < cap := by omega
+  have h0 := mVec64Push_readback tw slot cap v0 hact hroom0
+  have hact1 : requireActive (mVec64Push tw slot cap v0).1 slot cap = true := h0.2.2.2
+  have hroom1 : ((mVec64Push tw slot cap v0).1.bank slot).length < cap := by
+    have := h0.2.2.1
+    omega
+  have h1 := mVec64Push_readback (mVec64Push tw slot cap v0).1 slot cap v1 hact1 hroom1
+  refine ⟨h0.1, h1.1, h0.2.1, ?_, ?_⟩
+  · have hw := h1.2.1
+    have hlen := h0.2.2.1
+    simpa [hlen] using hw
+  · have hlen0 := h0.2.2.1
+    have hlen1 := h1.2.2.1
+    omega
+
 end ProofForge.Svm.Sdk.TransientModel
