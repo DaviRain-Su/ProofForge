@@ -152,7 +152,7 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门（**done**）
-          · C: svm-sdk-001..007 + svm-rt-004/`005` + svm-sem-001..`005` + svm-app-001/`002` **done** → next: svm-app-003 / closeout audit
+          · C: svm-sdk-001..007 + svm-rt-004/`005` + svm-sem-001..`005` + svm-app-001/`002` **done** → next: Tracks A–F closeout audit
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
           · F: svm-eng-002 **done** (status matrix + `scripts/svm_status_summary.py`)
@@ -175,6 +175,7 @@ Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
           · E: svm-sem-005 Queue empty-push L3 **done**
           · D: svm-app-001 Phoenix-v1 下一指令族（**done**：tags 10/11 CancelMultipleById cap=1）
           · D: svm-app-002 matching/fee/remainder 宣称面 **done**（tag 3 有界片）
+          · D: svm-app-003 非 Phoenix SDK 小例子集 **done**
 
 Phase 6   Facade 扫尾 + 序列化/返回政策
           · A: sf-014..sf-015
@@ -228,7 +229,7 @@ Phase 7   收口
 |---|---|---|
 | [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=1）；digest `baf247ca608bdc85`；Mollusk 6 |
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | **done** — tag 3 matching/fee/remainder |
-| [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | Mollusk + 可选 Surfpool |
+| [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
 
@@ -298,7 +299,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`/`002`** done → 下一刀 **`svm-app-003`** 或 closeout audit
+1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → 下一刀 **Tracks A–F closeout audit** 或 closeout audit
 2. **并行**：`svm-app-003` 非 Phoenix 小例子；Tracks A–F closeout audit
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
