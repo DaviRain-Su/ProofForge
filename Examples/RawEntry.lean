@@ -183,4 +183,12 @@ Runtime operation, allocation, pointer, or emitter recipe. -/
 @[pf_entry, pf_svm_raw 26 2 0]
 def echoPubkey (_s : State) (key : Pubkey) : Pubkey := key
 
+/-- Wide dynamic return (`svm-rt-005`): each `UInt128` element is two little-endian limbs. -/
+@[pf_entry, pf_svm_raw 27 2 0]
+def echoBoundedU128 (_s : State) (items : BoundedVec UInt128 2) : BoundedVec UInt128 2 := items
+
+/-- Wide tagged return: `Option UInt128` uses tag + two payload limbs. -/
+@[pf_entry, pf_svm_raw 29 2 0]
+def echoOptionU128 (_s : State) (value : Option UInt128) : Option UInt128 := value
+
 end Examples.RawEntry

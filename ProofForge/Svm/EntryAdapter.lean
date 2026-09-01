@@ -240,6 +240,41 @@ def RawEntry.returnScratchBytes (entry : RawEntry) : Nat :=
 private def supportedWidth (width : Nat) : Bool :=
   width == 1 || width == 2 || width == 4 || width == 8
 
+/-- v1 dynamic-return budget (`svm-rt-005`). Top-level plans stay independent of input
+cursors; element/payload geometry is static scalar leaves only (possibly multi-limb / nested
+static records). Dynamic-inside-dynamic nesting remains fail closed. Scratch ceiling matches
+`RawEntry.returnScratchBytes ≤ 304`. -/
+structure ReturnBudget where
+  maxElementLimbs : Nat := 4
+  maxCapacity : Nat := 64
+  maxWireBytes : Nat := 296
+  maxScratchBytes : Nat := 304
+  deriving Repr, BEq, Inhabited
+
+def returnBudget : ReturnBudget := {}
+
+private def validateReturnWidths (widths : Array Nat) (budget : ReturnBudget := returnBudget) :
+    Except String Unit := do
+  unless !widths.isEmpty do
+    throw "extract/unsupported: SVM Borsh return element widths must be non-empty"
+  unless widths.all supportedWidth do
+    throw "extract/unsupported: SVM Borsh return element widths must be 1/2/4/8-byte limbs"
+  unless widths.size ≤ budget.maxElementLimbs do
+    throw "extract/unsupported: SVM Borsh return element exceeds limb budget"
+
+private def validateReturnPlan (plan : BorshReturnPlan) (budget : ReturnBudget := returnBudget) :
+    Except String Unit := do
+  let capacity :=
+    match plan with
+    | .boundedArray capacity _ | .packedBytes capacity _ => capacity
+    | .option _ | .enumeration _ => 1
+  unless capacity ≤ budget.maxCapacity do
+    throw "extract/unsupported: SVM Borsh return capacity exceeds budget"
+  unless plan.maxBytes ≤ budget.maxWireBytes do
+    throw "extract/unsupported: SVM Borsh return wire bytes exceed budget"
+  unless plan.maxBytes + 8 ≤ budget.maxScratchBytes do
+    throw "extract/unsupported: SVM Borsh return scratch exceeds budget"
+
 def scalarLeafWidths (type : Core.Codec.Scalar) : Except String (Array Nat) := do
   unless type.isWellFormed do throw "extract/unsupported: malformed svm boundary scalar"
   match type with
@@ -503,19 +538,29 @@ def borshPlan (schema : Core.Codec.Schema) : Except String BorshPlan := do
 
 private def borshReturnPlanAt : Core.Codec.Schema → Except String BorshReturnPlan
   | .boundedArray capacity element => do
+      -- Wide / nested-static elements: every leaf must be a static scalar limb layout.
+      -- Dynamic children inside the element (Option/Vec/bytes) stay fail closed via staticLeaves.
       let leaves ← staticBorshLeaves element
       let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
-      unless leaves.size == 1 && widths.size == 1 do
-        throw "extract/unsupported: bounded Borsh returns currently require one-limb scalar elements"
-      pure (.boundedArray capacity widths)
-  | .boundedBytes capacity => pure (.packedBytes capacity false)
-  | .boundedString capacity => pure (.packedBytes capacity true)
+      validateReturnWidths widths
+      let plan := .boundedArray capacity widths
+      validateReturnPlan plan
+      pure plan
+  | .boundedBytes capacity => do
+      let plan := .packedBytes capacity false
+      validateReturnPlan plan
+      pure plan
+  | .boundedString capacity => do
+      let plan := .packedBytes capacity true
+      validateReturnPlan plan
+      pure plan
   | .option payload => do
       let leaves ← staticBorshLeaves payload
       let widths := leaves.foldl (init := #[]) fun out leaf => out ++ leaf.widths
-      unless leaves.size == 1 && widths.size == 1 do
-        throw "extract/unsupported: SVM tagged Option returns require a one-limb scalar payload"
-      pure (.option widths)
+      validateReturnWidths widths
+      let plan := .option widths
+      validateReturnPlan plan
+      pure plan
   | .enumeration _ tagBits variants => do
       unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
         throw "extract/unsupported: SVM tagged enum returns require a nonempty u8 tag space"
@@ -528,11 +573,20 @@ private def borshReturnPlanAt : Core.Codec.Schema → Except String BorshReturnP
               throw "extract/unsupported: SVM tagged enum return fields must be UInt64"
             pure items.size
         | _ => throw "extract/unsupported: SVM tagged enum return fields must be UInt64"
-      pure (.enumeration counts)
+      let plan := .enumeration counts
+      validateReturnPlan plan
+      pure plan
   | _ => throw "extract/unsupported: SVM Borsh return requires a bounded or tagged value"
 
-/-- Derive a top-level conditional Borsh output plan independently from the input decoder. Bounded
-elements and tagged payloads must fit the supported fixed scalar frame; nested outputs stay closed. -/
+/-- Derive a top-level conditional Borsh output plan independently from the input decoder.
+
+v1 ceiling (`svm-rt-005`):
+* top-level `boundedArray` / `packedBytes` / `option` / `enumeration` only
+* element/payload may be a wide scalar or nested static tuple/record (multi-limb)
+* constructed source frames reuse the same plan (no new emitter case)
+* dynamic nesting (Vec-of-Option, record-with-bounded-field return, etc.) stays fail closed
+* wire/scratch budgets: see `ReturnBudget` / `returnBudget`
+-/
 def borshReturnPlan (schema : Core.Codec.Schema) : Except String BorshReturnPlan := do
   let _ ← Core.Codec.validate schema
   borshReturnPlanAt schema

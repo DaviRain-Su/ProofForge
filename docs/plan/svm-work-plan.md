@@ -152,9 +152,10 @@ Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口
 Phase 2   持久容器证明 + SDK lifecycle + L3 golden 门
           · A: sf-003..sf-005（Vec / Versioned / BitSet）
           · E: svm-sem-002 assembler-semantics corpus 差分门
-          · C: svm-sdk-001..007 + svm-rt-004 **done** → next: svm-rt-005 / svm-sem-001 / svm-app-* / svm-eng-002
+          · C: svm-sdk-001..007 + svm-rt-004/`005` **done** → next: svm-sem-001 / svm-app-*
           · C: svm-sdk-002 **done (n/a)** owner-reassign 永久 fail-closed
           · C: svm-sdk-004 **done** ResourceManifest 先行；live >2 仍 fail-closed
+          · F: svm-eng-002 **done** (status matrix + `scripts/svm_status_summary.py`)
 
 Phase 3   Transient 证明 + SDK 形状加宽 + Counter 全函数 L3
           · A: sf-006..sf-007（TransientModel）
@@ -176,13 +177,13 @@ Phase 5   Component 组合证明 + Phoenix 指令面 + 容器 L3
 
 Phase 6   Facade 扫尾 + 序列化/返回政策
           · A: sf-014..sf-015
-          · B: svm-rt-005 nested/wide dynamic return（若仍在 ceiling 内）
+          · B: svm-rt-005 nested/wide dynamic return **done**（`ReturnBudget`；digest `243ea72de353e8e3`）
           · C: svm-sdk-006 UTF-8 Memo / richer migration payload（**done**）
 
 Phase 7   收口
           · A: sf-016 形式化审计
           · E: E0–E5 看板全绿（E∞ 可仍为远景 n/a）
-          · F: svm-eng-002 SVM 能力+证明+L3 三矩阵声明
+          · F: svm-eng-002 SVM 能力+证明+L3 三矩阵声明 **done**
           · D: svm-app-003 非 Phoenix 例子集（若未并行完成）
 ```
 
@@ -203,8 +204,8 @@ Phase 7   收口
 | [svm-rt-001](tasks/svm-rt-001.md) | Clock **signed** timestamp 视图（与 unsigned 字段并存；明确布局） | F1 | **done**；Lean + Mollusk 12/12；digest `19039a4899e65b6d` |
 | [svm-rt-002](tasks/svm-rt-002.md) | Token-2022 **第一个** typed extension：`MintCloseAuthority`（非 transfer-fee） | F2 | **done**；CPI `Token2022MintClose` + Sdk host parse；fee/hook/未知仍 fail-closed；digest `607b3786fb54eaee` |
 | [svm-rt-003](tasks/svm-rt-003.md) | AccountView 与 direct mutation 共用时的 **alias-aware** 变量 walk | F1 | **done**；`AccountViewMutation` digest `fee09f06d0cc60d4`；Mollusk 6/6；view-only digest 不变 |
-| [svm-rt-004](tasks/svm-rt-004.md) | Instructions / sliced sysvar（有界） | F2 | 按需；无通用任意切片 |
-| [svm-rt-005](tasks/svm-rt-005.md) | nested / constructed / wide dynamic **return** 政策（仍有界） | F0/F1 | 与 codec budget 一致；超界 fail closed |
+| [svm-rt-004](tasks/svm-rt-004.md) | Instructions / sliced sysvar（有界） | F2 | **done**；digest `fa750f0ebf227df3` |
+| [svm-rt-005](tasks/svm-rt-005.md) | nested / constructed / wide dynamic **return** 政策（仍有界） | F0/F1 | **done** — `ReturnBudget`; tags 27/29; Mollusk wide U128 |
 
 ### Track C — SDK 剩余
 
@@ -247,7 +248,7 @@ Phase 7   收口
 | ID | 内容 | 验收 |
 |---|---|---|
 | [svm-eng-001](tasks/svm-eng-001.md) | CI：`check_no_sorry` + 形式化相关 lake 目标进 SVM/Lean lane | **done**；Lean 具名 Proof/Solanalib/Semantics；SVM 同步 ownership+no-sorry |
-| [svm-eng-002](tasks/svm-eng-002.md) | 双矩阵收口：能力矩阵 + 形式化矩阵同一声明页 | 文档 + CI 摘要 |
+| [svm-eng-002](tasks/svm-eng-002.md) | 双矩阵收口：能力矩阵 + 形式化矩阵同一声明页 | **done** — [svm-status-matrix.md](svm-status-matrix.md) + summary script |
 
 ---
 
@@ -258,11 +259,11 @@ Phase 7   收口
 | 轨道 | 片 | 状态 |
 |---|---|---|
 | A | sf-000 … sf-016 | **全部 done**（SF-7 几何 done；可达/互逆可选加厚） |
-| B | svm-rt-001 … 005 | svm-rt-001/002/003 **done**；004–005 todo |
-| C | svm-sdk-001 … 007 | svm-sdk-001/002/003/004/005 **done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed）；其余 todo |
+| B | svm-rt-001 … 005 | **全部 done**（005 digest `243ea72de353e8e3`） |
+| C | svm-sdk-001 … 007 | **全部 done**（002 = n/a fail-closed；004 = manifest-first, >2 fail-closed） |
 | D | svm-app-001 … 003 | todo（fee 可依赖已合入的 Core.Math） |
 | E | svm-sem-001 … 005（E0 已有） | todo |
-| F | svm-eng-001 … 002 | svm-eng-001 **done**；002 todo |
+| F | svm-eng-001 … 002 | **全部 done**（[svm-status-matrix.md](svm-status-matrix.md)） |
 
 ---
 
@@ -296,8 +297,9 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` done → 下一刀 **`svm-rt-004` sliced sysvar **done****（或 `svm-sem-001` / `svm-app-*` / `svm-eng-002`）
-2. **并行**：`svm-sem-001`（E1）/ `svm-eng-002`（双矩阵收口）
+1. **主线能力**：through `svm-rt-005` + SDK `001`–`007` + `svm-eng-001`/`002` **done** → 下一刀 **`svm-sem-001`**（或 `svm-app-001`）
+2. **并行**：`svm-app-*` Phoenix 指令面 / matching 宣称
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。
+状态板：[`svm-status-matrix.md`](svm-status-matrix.md) / `python3 scripts/svm_status_summary.py`。

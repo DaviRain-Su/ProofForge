@@ -11,6 +11,7 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 **当前主线（SVM 全轨）**：[SVM 全面工作计划](svm-work-plan.md)
 （能力 Runtime/SDK + 应用 + 语义桥 + 工程 + 形式化）。
 形式化子计划：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
+状态收口页：[svm-status-matrix.md](svm-status-matrix.md)（`svm-eng-002`；`python3 scripts/svm_status_summary.py`）。
 WASM PR #4/#5 继续开着，不阻塞本轨。
 
 任务：
@@ -221,7 +222,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-rt-002](tasks/svm-rt-002.md) | done | Token-2022 第一个 typed extension（MintCloseAuthority） |
 | [svm-rt-003](tasks/svm-rt-003.md) | done | AccountView+mutation alias-aware walk |
 | [svm-rt-004](tasks/svm-rt-004.md) | done | Instructions / sliced sysvar |
-| [svm-rt-005](tasks/svm-rt-005.md) | todo | nested/wide dynamic return 政策 |
+| [svm-rt-005](tasks/svm-rt-005.md) | done | nested/wide dynamic return 政策（`ReturnBudget`；digest `243ea72de353e8e3`） |
 | [svm-sdk-001](tasks/svm-sdk-001.md) | done | resize rent top-up |
 | [svm-sdk-002](tasks/svm-sdk-002.md) | done (n/a) | owner-reassign 永久 fail-closed |
 | [svm-sdk-003](tasks/svm-sdk-003.md) | done | generic POD transient shapes (`VectorPubkey`) |
@@ -238,9 +239,9 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-sem-004](tasks/svm-sem-004.md) | todo | L3/E4 AccountWords ↔ storev 桥 |
 | [svm-sem-005](tasks/svm-sem-005.md) | todo | L3/E5 选定容器全函数有界证明 |
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
-| [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
+| [svm-eng-002](tasks/svm-eng-002.md) | done | 能力+证明双矩阵收口页（[svm-status-matrix.md](svm-status-matrix.md)） |
 
-本周默认：Track A 已收口；`svm-rt-001`/`002`/`003` + `svm-sdk-001`/`002`/`003`/`004`/`005`/`006`/`007` + `svm-eng-001` **done** → 下一刀 **`svm-rt-005` / `svm-sem-001` / `svm-app-*` / `svm-eng-002`**（`svm-rt-004` done）。
+本周默认：Track A + B runtime through `svm-rt-005` + C SDK `001`–`007` + `svm-eng-001`/`002` **done** → 下一刀 **`svm-sem-001` / `svm-app-*`**。
 WASM PR #4/#5 仍开着不阻塞。
 
 
