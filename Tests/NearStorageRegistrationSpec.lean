@@ -45,6 +45,9 @@ elab "#pf_near_storage_registration_check" : command => do
   let deposit ← match source.methods.find? (·.ixName == "storage_deposit") with
     | some method => pure method
     | none => throwError "missing storage_deposit"
+  let withdraw ← match source.methods.find? (·.ixName == "storage_withdraw") with
+    | some method => pure method
+    | none => throwError "missing storage_withdraw"
   let publicUnregister ← match source.methods.find? (·.ixName == "storage_unregister") with
     | some method => pure method
     | none => throwError "missing storage_unregister"
@@ -68,6 +71,10 @@ elab "#pf_near_storage_registration_check" : command => do
       deposit.paramSchemas == #[Codec.storageDepositArgsSchema] &&
       deposit.retSchema == Codec.storageBalanceResultSchema && deposit.retCount == 5 do
     throwError "storage_deposit lost its parser/map/refund/StorageBalance source contract"
+  unless registrationSteps withdraw.ops == #["read"] &&
+      withdraw.paramSchemas == #[Codec.storageWithdrawArgsSchema] &&
+      withdraw.retSchema == Codec.storageBalanceResultSchema && withdraw.retCount == 5 do
+    throwError "storage_withdraw lost its parser/one-read/StorageBalance source contract"
   unless registrationSteps publicUnregister.ops == #["read", "usage", "remove", "usage", "refund"] &&
       publicUnregister.paramSchemas == #[Codec.storageUnregisterArgsSchema] &&
       publicUnregister.retSchema == Codec.jsonBooleanResultSchema &&
@@ -106,6 +113,17 @@ elab "#pf_near_storage_registration_check" : command => do
       targetDeposit.entryPolicy == "near.entry.v1:payable" &&
       targetDeposit.tupleArity == some 5 do
     throwError "storage_deposit lost its exact mutating input/output/payable target policies"
+  let targetWithdraw ← match program.entries.find? (·.ixName == "storage_withdraw") with
+    | some method => pure method
+    | none => throwError "missing target storage_withdraw"
+  unless targetWithdraw.inputSchema == some Codec.storageWithdrawArgsSchema &&
+      targetWithdraw.inputPolicy ==
+        "near-json-storage-withdraw-args-bounded-v1(max-wire=279,ws=32,digits=1..39,keys=raw,unknown=reject)" &&
+      targetWithdraw.outputSchema == some Codec.storageBalanceResultSchema &&
+      targetWithdraw.outputPolicy == "near-json-storage-balance-option-v1" &&
+      targetWithdraw.entryPolicy == "near.entry.v1:payable" &&
+      targetWithdraw.tupleArity == some 5 do
+    throwError "storage_withdraw lost its exact mutating input/output/payable target policies"
   let targetPublicUnregister ← match program.entries.find? (·.ixName == "storage_unregister") with
     | some method => pure method
     | none => throwError "missing target storage_unregister"
@@ -128,6 +146,7 @@ elab "#pf_near_storage_registration_check" : command => do
       "(func (export \"storage_balance_of\")",
       "(func (export \"storage_balance_bounds\")",
       "(func (export \"storage_deposit\")",
+      "(func (export \"storage_withdraw\")",
       "(func (export \"storage_unregister\")",
       "(func (export \"seedCallerOne\")", "(func (export \"fixtureSetCostMax\")",
       "(func (export \"fixtureSeedCallerMixedSupply\")",
@@ -190,6 +209,26 @@ elab "#pf_near_storage_registration_check" : command => do
       "(call $pf_storage_write (i64.const 8) (i64.const 1105)"] do
     unless beforeFirstReturn.contains stateStore do
       throwError s!"storage_deposit state persistence was not before its JSON terminal: {stateStore}"
+  let withdrawParts := wat.splitOn "(func (export \"storage_withdraw\")"
+  unless withdrawParts.length == 2 do
+    throwError "missing unique storage_withdraw export body"
+  let withdrawBody := (withdrawParts[1]!).splitOn "(func (export \"" |>.head!
+  unless withdrawBody.contains "(i64.const 279)" &&
+      withdrawBody.contains "(call $pf_json_storage_withdraw_args" &&
+      withdrawBody.contains "(call $pf_attached_deposit" &&
+      withdrawBody.contains "(call $pf_storage_read" &&
+      withdrawBody.contains "(call $pf_mul64_lo" &&
+      withdrawBody.contains "(call $pf_mul64_hi" &&
+      withdrawBody.contains "(call $pf_u128_decimal" &&
+      withdrawBody.contains "(call $pf_value_return" &&
+      !withdrawBody.contains "(call $pf_storage_remove" &&
+      !withdrawBody.contains "(call $pf_log_utf8" &&
+      !withdrawBody.contains "(call $pf_promise_" do
+    throwError "storage_withdraw lost bounded guard/read/cost/exact JSON no-effect structure"
+  let beforeWithdrawRead := withdrawBody.splitOn "(call $pf_storage_read" |>.head!
+  unless beforeWithdrawRead.contains "(call $pf_attached_deposit" &&
+      !beforeWithdrawRead.contains "(call $pf_storage_write" do
+    throwError "storage_withdraw must guard attached yocto before its one map read"
   let unregisterParts := wat.splitOn "(func (export \"storage_unregister\")"
   unless unregisterParts.length == 2 do
     throwError "missing unique storage_unregister export body"
@@ -223,6 +262,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "7aca1e32e7be4d2b"
+  some "f5bfb45576eacf83"
 
 end Tests.NearStorageRegistrationSpec

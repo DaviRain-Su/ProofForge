@@ -153,6 +153,16 @@ def _storage_unregister(
     )
 
 
+def _storage_withdraw(
+    client: NearClient, contract: str, caller: str, wire: bytes,
+    *, deposit: int = 1, success: bool = True,
+) -> dict:
+    return client.call_on(
+        contract, "storage_withdraw", wire, signer=caller, deposit=deposit,
+        expect_success=success,
+    )
+
+
 def _assert_json_boolean(outcome: dict, expected: bool, scene: str) -> None:
     got = NearClient.success_value_bytes(outcome)
     wire = b"true" if expected else b"false"
@@ -192,6 +202,17 @@ def _assert_transfer_receipt(
     raise AssertionError(
         f"missing exact transfer receipt receiver={receiver} amount={amount}: {observed!r}"
     )
+
+
+def _assert_no_transfer_action(client: NearClient, outcome: dict, scene: str) -> None:
+    for record in outcome.get("receipts_outcome", []):
+        receipt_id = record.get("id")
+        if not receipt_id:
+            continue
+        receipt = client.rpc_call("EXPERIMENTAL_receipt", {"receipt_id": receipt_id})
+        actions = receipt.get("receipt", {}).get("Action", {}).get("actions", [])
+        if any(isinstance(action, dict) and "Transfer" in action for action in actions):
+            raise AssertionError(f"{scene}: unexpectedly staged a transfer receipt")
 
 
 def _assert_exact_reclaim(
@@ -403,12 +424,98 @@ def _run_public_storage_unregister_scenes(
         raise AssertionError("public post-remove cost overflow did not roll back map/state")
 
 
+def _run_storage_withdraw_scenes(
+    client: NearClient, wasm: Path, contract: str, caller: str, long: str,
+    malformed: str, withdraw_overflow: str, per_byte: int,
+) -> None:
+    client.deploy_to(contract, wasm)
+    client.call_on(contract, "initialize", NearClient.encode_u64_le(per_byte), signer=contract)
+    generous = 10**24
+    for account in (caller, long):
+        _register(client, contract, account, generous)
+        total = (len(account) + 64) * per_byte
+        for wire in (b"{}", b'{"amount":null}', b'{"amount":"0"}'):
+            before_state = client.view_state_values(contract)
+            before_supply = (
+                client.view_u64_on(contract, "totalSupplyW0"),
+                client.view_u64_on(contract, "totalSupplyW1"),
+            )
+            before_contract_balance = client.view_account_balance(contract)
+            outcome = _storage_withdraw(client, contract, account, wire)
+            _expect_deposit_result(outcome, total, f"storage_withdraw {account} {wire!r}")
+            if _outcome_logs(outcome):
+                raise AssertionError("successful storage_withdraw emitted a log/event")
+            _assert_no_transfer_action(client, outcome, "successful storage_withdraw")
+            if client.view_state_values(contract) != before_state:
+                raise AssertionError("successful storage_withdraw changed map/state/storage")
+            if before_supply != (
+                client.view_u64_on(contract, "totalSupplyW0"),
+                client.view_u64_on(contract, "totalSupplyW1"),
+            ):
+                raise AssertionError("successful storage_withdraw changed token supply")
+            after_contract_balance = client.view_account_balance(contract)
+            # nearcore can additionally credit the contract an execution rebate. The exact
+            # security-yocto evidence is the positive retained balance plus absence of any staged
+            # Transfer action; account amount alone is not an exact-delta oracle for this receipt.
+            if after_contract_balance < before_contract_balance + 1:
+                raise AssertionError(
+                    "storage_withdraw did not retain its security yocto: "
+                    f"before={before_contract_balance} after={after_contract_balance}"
+                )
+
+    for deposit in (0, 2):
+        before = client.view_state_values(contract)
+        _storage_withdraw(client, contract, caller, b"{}", deposit=deposit, success=False)
+        if client.view_state_values(contract) != before:
+            raise AssertionError("storage_withdraw one-yocto guard changed state")
+
+    for wire in (
+        b'{"amount":"1"}',
+        b'{"amount":"18446744073709551616"}',
+        b'{"amount":"340282366920938463463374607431768211455"}',
+    ):
+        before = client.view_state_values(contract)
+        _storage_withdraw(client, contract, caller, wire, success=False)
+        if client.view_state_values(contract) != before:
+            raise AssertionError("positive storage_withdraw rejection changed state")
+
+    missing = "missing-withdraw.test.near"
+    before = client.view_state_values(contract)
+    _storage_withdraw(client, contract, missing, b"{}", success=False)
+    if client.view_state_values(contract) != before:
+        raise AssertionError("unregistered storage_withdraw changed state")
+
+    client.call_on(contract, "seedCallerMalformed8", b"", signer=malformed)
+    malformed_before = client.view_state_values(contract)
+    _storage_withdraw(client, contract, malformed, b'{"amount":null}', success=False)
+    if client.view_state_values(contract) != malformed_before:
+        raise AssertionError("malformed storage_withdraw rejection changed state")
+
+    client.deploy_to(withdraw_overflow, wasm)
+    client.call_on(
+        withdraw_overflow, "initialize", NearClient.encode_u64_le(1),
+        signer=withdraw_overflow,
+    )
+    client.call_on(withdraw_overflow, "seedCallerZero", b"", signer=caller)
+    client.call_on(
+        withdraw_overflow, "fixtureSetCostMax", b"", signer=withdraw_overflow
+    )
+    overflow_before = client.view_state_values(withdraw_overflow)
+    _storage_withdraw(
+        client, withdraw_overflow, caller, b'{"amount":"0"}', success=False
+    )
+    if client.view_state_values(withdraw_overflow) != overflow_before:
+        raise AssertionError("storage_withdraw price overflow changed map/state/supply")
+
+
 def main() -> None:
     client = NearClient(_require("PF_NEAR_RPC"), Path(_require("PF_NEAR_HOME")))
     wasm = Path(_require("PF_NEAR_WASM"))
     contract = "reg.test.near"
     deposit_contract = "deposit-reg.test.near"
     unregister_contract = "unregister-reg.test.near"
+    withdraw_contract = "withdraw-reg.test.near"
+    withdraw_overflow = "withdraw-overflow.test.near"
     short = "a.test.near"
     long = "x" * (64 - len(".test.near")) + ".test.near"
     malformed = "bad.test.near"
@@ -419,8 +526,9 @@ def main() -> None:
     zero_cost = "zero.test.near"
 
     for account in (
-        contract, deposit_contract, unregister_contract, short, long, malformed, nonzero, forced, overflow,
-        add_overflow, zero_cost
+        contract, deposit_contract, unregister_contract, withdraw_contract, withdraw_overflow,
+        short, long, malformed, nonzero, forced, overflow, add_overflow, zero_cost,
+        "missing-withdraw.test.near"
     ):
         client.create_subaccount_with_key(account, 10**27)
     client.deploy_to(contract, wasm)
@@ -431,6 +539,9 @@ def main() -> None:
     )
     _run_public_storage_unregister_scenes(
         client, wasm, unregister_contract, short, malformed, per_byte
+    )
+    _run_storage_withdraw_scenes(
+        client, wasm, withdraw_contract, short, long, malformed, withdraw_overflow, per_byte
     )
 
     baseline_state = client.view_state_values(contract)

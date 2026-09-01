@@ -72,6 +72,13 @@ with two full u128 limbs. Missing and null clear inactive limbs; canonical quote
 checked amount decoder. The exact 279-byte bound covers 39 worst-case escaped digits and 32
 whitespace bytes. Unknown/duplicate/escaped keys and broader serde forms reject, so this remains a
 diagnostic bounded subset with no storage or Promise effect.
+wsm-near-storage-withdraw-001 composes that parser and mutating exact `StorageBalance` output into
+exact export `storage_withdraw`. Exact one yocto and a registered exact-16 caller balance are
+required. Because this closed policy immediately refunded all deposit excess, available storage is
+always zero: missing/null and explicit-zero requests return the checked variable
+`(caller.length + 64) × trustedPrice` total without changing map/state/supply, while positive
+amounts reject. No log, native refund, or Promise is created and the security yocto is retained.
+The bounded grammar and variable economics remain narrower than stock NEP-145.
 wsm-near-json-boolean-mutation-output-001 adds the paired output prerequisite. Only nominal
 `JsonBooleanResult` mutations bind exact unquoted `false`/`true`; the target validates its 0/1
 discriminant after state persistence, and a trap rolls all writes back. Ordinary scalar/record,
@@ -192,6 +199,12 @@ fields/escaped keys/excess whitespace, missing emits no informational log, and r
 fails closed on non-decreasing usage, cost multiplication overflow, or u128 addition overflow
 rather than returning zero/saturating. It therefore does not claim complete NEP-145 ABI
 compatibility, and asynchronous refund failure still cannot roll back the successful receipt.
+wsm-near-storage-withdraw-001 adds the remaining public-shaped closed lifecycle operation. It
+requires exact one yocto and caller registration, accepts only absent/null/zero withdrawal, returns
+the caller's variable retained total with zero available, and performs no map, supply, log, refund,
+or Promise effect. The security yocto is retained like near-contract-standards. Its bounded parser
+and variable-cost total remain explicit compatibility differences, so the exact export is not a
+complete NEP-145 claim.
 wsm-near-u128-storage-001 adds exact 16-byte little-endian Borsh NearToken storage values and
 strict status/fits/length-gated limb decoding; key geometry and ledger policy remain absent.
 wsm-near-queue-001/wsm-near-iterable-001 在其上分别加入 bounded Queue64 与 Identity

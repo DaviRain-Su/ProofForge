@@ -166,6 +166,46 @@ def storage_deposit (state : State)
     else .error .overflow
   else .error .overflow
 
+/-- Public-shaped bounded storage withdrawal over this contract's closed registration economics.
+
+Every successful registration refunds all excess immediately, so `available` is always zero.
+Missing/null amount and explicit zero therefore return the caller's exact variable retained cost;
+positive withdrawal is rejected. Like near-contract-standards, the exact attached security yocto is
+retained and no refund receipt is created. The bounded input rejects unknown fields and limits
+whitespace, and retained cost varies with caller length, so this is not a complete NEP-145 ABI or
+economic-policy compatibility claim. -/
+@[pf_entry, pf_near_payable]
+def storage_withdraw (state : State)
+    (args : ProofForge.Wasm.Near.Runtime.StorageWithdrawArgs) :
+    Except Error (State × ProofForge.Wasm.Near.Runtime.StorageBalanceResult) :=
+  let deposit := Context.attachedDeposit
+  if Registration.attachedIsOne deposit then
+    let caller := Context.caller
+    if DirectAccountNearTokenMap.accountLengthValid caller then
+      let _ := registrations.read caller
+      if Registration.readWasValidPresent then
+        if args.amountPresent ≤ 1 &&
+            (args.amountPresent = 0 || Registration.tokenIsZero args.amount) then
+          let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
+          let bytes := Registration.variableAccountEntryBytes caller
+          if Registration.trustedCostValid perByteCost &&
+              NearToken.canMulUInt64 perByteCost bytes then
+            let cost : NearToken :=
+              ⟨NearToken.mulUInt64W0 perByteCost bytes,
+                NearToken.mulUInt64W1 perByteCost bytes⟩
+            let next : State :=
+              ⟨state.perByteCostW0, state.perByteCostW1, state.lastDelta,
+                state.lastCostW0, state.lastCostW1, state.totalSupplyW0,
+                state.totalSupplyW1, state.lastCode⟩
+            let result : ProofForge.Wasm.Near.Runtime.StorageBalanceResult :=
+              { registered := 1, total := ⟨cost.w0, cost.w1⟩, available := ⟨0, 0⟩ }
+            .ok (next, result)
+          else .error .overflow
+        else .error .overflow
+      else .error .overflow
+    else .error .overflow
+  else .error .overflow
+
 @[pf_entry]
 def probeCaller (state : State) : Except Error (State × UInt64) :=
   let status := registrations.has Context.caller
