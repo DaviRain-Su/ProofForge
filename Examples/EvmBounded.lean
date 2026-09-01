@@ -52,6 +52,17 @@ frame is encoded as the canonical `uint16[]` active prefix. -/
 @[pf_entry]
 def echoBoundedValues (_s : State) (items : BoundedVec UInt16 4) : BoundedVec UInt16 4 := items
 
+/-- Wide one-ABI-word dynamic return: each `UInt128` element expands to two source limbs and is
+repacked into a single `uint128` ABI word at the publication boundary. -/
+@[pf_entry]
+def echoBoundedWide (_s : State) (items : BoundedVec UInt128 2) : BoundedVec UInt128 2 := items
+
+/-- Constructed static-product dynamic return: each element is two one-limb ABI words
+`(uint64,uint16)`. Nested dynamics remain fail closed. -/
+@[pf_entry]
+def echoBoundedPairs (_s : State) (items : BoundedVec (UInt64 × UInt16) 2) :
+    BoundedVec (UInt64 × UInt16) 2 := items
+
 @[pf_entry]
 def echoBoundedBytes (_s : State) (bytes : BoundedBytes 8) : BoundedBytes 8 := bytes
 

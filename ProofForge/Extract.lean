@@ -231,30 +231,92 @@ private def logicalReturnSchema (env : Environment) (kind : Core.IR.MethodKind) 
         throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
       return ← codecSchemaOfType env successArgs[successArgs.size - 1]!
 
+/-- Source limbs for one boundary scalar (`ceil(byteWidth / 8)`, capped at four). -/
+private def scalarReturnLimbCount (type : Core.Codec.Scalar) : Except String Nat := do
+  unless Core.Codec.Scalar.isWellFormed type do
+    throw "extract/unsupported: bounded result has a malformed scalar element"
+  let limbs := (type.byteWidth + 7) / 8
+  unless 1 ≤ limbs && limbs ≤ 4 do
+    throw "extract/unsupported: bounded result scalar element limb count is out of range"
+  pure limbs
+
+/-- Project a static leaf path through one bounded-array element carrier. -/
+private def projectBoundedElementLeaf (elem : Ops.Val) (path : Array Core.Codec.PathStep) :
+    Except String Ops.Val := do
+  let mut cur := elem
+  for step in path do
+    match step with
+    | .field name => cur := flattenField cur name
+    | .tuple 0 => cur := flattenField cur "fst"
+    | .tuple 1 => cur := flattenField cur "snd"
+    | .tuple ordinal => cur := flattenField cur (toString ordinal)
+    | .index _ =>
+        throw "extract/unsupported: bounded result element path must not contain fixed indexes"
+  pure cur
+
+/-- Expand one wide/one-limb scalar element into source limbs. Prefer `indexGet` byte offsets so
+return projection does not depend on a State-schema vector leaf table. -/
+private def expandScalarElementReturns (elem : Ops.Val) (type : Core.Codec.Scalar) :
+    Except String (Array Ops.Op) := do
+  let limbs ← scalarReturnLimbCount type
+  match elem with
+  | .indexGet base name index capacity _ =>
+      pure ((List.range limbs).toArray.map fun limb =>
+        .returnU64 (.indexGet base name index capacity (limb * 8)))
+  | _ =>
+      if limbs == 1 then
+        pure #[.returnU64 elem]
+      else
+        let names := #["w0", "w1", "w2", "w3"].extract 0 limbs
+        pure (names.map fun n => .returnU64 (flattenField elem n))
+
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
 output wire format. This is source projection only: Borsh/ABI length and padding remain target
-owned. Richer element shapes stay closed until recursive result projection is qualified. -/
+owned. Wide one-ABI-word scalars and constructed static (one-limb-leaf) products are in scope;
+nested dynamics and tagged element shapes stay closed. -/
 private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.Op) :
     Except String (Array Ops.Op) :=
   match ops.toList, schema with
-  | [.returnU64 root], .boundedArray capacity (.scalar type)
-  | [.returnState root], .boundedArray capacity (.scalar type) => do
-      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
-        throw "extract/unsupported: bounded result currently requires one-limb scalar elements"
+  | [.returnU64 root], .boundedArray capacity element
+  | [.returnState root], .boundedArray capacity element => do
       let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
-      for i in [0:capacity] do
-        result := result.push (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0))
-      pure result
+      match element with
+      | .scalar type =>
+          for i in [0:capacity] do
+            let elem := .indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0
+            result := result ++ (← expandScalarElementReturns elem type)
+          pure result
+      | _ => do
+          let leaves ← Core.Codec.staticLeaves element
+          unless !leaves.isEmpty do
+            throw "extract/unsupported: constructed bounded result element must contain a scalar"
+          for leaf in leaves do
+            unless (← scalarReturnLimbCount leaf.type) == 1 do
+              throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
+          for i in [0:capacity] do
+            for leafIdx in [0:leaves.size] do
+              result := result.push (.returnU64
+                (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity (leafIdx * 8)))
+          pure result
   | [.returnU64 root], .boundedBytes capacity | [.returnU64 root], .boundedString capacity
   | [.returnState root], .boundedBytes capacity | [.returnState root], .boundedString capacity => do
       let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
       for i in [0:capacity] do
         result := result.push (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0))
       pure result
-  | leaves, .boundedArray capacity (.scalar type) => do
-      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
-        throw "extract/unsupported: bounded result currently requires one-limb scalar elements"
-      unless leaves.length == capacity + 1 do
+  | leaves, .boundedArray capacity element => do
+      let expected ←
+        match element with
+        | .scalar type => pure (1 + capacity * (← scalarReturnLimbCount type))
+        | _ => do
+            let static ← Core.Codec.staticLeaves element
+            unless !static.isEmpty do
+              throw "extract/unsupported: constructed bounded result element must contain a scalar"
+            for leaf in static do
+              unless (← scalarReturnLimbCount leaf.type) == 1 do
+                throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
+            pure (1 + capacity * static.size)
+      unless leaves.length == expected do
         throw "extract/unsupported: constructed bounded result has the wrong fixed-frame size"
       leaves.toArray.mapM fun
         | .returnU64 value | .returnState value => pure (.returnU64 value)
@@ -265,8 +327,6 @@ private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops
       leaves.toArray.mapM fun
         | .returnU64 value | .returnState value => pure (.returnU64 value)
         | _ => throw "extract/unsupported: constructed bounded result must contain scalar leaves"
-  | _, .boundedArray .. =>
-      throw "extract/unsupported: bounded result requires scalar elements"
   | _, _ => pure ops
 
 /-- Count the fixed UInt64 payload lanes in the source representation of one enum constructor.

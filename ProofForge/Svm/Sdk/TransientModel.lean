@@ -805,4 +805,154 @@ theorem mVec128Push_get (tw : TransientWords) (slot : Fin 2) (cap : Nat) (w0 w1 
       simpa [hidx] using hw1
     simp [mVec64Get, hact', hn1, this]
 
+/-- After a successful Vector256 push, all four limbs are readable via `mVec64Get`. -/
+theorem mVec256Push_get (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (w0 w1 w2 w3 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 4 ≤ cap) :
+    mVec64Get
+        (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+          slot cap w3).1 slot cap (tw.bank slot).length = w0 ∧
+    mVec64Get
+        (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+          slot cap w3).1 slot cap ((tw.bank slot).length + 1) = w1 ∧
+    mVec64Get
+        (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+          slot cap w3).1 slot cap ((tw.bank slot).length + 2) = w2 ∧
+    mVec64Get
+        (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+          slot cap w3).1 slot cap ((tw.bank slot).length + 3) = w3 := by
+  have hroom0 : (tw.bank slot).length < cap := by omega
+  have h0 := mVec64Push_readback tw slot cap w0 hact hroom0
+  have hact1 : requireActive (mVec64Push tw slot cap w0).1 slot cap = true := h0.2.2.2
+  have hroom1 : ((mVec64Push tw slot cap w0).1.bank slot).length < cap := by
+    have := h0.2.2.1; omega
+  have h1 := mVec64Push_readback (mVec64Push tw slot cap w0).1 slot cap w1 hact1 hroom1
+  have hact2 : requireActive (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap = true :=
+    h1.2.2.2
+  have hroom2 : ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length < cap := by
+    have := h1.2.2.1; omega
+  have h2 := mVec64Push_readback (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+    slot cap w2 hact2 hroom2
+  have hact3 :
+      requireActive
+        (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+        slot cap = true :=
+    h2.2.2.2
+  have hroom3 :
+      ((mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.bank
+          slot).length < cap := by
+    have := h2.2.2.1; omega
+  have h3 := mVec64Push_readback
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+    slot cap w3 hact3 hroom3
+  have hact' :
+      requireActive
+        (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1
+          slot cap w3).1 slot cap = true :=
+    h3.2.2.2
+  have hlen0 := h0.2.2.1
+  have hn0 :
+      ¬((tw.bank slot).length ≥
+          ((mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+              slot cap w2).1 slot cap w3).1.bank slot).length) := by
+    omega
+  have hn1 :
+      ¬((tw.bank slot).length + 1 ≥
+          ((mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+              slot cap w2).1 slot cap w3).1.bank slot).length) := by
+    omega
+  have hn2 :
+      ¬((tw.bank slot).length + 2 ≥
+          ((mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+              slot cap w2).1 slot cap w3).1.bank slot).length) := by
+    omega
+  have hn3 :
+      ¬((tw.bank slot).length + 3 ≥
+          ((mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+              slot cap w2).1 slot cap w3).1.bank slot).length) := by
+    omega
+  have p1 :=
+    mVec64Push_preserves_prior (mVec64Push tw slot cap w0).1 slot cap w1
+      (tw.bank slot).length hact1 hroom1 (by omega)
+  have p2 :=
+    mVec64Push_preserves_prior (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2
+      (tw.bank slot).length hact2 hroom2 (by omega)
+  have p3 :=
+    mVec64Push_preserves_prior
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1 slot cap w3
+      (tw.bank slot).length hact3 hroom3 (by omega)
+  have q2 :=
+    mVec64Push_preserves_prior (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2
+      ((tw.bank slot).length + 1) hact2 hroom2 (by omega)
+  have q3 :=
+    mVec64Push_preserves_prior
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1 slot cap w3
+      ((tw.bank slot).length + 1) hact3 hroom3 (by omega)
+  have r3 :=
+    mVec64Push_preserves_prior
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1 slot cap w3
+      ((tw.bank slot).length + 2) hact3 hroom3 (by omega)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · have hw0 : (mVec64Push tw slot cap w0).1.words slot (tw.bank slot).length = w0 := h0.2.1
+    have : (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+        slot cap w2).1 slot cap w3).1.words slot (tw.bank slot).length = w0 := by
+      calc
+        _ = (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.words
+              slot (tw.bank slot).length := p3
+        _ = (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words
+              slot (tw.bank slot).length := p2
+        _ = (mVec64Push tw slot cap w0).1.words slot (tw.bank slot).length := p1
+        _ = w0 := hw0
+    simp [mVec64Get, hact', hn0, this]
+  · have hidx : ((mVec64Push tw slot cap w0).1.bank slot).length = (tw.bank slot).length + 1 := hlen0
+    have hw1 : (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot
+        ((mVec64Push tw slot cap w0).1.bank slot).length = w1 := h1.2.1
+    have : (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+        slot cap w2).1 slot cap w3).1.words slot ((tw.bank slot).length + 1) = w1 := by
+      have step1 :
+          (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.words
+            slot ((tw.bank slot).length + 1) =
+          (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words
+            slot ((tw.bank slot).length + 1) := q2
+      have step2 :
+          (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+              slot cap w2).1 slot cap w3).1.words slot ((tw.bank slot).length + 1) =
+          (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.words
+            slot ((tw.bank slot).length + 1) := q3
+      have base :
+          (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.words slot
+            ((tw.bank slot).length + 1) = w1 := by
+        simpa [hidx] using hw1
+      exact step2.trans (step1.trans base)
+    simp [mVec64Get, hact', hn1, this]
+  · have hidx :
+        ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length =
+          (tw.bank slot).length + 2 := by omega
+    have hw2 : (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.words
+        slot ((mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1.bank slot).length = w2 :=
+      h2.2.1
+    have : (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+        slot cap w2).1 slot cap w3).1.words slot ((tw.bank slot).length + 2) = w2 := by
+      have step := r3
+      have base :
+          (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.words
+            slot ((tw.bank slot).length + 2) = w2 := by
+        simpa [hidx] using hw2
+      exact step.trans base
+    simp [mVec64Get, hact', hn2, this]
+  · have hidx :
+        ((mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.bank
+            slot).length =
+          (tw.bank slot).length + 3 := by omega
+    have hw3 : (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+        slot cap w2).1 slot cap w3).1.words slot
+        ((mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1 slot cap w2).1.bank
+          slot).length = w3 :=
+      h3.2.1
+    have : (mVec64Push (mVec64Push (mVec64Push (mVec64Push tw slot cap w0).1 slot cap w1).1
+        slot cap w2).1 slot cap w3).1.words slot ((tw.bank slot).length + 3) = w3 := by
+      simpa [hidx] using hw3
+    simp [mVec64Get, hact', hn3, this]
+
 end ProofForge.Svm.Sdk.TransientModel

@@ -482,6 +482,39 @@ private def staticRequest : Schema :=
   | .error reason => reason.contains "product nesting depth"
   | .ok _ => false
 
+-- Wide one-ABI-word bounded returns: UInt128 expands to two source limbs.
+#guard
+  match ProofForge.Evm.Codec.outputPlan (.boundedArray 2 (.scalar (.uint 128))) with
+  | .ok (some (.dynamic plan)) =>
+      match plan with
+      | .boundedArray array =>
+          array.capacity == 2 && array.elementTypeName == "uint128" &&
+            array.elementWords == #[.uint 128] &&
+            plan.sourceWords == #[.uint32, .uint64, .uint64, .uint64, .uint64]
+      | _ => false
+  | _ => false
+
+-- Constructed static-product bounded returns: two one-limb ABI words per element.
+#guard
+  match ProofForge.Evm.Codec.outputPlan
+      (.boundedArray 2 (.tuple #[.scalar (.uint 64), .scalar (.uint 16)])) with
+  | .ok (some (.dynamic plan)) =>
+      match plan with
+      | .boundedArray array =>
+          array.elementTypeName == "(uint64,uint16)" &&
+            array.elementWords == #[.uint 64, .uint 16] &&
+            plan.sourceWords == #[.uint32, .uint64, .uint16, .uint64, .uint16]
+      | _ => false
+  | _ => false
+
+-- Nested dynamic elements stay fail closed.
+#guard
+  match ProofForge.Evm.Codec.outputPlan
+      (.boundedArray 2 (.boundedArray 2 (.scalar (.uint 64)))) with
+  | .error reason => reason.contains "bounded" || reason.contains "dynamic" ||
+      reason.contains "length policy"
+  | _ => false
+
 private def typedMethod : ProofForge.Evm.IR.Method := {
   kind := .get
   name := "typed"

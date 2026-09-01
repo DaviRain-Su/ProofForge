@@ -4,32 +4,37 @@ scope: evm
 status: partial
 depends-on: []
 plan: ../multi-target-strategy.md
+updated: 2026-09-01
 ---
 
 # evm-rt-nested-001 — nested / constructed / wide dynamic returns
 
 ## Context (Feature A)
 
-Default product path remains Lean → Extract → Yul → locked solc. Codec today fail-closes
-empty tuples and requires explicit dynamic ABI policy for bounded arrays/bytes/strings
-(`ProofForge/Evm/Codec.lean`). Nested constructed returns and wide dynamic aggregates are
-still outside the accepted surface.
+Default product path remains Lean → Extract → Yul → locked solc. Codec requires explicit
+dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`).
 
-## Deliverables
+## In-scope policy (Feature A ceiling)
 
-1. Policy: which nested shapes are in-scope (depth/width ceilings) vs fail-closed
-2. Codec/Extract: accept the in-scope subset; reject the rest with stable `evm/codec:` errors
-3. Anvil malformed matrix: nested OK cases + reject cases
-4. No Feature B / powdr coupling
+| Shape | Status | Notes |
+|---|---|---|
+| Product nesting depth ≤ 2 | accepted | `maxProductNesting = 2` |
+| Product nesting depth ≥ 3 | fail-closed | stable `evm/codec: product nesting depth …` |
+| Top-level `BoundedVec` of **one-limb** scalars | accepted | R1-019 |
+| Top-level `BoundedVec` of **wide one-ABI-word** scalars (`UInt128`/`UInt256`/`Addr20`/…) | accepted | Extract expands limbs; Emit packs ABI word |
+| Top-level `BoundedVec` of **constructed static products** (one-limb leaves) | accepted | e.g. `(uint64,uint16)[]` |
+| Nested dynamics (array-of-bytes, dynamic-in-tuple, …) | fail-closed | `staticAbiLeaves` / codec reject |
+| Tagged / Option elements inside dynamic arrays | fail-closed | follow-up |
+| Frames > `maxBoundedArrayLocalWords` (64) | fail-closed | resource ceiling |
 
 ## Progress (2026-09-01)
 
-- **Ceiling landed**: `ProofForge.Evm.Codec.maxProductNesting = 2` with
-  `productNestingDepth` + gate in `abiTypeOfSchema`
-- Depth-2 shapes already in use (`(uint64,(uint32,bool),uint16[2])`) stay accepted
-- Depth ≥ 3 fail-closes with `evm/codec: product nesting depth …`
-- Spec guards in `Tests/CoreCodecSpec.lean`
-- Still open: constructed/wide dynamic returns, Anvil matrix, raising the ceiling under policy
+- **Ceiling landed**: `maxProductNesting = 2` + `Tests/CoreCodecSpec.lean`
+- **Wide returns**: `echoBoundedWide` (`uint128[]`) — Extract limb expansion, Codec
+  `sourceLimbWords`, Emit pack, IR rewrite for limb `indexGet`
+- **Constructed returns**: `echoBoundedPairs` (`(uint64,uint16)[]`) — same pipeline
+- Spec coverage: `Tests/EvmBoundedSpec.lean`, `Tests/CoreCodecSpec.lean`
+- Still open: **Anvil OK/reject matrix** for wide/constructed; tagged-in-array; depth ceiling raise
 
 ## Non-goals
 

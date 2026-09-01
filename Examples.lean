@@ -100,6 +100,7 @@ import Examples.NearTokenArithmetic
 import Examples.NearTokenErgonomics
 import Examples.NearTokenStorage
 import Examples.EvmBounded
+import Examples.EvmExceptErgonomics
 import Examples.EvmSearch
 import Examples.EvmFindIndex
 import Examples.EvmStaticCounter

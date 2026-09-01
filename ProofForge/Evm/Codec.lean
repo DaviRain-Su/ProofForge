@@ -224,10 +224,22 @@ def AbiInputPlan.packedBytes (plan : AbiInputPlan) : Option PackedBytesPlan :=
   | some (.packedBytes bytes) => some bytes
   | _ => none
 
-/-- Fixed source-frame scalar metadata consumed by the output codec interpreter. -/
+/-- Expand one ABI element word into the fixed source limbs Extract publishes (`w0..`). -/
+def sourceLimbWords (type : Scalar) : Array Scalar :=
+  let limbs := limbCount type
+  if limbs ≤ 1 then #[type]
+  else Array.replicate limbs .uint64
+
+/-- Source limbs occupied by one bounded-array element (sum of per-word limb counts). -/
+def elementSourceLimbCount (elementWords : Array Scalar) : Nat :=
+  elementWords.foldl (init := 0) fun acc type => acc + limbCount type
+
+/-- Fixed source-frame scalar metadata consumed by the output codec interpreter. Wide one-ABI-word
+elements expand to `limbCount` `uint64` limbs so returndata packing can rebuild the ABI word. -/
 def DynamicOutputPlan.sourceWords : DynamicOutputPlan → Array Scalar
   | .boundedArray array =>
-      #[.uint32] ++ (Array.range array.capacity).flatMap fun _ => array.elementWords
+      #[.uint32] ++ (Array.range array.capacity).flatMap fun _ =>
+        array.elementWords.flatMap sourceLimbWords
   | .packedBytes bytes => #[.uint32] ++ Array.replicate bytes.capacity .uint8
 
 def TaggedTupleOutputPlan.sourceWords (plan : TaggedTupleOutputPlan) : Array Scalar :=
@@ -351,16 +363,21 @@ def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
   }
 
 /-- Select an independent top-level dynamic result policy. A bounded result is represented during
-source execution as `length || capacity slots`, then encoded as the canonical standard-ABI active
-prefix. Nested/tagged dynamics and multi-limb elements remain fail closed. -/
+source execution as `length || capacity × element source limbs`, then encoded as the canonical
+standard-ABI active prefix. Wide one-ABI-word scalars and constructed static products (flattenable
+by `staticAbiLeaves`) are accepted within the local-frame ceiling. Nested/tagged dynamics stay
+fail closed because `staticAbiLeaves` rejects them. -/
 def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPlan) := do
   let _ ← validate schema
   match schema with
   | .boundedArray capacity element =>
       let elementWords := (← staticAbiLeaves element).map (·.type)
-      unless elementWords.size == 1 && limbCount elementWords[0]! == 1 do
-        throw "evm/codec: bounded array result currently requires one-limb scalar elements"
-      let localWords := 1 + capacity * elementWords.size
+      unless !elementWords.isEmpty do
+        throw "evm/codec: bounded array result element must contain a scalar"
+      for type in elementWords do
+        unless Scalar.isWellFormed type do
+          throw "evm/codec: bounded array result has a malformed element scalar"
+      let localWords := 1 + capacity * elementSourceLimbCount elementWords
       unless localWords ≤ maxBoundedArrayLocalWords do
         throw s!"evm/codec: bounded array result frame exceeds {maxBoundedArrayLocalWords} words"
       return some (.boundedArray {

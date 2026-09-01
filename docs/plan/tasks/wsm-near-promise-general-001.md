@@ -1,9 +1,10 @@
 ---
 id: wsm-near-promise-general-001
 scope: wasm-near
-status: todo
+status: partial
 depends-on: []
 plan: ../multi-target-strategy.md
+updated: 2026-09-01
 ---
 
 # wsm-near-promise-general-001 — bounded Promise handle generalization (N13)
@@ -14,6 +15,47 @@ N12 public FT surface is on main (`Examples.NearFungibleLedger` + sandbox). Exis
 tasks cover static call / return / two-child join. Generalization is blocked until a
 source-visible handle + lifecycle contract exists (`wsm-near-promise-and-001` note).
 
+## Design sketch (greenfield, Feature A only)
+
+### Source handle
+
+```text
+structure PromiseHandle (maxFanIn : Nat) where
+  id     : UInt64          -- host promise index; opaque to apps
+  depth  : UInt8           -- creation depth; join increments
+  fanIn  : Fin (maxFanIn+1)
+```
+
+- `maxFanIn` is a compile-time capacity (suggested default **4**; hard ceiling **8**).
+- Handles are **not** copyable across unrelated entries without an explicit rebind effect.
+- Extract rejects any Promise API whose `maxFanIn` literal exceeds the profile ceiling.
+
+### Lifecycle ops (SDK-shaped)
+
+| Op | Meaning | Fail-closed edge |
+|---|---|---|
+| `Promise.create` | new root handle (`depth=0`, `fanIn=0`) | gas/deposit policy stays target-owned |
+| `Promise.then` | attach one callback; returns same handle family | depth ≥ ceiling |
+| `Promise.and` | N-way join of `2..maxFanIn` handles | fan-in overflow; mismatched batch |
+| `Promise.transfer` | NEAR transfer leaf | amount/account validation |
+
+N-way `and` is a single Extract-visible op with a **fixed** argument vector of length
+`maxFanIn` plus a runtime `used : Fin (maxFanIn+1)` count (inactive slots zero / unused).
+
+### Concurrency model
+
+- Keep today's static DAG spelling: no open-world promise maps.
+- Joins remain **batch-shaped** (array of handles), not recursively nested `and(and(...))`
+  beyond the depth ceiling — Encode depth in the handle so Extract can reject.
+- Self-callback + join fixtures reuse near-sandbox patterns from N12 ledger tests.
+
+### Implementation order
+
+1. `PromiseHandle` + create/then with depth gate (no IR shape change beyond new component tags)
+2. Fixed-capacity `andN` (N=3 first; generalize to maxFanIn)
+3. Sandbox DAG: create→then; create×3→and→callback
+4. Docs + capability-matrix row
+
 ## Deliverables
 
 1. Source-level bounded Promise handle type (fail-closed max fan-in / depth)
@@ -23,7 +65,7 @@ source-visible handle + lifecycle contract exists (`wsm-near-promise-and-001` no
 
 ## Non-goals
 
-Unbounded Promise graphs; host-side nondeterminism modeling.
+Unbounded Promise graphs; host-side nondeterminism modeling; XRPL.
 
 ## Acceptance
 
