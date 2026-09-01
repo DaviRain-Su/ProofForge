@@ -55,6 +55,7 @@ private partial def lowerOp : Ops.Op → Except String Op
   | .okState value => pure (.okState value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped frame => pure (.errorNamed frame.constructor)
   | .returnU64 value => pure (.returnU64 value)
   | .returnState value => pure (.returnState value)
 
@@ -386,6 +387,8 @@ private partial def rewriteRawArgsInOp (schemas : Array Core.Codec.Schema)
   | .okState value => return .okState (← rewriteRawArg schemas entry base value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped frame =>
+      return .errorTyped (← frame.mapValuesM (rewriteRawArg schemas entry base))
   | .returnU64 value => return .returnU64 (← rewriteRawArg schemas entry base value)
   | .returnState value => return .returnState (← rewriteRawArg schemas entry base value)
   | .ext payload => return .ext (← rewriteRawPayload schemas entry base payload)
@@ -406,6 +409,7 @@ private partial def opLocalIds : Ops.Op → Array Nat
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       Core.CFG.valueLocalIds value
   | .errorOverflow | .errorNamed _ => #[]
+  | .errorTyped frame => frame.values.flatMap Core.CFG.valueLocalIds
   | .ext payload => (cfgPayloadValues payload).flatMap Core.CFG.valueLocalIds
 
 def Method.rawArgLocalBase (method : Method) : Nat :=

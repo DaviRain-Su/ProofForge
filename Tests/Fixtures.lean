@@ -737,6 +737,22 @@ def choose (s : ChoiceState) (lhs rhs : UInt64) :
   let chosen : UInt64 := if lhs < rhs then lhs else rhs
   .ok ({ s with chosen }, chosen)
 
+/-- A reusable bounded-loop helper can yield one scalar for ordinary caller-side control without
+exposing a loop-specific operation. Position+1 keeps zero as the private missing sentinel. -/
+@[pf_inline] def boundedLoopPosition (needle : UInt64) : UInt64 := Id.run do
+  let mut position : UInt64 := 0
+  let mut visited : UInt64 := 0
+  for i in [0:3] do
+    let nextPosition :=
+      if position == 0 && needle == UInt64.ofNat i then UInt64.ofNat i + 1 else position
+    position := nextPosition
+    visited := visited + 1
+  return if visited == 3 then position else 0
+
+def hasBoundedLoopPosition (_s : ChoiceState) (needle : UInt64) : Bool :=
+  let position := boundedLoopPosition needle
+  position != 0
+
 /-- Negative extractor fixture: external-account shape parameters must be compile-time constants.
 The dynamic account operand must reject extraction rather than silently dropping the write. -/
 def malformedExternalWrite (s : ChoiceState) (acc value : UInt64) :

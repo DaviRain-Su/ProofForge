@@ -115,6 +115,30 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing tagged enum return source method"
   let some sourceEchoPubkey := source.methods.find? (·.ixName == "echoPubkey")
     | throwError "missing Pubkey return source method"
+  let some sourceBytesEqual := source.methods.find? (·.ixName == "bytesEqual")
+    | throwError "missing bounded-bytes equality source method"
+  let some sourceStringsEqual := source.methods.find? (·.ixName == "stringsEqual")
+    | throwError "missing bounded-string equality source method"
+  let some sourceBytesLess := source.methods.find? (·.ixName == "bytesLess")
+    | throwError "missing bounded-bytes ordering source method"
+  let some sourceStringsLess := source.methods.find? (·.ixName == "stringsLess")
+    | throwError "missing bounded-string ordering source method"
+  let some sourceBytesContains := source.methods.find? (·.ixName == "bytesContains")
+    | throwError "missing bounded-bytes substring source method"
+  let some sourceStringsContains := source.methods.find? (·.ixName == "stringsContains")
+    | throwError "missing bounded-string substring source method"
+  let some sourceBytesStarts := source.methods.find? (·.ixName == "bytesStartsWith")
+    | throwError "missing bounded-bytes prefix source method"
+  let some sourceStringsStarts := source.methods.find? (·.ixName == "stringsStartsWith")
+    | throwError "missing bounded-string prefix source method"
+  let some sourceBytesEnds := source.methods.find? (·.ixName == "bytesEndsWith")
+    | throwError "missing bounded-bytes suffix source method"
+  let some sourceStringsEnds := source.methods.find? (·.ixName == "stringsEndsWith")
+    | throwError "missing bounded-string suffix source method"
+  let some sourceBytesFind := source.methods.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing bounded-bytes first-position source method"
+  let some sourceStringsFind := source.methods.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing bounded-string first-position source method"
   let some sourceEchoBoundedU128 := source.methods.find? (·.ixName == "echoBoundedU128")
     | throwError "missing wide bounded-vector return source method"
   let some sourceEchoOptionU128 := source.methods.find? (·.ixName == "echoOptionU128")
@@ -142,13 +166,64 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceEchoPubkey.paramCount == 1 && sourceEchoPubkey.paramWidths.isEmpty &&
       sourceEchoPubkey.paramSchemas == #[pubkeySchema] &&
       sourceEchoPubkey.retSchema == pubkeySchema && sourceEchoPubkey.retCount == 4 &&
-      sourceEchoBoundedU128.annotations == #["svm.raw.v1:27:2:0"] &&
+      sourceBytesEqual.annotations == #["svm.raw.v1:27:2:0"] &&
+      sourceBytesEqual.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesEqual.retSchema == .scalar .boolean && sourceBytesEqual.retCount == 1 &&
+      sourceStringsEqual.annotations == #["svm.raw.v1:28:2:0"] &&
+      sourceStringsEqual.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsEqual.retSchema == .scalar .boolean && sourceStringsEqual.retCount == 1 &&
+      sourceBytesLess.annotations == #["svm.raw.v1:29:2:0"] &&
+      sourceBytesLess.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesLess.retSchema == .scalar .boolean && sourceBytesLess.retCount == 1 &&
+      sourceStringsLess.annotations == #["svm.raw.v1:30:2:0"] &&
+      sourceStringsLess.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsLess.retSchema == .scalar .boolean && sourceStringsLess.retCount == 1 &&
+      sourceBytesContains.annotations == #["svm.raw.v1:31:2:0"] &&
+      sourceBytesContains.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesContains.retSchema == .scalar .boolean && sourceBytesContains.retCount == 1 &&
+      sourceStringsContains.annotations == #["svm.raw.v1:32:2:0"] &&
+      sourceStringsContains.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsContains.retSchema == .scalar .boolean &&
+      sourceStringsContains.retCount == 1 &&
+      sourceBytesStarts.annotations == #["svm.raw.v1:33:2:0"] &&
+      sourceBytesStarts.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesStarts.retSchema == .scalar .boolean && sourceBytesStarts.retCount == 1 &&
+      sourceStringsStarts.annotations == #["svm.raw.v1:34:2:0"] &&
+      sourceStringsStarts.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsStarts.retSchema == .scalar .boolean && sourceStringsStarts.retCount == 1 &&
+      sourceBytesEnds.annotations == #["svm.raw.v1:35:2:0"] &&
+      sourceBytesEnds.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesEnds.retSchema == .scalar .boolean && sourceBytesEnds.retCount == 1 &&
+      sourceStringsEnds.annotations == #["svm.raw.v1:36:2:0"] &&
+      sourceStringsEnds.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsEnds.retSchema == .scalar .boolean && sourceStringsEnds.retCount == 1 &&
+      sourceBytesFind.annotations == #["svm.raw.v1:37:2:0"] &&
+      sourceBytesFind.paramSchemas == #[.boundedBytes 8, .boundedBytes 8] &&
+      sourceBytesFind.retSchema == .option (.scalar .uint64) && sourceBytesFind.retCount == 2 &&
+      sourceStringsFind.annotations == #["svm.raw.v1:38:2:0"] &&
+      sourceStringsFind.paramSchemas == #[.boundedString 8, .boundedString 8] &&
+      sourceStringsFind.retSchema == .option (.scalar .uint64) &&
+      sourceStringsFind.retCount == 2 &&
+      sourceEchoBoundedU128.annotations == #["svm.raw.v1:39:2:0"] &&
       sourceEchoBoundedU128.retSchema == .boundedArray 2 (.scalar .uint128) &&
       sourceEchoBoundedU128.retCount == 5 &&
-      sourceEchoOptionU128.annotations == #["svm.raw.v1:29:2:0"] &&
+      sourceEchoOptionU128.annotations == #["svm.raw.v1:40:2:0"] &&
       sourceEchoOptionU128.retSchema == .option (.scalar .uint128) &&
       sourceEchoOptionU128.retCount == 3 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
+  let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
+    match fuel with
+    | 0 => #[]
+    | fuel' + 1 => ops.foldl (init := #[]) fun bounds op =>
+        match op with
+        | .forBody bound body => bounds.push bound ++ loopBounds fuel' body
+        | .ite _ _ _ yes no => bounds ++ loopBounds fuel' yes ++ loopBounds fuel' no
+        | _ => bounds
+  for method in #[sourceBytesContains, sourceStringsContains, sourceBytesStarts,
+      sourceStringsStarts, sourceBytesEnds, sourceStringsEnds, sourceBytesFind,
+      sourceStringsFind] do
+    unless loopBounds 8 method.ops == #[64] do
+      throwError s!"{method.ixName} lost its static SVM product loop: {loopBounds 8 method.ops}"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -383,17 +458,101 @@ elab "#pf_guard_entry_adapter" : command => do
           entry.canonical.contains "borsh-leaves.[8,8,8,8]" do
         throwError s!"wrong Pubkey Borsh boundary plan: {repr entry}"
   | .generated => throwError "Pubkey method lost its raw adapter"
+  let some bytesEqual := program.methods.find? (·.ixName == "bytesEqual")
+    | throwError "missing projected bounded-bytes equality method"
+  let some stringsEqual := program.methods.find? (·.ixName == "stringsEqual")
+    | throwError "missing projected bounded-string equality method"
+  let some bytesLess := program.methods.find? (·.ixName == "bytesLess")
+    | throwError "missing projected bounded-bytes ordering method"
+  let some stringsLess := program.methods.find? (·.ixName == "stringsLess")
+    | throwError "missing projected bounded-string ordering method"
+  let some bytesContains := program.methods.find? (·.ixName == "bytesContains")
+    | throwError "missing projected bounded-bytes substring method"
+  let some stringsContains := program.methods.find? (·.ixName == "stringsContains")
+    | throwError "missing projected bounded-string substring method"
+  let some bytesStarts := program.methods.find? (·.ixName == "bytesStartsWith")
+    | throwError "missing projected bounded-bytes prefix method"
+  let some stringsStarts := program.methods.find? (·.ixName == "stringsStartsWith")
+    | throwError "missing projected bounded-string prefix method"
+  let some bytesEnds := program.methods.find? (·.ixName == "bytesEndsWith")
+    | throwError "missing projected bounded-bytes suffix method"
+  let some stringsEnds := program.methods.find? (·.ixName == "stringsEndsWith")
+    | throwError "missing projected bounded-string suffix method"
+  let some bytesFind := program.methods.find? (·.ixName == "bytesFindIndex")
+    | throwError "missing projected bounded-bytes first-position method"
+  let some stringsFind := program.methods.find? (·.ixName == "stringsFindIndex")
+    | throwError "missing projected bounded-string first-position method"
+  for (method, tag, marker) in [
+      (bytesEqual, 27, "borsh-schema.[4-12:b"),
+      (stringsEqual, 28, "borsh-schema.[4-12:t"),
+      (bytesLess, 29, "borsh-schema.[4-12:b"),
+      (stringsLess, 30, "borsh-schema.[4-12:t"),
+      (bytesContains, 31, "borsh-schema.[4-12:b"),
+      (stringsContains, 32, "borsh-schema.[4-12:t"),
+      (bytesStarts, 33, "borsh-schema.[4-12:b"),
+      (stringsStarts, 34, "borsh-schema.[4-12:t"),
+      (bytesEnds, 35, "borsh-schema.[4-12:b"),
+      (stringsEnds, 36, "borsh-schema.[4-12:t")
+    ] do
+    match method.entry with
+    | .raw entry =>
+        unless entry.tag == tag && entry.paramCount == 2 &&
+            entry.paramBorshPlans.size == 2 &&
+            entry.paramLeafWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1,
+              4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+            entry.paramLeafCounts == #[9, 9] && entry.minDataLen == 9 &&
+            entry.maxDataLen == 25 && entry.inferredReturnWidths == #[1] &&
+            entry.returnDataLen == 1 && entry.canonical.contains marker do
+          throwError s!"wrong bounded comparison Borsh plan: {repr entry}"
+    | .generated => throwError "bounded comparison method lost its raw adapter"
+    let graph ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError s!"bounded comparison did not reach CFG: {reason}"
+    unless graph.blocks.any fun block =>
+        match block.terminator with
+        | .exit (.returnU64 _) => true
+        | _ => false do
+      throwError s!"{method.ixName} lost its scalar Bool return"
+  for (method, tag, marker) in [
+      (bytesFind, 37, "borsh-schema.[4-12:b"),
+      (stringsFind, 38, "borsh-schema.[4-12:t")
+    ] do
+    match method.entry with
+    | .raw entry =>
+        unless entry.tag == tag && entry.paramCount == 2 &&
+            entry.paramBorshPlans.size == 2 &&
+            entry.paramLeafWidths == #[4, 1, 1, 1, 1, 1, 1, 1, 1,
+              4, 1, 1, 1, 1, 1, 1, 1, 1] &&
+            entry.paramLeafCounts == #[9, 9] && entry.minDataLen == 9 &&
+            entry.maxDataLen == 25 && entry.inferredReturnWidths.isEmpty &&
+            entry.returnBorshPlan == some (.option #[8]) && entry.returnDataLen == 9 &&
+            entry.returnScratchBytes == 17 &&
+            entry.canonical.contains marker &&
+            entry.canonical.contains "borsh-return-schema.option.[8]" do
+          throwError s!"wrong bounded first-position Borsh plan: {repr entry}"
+    | .generated => throwError "bounded first-position method lost its raw adapter"
+    let graph ←
+      match method.toCFG with
+      | .ok graph => pure graph
+      | .error reason => throwError s!"bounded first-position did not reach CFG: {reason}"
+    unless graph.blocks.all fun block =>
+        match block.terminator with
+        | .exit (.returnU64s values) => values.size == 2
+        | .exit (.returnU64 _) | .exit (.returnState _) | .exit (.okState _) => false
+        | _ => true do
+      throwError s!"{method.ixName} lost its complete Option return frame"
   let some echoBoundedU128 := program.methods.find? (·.ixName == "echoBoundedU128")
     | throwError "missing projected wide bounded-vector return method"
   let some echoOptionU128 := program.methods.find? (·.ixName == "echoOptionU128")
     | throwError "missing projected wide Option return method"
   match echoBoundedU128.entry, echoOptionU128.entry with
   | .raw wideArray, .raw wideOption =>
-      unless wideArray.tag == 27 &&
+      unless wideArray.tag == 39 &&
           wideArray.returnBorshPlan == some (.boundedArray 2 #[8, 8]) &&
           wideArray.returnDataLen == 36 && wideArray.returnScratchBytes == 44 &&
           wideArray.canonical.contains "borsh-return-schema.array.2.[8,8]" &&
-          wideOption.tag == 29 && wideOption.returnBorshPlan == some (.option #[8, 8]) &&
+          wideOption.tag == 40 && wideOption.returnBorshPlan == some (.option #[8, 8]) &&
           wideOption.returnDataLen == 17 && wideOption.returnScratchBytes == 25 &&
           wideOption.canonical.contains "borsh-return-schema.option.[8,8]" do
         throwError s!"wrong wide Borsh return plans: {repr wideArray}, {repr wideOption}"
@@ -425,63 +584,58 @@ elab "#pf_guard_entry_adapter" : command => do
     match Emit.emitAsm program with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless asm.contains "raw_walk_loop_route" &&
-      asm.contains "call packed" && asm.contains "call borshOptions" &&
-      asm.contains "call boundedPair" && asm.contains "lddw r2, 16" &&
-      asm.contains "call borshSingletonPair" && asm.contains "lddw r2, 20" &&
-      asm.contains "call enumSmall" && asm.contains "call enumWide" &&
-      asm.contains "call enumOptional" &&
-      asm.contains "call echo128" && asm.contains "call echoBytes12" &&
-      asm.contains "call aggregate" && asm.contains "jne r1, 29, err_raw_aggregate" &&
-      asm.contains "call optionValue" && asm.contains "call taggedValue" &&
-      asm.contains "call boundedValues" && asm.contains "call boundedBytes" &&
-      asm.contains "call boundedString" &&
-      asm.contains "call echoBoundedValues" && asm.contains "call echoBoundedBytes" &&
-      asm.contains "call echoBoundedString" && asm.contains "call makeBoundedString" &&
-      asm.contains "call echoOptionValue" && asm.contains "call echoTaggedValue" &&
-      asm.contains "call echoPubkey" && asm.contains "jne r1, 33, err_raw_echoPubkey" &&
-      asm.contains "call echoBoundedU128" && asm.contains "call echoOptionU128" &&
-      asm.contains "borsh_return_invalid_echoBoundedValues_" &&
-      asm.contains "borsh_return_invalid_echoBoundedBytes_" &&
-      asm.contains "borsh_return_invalid_echoBoundedString_" &&
-      asm.contains "borsh_return_invalid_echoBoundedU128_" &&
-      asm.contains "borsh_return_option_present_echoOptionU128_" &&
-      asm.contains "borsh_schema_utf8_loop_echoBoundedString_b0_return_" &&
-      asm.contains "borsh_return_invalid_makeBoundedString_" &&
-      asm.contains "borsh_schema_utf8_loop_makeBoundedString_b0_return_" &&
-      asm.contains "borsh_return_option_present_echoOptionValue_" &&
-      asm.contains "borsh_return_enum_variant_echoTaggedValue_" &&
-      asm.contains "mul64 r2, 2" && asm.contains "mul64 r2, 1" &&
-      asm.contains "decode recursive target-owned Borsh schema with exact cursor consumption" &&
-      asm.contains "borsh_schema_none_optionValue_" &&
-      asm.contains "borsh_schema_enum_done_taggedValue_" &&
-      asm.contains "borsh_schema_array_skip_boundedValues_" &&
-      asm.contains "borsh_schema_bytes_skip_boundedBytes_" &&
-      asm.contains "borsh_schema_utf8_loop_boundedString_" &&
-      asm.contains "borsh_schema_utf8_cont_boundedString_" &&
-      asm.contains "jne r7, r9, err_raw_optionValue" &&
-      asm.contains "jne r7, r9, err_raw_taggedValue" &&
-      asm.contains "jne r7, r9, err_raw_boundedValues" &&
-      asm.contains "jgt r1, 4, err_raw_boundedValues" &&
-      asm.contains "jgt r1, 1, err_raw_aggregate" &&
-      asm.contains "ldxdw r1, [r8 + 9]" && asm.contains "ldxw r1, [r8 + 19]" &&
-      asm.contains "ldxh r1, [r8 + 35]" &&
-      asm.contains "optional_return_present_enumOptional_" &&
-      asm.contains "optional_return_invalid_enumOptional_" &&
-      asm.contains "jeq r1, 0, raw_route_match_" &&
-      asm.contains "jeq r1, 1, raw_route_match_" &&
-      asm.contains "call sol_set_return_data" &&
-      asm.contains "authenticate the declared executable program account" &&
-      asm.contains "ldxb r1, [r8 + 9]" &&
-      asm.contains "ldxdw r1, [r8 + 10]" &&
-      asm.contains "jlt r2, 5, raw_route_next_" &&
-      asm.contains "jgt r2, 21, raw_route_next_" &&
-      asm.contains "decode a bounded Borsh Option suffix with exact cursor consumption" &&
-      asm.contains "jne r1, 1, err_raw_borshOptions" &&
-      asm.contains "jne r7, r9, err_raw_borshOptions" &&
-      asm.contains "ja raw_generated_entry" &&
-      asm.contains "call initialize" do
-    throwError "packed and generated entry assembly paths are not both present"
+  for marker in #[
+      "raw_walk_loop_route", "call packed", "call borshOptions", "call boundedPair",
+      "lddw r2, 16", "call borshSingletonPair", "lddw r2, 20", "call enumSmall",
+      "call enumWide", "call enumOptional", "call echo128", "call echoBytes12",
+      "call aggregate", "jne r1, 29, err_raw_aggregate", "call optionValue",
+      "call taggedValue", "call boundedValues", "call boundedBytes", "call boundedString",
+      "call echoBoundedValues", "call echoBoundedBytes", "call echoBoundedString",
+      "call makeBoundedString", "call echoOptionValue", "call echoTaggedValue",
+      "call echoPubkey", "jne r1, 33, err_raw_echoPubkey", "call bytesEqual",
+      "call stringsEqual", "call bytesLess", "call stringsLess", "call bytesContains",
+      "call stringsContains", "call bytesStartsWith", "call stringsStartsWith",
+      "call bytesEndsWith", "call stringsEndsWith", "call bytesFindIndex",
+      "call stringsFindIndex", "call echoBoundedU128", "call echoOptionU128",
+      "borsh_schema_utf8_loop_stringsEqual_0",
+      "borsh_schema_utf8_loop_stringsEqual_9", "borsh_schema_utf8_loop_stringsLess_0",
+      "borsh_schema_utf8_loop_stringsLess_9", "borsh_schema_utf8_loop_stringsContains_0",
+      "borsh_schema_utf8_loop_stringsContains_9",
+      "borsh_schema_utf8_loop_stringsStartsWith_0",
+      "borsh_schema_utf8_loop_stringsStartsWith_9",
+      "borsh_schema_utf8_loop_stringsEndsWith_0",
+      "borsh_schema_utf8_loop_stringsEndsWith_9",
+      "borsh_schema_utf8_loop_stringsFindIndex_0",
+      "borsh_schema_utf8_loop_stringsFindIndex_9",
+      "borsh_return_option_present_bytesFindIndex_",
+      "borsh_return_option_present_stringsFindIndex_",
+      "borsh_return_invalid_echoBoundedValues_",
+      "borsh_return_invalid_echoBoundedBytes_", "borsh_return_invalid_echoBoundedString_",
+      "borsh_return_invalid_echoBoundedU128_",
+      "borsh_return_option_present_echoOptionU128_",
+      "borsh_schema_utf8_loop_echoBoundedString_b0_return_",
+      "borsh_return_invalid_makeBoundedString_",
+      "borsh_schema_utf8_loop_makeBoundedString_b0_return_",
+      "borsh_return_option_present_echoOptionValue_",
+      "borsh_return_enum_variant_echoTaggedValue_", "mul64 r2, 2", "mul64 r2, 1",
+      "decode recursive target-owned Borsh schema with exact cursor consumption",
+      "borsh_schema_none_optionValue_", "borsh_schema_enum_done_taggedValue_",
+      "borsh_schema_array_skip_boundedValues_", "borsh_schema_bytes_skip_boundedBytes_",
+      "borsh_schema_utf8_loop_boundedString_", "borsh_schema_utf8_cont_boundedString_",
+      "jne r7, r9, err_raw_optionValue", "jne r7, r9, err_raw_taggedValue",
+      "jne r7, r9, err_raw_boundedValues", "jgt r1, 4, err_raw_boundedValues",
+      "jgt r1, 1, err_raw_aggregate", "ldxdw r1, [r8 + 9]", "ldxw r1, [r8 + 19]",
+      "ldxh r1, [r8 + 35]", "optional_return_present_enumOptional_",
+      "optional_return_invalid_enumOptional_", "jeq r1, 0, raw_route_match_",
+      "jeq r1, 1, raw_route_match_", "call sol_set_return_data",
+      "authenticate the declared executable program account", "ldxb r1, [r8 + 9]",
+      "ldxdw r1, [r8 + 10]", "jlt r2, 5, raw_route_next_", "jgt r2, 21, raw_route_next_",
+      "decode a bounded Borsh Option suffix with exact cursor consumption",
+      "jne r1, 1, err_raw_borshOptions", "jne r7, r9, err_raw_borshOptions",
+      "ja raw_generated_entry", "call initialize"
+    ] do
+    unless asm.contains marker do
+      throwError s!"raw/generated entry assembly is missing {marker}"
   let idl := Idl.emitProgramIdl program
   unless idl.contains "\"name\": \"initialize\"" && !idl.contains "\"name\": \"packed\"" do
     throwError "target IDL exposed protocol-owned raw wire as a generated instruction"

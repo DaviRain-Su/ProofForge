@@ -414,6 +414,7 @@ private partial def opStaticPayloadsWellFormed : Op → Bool
           data.all (fun word => word.value?.all staticPayloadsWellFormed) &&
             bump.all staticPayloadsWellFormed
       | .component call => call.allValues staticPayloadsWellFormed
+  | .errorTyped frame => frame.values.all staticPayloadsWellFormed
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
 
 def Op.wellFormed (op : Op) : Bool :=
@@ -533,6 +534,7 @@ partial def hasAccountView (ops : Array Op) : Bool :=
         | .invoke _ _ data _ bump =>
             data.any (fun word => word.value?.any valHasAccountView) ||
               bump.any valHasAccountView
+    | .errorTyped frame => frame.values.any valHasAccountView
     | .joinLocal _ | .errorOverflow | .errorNamed _ => false
     | .forBody _ body => hasAccountView body
 

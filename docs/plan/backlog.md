@@ -56,7 +56,8 @@ STATICCALL success、exact returndata 与 nonzero signer 收口到 typed closed 
 div/mod 已固定 checked 除零 revert 策略；EVM-RT-2e 已加入 schema-resolved ordered static
 UInt64 store，为 CALL 前后可见的 lock effect 提供 sound foundation；R4-006 已补齐 full-width
 gas/basefee/prevrandao/gaslimit 并钉死 Cancun opcode 语义；R4-007 已让所有 source
-`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R4-008 已把 production
+`.errorNamed` 叶自动进入 zero-argument custom-error ABI metadata；R4-016 又以
+target-neutral typed frame 支持 1..4 个显式 `UInt64` 字段的 source custom error；R4-008 已把 production
 full-width environment lowering 收口到 generic Component bridge；R5-009 已在其上组合
 reusable ReentrancyGuard policy。并行 EVM
 UInt256 线现已补齐 typed comparison/bitwise/shift/div/mod。
@@ -103,6 +104,11 @@ R1-028 shared allocation-free UInt64 ceiling log2/log10/log256/sqrt；
 R1-029 shared allocation-free full-precision UInt64 mulDiv；
 R1-030 shared allocation-free full-precision UInt64 ceiling mulDiv；
 R1-031 shared allocation-free scaled UInt64 fixed-point policy；
+R1-032 shared allocation-free bounded bytes/String active-prefix equality；
+R1-033 shared allocation-free bounded bytes/String unsigned lexicographic ordering；
+R1-034 shared allocation-free bounded bytes/String substring search；
+R1-035 shared allocation-free bounded bytes/String prefix/suffix matching；
+R1-036 shared allocation-free bounded bytes/String first-match position；
 这些都是阶段内可复用组件切片，不代表 R3/R5 整体完成。
 R0-002 已把“达到主流环境能力”固定为 shared bounded language、target Runtime 和 reusable
 SDK policy 三层，并按 F0 shared substrate、F1 Runtime、F2 policy、F3 lifecycle 排序；详见
@@ -454,6 +460,49 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   kernel。BatchSizer/EvmPriceBand 分别拥有 scale/divisor/error/persistence policy；没有新增
   target effect、allocation、pointer 或 physical layout。typed fixed-point value、scale type、
   cast/conversion、signed/wider fixed point 继续 fail closed。详见 `docs/plan/tasks/r1-031.md`。
+
+- R1-032 shared bounded bytes/String equality 已完成：`BoundedBytes.equals` 持有唯一的
+  compile-time bounded active-prefix scan，`BoundedString.equals` 通过 compiler-erased
+  `asBytes` 直接复用；两者拒绝 over-capacity/unequal-length frame，并忽略 inactive fixed
+  slots。String 与 Rust 一样把 strict UTF-8 当作 checked constructor/target codec invariant，
+  不在每次比较时重复 validation，也不做 normalization/locale policy。RawEntry 与 EvmBounded
+  分别绑定双 Borsh frame 和双 adjacent ABI tail；不新增 Runtime/Ops/IR/CFG/Component/Emit、
+  allocation、pointer 或 shared wire layout。详见 `docs/plan/tasks/r1-032.md`。
+
+- R1-033 shared bounded bytes/String ordering 已完成：Core 提供 typed `LexOrder`、checked
+  `compareLex?` 和 contract-facing `isLexLess`；后者以一个 compile-time bounded scan 按
+  unsigned active bytes 比较，首个差异决定顺序、相同前缀由较短值优先，并忽略 inactive
+  fixed slots。String 通过 compiler-erased byte view 复用且不引入 normalization/collation。
+  RawEntry tags 29/30 与 EvmBounded 分别验证 canonical Borsh/ABI 双输入和 Bool policy；没有
+  新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared wire。详见
+  `docs/plan/tasks/r1-033.md`。
+
+- R1-034 shared bounded bytes/String substring search 已完成：`BoundedBytes.contains` 接受独立
+  compile-time capacities，以单一 static product scan 覆盖 empty/present/absent/overlap，并在
+  扫描前拒绝任一 malformed length；`BoundedString.contains` 通过 compiler-erased byte view
+  复用，UTF-8 仍由 constructor/codec gate 持有。Extract generic static Nat range evaluation
+  精确保留 `capacity * needleCapacity`，没有新增 Runtime/Ops/IR/CFG/Component/Emit case。
+  RawEntry tags 31/32 与独立 `EvmSearch` Example 分别绑定 dual Borsh/ABI 输入；详见
+  [R1-034](tasks/r1-034.md)。
+
+- R1-035 shared bounded bytes/String prefix/suffix matching 已完成：`startsWith`/`endsWith` 与
+  `contains` 复用同一个 static product-scan kernel，private mode 只选择任意起点、起点 0 或
+  唯一末尾起点；empty/exact/proper/longer/absent 与 malformed-length policy 均 fail closed，
+  inactive slots 不影响结果。String 继续复用 compiler-erased byte view，RawEntry tags 33–36
+  与 EvmSearch 的四个 ABI methods 分别绑定 dual Borsh/ABI 输入；未新增 Runtime/Ops/IR/CFG/
+  Component/Extract/Emit case、allocation、pointer 或 shared wire。详见
+  [R1-035](tasks/r1-035.md)。
+
+- R1-036 shared bounded bytes/String first-match position 已完成：`BoundedBytes.findIndex?`
+  返回 typed `Option UInt64`，以同一 static product scan 的 private position+1 frame 保留首个
+  overlap match；empty needle 为 `some 0`，absent/longer/malformed 为 `none`，inactive tail
+  不参与结果。`BoundedString.findIndex?` 返回 UTF-8 byte offset，不引入 normalization 或
+  scalar-index policy。Extract 只把 effect-free bounded scalar loop 放进既有 join local，并在
+  constructed Option 出口验证 exact two-leaf frame；SVM RawEntry tags 37/38 与独立
+  EvmFindIndex ABI consumer 分别绑定 canonical Borsh / `(bool,uint64)` output。EVM emitter
+  统一声明已有 4096-byte low-memory scratch contract，解除 solc bounded-loop StackTooDeep，
+  未增加 feature-specific Runtime/Ops/IR/CFG/Component/Emit case、allocation 或 pointer。详见
+  [R1-036](tasks/r1-036.md)。
 
 - R3-001 persistent SVM SDK foundation 已完成：`Svm.Sdk` 组合 POD Field、fixed Vec/Queue、
   ordered Map/RBMap、one-based allocator 与 canonical initialization；JobQueue/TicketLine 在
@@ -1089,6 +1138,13 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   Ops/IR/main Emit recipe。EvmCtx digest `b4a1d16740330566`、bytecode 3,802 B；Anvil 核对
   positive base fee 与普通非 blob 调用 index 0 的 exact zero hash。详见
   `docs/plan/tasks/r4-015.md`。
+
+- R4-016 EVM parameterized source custom errors 已完成：Extract 将普通 Lean error constructor
+  的 1..4 个显式、唯一 `UInt64` 字段保存为 Core typed frame，CFG 与 EVM IR 不丢失字段顺序；
+  EVM 从同一 descriptor 派生 selector、ABI JSON 与 bounded revert words，并复用既有
+  `LogError.ErrorPlan` interpreter。SVM 显式擦除 payload 到当前 named program error；zero-field
+  constructor 保持既有 selector-only 行为。更宽、匿名、隐式、多态、递归和超限字段 fail
+  closed。详见 `docs/plan/tasks/r4-016.md`。
 
 - E-U256-004 checked division/modulo 已完成：typed `Division` query 通过既有 `WideWord`
   component 固定打包两个四-limb word，由 target interpreter 在 `div`/`mod` 前统一拒绝零

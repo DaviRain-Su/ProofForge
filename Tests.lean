@@ -66,6 +66,7 @@ import Tests.CrossTargetCodecSpec
 import Tests.EvmBuildSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
+import Tests.EvmSearchSpec
 import Tests.EvmStaticStorageSpec
 import Tests.EvmOrderedStorageSpec
 import Tests.EvmEffectStateSpec
@@ -80,6 +81,7 @@ import Tests.EvmStorageEnumerableSetSpec
 import Tests.EvmStorageEnumerableMapSpec
 import Tests.EvmStorageCheckpointsSpec
 import Tests.EvmSafeCastSpec
+import Tests.EvmTypedErrorSpec
 import Tests.CoreMathSpec
 import Tests.EvmPausableSpec
 import Tests.TipJarSpec

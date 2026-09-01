@@ -306,6 +306,8 @@ partial def toLegacyOp : Op → Except String ProofForge.Ops.Op
   | .okState value => return .okState (← toLegacyVal value)
   | .errorOverflow => pure .errorOverflow
   | .errorNamed name => pure (.errorNamed name)
+  | .errorTyped _ =>
+      throw "extract/unsupported: legacy adapter cannot represent parameterized source errors"
   | .returnU64 value => return .returnU64 (← toLegacyVal value)
   | .returnState value => return .returnState (← toLegacyVal value)
   | .ext (.svm (.invoke programIx metas data seeds bump)) => do

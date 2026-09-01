@@ -242,6 +242,39 @@ private def outOfRange : BoundedBytes 4 :=
 private def malformedLength : BoundedBytes 4 :=
   { length := 5, values := #v[0x61, 0x62, 0x63, 0x64] }
 
+private def asciiWithDirtyTail : BoundedBytes 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0xff] }
+
+private def abd : BoundedBytes 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x64, 0] }
+
+private def asciiText : BoundedString 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0] }
+
+private def dirtyAsciiText : BoundedString 4 :=
+  { length := 3, values := #v[0x61, 0x62, 0x63, 0xff] }
+
+private def invalidText : BoundedString 4 :=
+  { length := 2, values := #v[0xc0, 0x80, 0, 0] }
+
+private def middle : BoundedBytes 2 :=
+  { length := 1, values := #v[0x62, 0xff] }
+
+private def suffix : BoundedBytes 2 :=
+  { length := 2, values := #v[0x62, 0x63] }
+
+private def emptyNeedle : BoundedBytes 2 :=
+  { length := 0, values := #v[0xff, 0xff] }
+
+private def malformedNeedle : BoundedBytes 2 :=
+  { length := 3, values := #v[0x61, 0x62] }
+
+private def middleText : BoundedString 2 :=
+  { length := 1, values := #v[0x62, 0xff] }
+
+private def emptyText : BoundedString 2 :=
+  { length := 0, values := #v[0xff, 0xff] }
+
 #guard ascii.wellFormed
 #guard ascii.size == 3
 #guard ascii.get? 1 == some 0x62
@@ -256,6 +289,53 @@ private def malformedLength : BoundedBytes 4 :=
 #guard !truncated.isValidUtf8
 #guard !outOfRange.isValidUtf8
 #guard !malformedLength.isValidUtf8
+#guard ascii.equals asciiWithDirtyTail
+#guard asciiWithDirtyTail.equals ascii
+#guard !ascii.equals cent
+#guard !ascii.equals abd
+#guard !malformedLength.equals malformedLength
+#guard ascii.contains middle
+#guard ascii.contains suffix
+#guard ascii.contains emptyNeedle
+#guard asciiWithDirtyTail.contains suffix
+#guard !cent.contains middle
+#guard !ascii.contains malformedNeedle
+#guard !malformedLength.contains emptyNeedle
+#guard ascii.findIndex? middle == some 1
+#guard ascii.findIndex? suffix == some 1
+#guard ascii.findIndex? emptyNeedle == some 0
+#guard asciiWithDirtyTail.findIndex? suffix == some 1
+#guard cent.findIndex? middle == none
+#guard ascii.findIndex? malformedNeedle == none
+#guard malformedLength.findIndex? emptyNeedle == none
+#guard ascii.startsWith emptyNeedle
+#guard ascii.startsWith middle == false
+#guard ascii.startsWith ({ length := 2, values := #v[0x61, 0x62] } : BoundedBytes 2)
+#guard ascii.endsWith emptyNeedle
+#guard ascii.endsWith suffix
+#guard !ascii.endsWith middle
+#guard !ascii.startsWith malformedNeedle
+#guard !malformedLength.endsWith emptyNeedle
+#guard ascii.compareLex? asciiWithDirtyTail == some .equal
+#guard ascii.compareLex? abd == some .less
+#guard abd.compareLex? ascii == some .greater
+#guard ascii.compareLex? cent == some .less
+#guard malformedLength.compareLex? malformedLength == none
+#guard asciiText.equals dirtyAsciiText
+#guard dirtyAsciiText.equals asciiText
+#guard !asciiText.equals invalidText
+#guard invalidText.equals invalidText
+#guard asciiText.contains middleText
+#guard asciiText.contains emptyText
+#guard dirtyAsciiText.contains middleText
+#guard asciiText.findIndex? middleText == some 1
+#guard asciiText.findIndex? emptyText == some 0
+#guard dirtyAsciiText.findIndex? middleText == some 1
+#guard asciiText.startsWith emptyText
+#guard asciiText.endsWith middleText == false
+#guard dirtyAsciiText.endsWith ({ length := 2, values := #v[0x62, 0x63] } : BoundedString 2)
+#guard asciiText.compareLex? dirtyAsciiText == some .equal
+#guard invalidText.compareLex? invalidText == some .equal
 #guard (BoundedString.ofBytes? euro).map (·.wellFormed) == some true
 #guard (BoundedString.ofBytes? surrogate).isNone
 

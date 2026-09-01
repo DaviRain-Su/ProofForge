@@ -144,6 +144,158 @@ def pop? {n : Nat} (bytes : BoundedBytes n) : Option (BoundedBytes n × UInt8) :
 def clear {n : Nat} (bytes : BoundedBytes n) : BoundedBytes n :=
   ofVec bytes.asVec.clear
 
+/-- Active-prefix byte equality for one bounded byte type. Both frames must be canonical, inactive
+backing bytes are ignored, and the scan is bounded by compile-time capacity rather than input. -/
+@[pf_inline] def equals {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then false
+  else if UInt64.ofNat capacity < right.length.toUInt64 then false
+  else if left.length != right.length then false
+  else Id.run do
+    let mut equal : UInt64 := 1
+    let mut visited : UInt64 := 0
+    for i in [0:capacity] do
+      let byteEqual : UInt64 := if left.values[i]! == right.values[i]! then 1 else 0
+      equal := equal &&& if UInt64.ofNat i < left.length.toUInt64 then byteEqual else 1
+      visited := visited + 1
+    return equal == 1 && visited == UInt64.ofNat capacity
+
+/-- One allocation-free static product scan shared by index/contains/prefix/suffix. `startMode` is
+a private lowering detail: zero accepts any in-range candidate, one only start zero, and two only
+the unique final start. The result uses private position+1 encoding so zero remains "not found". -/
+@[pf_inline] private def searchIndexUnchecked {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity)
+    (startMode : UInt64) : UInt64 := Id.run do
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  let lastStart := haystackLength - needleLength
+  -- Bit zero records the current candidate; higher bits hold the first matched position+1.
+  let mut scanState : UInt64 := 1
+  let mut visited : UInt64 := 0
+  for flat in [0:capacity * needleCapacity] do
+    let start := flat / needleCapacity
+    let offset := flat % needleCapacity
+    let activeStart :=
+      if startMode == 0 then UInt64.ofNat start ≤ lastStart
+      else if startMode == 1 then start == 0
+      else UInt64.ofNat start == lastStart
+    let activeOffset := UInt64.ofNat offset < needleLength
+    let byteEqual : UInt64 :=
+      if activeStart && activeOffset then
+        if haystack.values[start + offset]! == needle.values[offset]! then 1 else 0
+      else 1
+    let found := scanState >>> 1
+    let candidate := scanState &&& 1
+    let matched := candidate &&& byteEqual
+    let candidateComplete := offset + 1 == needleCapacity
+    let nextFound :=
+      if found == 0 && candidateComplete && activeStart && matched == 1 then
+        UInt64.ofNat start + 1
+      else found
+    let nextCandidate := if candidateComplete then 1 else matched
+    scanState := nextCandidate ||| (nextFound <<< 1)
+    visited := visited + 1
+  return if visited == UInt64.ofNat (capacity * needleCapacity) then scanState >>> 1 else 0
+
+@[pf_inline] private def searchUnchecked {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity)
+    (startMode : UInt64) : Bool :=
+  let position := searchIndexUnchecked haystack needle startMode
+  position != 0
+
+/-- Allocation-free active-prefix substring search. Both frames must be canonical. Empty needles
+match every canonical haystack; otherwise neither inactive tail can affect the shared static scan. -/
+@[pf_inline] def contains {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Bool :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then false
+  else if UInt64.ofNat needleCapacity < needleLength then false
+  else if needleLength == 0 then true
+  else if haystackLength < needleLength then false
+  else searchUnchecked haystack needle 0
+
+/-- Return the first zero-based active-prefix byte position of a canonical needle. Empty needles
+match at zero, invalid frames and longer needles return `none`, and inactive tails are ignored. -/
+@[pf_inline] def findIndex? {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Option UInt64 :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then none
+  else if UInt64.ofNat needleCapacity < needleLength then none
+  else if needleLength == 0 then some 0
+  else if haystackLength < needleLength then none
+  else
+    let position := searchIndexUnchecked haystack needle 0
+    if position == 0 then none else some (position - 1)
+
+/-- Rust-style active-prefix test with independent fixed carrier capacities. Invalid frames and a
+needle longer than the haystack fail closed; an empty canonical needle is a prefix. -/
+@[pf_inline] def startsWith {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Bool :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then false
+  else if UInt64.ofNat needleCapacity < needleLength then false
+  else if needleLength == 0 then true
+  else if haystackLength < needleLength then false
+  else searchUnchecked haystack needle 1
+
+/-- Rust-style active-suffix test. The checked subtraction identifies the only possible suffix
+start, then the same allocation-free bounded matcher owns byte comparison. -/
+@[pf_inline] def endsWith {capacity needleCapacity : Nat}
+    (haystack : BoundedBytes capacity) (needle : BoundedBytes needleCapacity) : Bool :=
+  let haystackLength := haystack.length.toUInt64
+  let needleLength := needle.length.toUInt64
+  if UInt64.ofNat capacity < haystackLength then false
+  else if UInt64.ofNat needleCapacity < needleLength then false
+  else if needleLength == 0 then true
+  else if haystackLength < needleLength then false
+  else searchUnchecked haystack needle 2
+
+/-- One compile-time bounded unsigned-byte scan. `ordering` is a private lowering detail:
+zero remains undecided/equal, one means left is smaller, and two means right is smaller. The public
+API exposes only Bool or `LexOrder`, never this scalar state. -/
+@[pf_inline] private def lexLessUnchecked {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool := Id.run do
+  let leftLength := left.length.toUInt64
+  let rightLength := right.length.toUInt64
+  let commonLength := if leftLength < rightLength then leftLength else rightLength
+  let mut ordering : UInt64 := 0
+  let mut visited : UInt64 := 0
+  for i in [0:capacity] do
+    let active := UInt64.ofNat i < commonLength
+    let undecided := ordering == 0
+    let leftByte := left.values[i]!
+    let rightByte := right.values[i]!
+    ordering :=
+      if active && undecided then
+        if leftByte < rightByte then 1
+        else if rightByte < leftByte then 2
+        else 0
+      else ordering
+    visited := visited + 1
+  return visited == UInt64.ofNat capacity &&
+    (ordering == 1 || (ordering == 0 && leftLength < rightLength))
+
+/-- Checked strict lexicographic ordering for contract policy. Invalid frames are never ordered,
+and inactive fixed-frame slots cannot affect the result. -/
+@[pf_inline] def isLexLess {capacity : Nat}
+    (left right : BoundedBytes capacity) : Bool :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then false
+  else if UInt64.ofNat capacity < right.length.toUInt64 then false
+  else lexLessUnchecked left right
+
+/-- Typed three-way source-level ordering. The first differing unsigned active byte decides; if one
+active prefix exhausts first, the shorter value sorts first. Invalid frames return `none`. -/
+@[pf_inline] def compareLex? {capacity : Nat}
+    (left right : BoundedBytes capacity) : Option LexOrder :=
+  if UInt64.ofNat capacity < left.length.toUInt64 then none
+  else if UInt64.ofNat capacity < right.length.toUInt64 then none
+  else if lexLessUnchecked left right then some .less
+  else if lexLessUnchecked right left then some .greater
+  else some .equal
+
 private def isContinuation (byte : Nat) : Bool := 0x80 ≤ byte && byte ≤ 0xbf
 
 /-- Strict Unicode scalar UTF-8 validation over the active prefix. It rejects truncated,
@@ -195,7 +347,7 @@ end ProofForge.Core.Value.BoundedBytes
 
 namespace ProofForge.Core.Value.BoundedString
 
-def asBytes (text : BoundedString capacity) : BoundedBytes capacity :=
+@[pf_inline] def asBytes (text : BoundedString capacity) : BoundedBytes capacity :=
   { length := text.length, values := text.values }
 
 def wellFormed (text : BoundedString capacity) : Bool := text.asBytes.isValidUtf8
@@ -203,6 +355,46 @@ def size (text : BoundedString capacity) : UInt64 := text.length.toUInt64
 def isEmpty (text : BoundedString capacity) : Bool := text.length == 0
 def getByte? (text : BoundedString capacity) (index : UInt64) : Option UInt8 :=
   text.asBytes.get? index
+
+/-- Unicode-string equality is active-prefix byte equality. As with Rust `String`, validity is a
+carrier invariant enforced by checked constructors and boundary codecs, not work repeated by each
+comparison. No normalization or locale policy is inferred. -/
+@[pf_inline] def equals {capacity : Nat}
+    (left right : BoundedString capacity) : Bool :=
+  left.asBytes.equals right.asBytes
+
+/-- Rust-style `String::contains` semantics over the validated UTF-8 byte carrier. The needle is a
+byte substring rather than a Unicode-scalar or locale-aware pattern, and the shared bounded scan
+performs no allocation. -/
+@[pf_inline] def contains {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (needle : BoundedString needleCapacity) : Bool :=
+  text.asBytes.contains needle.asBytes
+
+/-- First UTF-8 byte offset of an exact validated String needle. -/
+@[pf_inline] def findIndex? {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (needle : BoundedString needleCapacity) : Option UInt64 :=
+  text.asBytes.findIndex? needle.asBytes
+
+/-- Exact UTF-8 byte-prefix policy over the validated String carrier. -/
+@[pf_inline] def startsWith {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (prefixValue : BoundedString needleCapacity) : Bool :=
+  text.asBytes.startsWith prefixValue.asBytes
+
+/-- Exact UTF-8 byte-suffix policy over the validated String carrier. -/
+@[pf_inline] def endsWith {capacity needleCapacity : Nat}
+    (text : BoundedString capacity) (suffix : BoundedString needleCapacity) : Bool :=
+  text.asBytes.endsWith suffix.asBytes
+
+/-- Strict UTF-8 is a carrier/boundary invariant, so String ordering reuses the one unsigned-byte
+lexicographic policy without normalization or locale-dependent collation. -/
+@[pf_inline] def compareLex? {capacity : Nat}
+    (left right : BoundedString capacity) : Option LexOrder :=
+  left.asBytes.compareLex? right.asBytes
+
+/-- Checked strict ordering shares the byte implementation and returns false for malformed frames. -/
+@[pf_inline] def isLexLess {capacity : Nat}
+    (left right : BoundedString capacity) : Bool :=
+  left.asBytes.isLexLess right.asBytes
 
 /-- Checked conversion keeps the byte and string carriers physically independent in source while
 reusing one strict UTF-8 contract. -/

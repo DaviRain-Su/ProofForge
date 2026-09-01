@@ -1,3 +1,5 @@
+import ProofForge.Core.Codec
+
 namespace ProofForge.Core.Ops
 
 /-- Target-independent comparison used by source values and control flow. -/
@@ -34,6 +36,48 @@ inductive Val (Ext : Type) where
 
 instance : Inhabited (Val Ext) := ⟨.lit 0⟩
 
+/-- One logical field of a source error constructor. Core owns declaration-order names, scalar
+metadata, and source-limb values; targets own selectors, wire geometry, and error codes. -/
+structure ErrorArg (V : Type) where
+  name : String
+  type : Core.Codec.Scalar
+  parts : Array V
+  deriving BEq, Repr, Inhabited
+
+/-- Target-neutral fixed error frame preserved from a parameterized `Except.error` constructor. -/
+structure ErrorFrame (V : Type) where
+  constructor : String
+  args : Array (ErrorArg V)
+  deriving BEq, Repr, Inhabited
+
+def ErrorArg.mapValues (mapValue : α → β) (arg : ErrorArg α) : ErrorArg β :=
+  { arg with parts := arg.parts.map mapValue }
+
+def ErrorFrame.mapValues (mapValue : α → β) (frame : ErrorFrame α) : ErrorFrame β :=
+  { frame with args := frame.args.map (·.mapValues mapValue) }
+
+def ErrorArg.mapValuesM [Monad m] (mapValue : α → m β) (arg : ErrorArg α) :
+    m (ErrorArg β) := do
+  return { arg with parts := ← arg.parts.mapM mapValue }
+
+def ErrorFrame.mapValuesM [Monad m] (mapValue : α → m β) (frame : ErrorFrame α) :
+    m (ErrorFrame β) := do
+  return { frame with args := ← frame.args.mapM (·.mapValuesM mapValue) }
+
+def ErrorFrame.values (frame : ErrorFrame V) : Array V :=
+  frame.args.flatMap (·.parts)
+
+/-- Generic frame invariant. The fixed source representation uses little UInt64 limbs; a target
+may impose a smaller scalar vocabulary or total-word bound before emission. -/
+def ErrorFrame.wellFormed (valueWellFormed : V → Bool) (frame : ErrorFrame V) : Bool :=
+  let names := frame.args.toList.map (·.name)
+  !frame.constructor.isEmpty && !frame.args.isEmpty &&
+    names.length == names.eraseDups.length &&
+    frame.args.all fun arg =>
+      !arg.name.isEmpty && arg.type.isWellFormed &&
+        arg.parts.size == (arg.type.byteWidth + 7) / 8 &&
+        arg.parts.all valueWellFormed
+
 /--
 Target-independent effects and control flow. `OpExt V` is target-owned and may carry typed
 metadata plus source values, but cannot recursively contain `Op`.
@@ -61,6 +105,7 @@ inductive Op (ValExt : Type) (OpExt : Type → Type) where
   | okState (value : Val ValExt)
   | errorOverflow
   | errorNamed (name : String)
+  | errorTyped (frame : ErrorFrame (Val ValExt))
   | returnU64 (value : Val ValExt)
   | returnState (value : Val ValExt)
   | ext (payload : OpExt (Val ValExt))
@@ -90,6 +135,7 @@ partial def Op.wellFormed (arity : ValExt → Nat)
   | .storeField _ value | .okState value | .returnU64 value | .returnState value =>
       value.wellFormed arity
   | .joinLocal _ | .errorOverflow | .errorNamed _ => true
+  | .errorTyped frame => frame.wellFormed (·.wellFormed arity)
   | .checkedAddU64 lhs rhs | .checkedSubU64 lhs rhs | .checkedMulU64 lhs rhs
   | .checkedDivU64 lhs rhs | .checkedModU64 lhs rhs =>
       lhs.wellFormed arity && rhs.wellFormed arity

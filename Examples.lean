@@ -48,6 +48,8 @@ import Examples.TokenStateView
 import Examples.SelfLog
 import Examples.EvmCtx
 import Examples.EvmBounded
+import Examples.EvmSearch
+import Examples.EvmFindIndex
 import Examples.EvmStaticCounter
 import Examples.EvmStaticRoster
 import Examples.EvmOrderedStorage
@@ -65,6 +67,7 @@ import Examples.EvmCheckpointBook
 import Examples.EvmCheckpointTrace
 import Examples.EvmSafeCastAccumulator
 import Examples.EvmSafeCastConfig
+import Examples.EvmTypedErrors
 import Examples.BatchSizer
 import Examples.EvmPriceBand
 import Examples.GuardedPayout

@@ -25,6 +25,14 @@ No host collection or native pointer may be persisted in a target artifact.
   w3 : UInt64
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- Typed source-level result for allocation-free lexicographic policies. Applications consume the
+ordering in ordinary Lean and retain ownership of their public ABI/result policy. -/
+inductive LexOrder where
+  | less
+  | equal
+  | greater
+  deriving Repr, DecidableEq, Inhabited, BEq
+
 /--
 Exactly `n` logical bytes in source byte order, packed into four little-endian `UInt64` limbs.
 

@@ -1931,6 +1931,20 @@ private def asOptionStorage (env : Environment) (e : Expr) : Option (Ops.Val × 
       | _ => none
     | none => none
 
+/-- Unwrap only sequencing carriers around a returned Option. `peelControl` intentionally erases
+`Option.some` for payload-oriented consumers, so fixed result framing must inspect it first. -/
+private def asConstructedOptionResult (env : Environment) : Nat → Expr →
+    Option (Ops.Val × Ops.Val)
+  | 0, e => asOptionStorage env e
+  | fuel' + 1, e =>
+      let e := peelLets (strip e)
+      if (isConstNamed e ``Pure.pure || endsWith e ".pure" ||
+          isConstNamed e ``ForInStep.done || endsWith e ".done") &&
+          e.getAppArgs.size ≥ 1 then
+        asConstructedOptionResult env fuel' e.getAppArgs[e.getAppArgs.size - 1]!
+      else
+        asOptionStorage env e
+
 /-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
 private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array Ops.Val :=
   match fuel with
@@ -2761,19 +2775,69 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
     else none
   else none
 
-private def errorCtorName (e : Expr) : Option String :=
+private inductive DecodedError where
+  | notError
+  | overflow
+  | named (name : String)
+  | typed (frame : Core.Ops.ErrorFrame Ops.Val)
+  | unsupported (reason : String)
+
+/-- Preserve direct parameterized source-error constructors as one target-neutral fixed frame.
+The first safe slice accepts one through four explicitly named UInt64 fields. Unsupported payloads
+must not silently degrade to selector-only errors. -/
+private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
   let e := peelControl 8 e
   if isConstNamed e ``Except.error then
     let args := e.getAppArgs
     if h : args.size > 0 then
-      let ctor := strip args[args.size - 1]
-      match ctor.getAppFn.constName? with
-      | some n =>
-        let last := Core.IR.lastName n.toString
-        if last == "overflow" then none else some last
-      | none => none
-    else none
-  else none
+      let applied := strip args[args.size - 1]
+      match applied.getAppFn.constName? with
+      | none => .notError
+      | some ctorName =>
+        let name := Core.IR.lastName ctorName.toString
+        match env.find? ctorName with
+        | some (.ctorInfo ctor) =>
+          if ctor.numFields == 0 then
+            if name == "overflow" then .overflow else .named name
+          else if name == "overflow" then
+            .unsupported "overflow error constructor cannot carry fields"
+          else if ctor.numFields > 4 then
+            .unsupported "parameterized source error supports at most four UInt64 fields"
+          else
+            match env.find? ctor.induct with
+            | some (.inductInfo info) =>
+              if info.numParams != 0 || info.numIndices != 0 || info.isRec then
+                .unsupported "parameterized source error must be a nonrecursive monomorphic enum"
+              else if applied.getAppArgs.size < ctor.numFields then
+                .unsupported "parameterized source error lost constructor fields"
+              else Id.run do
+                let mut type := ctor.type
+                let mut errorArgs : Array (Core.Ops.ErrorArg Ops.Val) := #[]
+                let mut names : Array String := #[]
+                for fieldIndex in [:ctor.numFields] do
+                  let .forallE fieldName domain body binderInfo := strip type
+                    | return .unsupported "parameterized source error lost field metadata"
+                  if fieldName.isAnonymous || binderInfo != .default then
+                    return .unsupported "parameterized source error fields must be explicitly named"
+                  if domain.consumeMData.getAppFn.constName? != some ``UInt64 then
+                    return .unsupported "parameterized source error currently supports only UInt64 fields"
+                  let fieldName := fieldName.toString
+                  if fieldName.isEmpty || names.contains fieldName then
+                    return .unsupported "parameterized source error field names must be unique"
+                  let some fieldExpr := applied.getAppArgs[applied.getAppArgs.size - ctor.numFields + fieldIndex]?
+                    | return .unsupported "parameterized source error lost field value"
+                  let some value := val env fieldExpr
+                    | return .unsupported "parameterized source error field is not a scalar value"
+                  names := names.push fieldName
+                  errorArgs := errorArgs.push { name := fieldName, type := .uint64, parts := #[value] }
+                  type := body
+                let frame : Core.Ops.ErrorFrame Ops.Val := { constructor := name, args := errorArgs }
+                if frame.wellFormed (·.wellFormed IR.ValKind.arity) then .typed frame
+                else .unsupported "parameterized source error frame is malformed"
+            | _ => .unsupported "parameterized source error has no enum metadata"
+        | _ => if name == "overflow" then .overflow else .named name
+    else .notError
+  else .notError
 
 private def isErrorOverflow (e : Expr) : Bool :=
   let e := peelControl 8 e
@@ -4201,7 +4265,7 @@ private def invokeOpsWithRet
     Except String (Array Ops.Op) := do
   return invokeOps inv (← invokeRet env e inv)
 
-private def forRangeEnd (e : Expr) : Option Nat :=
+private def forRangeEnd (env : Environment) (e : Expr) : Option Nat :=
   let rec rangeEnd (fuel : Nat) (e : Expr) : Option Nat :=
     match fuel with
     | 0 => none
@@ -4210,7 +4274,7 @@ private def forRangeEnd (e : Expr) : Option Nat :=
       if endsWith e ".mk" || e.getAppFn.constName?.isSome then
         let rargs := e.getAppArgs
         if rargs.size ≥ 2 then
-          match asLit 8 rargs[1]! with
+          match asStaticLit env 16 rargs[1]! with
           | some (.lit n) => some n.toNat
           | _ => rargs.findSome? (rangeEnd fuel')
         else rargs.findSome? (rangeEnd fuel')
@@ -4339,7 +4403,7 @@ private def findForIn (env : Environment) (e : Expr) : Option (Nat × Ops.Val) :
         else none
       else if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then
         let args := e.getAppArgs
-        let n? := args.findSome? forRangeEnd
+        let n? := args.findSome? (forRangeEnd env)
         let rec findAdd (fuel : Nat) (e : Expr) : Option Ops.Val :=
           match fuel with
           | 0 => none
@@ -4380,7 +4444,7 @@ private def findForBodyExpr (env : Environment) (e : Expr) : Option (Nat × Expr
         if (findForIn env e).isSome then none
         else
           let args := e.getAppArgs
-          let n? := args.findSome? forRangeEnd
+          let n? := args.findSome? (forRangeEnd env)
           -- `forIn xs init (fun i r => body)`：最后一个 λ 是循环体。
           let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
             match fuel with
@@ -4464,7 +4528,7 @@ private def findForStateExpr (env : Environment) (e : Expr) :
         | _ => e.getAppArgs.findSome? (findForExpr fuel')
   let loopParts? := do
     let forExpr ← findForExpr 32 e
-    let n ← forExpr.getAppArgs.findSome? forRangeEnd
+    let n ← forExpr.getAppArgs.findSome? (forRangeEnd env)
     let rec lastLam (fuel : Nat) (e : Expr) : Option Expr :=
       match fuel with
       | 0 => none
@@ -6135,11 +6199,21 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       .ok (snapshotStateUpdate localDepth #[op, .okState ret])
     | _ => .ok #[op]
   else
+  let optionResult? := asConstructedOptionResult env 8 e
+  let decodedError := decodeErrorCtor env e
   let e := peelControl 8 e
-  if isErrorOverflow e then
+  if let .overflow := decodedError then
     .ok #[.errorOverflow]
-  else if let some name := errorCtorName e then
+  else if let .named name := decodedError then
     .ok #[.errorNamed name]
+  else if let .typed frame := decodedError then
+    .ok #[.errorTyped frame]
+  else if let .unsupported reason := decodedError then
+    .error s!"extract/unsupported: {reason}"
+  else if let some (tag, payload) := optionResult? then
+    -- A constructed Option is already a fixed logical frame. Target codecs retain ownership of
+    -- the tag width and wire layout; extraction only preserves both source leaves through joins.
+    .ok #[.returnU64 tag, .returnU64 payload]
   else if let some values := asOkNoop env e then
     if stateful && values.size == 1 then
       .ok #[.okState values[0]!]
@@ -6339,6 +6413,43 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
     else
       e.getAppArgs.any (loopUnderBind fuel' · underBind)
 
+/-- A scalar let whose producer owns bounded control/effects needs one join local before its caller
+can compare or transform the result. Ordinary scalar lets remain eligible for direct substitution. -/
+private def isSequencedScalarProducer (env : Environment) (type value : Expr) : Bool :=
+  type.consumeMData.getAppFn.constName? == some ``UInt64 &&
+    (mentionsSvmEffect env 16 value || (findForIn env value).isSome ||
+      (findForBodyExpr env value).isSome)
+
+/-- Find one effect-free UInt64 helper below a pure expression wrapper whose bounded control must
+be evaluated before the enclosing comparison/arithmetic expression. Never cross a control
+boundary: branch arms and bind continuations retain their original evaluation order. Effectful
+producers require an explicit source `let`, so replacing a repeated pure subtree cannot coalesce
+effects. -/
+private def nestedSequencedScalarHelper? (env : Environment) (e : Expr) : Option Expr :=
+  let rec visit (fuel : Nat) (candidate : Expr) : Option Expr :=
+    match fuel with
+    | 0 => none
+    | fuel' + 1 =>
+      let candidate := candidate.consumeMData
+      let head := strip candidate
+      if isConstNamed head ``ite || isConstNamed head ``dite ||
+          isConstNamed head ``Bind.bind || endsWith head ".bind" then
+        none
+      else
+        match unfoldUserHelper env candidate with
+        | some (name, unfolded) =>
+            match env.find? name with
+            | some (.defnInfo info) =>
+                if (resultType 16 info.type).consumeMData.getAppFn.constName? == some ``UInt64 &&
+                    !mentionsSvmEffect env 16 unfolded && (decodeEvmEffect env unfolded).isNone &&
+                    ((findForIn env unfolded).isSome || (findForBodyExpr env unfolded).isSome) then
+                  some candidate
+                else
+                  candidate.getAppArgs.findSome? (visit fuel')
+            | _ => candidate.getAppArgs.findSome? (visit fuel')
+        | none => candidate.getAppArgs.findSome? (visit fuel')
+  e.getAppArgs.findSome? (visit 16)
+
 def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     (stateful : Bool := false) (preserveLocals : Bool := false)
     (localDepth : Nat := 0) (stateType? : Option Name := none)
@@ -6398,14 +6509,13 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
         (findInvoke env 16 value).isSome || mentionsSvmEffect env 16 value ||
           (decodeEvmEffect env value).isSome ||
           (findForIn env value).isSome || (findForBodyExpr env value).isSome
-      let scalarSvmEffect :=
-        ty.consumeMData.getAppFn.constName? == some ``UInt64 && mentionsSvmEffect env 16 value
-      if scalarSvmEffect then
+      let scalarControlProducer := isSequencedScalarProducer env ty value
+      if scalarControlProducer then
         match decodeExpr env fuel' value (preserveLocals := preserveLocals)
             (localDepth := localDepth + 1) (stateType? := stateType?)
             (deepScalars := deepScalars) with
         | .error reason =>
-            return .error s!"extract/unsupported: scalar effect producer: {reason}"
+            return .error s!"extract/unsupported: scalar control producer: {reason}"
         | .ok producerOps =>
           match lowerBindProducer localDepth producerOps with
           | some (joinedProducer, true, true) =>
@@ -6416,9 +6526,9 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             | .ok continuationOps =>
                 return .ok (#[.joinLocal localDepth] ++ joinedProducer ++ continuationOps)
             | .error reason =>
-                return .error s!"extract/unsupported: scalar effect continuation: {reason}"
+                return .error s!"extract/unsupported: scalar control continuation: {reason}"
           | _ =>
-              return .error "extract/unsupported: scalar effect producer has no control value"
+              return .error "extract/unsupported: scalar control producer has no value"
       else if !effectful then
         if let some source := sequentialStateSource? env ty value stateType? then
           match decodeYieldState env 128 localDepth value (stateType? := stateType?)
@@ -6457,6 +6567,27 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
             (localDepth := localDepth) (stateType? := stateType?)
             (deepScalars := deepScalars)
     | _ => pure ()
+    if let some producer := nestedSequencedScalarHelper? env e then
+      match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
+          (localDepth := localDepth + 1) (stateType? := stateType?)
+          (deepScalars := deepScalars) with
+      | .error reason =>
+          return .error s!"extract/unsupported: nested scalar control producer: {reason}"
+      | .ok producerOps =>
+        match lowerBindProducer localDepth producerOps with
+        | some (joinedProducer, true, true) =>
+            let marker := mkApp (mkConst ``localRef) (mkNatLit localDepth)
+            let continuation := e.replace fun candidate =>
+              if candidate == producer then some marker else none
+            match decodeExpr env fuel' continuation (stateful := stateful)
+                (preserveLocals := preserveLocals) (localDepth := localDepth + 1)
+                (stateType? := stateType?) (deepScalars := deepScalars) with
+            | .ok continuationOps =>
+                return .ok (#[.joinLocal localDepth] ++ joinedProducer ++ continuationOps)
+            | .error reason =>
+                return .error s!"extract/unsupported: nested scalar control continuation: {reason}"
+        | _ =>
+            return .error "extract/unsupported: nested scalar control producer has no value"
     -- Branch decoders normalize their arms independently. Zeta-reducing the entire branch here
     -- duplicates let-bound State transitions into every projection before the sequential-state
     -- boundary can consume them, making composed record updates exponential.

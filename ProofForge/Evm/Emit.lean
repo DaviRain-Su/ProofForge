@@ -4,6 +4,7 @@ import ProofForge.Evm.Payable
 import ProofForge.Evm.Payable.Emit
 import ProofForge.Evm.Codec.Emit
 import ProofForge.Evm.Component.Emit
+import ProofForge.Evm.LogError.Emit
 import ProofForge.Crypto.Keccak
 
 namespace ProofForge.Evm.Emit
@@ -59,6 +60,12 @@ private def staticU64SlotOf (p : IR.Program) (name : String) : Except String Nat
   | none => throw s!"extract/unsupported: unknown field {name}"
 
 private def nl : String := "\n"
+
+/-- Generated EVM code owns only a fixed low-memory scratch window. Two maximum target-local ABI
+frames cover output headers/staging and the bounded codec frame. Advertising that derived contract
+to solc enables its stack-to-memory pass without introducing a source-level heap or allocator. -/
+private def memoryGuardBytes : Nat :=
+  2 * Codec.maxBoundedArrayLocalWords * 32
 
 private def yulLit (n : UInt64) : String :=
   if n == 0 then "0"
@@ -554,6 +561,42 @@ private partial def materializeVal (p : IR.Program) (indent paramPrefix : String
         let e ← loadVal p paramPrefix paramCount paramWidths v
         return ("", e, st)
 
+/-- Validate the first generic source-error surface. Each named field is one ABI `uint64`
+word; wider and structured fields stay closed until their source codec contract is explicit. -/
+private def typedErrorAbiTypes (frame : Core.Ops.ErrorFrame Ops.Val) : Except String (Array String) := do
+  unless frame.wellFormed (·.wellFormed Ops.ValKind.arity) do
+    throw "extract/unsupported: malformed typed error frame"
+  if frame.args.isEmpty || frame.args.size > LogError.maxErrorArgs then
+    throw "extract/unsupported: typed error requires one to four fields"
+  let mut types := #[]
+  for arg in frame.args do
+    unless arg.type == .uint 64 && arg.parts.size == 1 do
+      throw "extract/unsupported: typed error fields must be named UInt64 values"
+    types := types.push (← Codec.abiType arg.type)
+  return types
+
+/-- Materialize one validated source error frame and hand its ABI geometry to the existing
+target-local custom-error interpreter. Selector, argument order, and ABI metadata all consume
+the same typed frame. -/
+private def emitTypedError (p : IR.Program) (indent paramPrefix : String)
+    (paramCount : Nat) (paramWidths : Array Core.Codec.Scalar)
+    (frame : Core.Ops.ErrorFrame Ops.Val) (st : Render) : Except String (String × Render) := do
+  let abiTypes ← typedErrorAbiTypes frame
+  let mut prelude := ""
+  let mut words := #[]
+  let mut st := st
+  for arg in frame.args do
+    let (pre, word, st') ←
+      materializeVal p indent paramPrefix paramCount paramWidths arg.parts[0]! st
+    prelude := prelude ++ pre
+    words := words.push word
+    st := st'
+  let revert ← LogError.Emit.emitRevert { indent } {
+    selector := Keccak.selector frame.constructor abiTypes
+    args := words
+  }
+  return (prelude ++ revert, st)
+
 private def brace (inner : String) : String :=
   "{" ++ nl ++ inner ++ "}"
 
@@ -765,6 +808,10 @@ private partial def emitOps (p : IR.Program) (indent paramPrefix : String)
           acc := acc ++ indent ++ revert0 ++ nl
     | .errorNamed name =>
         acc := acc ++ revertNamed indent name
+    | .errorTyped frame =>
+        let (txt, st') ← emitTypedError p indent paramPrefix paramCount paramWidths frame st
+        acc := acc ++ txt
+        st := st'
     | .returnU64 v =>
         let (pre, value, st') ←
           match st.last with
@@ -1108,6 +1155,11 @@ private def emitCFGCase (p : IR.Program) (method : IR.Method)
           finalState := next
       | .errorOverflow => body := body ++ indent ++ revert0 ++ nl
       | .errorNamed name => body := body ++ revertNamed indent name
+      | .errorTyped frame =>
+          let (text, next) ←
+            emitTypedError p indent "arg" method.paramCount paramTypes frame finalState
+          body := body ++ text
+          finalState := next
       | .returnU64 value =>
           -- A return after a mutation owns its explicit value; substituting the effect carrier
           -- leaks an event/write result into the source ABI (for example an ERC-20 Boolean).
@@ -1393,6 +1445,7 @@ def emitYul (p : IR.Program) : Except String String := do
     "  }" ++ nl ++
     "  object " ++ q runtimeName ++ " {" ++ nl ++
     "    code {" ++ nl ++
+    "      mstore(64, memoryguard(" ++ toString memoryGuardBytes ++ "))" ++ nl ++
     renderAddr20Helper ++
     renderFixedBytesHelper ++
     globalGuard ++
@@ -1572,6 +1625,19 @@ private def errorAbiExpired : String :=
 private def errorAbiNamed (name : String) : String :=
   "{\"type\":\"error\",\"name\":\"" ++ escapeJson name ++ "\",\"inputs\":[]}"
 
+private def typedErrorIdentity (frame : Core.Ops.ErrorFrame Ops.Val) : Except String String := do
+  let types ← typedErrorAbiTypes frame
+  return frame.constructor ++ "(" ++ String.intercalate "," types.toList ++ ")"
+
+private def errorAbiTyped (frame : Core.Ops.ErrorFrame Ops.Val) : Except String String := do
+  let types ← typedErrorAbiTypes frame
+  let mut inputs := #[]
+  for i in [0:frame.args.size] do
+    inputs := inputs.push ("{\"name\":\"" ++ escapeJson frame.args[i]!.name ++
+      "\",\"type\":\"" ++ types[i]! ++ "\"}")
+  return "{\"type\":\"error\",\"name\":\"" ++ escapeJson frame.constructor ++
+    "\",\"inputs\":[" ++ String.intercalate "," inputs.toList ++ "]}"
+
 /-- Collect unique metadata names from the full structured op tree in first-use order. ABI
 metadata must follow the same `ite`/bounded-`forBody` nesting that the Yul emitter consumes. -/
 private partial def collectOpNames (nameOf : IR.Op → Option String)
@@ -1599,6 +1665,21 @@ private def collectNamedErrorNames (ops : Array IR.Op) : Array String :=
     | .errorNamed name => some name
     | _ => none) ops
 
+/-- Collect typed source errors through the same structured control-flow tree as emission.
+ABI-identity deduplication happens after validation so malformed descriptors cannot disappear
+behind an earlier declaration. -/
+private partial def collectTypedErrorFrames (ops : Array IR.Op) :
+    Array (Core.Ops.ErrorFrame Ops.Val) :=
+  ops.foldl (init := #[]) fun acc op =>
+    let acc :=
+      match op with
+      | .errorTyped frame => acc.push frame
+      | _ => acc
+    match op with
+    | .ite _ _ _ t f => acc ++ collectTypedErrorFrames t ++ collectTypedErrorFrames f
+    | .forBody _ body => acc ++ collectTypedErrorFrames body
+    | _ => acc
+
 private partial def hasErrorLeaf (pred : IR.Op → Bool) (ops : Array IR.Op) : Bool :=
   ops.any fun op =>
     pred op ||
@@ -1619,6 +1700,14 @@ def emitAbiChecked (p : IR.Program) : Except String String := do
     p.entries.foldl (init := #[]) fun acc m =>
       (collectNamedErrorNames m.ops).foldl (init := acc) fun acc n =>
         if acc.contains n then acc else acc.push n
+  let mut typedErrors := #[]
+  let mut typedErrorIds := #[]
+  for method in p.entries do
+    for frame in collectTypedErrorFrames method.ops do
+      let identity ← typedErrorIdentity frame
+      unless typedErrorIds.contains identity do
+        typedErrorIds := typedErrorIds.push identity
+        typedErrors := typedErrors.push frame
   let needIns := p.entries.any (fun m =>
     hasErrorLeaf (fun
       | .component call => call.emitsInsufficient
@@ -1657,6 +1746,7 @@ def emitAbiChecked (p : IR.Program) : Except String String := do
       (if needCap then #[errorAbiCapExceeded] else #[]) ++
       (if needExpired then #[errorAbiExpired] else #[]) ++
       namedErrors.map errorAbiNamed ++
+      (← typedErrors.mapM errorAbiTyped) ++
       (if needRecv then #[receiveAbi] else #[]) ++
       entryItems
   return "[

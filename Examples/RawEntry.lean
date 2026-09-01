@@ -183,12 +183,73 @@ Runtime operation, allocation, pointer, or emitter recipe. -/
 @[pf_entry, pf_svm_raw 26 2 0]
 def echoPubkey (_s : State) (key : Pubkey) : Pubkey := key
 
-/-- Wide dynamic return (`svm-rt-005`): each `UInt128` element is two little-endian limbs. -/
+/-- Active-prefix bytes compare independently of inactive fixed-frame slots. Both operands retain
+their own canonical Borsh length prefix and no target byte operation is introduced. -/
 @[pf_entry, pf_svm_raw 27 2 0]
+def bytesEqual (_s : State) (left right : BoundedBytes 8) : Bool :=
+  left.equals right
+
+/-- Strictly validated UTF-8 inputs compare by their canonical byte sequence. -/
+@[pf_entry, pf_svm_raw 28 2 0]
+def stringsEqual (_s : State) (left right : BoundedString 8) : Bool :=
+  left.equals right
+
+/-- Typed lexicographic policy stays in Core; this protocol chooses a Bool "strictly before"
+result and keeps Borsh geometry in the raw adapter. -/
+@[pf_entry, pf_svm_raw 29 2 0]
+def bytesLess (_s : State) (left right : BoundedBytes 8) : Bool :=
+  left.isLexLess right
+
+/-- UTF-8 validation remains adapter-owned; ordering reuses the same unsigned active-byte scan. -/
+@[pf_entry, pf_svm_raw 30 2 0]
+def stringsLess (_s : State) (left right : BoundedString 8) : Bool :=
+  left.isLexLess right
+
+/-- Active-prefix substring search is an ordinary bounded SDK policy; the raw adapter owns only
+the two canonical Borsh frames and the Bool result. -/
+@[pf_entry, pf_svm_raw 31 2 0]
+def bytesContains (_s : State) (haystack needle : BoundedBytes 8) : Bool :=
+  haystack.contains needle
+
+/-- Strict UTF-8 decoding remains at the protocol boundary before the shared byte search runs. -/
+@[pf_entry, pf_svm_raw 32 2 0]
+def stringsContains (_s : State) (text needle : BoundedString 8) : Bool :=
+  text.contains needle
+
+/-- Prefix/suffix helpers share Core policy and the existing dual-frame adapter geometry. -/
+@[pf_entry, pf_svm_raw 33 2 0]
+def bytesStartsWith (_s : State) (value prefixValue : BoundedBytes 8) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry, pf_svm_raw 34 2 0]
+def stringsStartsWith (_s : State) (value prefixValue : BoundedString 8) : Bool :=
+  value.startsWith prefixValue
+
+@[pf_entry, pf_svm_raw 35 2 0]
+def bytesEndsWith (_s : State) (value suffix : BoundedBytes 8) : Bool :=
+  value.endsWith suffix
+
+@[pf_entry, pf_svm_raw 36 2 0]
+def stringsEndsWith (_s : State) (value suffix : BoundedString 8) : Bool :=
+  value.endsWith suffix
+
+/-- First-match search exposes typed Option policy while the raw adapter independently owns its
+canonical Borsh option return frame. -/
+@[pf_entry, pf_svm_raw 37 2 0]
+def bytesFindIndex (_s : State) (haystack needle : BoundedBytes 8) : Option UInt64 :=
+  haystack.findIndex? needle
+
+@[pf_entry, pf_svm_raw 38 2 0]
+def stringsFindIndex (_s : State) (text needle : BoundedString 8) : Option UInt64 :=
+  text.findIndex? needle
+
+/-- Wide dynamic return (`svm-rt-005`): each `UInt128` element is two little-endian limbs. -/
+@[pf_entry, pf_svm_raw 39 2 0]
 def echoBoundedU128 (_s : State) (items : BoundedVec UInt128 2) : BoundedVec UInt128 2 := items
 
 /-- Wide tagged return: `Option UInt128` uses tag + two payload limbs. -/
-@[pf_entry, pf_svm_raw 29 2 0]
+@[pf_entry, pf_svm_raw 40 2 0]
 def echoOptionU128 (_s : State) (value : Option UInt128) : Option UInt128 := value
+
 
 end Examples.RawEntry

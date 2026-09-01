@@ -65,4 +65,24 @@ def makeBoundedString (_s : State) (length : UInt32)
     (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) : BoundedString 8 :=
   { length, values := #v[b0, b1, b2, b3, b4, b5, b6, b7] }
 
+/-- Allocation-free equality observes only the canonical active byte prefixes. -/
+@[pf_entry]
+def bytesEqual (_s : State) (left right : BoundedBytes 4) : Bool :=
+  left.equals right
+
+/-- ABI strings are strictly validated before ordinary source-level byte equality. -/
+@[pf_entry]
+def stringsEqual (_s : State) (left right : BoundedString 4) : Bool :=
+  left.equals right
+
+/-- The application exposes one Bool policy while Core retains the typed three-way ordering. -/
+@[pf_entry]
+def bytesLess (_s : State) (left right : BoundedBytes 4) : Bool :=
+  left.isLexLess right
+
+/-- ABI UTF-8 gates precede the shared unsigned active-byte ordering policy. -/
+@[pf_entry]
+def stringsLess (_s : State) (left right : BoundedString 4) : Bool :=
+  left.isLexLess right
+
 end Examples.EvmBounded

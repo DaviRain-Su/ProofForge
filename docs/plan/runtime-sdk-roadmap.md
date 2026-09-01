@@ -128,6 +128,11 @@ R1-028 shared UInt64 ceiling logarithms/root、
 R1-029 shared full-precision UInt64 mulDiv、
 R1-030 shared full-precision UInt64 ceiling mulDiv、
 R1-031 shared scaled UInt64 fixed-point policy、
+R1-032 shared bounded bytes/String active-prefix equality、
+R1-033 shared bounded bytes/String unsigned lexicographic ordering、
+R1-034 shared bounded bytes/String substring search、
+R1-035 shared bounded bytes/String prefix/suffix matching、
+R1-036 shared bounded bytes/String first-match position、
 R3-026 persistent SVM BitSet、
 R3-027 persistent SVM enumerable Set、R3-028 fixed-account version header、R3-029 typed
 transient wide vectors，以及 R2-010 checked
@@ -162,7 +167,9 @@ environment lowering 收口到 generic Component bridge；UInt256 div/mod 也已
 [R3-029](tasks/r3-029.md)、[R3-009](tasks/r3-009.md)、[R3-011](tasks/r3-011.md)、
 [R1-023](tasks/r1-023.md)、[R1-024](tasks/r1-024.md)、[R1-025](tasks/r1-025.md)、
 [R1-026](tasks/r1-026.md)、[R1-027](tasks/r1-027.md)、[R1-028](tasks/r1-028.md)、
-[R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md) 和 [R1-031](tasks/r1-031.md)。
+[R1-029](tasks/r1-029.md)、[R1-030](tasks/r1-030.md)、[R1-031](tasks/r1-031.md)、
+[R1-032](tasks/r1-032.md)、[R1-033](tasks/r1-033.md)、[R1-034](tasks/r1-034.md)、
+[R1-035](tasks/r1-035.md)、[R1-036](tasks/r1-036.md)。
 这不表示 R2/R4/R5 已完成。
 
 ## 5. 阶段拆分
@@ -337,6 +344,45 @@ R1-031 已完成 shared scaled UInt64 fixed-point policy：`Core.FixedPoint.UInt
 overflow。SVM/EVM consumer 各自拥有 state/error policy；不新增 Runtime/Ops/IR/CFG/Component/
 Emit、allocation、pointer 或 shared physical layout。typed fixed-point values/scale/casts、signed/
 wider fixed point 继续 fail closed。详见 [R1-031](tasks/r1-031.md)。
+
+R1-032 已完成 shared bounded bytes/String equality：`BoundedBytes.equals` 用 compile-time
+bounded scan 比较 canonical active prefix；`BoundedString.equals` 通过 compiler-erased byte
+view 复用同一个 scan。它忽略 inactive fixed slots，并在扫描前拒绝 over-capacity 或 unequal
+length。String validity 由 checked constructor 与 target codec 持有，比较本身不重复 UTF-8
+validation，也不做 normalization/locale policy。RawEntry/EvmBounded 分别验证双 Borsh frame
+与双 adjacent ABI dynamic tail；不新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer
+或 shared wire。详见 [R1-032](tasks/r1-032.md)。
+
+R1-033 已完成 shared bounded bytes/String ordering：Core 的 typed `LexOrder`/`compareLex?`
+保留三态 source policy，`isLexLess` 则为 contract consumer 提供一个 compile-time bounded
+unsigned-byte scan；首个不同 active byte 决定顺序，相同前缀由较短值优先，inactive slots 不
+影响结果。String 通过 compiler-erased byte view 复用，不重复 UTF-8 validation，也不做
+normalization/locale collation。RawEntry/EvmBounded 分别绑定 canonical 双 Borsh frame 与双
+adjacent ABI tail；不新增 Runtime/Ops/IR/CFG/Component/Emit、allocation、pointer 或 shared
+wire。详见 [R1-033](tasks/r1-033.md)。
+
+R1-034 已完成 shared bounded bytes/String substring search：`BoundedBytes.contains` 用单一
+compile-time static product scan 支持独立 haystack/needle capacities、empty needle、overlap 与
+malformed-length fail-closed；`BoundedString.contains` 复用同一 byte policy，UTF-8 继续由 target
+codec gate 持有。Extract 只补 generic closed Nat range evaluation，未增加 search-specific
+Runtime/Ops/IR/CFG/Component/Emit case。RawEntry 与独立 EvmSearch Example 分别绑定 dual
+Borsh/ABI inputs。详见 [R1-034](tasks/r1-034.md)。
+
+R1-035 已完成 shared bounded bytes/String prefix/suffix matching：`startsWith`/`endsWith` 与
+`contains` 收敛到一个 static product-scan kernel，private scalar mode 选择任意/首位/末位起点，
+并统一 empty、longer、malformed-length 与 inactive-tail policy。String 仍复用 compiler-erased
+byte view，UTF-8 由 target codec gate 持有；RawEntry tags 33–36 与 EvmSearch 分别验证 dual
+Borsh/ABI inputs。未增加 Runtime/Ops/IR/CFG/Component/Extract/Emit case。详见
+[R1-035](tasks/r1-035.md)。
+
+R1-036 已完成 shared bounded bytes/String first-match position：`findIndex?` 复用同一 static
+product scan，并以 private position+1 scalar 保留第一个 overlap match，public API 返回 typed
+`Option UInt64`；empty needle 是 `some 0`，absent/longer/malformed 是 `none`。String 结果是
+validated UTF-8 byte offset。Extract 以既有 join local 顺序化 effect-free bounded scalar loop，
+并 fail-closed 验证 constructed Option 的 exact two-leaf frame；RawEntry tags 37/38 与
+EvmFindIndex 分别绑定 Borsh Option 和 ABI `(bool,uint64)`。EVM runtime Yul 统一声明 fixed
+4096-byte low-memory scratch contract，使 solc 可进行 stack-to-memory lowering；没有新增
+search-specific Runtime/Ops/IR/CFG/Component/Emit case。详见 [R1-036](tasks/r1-036.md)。
 
 1. 已增加逻辑 `FixedBytes n`、`UInt128` 和 shared `UInt256` 的 source/profile 规则；fixed
    source limbs 不包含 target wire/account/storage geometry。
@@ -678,8 +724,11 @@ EvmCtx/TipJar 不再直接 import Runtime，Anvil 门与 block JSON 精确对照
 R4-007 已完成 source zero-argument custom-error ABI metadata：ABI emitter 从完整 structured
 op tree 收集 `.errorNamed`，与 Yul emitter 一样递归 `ite`/bounded `forBody`，按首次出现顺序
 去重并生成 `error Name()` JSON。应用新增 enum error 不再改 Emit 的 hard-coded error list；
-EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；
-parameterized source errors 仍需未来 typed IR contract。详见 [R4-007](tasks/r4-007.md)。
+EvmVecLog/Stack artifact 已包含 malformed/oob/empty。Yul、bytecode、IR/digest 全部不变；详见
+[R4-007](tasks/r4-007.md)。R4-016 在 Core 增加 target-neutral fixed error frame：普通 Lean
+constructor 的 1..4 个显式唯一 UInt64 字段贯穿 CFG/EVM，selector、ABI 和 revert words 从同一
+descriptor 派生并复用既有 LogError interpreter；SVM 则显式保留当前 named-code 语义。其余
+payload shapes fail closed。详见 [R4-016](tasks/r4-016.md)。
 
 R4-008 已把 R4-006 的 production full-width environment lowering 从 top-level value recipe
 迁到 `Evm.Environment.Query` + generic Component bridge。唯一 component interpreter 继续对每个
@@ -725,6 +774,11 @@ R4-015 增加 Cancun `Context.blobBaseFee : UInt256` 与
 source-order fixed-bytes 语义，每个四-limb 结果只观察一次 opcode；普通非 blob 调用的 absent
 index 精确返回零。不开放 blob payload、allocation 或新主 Emit case；详见
 [R4-015](tasks/r4-015.md)。
+
+R4-016 增加 target-neutral typed source-error frame。EVM 支持 1..4 个显式唯一 UInt64 字段，
+从同一 frame 派生 Solidity selector、ordered ABI words 与 JSON metadata，不再为每个应用 error
+增加 Runtime/Component/Emit recipe；SVM 有意擦除 payload 到既有 named program error。更宽、
+匿名、隐式、递归、多态和超限 payload 均 fail closed；详见 [R4-016](tasks/r4-016.md)。
 
 E-U256-002 已完成 unsigned compare 子切片：`WideWord.Comparison` 和唯一 component emitter
 覆盖 eq/lt/le/gt/ge，SDK 不再要求合约拼 limbs 或写 Yul relation；原 `ge256` canonical
