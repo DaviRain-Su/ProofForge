@@ -299,7 +299,7 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → 下一刀 **Tracks A–F closeout audit** 或 closeout audit
+1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → Tracks A–F closeout audit **done**（`tasks/svm-closeout-audit.md`） 或 closeout audit
 2. **并行**：`svm-app-003` 非 Phoenix 小例子；Tracks A–F closeout audit
 3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 

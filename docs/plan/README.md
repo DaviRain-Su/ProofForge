@@ -196,11 +196,11 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 
 | ID | 状态 | 内容 |
 |---|---|---|
-| [sf-000](tasks/sf-000.md) | todo | 证明基础设施成文 |
+| [sf-000](tasks/sf-000.md) | done | 证明基础设施成文 |
 | [sf-001](tasks/sf-001.md) | doing | Queue wrap push + 读回（nowrap 已在 main） |
 | [sf-002](tasks/sf-002.md) | doing | Queue wrap pop / peek / 往返（clear/advance 已在 main） |
-| [sf-003](tasks/sf-003.md) | todo | BoundedVec pop + setAt 读回 |
-| [sf-004](tasks/sf-004.md) | todo | Versioned 状态机 |
+| [sf-003](tasks/sf-003.md) | done | BoundedVec pop + setAt 读回 |
+| [sf-004](tasks/sf-004.md) | done | Versioned 状态机 |
 | [sf-005](tasks/sf-005.md) | done | StorageBitSet mask 代数 + 账户桥 |
 | [sf-006](tasks/sf-006.md) | done | TransientModel + Vector64 |
 | [sf-007](tasks/sf-007.md) | done | Bytes + Record64 + WideVec |
@@ -241,7 +241,7 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [svm-eng-001](tasks/svm-eng-001.md) | done | 形式化门进 CI（Lean 具名目标 + SVM ownership/no-sorry） |
 | [svm-eng-002](tasks/svm-eng-002.md) | done | 能力+证明双矩阵收口页（[svm-status-matrix.md](svm-status-matrix.md)） |
 
-本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → 下一刀 **Tracks A–F closeout audit**。
+本周默认：Track A–C + eng + `svm-rt-005` + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → Tracks A–F closeout audit **done**（见 [svm-closeout-audit](tasks/svm-closeout-audit.md)）。
 WASM PR #4/#5 仍开着不阻塞。
 
 
