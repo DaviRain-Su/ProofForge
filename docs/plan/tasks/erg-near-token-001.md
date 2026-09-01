@@ -16,4 +16,5 @@ depends-on: []
 
 ## Follow-up
 
-- Refactor `NearFungibleLedger.ft_transfer` to use `NearToken.addChecked` in `andThen` chains
+- Refactor `NearFungibleLedger.ft_transfer` / `ft_transfer_call` to use `NearToken.canSub`/`canAdd` + `ofLimbs` (delivered; storage step order preserved, digest `fa280d85ffcd8859`)
+- Wire `Except.andThen` + `subChecked`/`addChecked` in NEAR effectful increment methods once Extract supports `match`/`andThen` inside nested payable/void entry bodies
