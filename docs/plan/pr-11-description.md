@@ -13,7 +13,7 @@ Copy everything below the line into the PR body.
 | **PR** | https://github.com/DaviRain-Su/ProofForge/pull/11 |
 | **Branch** | `cursor/productization-split-4d63` → `main` |
 | **Scope** | **Entire productization slice lives in this PR** (prod-001 → prod-004). |
-| **Now** | prod-001…004 landed: Lake Sdk/Compiler split, CLI `--module`/`pf.toml`/`init`, templates, release workflow. |
+| **Now** | prod-001…004 implemented + locally verified (full SVM/EVM Registry assemble + clean-dir git require). Waiting on GitHub CI. |
 | **CI** | Ownership + Sdk import-closure + Sdk lib builds; full SVM/EVM digest lanes unchanged. |
 
 Authority doc: [`docs/plan/productization.md`](../productization.md) (§7 is the live checklist).
@@ -44,6 +44,9 @@ Authority doc: [`docs/plan/productization.md`](../productization.md) (§7 is the
 ## Verify
 
 ```text
+# Local full digest smoke (needs sbpf+solc):
+#   ./scripts/smoke_productization.sh
+#   lake exe pf -- build --target svm --out build/sbpf && lake exe pf -- build --target evm --out build/evm
 python3 scripts/check_ownership.py
 python3 scripts/check_sdk_import_closure.py
 lake build ProofForgeSvmSdk ProofForgeEvmSdk pf

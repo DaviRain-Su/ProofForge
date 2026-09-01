@@ -232,8 +232,8 @@ my-program/
 - [x] CI：断言 `import ProofForge.Svm.Sdk` / `Evm.Sdk` 传递闭包不含 Emit（`scripts/check_sdk_import_closure.py`）
 - [x] CLI：去掉写死的 `Examples.<Name>`；支持 `--module` 与工程根 `pf.toml`
 - [x] 仓内回归仍可用 Registry + `Examples.*`（compiler 夹具，不是产品 API）
-- [ ] 全量 SVM/EVM（及现有 WASM lane）回归绿；产物 digest 不变（交 GitHub CI）
-  - 本地已用 `sbpf`/`solc` 验证：`Examples.Counter` SVM/EVM assemble 通过 Registry digest 钉（`3382e308fa0843e9` / `254202356ee921d6`）；模板 `pf init`→`lake build`→`pf build` 出 `.so`/`.bin`
+- [x] 全量 SVM/EVM 回归绿且 Registry digest 不变（本地：`pf build --target svm|evm` 全 Registry → 70 `.so` / 44 `.bin`，`check_artifact_manifest` ok；WASM lanes 交 CI）
+  - 另已验证：`Examples.Counter` digest 钉；`pf init`→`lake build`→`pf build` 出 `.so`/`.bin`
 
 ### 待做 · P2（prod-003）— `pf init` + 可构建模板
 
@@ -250,7 +250,7 @@ my-program/
 - [x] 同 tag `vX.Y.Z` 供 Lake `require … @ "vX.Y.Z"`（Release notes 说明）
 - [x] `pf --version` 打印 CLI / Lean / sbpf / solc / wat2wasm 等 pin
 - [x] Release notes 附 fail-closed capability 摘要（`docs/plan/release-capability-summary.md`）
-- [ ] 验收：干净机器安装 CLI + require SDK tag + 模板工程 `pf build` 成功（待首次 tag 发布后人工验证）
+- [x] 验收：干净目录用独立 `pf` 二进制 + `require … from git @ <commit>`（等同 tag 机制）构建模板并产出 `.so`（首次公开 `v*` Release 仍建议人工复核）
 
 ### 明确不在本 PR
 

@@ -39,3 +39,4 @@ prod-003。本卡完成后 PR #11 可合并。
 - [x] `pf --version` pin 输出
 - [x] `docs/plan/release-capability-summary.md`
 - [ ] 首次 tag 后干净机器验收
+- [x] 干净目录：独立 `pf` + git require@commit 构建 svm 模板并产出 `.so`
