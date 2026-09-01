@@ -265,4 +265,26 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
           loadAccountWord? a demoQueueCountWord == loadAccountWord? b demoQueueCountWord
   | _, _ => false
 
+
+-- E∞: walked r7 instruction-data cursor (`svm-sem-006`)
+#guard (walkArgU64? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← counterInputMem 7 5
+      let (regs, finalMem) ← evalWalkArgToStack? rhsStackOffset mem
+      pure (regs .br1 == 5 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 5) &&
+        regs .br7 == mmInputStart + BitVec.ofNat 64 (counterArg0Offset + 8))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← counterInputMem 7 5
+      let (_, walkedMem) ← evalWalkArgToStack? rhsStackOffset mem
+      let (_, absMem) ← evalAbsArgToStack? mem
+      pure (loadv .m64 walkedMem rhsStackAddr == loadv .m64 absMem rhsStackAddr &&
+        loadv .m64 walkedMem rhsStackAddr == some (.vlong 5))) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec

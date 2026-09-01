@@ -1029,14 +1029,14 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   | .raw entry =>
       unless cancelByIdRaw.kind == .get && entry.tag == 10 && entry.accountCount == 9 &&
           entry.programAccount == 0 && entry.paramCount == 1 &&
-          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 22 do
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 39 do
         throwError s!"wrong raw CancelMultipleOrdersById adapter: {repr entry}"
   | .generated => throwError "CancelMultipleOrdersById lost its raw adapter"
   match cancelByIdFreeRaw.entry with
   | .raw entry =>
       unless cancelByIdFreeRaw.kind == .get && entry.tag == 11 && entry.accountCount == 4 &&
           entry.programAccount == 0 && entry.paramCount == 1 &&
-          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 22 do
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 39 do
         throwError s!"wrong raw CancelMultipleOrdersByIdWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelMultipleOrdersByIdWithFreeFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
@@ -1559,7 +1559,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jgt r2, 21, raw_route_next_" &&
       asm.contains "jeq r1, 8, raw_route_match_" &&
       asm.contains "jeq r1, 9, raw_route_match_" &&
-      asm.contains "jgt r2, 22, raw_route_next_" &&
+      asm.contains "jgt r2, 39, raw_route_next_" &&
       asm.contains "jeq r1, 10, raw_route_match_" &&
       asm.contains "jeq r1, 11, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&

@@ -166,7 +166,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   tags 8/9 CancelUpTo 在同一边界上增加 side + optional tick/search/cancel caps 的 Borsh
   option wire（5–21 bytes）与有界 FIFO filter；tag 9 无 status gate，tag 8 走 9-account
   withdraw 路径。tags 10/11 CancelMultipleOrdersById 接受官方
-  `tag || Borsh Vec<CancelOrderParams>` wire，本 profile 片容量为 1（5–22 bytes）；空 vec
+  `tag || Borsh Vec<CancelOrderParams>` wire，本 profile 片容量为 2（5–39 bytes）；空 vec
   为 noop（不 bump sequence、无 audit）。side/sequence MSB 不匹配、missing id、foreign owner
   跳过并仍 bump sequence + header-only；成功取消写一条 Reduce。tag 11 保留 free funds；
   tag 10 claim 本次释放量并保留 pre-existing free。Phoenix source 只做组合；没有新增
@@ -178,7 +178,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   remainder、full-book eviction、同 maker 聚合、其他 TIF/self-trade 策略 fail closed。Lean Spec
   钉 fee/posting 纯算术；Mollusk 覆盖 one/two-match fee 与 remainder 成功路径及 unsupported 形状。
 - **未支持（P5 remaining instructions/公网）**：完整 placement/matching 策略矩阵、runtime remaining
-  accounts、Token-2022 extension 语义、多 id CancelMultiple 满容量 Vec、全部 Phoenix-v1
+  accounts、Token-2022 extension 语义、CancelMultiple 超过本片容量 2 的 Vec / 满官方容量、全部 Phoenix-v1
   指令兼容与公网部署。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/

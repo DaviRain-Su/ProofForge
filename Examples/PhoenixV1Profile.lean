@@ -2610,15 +2610,52 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
         .error .overflow
 
 /--
+Cancel one resting order id for tags 10/11. Side/MSB mismatch, missing id, and foreign owner
+are skips that still emit a header-only Reduce (`recordIndex = 0`). Returns removed base lots.
+-/
+def cancelOneByIdFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+    (traderKey0 traderIndex side price sequence : UInt64) : Except Error UInt64 := do
+  if side ≠ 0 && side ≠ 1 then
+    .error .overflow
+  else
+    let encodedBid := sequence >>> 63 = 1
+    let skip := (side = 0 && !encodedBid) || (side = 1 && encodedBid)
+    let orderIndex :=
+      if skip || traderIndex = 0 then 0
+      else if side = 0 then layout.findBid price sequence
+      else layout.findAsk price sequence
+    let owner :=
+      if orderIndex = 0 then 0
+      else if side = 0 then layout.bidOwner orderIndex
+      else layout.askOwner orderIndex
+    let resting :=
+      if orderIndex = 0 || owner ≠ traderIndex then 0
+      else if side = 0 then layout.bidOrderSize orderIndex
+      else layout.askOrderSize orderIndex
+    let removed ←
+      if resting = 0 then .ok 0
+      else
+        reduceFreeFunds512At layout 2 3 traderKey0 side price sequence resting
+    let recordIndex := if removed = 0 then 0 else orderIndex
+    let _ := recordReduceAt recordIndex sequence price removed 0
+    .ok removed
+
+/-- Released lots for one successful cancel-by-id, after removal. -/
+def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
+    (side price removed : UInt64) : Except Error UInt64 :=
+  if removed = 0 then .ok 0
+  else if side = 0 then quoteLotsReleased512At layout price removed
+  else .ok removed
+
+/--
 Official Phoenix `CancelMultipleOrdersByIdWithFreeFunds` tag 11 wire:
-`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most one order id. Empty
-vectors are a no-op (no sequence bump, no audit batch). Side/sequence mismatches, missing ids,
-and foreign owners are skipped. A successful cancel appends one Reduce event and keeps collateral
-in free funds.
+`0b || Borsh Vec<CancelOrderParams>`. This profile slice accepts at most **two** order ids
+(`BoundedVec` capacity = 2). Empty vectors are a no-op. Each id is cancelled through the shared
+per-id helper; collateral stays in free funds.
 -/
 @[pf_entry, pf_svm_raw 11 4 0]
 def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
-    (orders : BoundedVec CancelOrderParams 1) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 2) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if isWritable 1 ≠ 0 || isWritable 2 = 0 || isWritable 3 ≠ 0 ||
         checkPdaSeeds 0 #[.ascii "log"] ≠ 0 then
@@ -2629,49 +2666,43 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
       checkPdaSeeds 0 #[.ascii "log"] ≠ 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
-    let layout := Examples.PhoenixV1.small 2
-    let order := orders.values[0]!
-    let side := order.side.toUInt64
-    if side ≠ 0 && side ≠ 1 then
+    let side0 := orders.values[0]!.side.toUInt64
+    let side1ok :=
+      orders.length = 1 ||
+        orders.values[1]!.side.toUInt64 = 0 ||
+        orders.values[1]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok then
       .error .overflow
     else
-      let encodedBid := order.sequence >>> 63 = 1
-      let skip := (side = 0 && !encodedBid) || (side = 1 && encodedBid)
+      let layout := Examples.PhoenixV1.small 2
       let traderKey0 := signerKey 3
       let traderIndex := layout.findTrader
         traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
-      let orderIndex :=
-        if skip || traderIndex = 0 then 0
-        else if side = 0 then layout.findBid order.price order.sequence
-        else layout.findAsk order.price order.sequence
-      let owner :=
-        if orderIndex = 0 then 0
-        else if side = 0 then layout.bidOwner orderIndex
-        else layout.askOwner orderIndex
-      let resting :=
-        if orderIndex = 0 || owner ≠ traderIndex then 0
-        else if side = 0 then layout.bidOrderSize orderIndex
-        else layout.askOrderSize orderIndex
       let marketSequence := layout.marketSequence
       let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 11 2 2 marketSequence
-      let removed ←
-        if resting = 0 then .ok 0
-        else
-          reduceFreeFunds512At layout 2 3 traderKey0 side order.price order.sequence resting
-      let recordIndex := if removed = 0 then 0 else orderIndex
-      let _ := recordReduceAt recordIndex order.sequence order.price removed 0
-      let _ := finishMarketBatch
-      .ok (_s, 0)
+      let o0 := orders.values[0]!
+      let _ ←
+        cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side0 o0.price o0.sequence
+      if orders.length = 2 then
+        let o1 := orders.values[1]!
+        let _ ←
+          cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+            o1.side.toUInt64 o1.price o1.sequence
+        let _ := finishMarketBatch
+        .ok (_s, 0)
+      else
+        let _ := finishMarketBatch
+        .ok (_s, 0)
 
 /--
-Official Phoenix `CancelMultipleOrdersById` tag 10 uses the same single-id vector, but claims any
-released collateral and withdraws through the shared nine-account classic Token context. Pre-existing
-free balances are preserved. Missing ids remain header-only success.
+Official Phoenix `CancelMultipleOrdersById` tag 10 uses the same two-id vector, but claims any
+released collateral and withdraws through the shared nine-account classic Token context. Quote and
+base lots from both ids are aggregated before claim/withdraw.
 -/
 @[pf_entry, pf_svm_raw 10 9 0]
 def cancelMultipleOrdersById (_s : State)
-    (orders : BoundedVec CancelOrderParams 1) : Except Error (State × UInt64) := do
+    (orders : BoundedVec CancelOrderParams 2) : Except Error (State × UInt64) := do
   if orders.length = 0 then
     if cancelWithdrawContextValid = 0 then
       .error .overflow
@@ -2680,54 +2711,80 @@ def cancelMultipleOrdersById (_s : State)
   else if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
-    let layout := Examples.PhoenixV1.small 2
-    let order := orders.values[0]!
-    let side := order.side.toUInt64
-    if side ≠ 0 && side ≠ 1 then
+    let side0 := orders.values[0]!.side.toUInt64
+    let side1ok :=
+      orders.length = 1 ||
+        orders.values[1]!.side.toUInt64 = 0 ||
+        orders.values[1]!.side.toUInt64 = 1
+    if (side0 ≠ 0 && side0 ≠ 1) || !side1ok then
       .error .overflow
     else
-      let encodedBid := order.sequence >>> 63 = 1
-      let skip := (side = 0 && !encodedBid) || (side = 1 && encodedBid)
+      let layout := Examples.PhoenixV1.small 2
       let traderKey0 := signerKey 3
       let traderIndex := layout.findTrader
         traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
-      let orderIndex :=
-        if skip || traderIndex = 0 then 0
-        else if side = 0 then layout.findBid order.price order.sequence
-        else layout.findAsk order.price order.sequence
-      let owner :=
-        if orderIndex = 0 then 0
-        else if side = 0 then layout.bidOwner orderIndex
-        else layout.askOwner orderIndex
-      let resting :=
-        if orderIndex = 0 || owner ≠ traderIndex then 0
-        else if side = 0 then layout.bidOrderSize orderIndex
-        else layout.askOrderSize orderIndex
       let marketSequence := layout.marketSequence
       let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 10 2 2 marketSequence
-      let removed ←
-        if resting = 0 then .ok 0
+      let o0 := orders.values[0]!
+      let removed0 ←
+        cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side0 o0.price o0.sequence
+      let released0 ← releasedLotsForCancel512At layout side0 o0.price removed0
+      let quote0 := if side0 = 0 then released0 else 0
+      let base0 := if side0 = 0 then 0 else released0
+      if orders.length = 2 then
+        let o1 := orders.values[1]!
+        let side1 := o1.side.toUInt64
+        let removed1 ←
+          cancelOneByIdFreeFunds512At layout traderKey0 traderIndex
+            side1 o1.price o1.sequence
+        let released1 ← releasedLotsForCancel512At layout side1 o1.price removed1
+        let quote1 := if side1 = 0 then released1 else 0
+        let base1 := if side1 = 0 then 0 else released1
+        if quote0 > u64Max - quote1 || base0 > u64Max - base1 then
+          .error .overflow
         else
-          reduceFreeFunds512At layout 2 3 traderKey0 side order.price order.sequence resting
-      let released ←
-        if removed = 0 then .ok 0
-        else if side = 0 then quoteLotsReleased512At layout order.price removed
-        else .ok removed
-      let lotSize := if side = 0 then layout.quoteLotSize else layout.baseLotSize
-      let releasedDivisor := if released = 0 then 1 else released
-      if lotSize ≤ u64Max / releasedDivisor then
-        let atoms := released * lotSize
-        let _ ←
-          if traderIndex = 0 || released = 0 then .ok 0
-          else claimReleasedFunds512At layout traderIndex side released
-        let _ := withdrawReleasedAt side atoms
-        let recordIndex := if removed = 0 then 0 else orderIndex
-        let _ := recordReduceAt recordIndex order.sequence order.price removed 0
-        let _ := finishMarketBatch
-        .ok (_s, 0)
+          let quoteReleased := quote0 + quote1
+          let baseReleased := base0 + base1
+          let quoteLotSize := layout.quoteLotSize
+          let baseLotSize := layout.baseLotSize
+          let quoteDivisor := if quoteReleased = 0 then 1 else quoteReleased
+          let baseDivisor := if baseReleased = 0 then 1 else baseReleased
+          if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+            let quoteAtoms := quoteReleased * quoteLotSize
+            let baseAtoms := baseReleased * baseLotSize
+            let _ ←
+              if traderIndex = 0 || quoteReleased = 0 then .ok 0
+              else claimReleasedFunds512At layout traderIndex 0 quoteReleased
+            let _ ←
+              if traderIndex = 0 || baseReleased = 0 then .ok 0
+              else claimReleasedFunds512At layout traderIndex 1 baseReleased
+            let _ := withdrawReleasedAt 0 quoteAtoms
+            let _ := withdrawReleasedAt 1 baseAtoms
+            let _ := finishMarketBatch
+            .ok (_s, 0)
+          else
+            .error .overflow
       else
-        .error .overflow
+        let quoteLotSize := layout.quoteLotSize
+        let baseLotSize := layout.baseLotSize
+        let quoteDivisor := if quote0 = 0 then 1 else quote0
+        let baseDivisor := if base0 = 0 then 1 else base0
+        if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
+          let quoteAtoms := quote0 * quoteLotSize
+          let baseAtoms := base0 * baseLotSize
+          let _ ←
+            if traderIndex = 0 || quote0 = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 0 quote0
+          let _ ←
+            if traderIndex = 0 || base0 = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 1 base0
+          let _ := withdrawReleasedAt 0 quoteAtoms
+          let _ := withdrawReleasedAt 1 baseAtoms
+          let _ := finishMarketBatch
+          .ok (_s, 0)
+        else
+          .error .overflow
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
@@ -2751,5 +2808,6 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelUpToAsks512At finishCancelAll
   cancelWithdrawContextValid placeFreeFundsContextValid placePostOnlyFreeFunds512At
   placeLimitOneMatchFreeFunds512At placeLimitTwoMatchesFreeFunds512At
+  cancelOneByIdFreeFunds512At releasedLotsForCancel512At
 
 end Examples.PhoenixV1Profile

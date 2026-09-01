@@ -13,6 +13,13 @@ the same checked account load/store and bounded tree/allocator routines that
 
 ## Physical-state contract
 
+Account-resident allocators recycle one-based slots inside a **compile-time** region
+capacity; they do not make containers unbounded. Size `capacity` so
+`header + stride * capacity` fits the account (`Memory.maxAccountDataBytes` = 10 MiB,
+per-tx resize ≤ 10240) and `capacity ≤ containerCapacityLimit`. See
+`docs/modules/allocator-bounds.md`.
+
+
 Every persistent value in this facade is a `u64` account word addressed by an explicit
 one-based slot index into a static `Region` (`account`, `baseWord`, `strideWords`,
 `capacity`, `indexBase`, `access`). The integer `0` is the universal null sentinel: map

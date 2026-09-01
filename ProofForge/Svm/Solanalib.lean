@@ -955,7 +955,8 @@ writes) projected through the E4 `storev`/`loadv` bridge. Layout knife matches
 `Examples.TicketLine` (head@2, count@3, slots@4, capacity 16).
 
 Still out of L3: full / nowrap / wrap push; all pop / peek / initialize branches;
-walked `r7` args; Agave/ELF.
+whole-program TicketLine emit→step; Agave Loader/syscall/ELF host (beyond the E∞
+walked-`r7` knife below).
 -/
 
 open ProofForge.Svm.Sdk.Queue
@@ -1058,6 +1059,82 @@ theorem projectDemoEmptyPush_eq_stores :
       let c2 ← loadAccountWord? viaStores demoQueueCountWord
       pure (s1 == s2 && h1 == h2 && c1 == c2 &&
         s1 == 42 && h1 == 1 && c1 == 1)) = some true := by
+  native_decide
+
+/-!
+## E-infinity knife - walked r7 instruction-data cursor (svm-sem-006)
+
+EntryAdapter / raw Borsh paths keep a walking instruction-data cursor in r7
+(ldxdw / width advance) rather than only absolute [r6 + INSTRUCTION_DATA + off]
+loads. This first host-adequacy knife materializes one Counter-shaped arg0 through
+that cursor and proves it agrees with E1 absolute arg materialization on the
+staged stack word. Still far from Loader serialization, syscalls, CPI, or ELF accept.
+-/
+
+/-- Typed counterpart of ldxdw r1,[r7+0]; add64 r7,8; stxdw [r10+stackOff],r1. -/
+def walkArgU64? (stackOff : U16) : Option EbpfAsm := do
+  let off ← positiveOffset? 0
+  return [
+    .ldx .m64 .br1 .br7 off,
+    .alu64 .add .br7 (.imm 8),
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- `r6` = input base; `r7` = absolute Counter arg0 cursor (same byte as E1 `.arg`). -/
+def counterWalkedArgRegs : RegMap :=
+  setReg (setReg initRegMap .br6 mmInputStart)
+    .br7 (mmInputStart + BitVec.ofNat 64 counterArg0Offset)
+
+/-- Canonical sBPF frame pointer installed by `initBpfState`. -/
+def counterFramePointer : U64 :=
+  mmStackStart + stackFrameSize * maxCallDepth
+
+/-- Absolute address of the RHS staged stack slot (`[r10 - 16]`). -/
+def rhsStackAddr : U64 :=
+  counterFramePointer - 16
+
+/-- Run the walked-`r7` arg load against seeded Counter input memory. -/
+def evalWalkArgToStack? (stackOff : U16) (memory : Mem) : Option (RegMap × Mem) := do
+  let frag ← walkArgU64? stackOff
+  let state0 := initBpfState counterWalkedArgRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute E1 materialize of Counter arg0 into the RHS stack slot. -/
+def evalAbsArgToStack? (memory : Mem) : Option (RegMap × Mem) := do
+  let frag ← materializeOperand? (.arg counterArg0Offset) rhsStackOffset
+  let state0 := initBpfState counterStraightlineRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Walked-`r7` assembly is well-formed. -/
+theorem walkArgU64_verified :
+    (walkArgU64? rhsStackOffset).isSome = true := by
+  native_decide
+
+/-- Concrete walked load of arg0 (=5) leaves 5 in `r1`, stages it at `[r10-16]`, and advances `r7`. -/
+theorem evalWalkArg_arg0_5 :
+    (do
+      let mem ← counterInputMem 7 5
+      let (regs, finalMem) ← evalWalkArgToStack? rhsStackOffset mem
+      pure (regs .br1 == 5 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 5) &&
+        regs .br7 == mmInputStart + BitVec.ofNat 64 (counterArg0Offset + 8))) =
+      some true := by
+  native_decide
+
+/-- Walked `r7` arg0 and absolute E1 `.arg` materialization agree on the staged stack word. -/
+theorem walkArg_eq_absArg_stack :
+    (do
+      let mem ← counterInputMem 7 5
+      let (_, walkedMem) ← evalWalkArgToStack? rhsStackOffset mem
+      let (_, absMem) ← evalAbsArgToStack? mem
+      pure (loadv .m64 walkedMem rhsStackAddr == loadv .m64 absMem rhsStackAddr &&
+        loadv .m64 walkedMem rhsStackAddr == some (.vlong 5))) =
+      some true := by
   native_decide
 
 end ProofForge.Svm.Solanalib

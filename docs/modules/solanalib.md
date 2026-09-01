@@ -85,14 +85,15 @@ Solanalib 当前没有为本仓提供：
 
 已覆盖 E5（`svm-sem-005`）：BoundedQueue empty-push 三写 ↔ typed `storev`/`loadv` 投影。
 
-仍不覆盖：walked `r7` args、Queue 非空/绕回/pop 分支、whole-program / Agave ELF execution。
+E∞ 第一刀（`svm-sem-006`）：walked `r7` Counter arg0 cursor ↔ E1 绝对 `.arg` staged word。
+仍不覆盖：Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests
 
 - `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization；
   五种 checked arithmetic 的 success/overflow edge、multiply zero path、scratch handoff 与
   state-store；六种普通比较 then/else；E1 Counter field/arg/lit materialization 与
-  straightline success/overflow；以及 E3 multi-block CFG bounds/success/overflow `#guard`。
+  straightline success/overflow；以及 E3 multi-block CFG bounds/success/overflow `#guard`；E∞ walked-`r7` `#guard`。
 - `Tests/NormalizationSpec.lean`：真实抽出的 Counter increment/decrement/scale/divide/modulo
   都从 Core Place、SVM slot 和各自 target-owned CFG checked terminator 生成对应 typed
   fragment；Counter.nonzero 生成真实普通 branch fragment；任一 Core/CFG operand 不一致或

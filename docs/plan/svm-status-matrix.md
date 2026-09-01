@@ -49,8 +49,9 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 
 | ID | Slice | Status |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1); digest `baf247ca608bdc85` |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 next instruction group | **done** — tags 10/11 CancelMultipleById (cap=1; see app-004→2); digest `2dc1e143994eca61` |
 | [svm-app-002](tasks/svm-app-002.md) | Matching / fee / remainder | **done** |
+| [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)

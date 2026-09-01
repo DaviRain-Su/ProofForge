@@ -18,8 +18,8 @@ plan: ../svm-work-plan.md
    片 **capacity = 1**；空 vec noop；side/MSB/missing/foreign skip；10=withdraw / 11=free）
 2. Mollusk 正反例 — **done**：`phoenix_v1_profile.rs` empty / success / skip / withdraw /
    noncanonical / storage+token reject
-3. digest 纪律；无 Phoenix 名进入 `ProofForge/Svm` — **done**：digest `baf247ca608bdc85`；
-   Spec adapter+composition+ASM routes 8–11
+3. digest 纪律；无 Phoenix 名进入 `ProofForge/Svm` — **done**：digest `2dc1e143994eca61`；
+   Spec adapter+composition+ASM routes 8–11；capacity 见 [svm-app-004](svm-app-004.md)
 
 ## 非目标
 
