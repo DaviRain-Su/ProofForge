@@ -22,8 +22,8 @@ depends-on: [svm-sem-006]
 
 ## Evidence
 
-- `ProofForge/Svm/Solanalib.lean`：`walkTwoArgs_eq_absArgs_stack` /
-  `evalWalkTwoArgs_arg0_5_arg1_9`
+- `ProofForge/Svm/Solanalib.lean`：`evalWalkTwoArgs_arg0_5_arg1_9` /
+  `walkTwoArgs_eq_absArgs_stack`
 - Spec guards for the two-arg pipeline
 
 ## 仍未覆盖
