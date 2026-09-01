@@ -3,6 +3,9 @@ import ProofForge
 namespace Examples.NearTokenErgonomics
 
 open ProofForge.Wasm.Near.Sdk
+open ProofForge.Core.Except
+
+private def u64Max : UInt64 := ~~~(0 : UInt64)
 
 structure State where
   marker : UInt64
@@ -19,6 +22,17 @@ inductive Error where
 def touch (state : State) (delta : UInt64) : Except Error (State × UInt64) :=
   let next := state.marker + delta
   if next ≥ state.marker then .ok (⟨next⟩, next) else .error .overflow
+
+private def checkedAdd (a b : UInt64) : Except Error UInt64 :=
+  if a ≤ u64Max - b then ok (a + b) else err .overflow
+
+attribute [pf_inline] checkedAdd
+
+/-- Fallible scalar chain via `Core.Except.andThen` (not `do` notation). -/
+@[pf_entry]
+def addViaAndThen (state : State) (delta : UInt64) : Except Error (State × UInt64) :=
+  andThen (checkedAdd state.marker delta) fun sum =>
+    ok (⟨sum⟩, sum)
 
 @[pf_entry]
 def canAddViaHelper (_state : State) : UInt64 :=

@@ -25,7 +25,7 @@ open ProofForge
   #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenErgonomics", "NearTokenStorage", "NearMemory", "NearOutput", "NearStorageBalanceOutput", "NearStorageBalanceBoundsOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtOnTransferInput", "NearFtReceiverValue", "NearPromiseOrValue", "NearFtReceiverDual", "NearJsonFtResolveInput", "NearJsonStorageDepositInput", "NearJsonStorageUnregisterInput", "NearJsonStorageWithdrawInput", "NearJsonBooleanMutation", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "f85fa4f3182ec1eb"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenErgonomics" == some "227ff6cdb05af2b9"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenErgonomics" == some "cfc8d03d4e1883a5"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "e1e290ddec221fa5"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenStorage" == some "92e4c2bf2a7f74a0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"

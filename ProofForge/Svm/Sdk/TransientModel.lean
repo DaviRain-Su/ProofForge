@@ -396,4 +396,121 @@ theorem mRecordAppend2_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
     have hlen1 := h1.2.2.1
     omega
 
+/-- Three-limb record append with room: all limbs written, length +3. -/
+theorem mRecordAppend3_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (v0 v1 v2 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 3 ≤ cap) :
+    (mVec64Push tw slot cap v0).2 = okCode ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).2 = okCode ∧
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).2 =
+      okCode ∧
+    (mVec64Push tw slot cap v0).1.words slot (tw.bank slot).length = v0 ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.words slot
+      ((tw.bank slot).length + 1) = v1 ∧
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1.words slot
+      ((tw.bank slot).length + 2) = v2 ∧
+    ((mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1.bank slot).length =
+      (tw.bank slot).length + 3 := by
+  have hroom0 : (tw.bank slot).length < cap := by omega
+  have h0 := mVec64Push_readback tw slot cap v0 hact hroom0
+  have hact1 : requireActive (mVec64Push tw slot cap v0).1 slot cap = true := h0.2.2.2
+  have hroom1 : ((mVec64Push tw slot cap v0).1.bank slot).length < cap := by
+    have := h0.2.2.1
+    omega
+  have h1 := mVec64Push_readback (mVec64Push tw slot cap v0).1 slot cap v1 hact1 hroom1
+  have hact2 : requireActive (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap = true :=
+    h1.2.2.2
+  have hroom2 : ((mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.bank slot).length < cap := by
+    have := h1.2.2.1
+    omega
+  have h2 := mVec64Push_readback (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2 hact2 hroom2
+  refine ⟨h0.1, h1.1, h2.1, h0.2.1, ?_, ?_, ?_⟩
+  · have hw := h1.2.1
+    have hlen := h0.2.2.1
+    simpa [hlen] using hw
+  · have hw := h2.2.1
+    have hidx : ((mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.bank slot).length =
+        (tw.bank slot).length + 2 := by
+      have := h1.2.2.1
+      have := h0.2.2.1
+      omega
+    simpa [hidx] using hw
+  · have hlen0 := h0.2.2.1
+    have hlen1 := h1.2.2.1
+    have hlen2 := h2.2.2.1
+    omega
+
+/-- Four-limb record append with room: all limbs written, length +4. -/
+theorem mRecordAppend4_readback (tw : TransientWords) (slot : Fin 2) (cap : Nat)
+    (v0 v1 v2 v3 : UInt64)
+    (hact : requireActive tw slot cap = true)
+    (hroom : (tw.bank slot).length + 4 ≤ cap) :
+    (mVec64Push tw slot cap v0).2 = okCode ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).2 = okCode ∧
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).2 =
+      okCode ∧
+    (mVec64Push
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1 slot cap v3).2 =
+      okCode ∧
+    (mVec64Push tw slot cap v0).1.words slot (tw.bank slot).length = v0 ∧
+    (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.words slot
+      ((tw.bank slot).length + 1) = v1 ∧
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1.words slot
+      ((tw.bank slot).length + 2) = v2 ∧
+    (mVec64Push
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1 slot cap v3).1.words slot
+      ((tw.bank slot).length + 3) = v3 ∧
+    ((mVec64Push
+      (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1 slot cap v3).1.bank slot).length =
+      (tw.bank slot).length + 4 := by
+  have hroom0 : (tw.bank slot).length < cap := by omega
+  have h0 := mVec64Push_readback tw slot cap v0 hact hroom0
+  have hact1 : requireActive (mVec64Push tw slot cap v0).1 slot cap = true := h0.2.2.2
+  have hroom1 : ((mVec64Push tw slot cap v0).1.bank slot).length < cap := by
+    have := h0.2.2.1
+    omega
+  have h1 := mVec64Push_readback (mVec64Push tw slot cap v0).1 slot cap v1 hact1 hroom1
+  have hact2 : requireActive (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap = true :=
+    h1.2.2.2
+  have hroom2 : ((mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.bank slot).length < cap := by
+    have := h1.2.2.1
+    omega
+  have h2 := mVec64Push_readback (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2 hact2 hroom2
+  have hact3 :
+      requireActive (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1 slot cap =
+        true :=
+    h2.2.2.2
+  have hroom3 :
+      ((mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1.bank slot).length < cap := by
+    have := h2.2.2.1
+    omega
+  have h3 := mVec64Push_readback
+    (mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1 slot cap v3 hact3 hroom3
+  refine ⟨h0.1, h1.1, h2.1, h3.1, h0.2.1, ?_, ?_, ?_, ?_⟩
+  · have hw := h1.2.1
+    have hlen := h0.2.2.1
+    simpa [hlen] using hw
+  · have hw := h2.2.1
+    have hidx : ((mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1.bank slot).length =
+        (tw.bank slot).length + 2 := by
+      have := h1.2.2.1
+      have := h0.2.2.1
+      omega
+    simpa [hidx] using hw
+  · have hw := h3.2.1
+    have hidx :
+        ((mVec64Push (mVec64Push (mVec64Push tw slot cap v0).1 slot cap v1).1 slot cap v2).1.bank slot).length =
+          (tw.bank slot).length + 3 := by
+      have := h2.2.2.1
+      have := h1.2.2.1
+      have := h0.2.2.1
+      omega
+    simpa [hidx] using hw
+  · have hlen0 := h0.2.2.1
+    have hlen1 := h1.2.2.1
+    have hlen2 := h2.2.2.1
+    have hlen3 := h3.2.2.1
+    omega
+
 end ProofForge.Svm.Sdk.TransientModel

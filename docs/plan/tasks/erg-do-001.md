@@ -11,8 +11,9 @@ depends-on: []
 
 - `ProofForge.Core.Except`: `ok`, `err`, `andThen`, `map`, `guard`
 - Imported through root `ProofForge` module
+- Extract: `Core.Except.andThen` sequenced like `Bind.bind`; `ok`/`err` recognized alongside std `Except`
 
 ## Follow-up
 
-- Extract support for `andThen` on NEAR/SVM/EVM targets (currently use explicit `match` in on-chain examples)
-- Optional `do` notation guide in docs once extraction lands
+- Optional `do` notation guide in docs
+- SVM/EVM examples using `andThen` chains (NEAR `addViaAndThen` landed)

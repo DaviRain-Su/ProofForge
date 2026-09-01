@@ -3,6 +3,7 @@ import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr
 import ProofForge.Core.Value
+import ProofForge.Core.Except
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
@@ -17,6 +18,13 @@ import ProofForge.Extract.Lexical
 open Lean
 
 namespace ProofForge.Extract
+
+/-- Recognize std `Except` and `Core.Except` result constructors interchangeably. -/
+private def isExceptOkHead (e : Expr) : Bool :=
+  isConstNamed e ``Except.ok || isConstNamed e ``ProofForge.Core.Except.ok
+
+private def isExceptErrorHead (e : Expr) : Bool :=
+  isConstNamed e ``Except.error || isConstNamed e ``ProofForge.Core.Except.err
 
 /-- NEAR Runtime host reads. Matched by const name before any empty-arg UInt64
 unfold that would bake the irreducible stub body `0` into a literal. -/
@@ -2474,7 +2482,7 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
       | .letE _ _ value body _ => go fuel' value <|> go fuel' body
       | .lam _ _ body _ => go fuel' body
       | _ =>
-        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
@@ -3022,7 +3030,7 @@ private def asStoreFields (env : Environment) (e : Expr)
   -- Preserve the RHS of `let next := ...` before peeling the state constructor. Dropping a used
   -- scalar binder turns `next` into an unrelated outer `.arg` and silently stores the wrong value.
   let e := peelControl 8 (substUInt64Lets 64 (dropUnusedHeadLets 32 e))
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if args.size ≥ 1 then
       let pair := strip args[args.size - 1]!
@@ -3044,7 +3052,7 @@ private def asStoreFields (env : Environment) (e : Expr)
 
 private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if args.size ≥ 1 then
       let pair := strip args[args.size - 1]!
@@ -3163,7 +3171,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
 /-- Scalar `Except.ok` is an intermediate value producer, not a state commit. -/
 private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let payload := strip args[args.size - 1]
@@ -3175,7 +3183,7 @@ private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
 result may be one scalar or a statically bounded product of scalar leaves. -/
 private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let pair := strip args[args.size - 1]
@@ -3230,7 +3238,7 @@ The first safe slice accepts one through four explicitly named UInt64 fields. Un
 must not silently degrade to selector-only errors. -/
 private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
   let e := peelControl 8 e
-  if isConstNamed e ``Except.error then
+  if isExceptErrorHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let applied := strip args[args.size - 1]
@@ -3284,7 +3292,7 @@ private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
 
 private def isErrorOverflow (e : Expr) : Bool :=
   let e := peelControl 8 e
-  if isConstNamed e ``Except.error then
+  if isExceptErrorHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       endsWith (strip args[args.size - 1]) ".overflow"
@@ -4637,7 +4645,7 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
-      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+      if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
         let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
         if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
           let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
@@ -5132,7 +5140,7 @@ private def collectIndexSets (env : Environment) (e : Expr)
       | .letE _ _ value body _ => go fuel' (body.instantiate1 value) state
       | .lam _ _ body _ => go fuel' body state
       | _ =>
-        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 1]! state
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 2]! state
@@ -7329,7 +7337,7 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
     (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Option (Except String (Array Ops.Op)) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if !isConstNamed e ``Except.ok || e.getAppArgs.size < 1 then none else
+  if !isExceptOkHead e || e.getAppArgs.size < 1 then none else
   let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
   if !isConstNamed pair ``Prod.mk || pair.getAppArgs.size < 2 then none else
   let args := pair.getAppArgs
@@ -7641,6 +7649,11 @@ private partial def dropIgnoredScalarTerminals (ops : Array Ops.Op) : Array Ops.
     | .forBody n body => some (.forBody n (dropIgnoredScalarTerminals body))
     | op => some op
 
+/-- Monadic join heads that sequence a fallible scalar producer into a continuation. -/
+private def isExceptSequencerHead (e : Expr) : Bool :=
+  isConstNamed e ``Bind.bind || endsWith e ".bind" ||
+    isConstNamed e ``ProofForge.Core.Except.andThen || endsWith e ".andThen"
+
 /-- A bind enclosing a loop belongs to the surrounding monadic control flow and must be decoded
 before loop discovery. Binds inside the callback body are part of that iteration and do not hide
 the state loop itself. -/
@@ -7650,7 +7663,7 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
   | fuel' + 1 =>
     let e := strip e
     if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then underBind
-    else if isConstNamed e ``Bind.bind || endsWith e ".bind" then
+    else if isExceptSequencerHead e then
       let args := e.getAppArgs
       if h : args.size ≥ 2 then
         let producer := args[args.size - 2]
@@ -7689,8 +7702,7 @@ private def nestedSequencedScalarHelper? (env : Environment) (e : Expr) : Option
     | fuel' + 1 =>
       let candidate := candidate.consumeMData
       let head := strip candidate
-      if isConstNamed head ``ite || isConstNamed head ``dite ||
-          isConstNamed head ``Bind.bind || endsWith head ".bind" then
+      if isConstNamed head ``ite || isConstNamed head ``dite || isExceptSequencerHead head then
         none
       else
         match unfoldUserHelper env candidate with
@@ -7860,7 +7872,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       else if (unfoldUserHelper env controlled).isSome then controlled
       else e
     let e0 := strip e
-    if (isConstNamed e0 ``Bind.bind || endsWith e0 ".bind") && e0.getAppArgs.size ≥ 2 then
+    if isExceptSequencerHead e0 && e0.getAppArgs.size ≥ 2 then
       let args := e0.getAppArgs
       let producer := args[args.size - 2]!
       let continuation := args[args.size - 1]!
