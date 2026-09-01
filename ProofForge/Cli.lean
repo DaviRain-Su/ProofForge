@@ -314,24 +314,26 @@ private def selectXrplNames (names : Array String) : Except String (Array String
       | some _ => .ok n
       | none => .error s!"unknown xrpl program {n}"
 
-private unsafe def extractXrplPrograms (names : Array String) :
+private unsafe def extractXrplPrograms (units : Array BuildUnit) :
     IO (Except String (Array ProofForge.Wasm.Xrpl.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let moduleName (name : String) := Lean.Name.str `Examples name
-    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Xrpl.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Wasm.Xrpl.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Wasm.Xrpl.IR.digestHex program
-        match Wasm.Xrpl.Registry.digestOf name with
-        | some expected =>
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Wasm.Xrpl.IR.digestHex program
+          match Wasm.Xrpl.Registry.digestOf u.name with
+          | some expected =>
             if digest == expected then .ok program
-            else .error s!"{name}: ir/mismatch: extracted xrpl digest {digest} != fixture {expected}"
-        | none => .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted xrpl digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
 
@@ -383,7 +385,7 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       return 1
     let name := names[0]!
     let outDir := defaultXrplOut opts
-    match ← extractXrplPrograms #[name] with
+    match ← extractXrplPrograms #[{ name := name, module := Lean.Name.str `Examples name }] with
     | .error reason =>
       IO.eprintln s!"pf: {reason}"
       return 1
@@ -465,24 +467,26 @@ private def selectNearNames (names : Array String) : Except String (Array String
       | some _ => .ok n
       | none => .error s!"unknown near program {n}"
 
-private unsafe def extractNearPrograms (names : Array String) :
+private unsafe def extractNearPrograms (units : Array BuildUnit) :
     IO (Except String (Array ProofForge.Wasm.Near.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let moduleName (name : String) := Lean.Name.str `Examples name
-    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Near.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Wasm.Near.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Wasm.Near.IR.digestHex program
-        match Wasm.Near.Registry.digestOf name with
-        | some expected =>
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Wasm.Near.IR.digestHex program
+          match Wasm.Near.Registry.digestOf u.name with
+          | some expected =>
             if digest == expected then .ok program
-            else .error s!"{name}: ir/mismatch: extracted near digest {digest} != fixture {expected}"
-        | none => .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted near digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
 
@@ -599,12 +603,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes)"
           return 0
     | .xrpl =>
-      match selectXrplNames opts.names with
+      match resolveUnits opts selectXrplNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractXrplPrograms names with
+      | .ok units =>
+        match ← extractXrplPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -615,12 +619,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; deployable=false)"
           return 0
     | .xrplAlphaNet =>
-      match selectXrplNames opts.names with
+      match resolveUnits opts selectXrplNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractXrplPrograms names with
+      | .ok units =>
+        match ← extractXrplPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -631,12 +635,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; AlphaNet host)"
           return 0
     | .near =>
-      match selectNearNames opts.names with
+      match resolveUnits opts selectNearNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractNearPrograms names with
+      | .ok units =>
+        match ← extractNearPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
