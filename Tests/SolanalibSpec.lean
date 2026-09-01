@@ -826,5 +826,28 @@ private def branchSelects (cmp : ProofForge.Core.Ops.Cmp) (lhs rhs : U64)
   | some true => true
   | _ => false
 
+-- E∞ knife 27: Loader account-3 owner limbs 0/1 after skip chain (`svm-sem-032`)
+#guard (walkAccount3OwnerAfterSkipChain? rhsStackOffset).isSome
+#guard
+  match (do
+      let mem ← account3OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7
+      let (regs, finalMem) ← evalWalkAccount3OwnerAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xE6 && regs .br2 == 0xF7 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xE6))) with
+  | some true => true
+  | _ => false
+#guard
+  match (do
+      let mem ← account3OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7
+      let (regs, _) ← evalWalkAccount3OwnerAfterSkipChainToStack? rhsStackOffset mem
+      let (owner0, owner1) ← evalAbsAccount3Owner? mem
+      pure (regs .br1 == owner0 && regs .br2 == owner1 &&
+        owner0 == 0xE6 && owner1 == 0xF7)) with
+  | some true => true
+  | _ => false
+
 end Tests.SolanalibSpec
 
