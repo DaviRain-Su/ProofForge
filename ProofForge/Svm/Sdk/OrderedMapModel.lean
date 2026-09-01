@@ -250,7 +250,7 @@ theorem AssocIndex.remove_head_miss
     refine List.find?_eq_none.2 ?_
     intro a _
     cases h0 : decide (a.key0 = e.key0) <;> cases h1 : decide (a.key1 = e.key1) <;>
-      simp only [h0, h1]
+      simp [h0, h1]
   simp [hnone]
 
 theorem AssocIndex.remove_after_insert_miss
