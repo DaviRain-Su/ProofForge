@@ -227,7 +227,7 @@ Phase 7   收口
 
 | ID | 内容 | 验收 |
 |---|---|---|
-| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=1；见 app-004→2）；digest `2dc1e143994eca61`；Mollusk 6 |
+| [svm-app-001](tasks/svm-app-001.md) | Phoenix-v1 下一组官方 instruction 组合（只扩 Examples） | **done**；tags 10/11 CancelMultipleById（cap=1；见 app-004→2）；digest `2dc1e143994eca61`；CancelById Mollusk 7 |
 | [svm-app-002](tasks/svm-app-002.md) | matching / fee / remainder 策略缺口补到文档宣称面 | **done** — tag 3 matching/fee/remainder |
 | [svm-app-004](tasks/svm-app-004.md) | Phoenix CancelMultipleById Vec capacity 1→2 | **done** — maxDataLen 39; Mollusk dual-id |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
