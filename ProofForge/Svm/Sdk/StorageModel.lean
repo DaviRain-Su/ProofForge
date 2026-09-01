@@ -650,7 +650,7 @@ theorem mBvPop_oldTail_oob (mem : AccountWords)
     exact (UInt64.lt_iff_toNat_lt).2 this
   exact mBvGetAt_oob (mBvPop mem vec).1 vec (mBvSize mem vec) (Or.inr hlt)
 
-/-- sf-003：BoundedVec push/pop/setAt 读回闭环（`mBvPush_*` / `mBvPop_*` / `mBvSetAt_*`）。 -/
+/-! sf-003：BoundedVec push/pop/setAt 读回闭环（`mBvPush_*` / `mBvPop_*` / `mBvSetAt_*`）。 -/
 
 end BvWfAlgebra
 
