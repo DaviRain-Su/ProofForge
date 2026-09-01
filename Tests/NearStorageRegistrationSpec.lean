@@ -99,7 +99,8 @@ elab "#pf_near_storage_registration_check" : command => do
   let targetBounds ← match program.entries.find? (·.ixName == "storage_balance_bounds") with
     | some method => pure method
     | none => throwError "missing target storage_balance_bounds"
-  unless targetBounds.inputSchema.isNone && targetBounds.inputPolicy.isEmpty &&
+  unless targetBounds.inputSchema == some .unit &&
+      targetBounds.inputPolicy == "near-no-args-ignore-input-v1" &&
       targetBounds.outputSchema == some Codec.storageBalanceBoundsResultSchema &&
       targetBounds.outputPolicy == "near-json-storage-balance-bounds-v1" &&
       targetBounds.paramCount == 0 && targetBounds.tupleArity == some 5 do
@@ -182,13 +183,13 @@ elab "#pf_near_storage_registration_check" : command => do
   unless boundsParts.length == 2 do
     throwError "missing unique storage_balance_bounds export body"
   let boundsBody := (boundsParts[1]!).splitOn "(func (export \"" |>.head!
-  unless (boundsBody.splitOn "(call $pf_input").length == 2 &&
+  unless !boundsBody.contains "(call $pf_input" &&
       (boundsBody.splitOn "(call $pf_value_return").length == 5 &&
       !boundsBody.contains "(call $pf_storage_write" &&
       !boundsBody.contains "(call $pf_storage_remove" &&
       !boundsBody.contains "(call $pf_log_utf8" &&
       !boundsBody.contains "(call $pf_promise_" do
-    throwError "storage_balance_bounds must enforce empty input and return one branch without effects"
+    throwError "storage_balance_bounds must ignore request bytes and return one branch without effects"
   let depositParts := wat.splitOn "(func (export \"storage_deposit\")"
   unless depositParts.length == 2 do
     throwError "missing unique storage_deposit export body"
@@ -265,6 +266,6 @@ elab "#pf_near_storage_registration_check" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Fungible.Registration.maximumAccountEntryBytes == 128
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" ==
-  some "1a2bdb2d02f88de5"
+  some "c8ee999bea20bf6d"
 
 end Tests.NearStorageRegistrationSpec

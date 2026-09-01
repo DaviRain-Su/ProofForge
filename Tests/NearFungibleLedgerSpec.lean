@@ -50,6 +50,37 @@ elab "#pf_near_fungible_ledger_check" : command => do
       s!"transfer={methodSteps "transferCallerToSelfOne"}, " ++
       s!"malformed8={methodSteps "seedSelfMalformed8"}, " ++
       s!"malformed20={methodSteps "seedSelfMalformed20"}"
+  let some sourceSupply := source.methods.find? (·.ixName == "ft_total_supply")
+    | throwError "missing source ft_total_supply"
+  unless sourceSupply.annotations == #["near.no-args-ignore-input.v1"] do
+    throwError "ft_total_supply lost its explicit no-args wrapper annotation"
+  let duplicateNoArgs := { source with methods := source.methods.map fun candidate =>
+    if candidate.ixName == "ft_total_supply" then
+      { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
+    else candidate }
+  match IR.fromExtracted duplicateNoArgs with
+  | .error reason =>
+      unless reason.contains "duplicate near no-args annotations" do
+        throwError s!"wrong duplicate no-args rejection: {reason}"
+  | .ok _ => throwError "duplicate no-args annotation was accepted"
+  let parameterizedNoArgs := { source with methods := source.methods.map fun candidate =>
+    if candidate.ixName == "ft_balance_of" then
+      { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
+    else candidate }
+  match IR.fromExtracted parameterizedNoArgs with
+  | .error reason =>
+      unless reason.contains "requires an exact zero-parameter non-initializer" do
+        throwError s!"wrong parameterized no-args rejection: {reason}"
+  | .ok _ => throwError "no-args annotation was accepted on a parameterized method"
+  let initializerNoArgs := { source with methods := source.methods.map fun candidate =>
+    if candidate.kind == .init then
+      { candidate with annotations := candidate.annotations.push "near.no-args-ignore-input.v1" }
+    else candidate }
+  match IR.fromExtracted initializerNoArgs with
+  | .error reason =>
+      unless reason.contains "requires an exact zero-parameter non-initializer" do
+        throwError s!"wrong initializer no-args rejection: {reason}"
+  | .ok _ => throwError "no-args annotation was accepted on an initializer"
   let program ←
     match IR.fromExtracted source with
     | .ok program => pure program
@@ -65,7 +96,8 @@ elab "#pf_near_fungible_ledger_check" : command => do
     throwError "ft_balance_of lost its specialized AccountId-input/u128-output composition"
   let some supply := program.entries.find? (·.ixName == "ft_total_supply")
     | throwError "missing target ft_total_supply"
-  unless supply.inputSchema.isNone && supply.inputPolicy.isEmpty &&
+  unless supply.inputSchema == some .unit &&
+      supply.inputPolicy == "near-no-args-ignore-input-v1" &&
       supply.outputSchema == some (.scalar .uint128) &&
       supply.outputPolicy == "near-json-u128-string-v1" && supply.paramCount == 0 &&
       supply.tupleArity == some 2 do
@@ -158,13 +190,22 @@ elab "#pf_near_fungible_ledger_check" : command => do
         | body :: _ => pure body
         | [] => throwError "ft_total_supply body terminator is missing"
     | _ => throwError "ft_total_supply must occur exactly once"
-  unless (supplyBody.splitOn "(call $pf_input").length == 2 &&
+  unless !supplyBody.contains "(call $pf_input" &&
       (supplyBody.splitOn "(call $pf_value_return").length == 2 &&
       !supplyBody.contains "(call $pf_storage_write" &&
       !supplyBody.contains "(call $pf_storage_remove" &&
       !supplyBody.contains "(call $pf_log_utf8" &&
       !supplyBody.contains "(call $pf_promise" do
-    throwError "ft_total_supply must enforce empty input and value_return once without effects"
+    throwError "ft_total_supply must ignore request bytes and value_return once without effects"
+  let legacyNoArgsBody ← match wat.splitOn "(func (export \"balanceSelfHas\")" with
+    | [_before, tail] =>
+        match tail.splitOn "\n  )\n" with
+        | body :: _ => pure body
+        | [] => throwError "balanceSelfHas body terminator is missing"
+    | _ => throwError "balanceSelfHas must occur exactly once"
+  unless legacyNoArgsBody.contains "(call $pf_input" &&
+      legacyNoArgsBody.contains "(call $pf_register_len" do
+    throwError "unannotated zero-parameter methods no longer enforce exact-empty input"
   let transferBody ← match wat.splitOn "(func (export \"ft_transfer\")" with
     | [_before, tail] =>
         match tail.splitOn "\n  )\n" with
@@ -288,6 +329,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "f45af507fc51f527"
+  some "781b002ad40ccf83"
 
 end Tests.NearFungibleLedgerSpec

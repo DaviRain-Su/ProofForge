@@ -2710,7 +2710,10 @@ private def loadHostPrelude (method : Method ValKind OpExt) (view : Bool) (level
 
 private def inputPlanOf (method : Method ValKind OpExt) :
     Except String (Option Codec.InputPlan) :=
-  method.inputSchema.mapM Codec.targetInputPlan
+  if method.inputPolicy == Codec.InputPlan.noArgsIgnoreInput.canonical then
+    return some .noArgsIgnoreInput
+  else
+    method.inputSchema.mapM Codec.targetInputPlan
 
 private def panicInput (level : Nat) : String :=
   indent level ("(call $pf_panic_utf8 (i64.const 5) (i64.const " ++
@@ -2721,7 +2724,9 @@ private def loadArg (method : Method ValKind OpExt) (level : Nat) :
   if let some plan ← inputPlanOf method then
     unless method.paramCount == plan.localCount do
       throw s!"near/codec: {method.ixName} scalar frame does not match its input plan"
-    if plan == .jsonAccountId then
+    if plan == .noArgsIgnoreInput then
+      return #[]
+    else if plan == .jsonAccountId then
       let mut lines : Array String := #[
         indent level ("(call $pf_input (i64.const " ++ toString inputReg ++ "))"),
         indent level ("(local.set $pf_input_size (call $pf_register_len (i64.const " ++

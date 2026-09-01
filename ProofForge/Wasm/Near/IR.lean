@@ -848,6 +848,14 @@ private structure BoundInput where
 
 private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     Except String (Core.IR.Method Ops.ValKind Ops.OpExt × Option BoundInput) := do
+  let noArgsAnnotations := method.annotations.filter (· == "near.no-args-ignore-input.v1")
+  unless noArgsAnnotations.size ≤ 1 do
+    throw s!"near/codec: {method.ixName} has duplicate no-args input annotations"
+  if !noArgsAnnotations.isEmpty then
+    unless method.kind != .init && method.paramCount == 0 && method.paramSchemas.isEmpty do
+      throw s!"near/codec: {method.ixName} no-args input requires an exact zero-parameter non-initializer"
+    let plan := Codec.InputPlan.noArgsIgnoreInput
+    return (method, some { ixName := method.ixName, schema := .unit, plan })
   if method.paramSchemas.isEmpty ||
       (method.paramSchemas.all schemaIsScalar && method.paramSchemas != #[.scalar .uint128]) then
     return (method, none)
@@ -859,6 +867,7 @@ private def bindInput (method : Core.IR.Method Ops.ValKind Ops.OpExt) :
     throw s!"near/codec: {method.ixName} JSON AccountId input currently requires a view"
   let rewriteRoot := match plan with
     | .borsh borsh => rewriteInputRoot method borsh
+    | .noArgsIgnoreInput => fun _ => pure none
     | .jsonAccountId => rewriteJsonAccountInputRoot method
     | .jsonU128Amount => rewriteJsonU128InputRoot method
     | .jsonOptionalMemo16 => rewriteJsonOptionalMemoInputRoot method
@@ -892,11 +901,12 @@ private structure BoundEntry where
 private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry := do
   let privateAnnotations := method.annotations.filter (· == "near.private.v1")
   let payableAnnotations := method.annotations.filter (· == "near.payable.v1")
+  let noArgsAnnotations := method.annotations.filter (· == "near.no-args-ignore-input.v1")
   let voidAnnotations := method.annotations.filter (· == "near.void.v1")
   let promiseOrValueAnnotations := method.annotations.filter
     (· == "near.promise-or-value-u128.v1")
   let migrationAnnotations := method.annotations.filter (·.startsWith "near.migrate.v1:")
-  unless privateAnnotations.size + payableAnnotations.size + voidAnnotations.size +
+  unless privateAnnotations.size + payableAnnotations.size + noArgsAnnotations.size + voidAnnotations.size +
       promiseOrValueAnnotations.size +
       migrationAnnotations.size ==
       method.annotations.size do
@@ -905,6 +915,8 @@ private def bindEntry (method : Extract.IR.Method) : Except String BoundEntry :=
     throw s!"extract/unsupported: {method.ixName} has duplicate near private annotations"
   unless payableAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near payable annotations"
+  unless noArgsAnnotations.size ≤ 1 do
+    throw s!"extract/unsupported: {method.ixName} has duplicate near no-args annotations"
   unless voidAnnotations.size ≤ 1 do
     throw s!"extract/unsupported: {method.ixName} has duplicate near void annotations"
   unless promiseOrValueAnnotations.size ≤ 1 do

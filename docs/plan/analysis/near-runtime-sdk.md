@@ -236,8 +236,9 @@ asynchronous; dynamic handles and multi-action builders are absent.
    chooses those extrema consistently with authoritative near-account-id and ProofForge's existing
    parsers: `(2 + 64) × trustedPrice` minimum and `(64 + 64) × trustedPrice` maximum. Both full-u128
    products are checked; invalid config/overflow traps without map or effects. This differs from the
-   stock FT's fixed equal bounds and retains ProofForge's exact-empty no-argument input policy, so
-   method/output shape is not a complete NEP-145 ABI claim.
+   stock FT's fixed equal bounds. The later explicit no-args policy matches near-sdk request-ignore
+   behavior for this method without changing other zero-parameter entries, so method/output shape
+   is not a complete NEP-145 ABI claim.
    **NEAR-STORAGE-DEPOSIT-INPUT (wsm-near-json-storage-deposit-input-001 done):** an exact
    compiler-owned eleven-leaf frame now decodes optional `account_id` and `registration_only` in
    either field order. Missing/null, false, and true remain distinct; account values reuse the
@@ -336,10 +337,10 @@ asynchronous; dynamic handles and multi-action builders are absent.
    this official-shaped method is not claimed as complete NEP-141 ABI compliance.
    **NEAR-FT-TOTAL-SUPPLY (wsm-near-ft-total-supply-001 done):** the no-argument exact export reads
    the integrated ledger state's `(supplyW0,supplyW1)` and emits one canonical quoted-u128 result,
-   with no balance-map operation or mutation. Existing ProofForge no-parameter wrappers require
-   exact zero-length input, unlike current near-sdk-rs generated wrappers, which do not inspect
-   request bytes at all for methods without regular arguments. `{}` and malformed nonempty bytes
-   therefore reject here, and full public compatibility is not claimed.
+   with no balance-map operation or mutation. `wsm-near-no-args-input-001` opts this method into
+   current near-sdk-rs behavior: methods without regular arguments do not inspect request bytes.
+   Other zero-parameter ProofForge entries retain exact-empty input, and full public compatibility
+   is not claimed.
    **NEAR-FT-TRANSFER (wsm-near-ft-transfer-001 done):** exact `ft_transfer` composes the bounded
    fifteen-leaf argument frame, full predecessor AccountId, strict one-yocto guard, and empty
    success output with the existing `BAL2` ledger. Both balances must be present exact-16 values;

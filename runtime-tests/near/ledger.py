@@ -84,14 +84,6 @@ def _json_supply(client: NearClient, wire: bytes = b"") -> int:
     return value
 
 
-def _json_supply_fails(client: NearClient, wire: bytes, scene: str) -> None:
-    try:
-        client.view("ft_total_supply", wire)
-    except NearRpcError:
-        return
-    raise AssertionError(f"{scene}: nonempty no-argument input was accepted")
-
-
 def _receipt_logs(response: dict) -> list[str]:
     return [
         log
@@ -332,8 +324,15 @@ def main() -> None:
         raise AssertionError("ft_balance_of missing account did not return quoted zero")
     if _json_supply(client) != 0:
         raise AssertionError("ft_total_supply initial value was not quoted zero")
-    _json_supply_fails(client, b"{}", "empty JSON object")
-    _json_supply_fails(client, b"not-json", "malformed nonempty bytes")
+    for wire in (b"{}", b"not-json", b"\xff" * 4096):
+        if _json_supply(client, wire) != 0:
+            raise AssertionError("ft_total_supply no-args wrapper changed result for ignored bytes")
+    try:
+        client.view("balanceSelfHas", b"{}")
+    except NearRpcError:
+        pass
+    else:
+        raise AssertionError("unannotated zero-argument view stopped requiring empty input")
     _fail_unchanged(client, "burnSelfOne", "missing-balance underflow")
     before = client.view_state_values()
     _call(client, "mintSelfZero")

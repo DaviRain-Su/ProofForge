@@ -229,6 +229,7 @@ def storageBalanceBoundsResultSchema : Core.Codec.Schema :=
 it is deliberately narrower than generic serde_json-generated method wrappers. -/
 inductive InputPlan where
   | borsh (plan : BorshInputPlan)
+  | noArgsIgnoreInput
   | jsonAccountId
   | jsonU128Amount
   | jsonOptionalMemo16
@@ -244,6 +245,7 @@ inductive InputPlan where
 
 def InputPlan.localCount : InputPlan → Nat
   | .borsh plan => plan.localCount
+  | .noArgsIgnoreInput => 0
   | .jsonAccountId => 9
   | .jsonU128Amount => 2
   | .jsonOptionalMemo16 => 4
@@ -258,6 +260,7 @@ def InputPlan.localCount : InputPlan → Nat
 
 def InputPlan.canonical : InputPlan → String
   | .borsh plan => plan.canonical
+  | .noArgsIgnoreInput => "near-no-args-ignore-input-v1"
   | .jsonAccountId =>
       s!"near-json-account-id-object-bounded-v1(max-wire={maxJsonAccountInputBytes}," ++
         s!"ws={maxJsonAccountWhitespace},keys=canonical,unknown=reject)"

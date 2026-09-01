@@ -108,6 +108,17 @@ initialize pfNearPayableAttr : TagAttribute ←
       | some (.defnInfo _) => pure ()
       | _ => throwError "extract/unsupported: pf_near_payable is not a definition"
 
+/-- Mark one exact zero-parameter NEAR method as matching near-sdk's generated no-args wrapper:
+the request body is not read or validated. Other zero-parameter methods retain exact-empty input. -/
+initialize pfNearNoArgsAttr : TagAttribute ←
+  registerTagAttribute `pf_near_no_args
+    "declare a NEAR zero-parameter wrapper that ignores request bytes"
+    fun decl => do
+      let env ← getEnv
+      match env.find? decl with
+      | some (.defnInfo _) => pure ()
+      | _ => throwError "extract/unsupported: pf_near_no_args is not a definition"
+
 /-- Mark one explicit logical-Unit NEAR mutator as matching near-sdk's omitted-return wrapper:
 persist state but do not call `value_return`. Without this marker explicit Unit remains JSON null. -/
 initialize pfNearVoidAttr : TagAttribute ←
@@ -335,6 +346,9 @@ def isNearPrivate (env : Environment) (decl : Name) : Bool :=
 def isNearPayable (env : Environment) (decl : Name) : Bool :=
   pfNearPayableAttr.hasTag env decl
 
+def isNearNoArgs (env : Environment) (decl : Name) : Bool :=
+  pfNearNoArgsAttr.hasTag env decl
+
 def isNearVoid (env : Environment) (decl : Name) : Bool :=
   pfNearVoidAttr.hasTag env decl
 
@@ -351,6 +365,8 @@ def nearEntryAnnotations (env : Environment) (decl : Name) : Array String := Id.
     annotations := annotations.push "near.private.v1"
   if isNearPayable env decl then
     annotations := annotations.push "near.payable.v1"
+  if isNearNoArgs env decl then
+    annotations := annotations.push "near.no-args-ignore-input.v1"
   if isNearVoid env decl then
     annotations := annotations.push "near.void.v1"
   if isNearPromiseOrValue env decl then

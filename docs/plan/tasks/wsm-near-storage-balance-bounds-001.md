@@ -37,7 +37,7 @@ Nearcore account-creation policy may restrict who can create short top-level IDs
 change AccountId syntax or this contract's global accepted geometry.
 
 The stock near-contract-standards FT reports one fixed max-account measurement as both bounds;
-ProofForge intentionally reports the extrema of its variable policy. Existing no-parameter wrappers
-require exact empty input, while near-sdk generated no-argument wrappers ignore request bytes, so
-`{}` and other nonempty bodies reject here. This slice does not add storage deposit/withdraw,
+ProofForge intentionally reports the extrema of its variable policy. The later
+`wsm-near-no-args-input-001` slice opts this exact method into near-sdk's generated no-argument
+request-ignore behavior without changing other zero-parameter methods. This slice does not add storage deposit/withdraw,
 arbitrary-account mutation, automatic ledger enforcement, or full NEP-145 compatibility.

@@ -25,7 +25,7 @@ open ProofForge
   #["Counter", "NearCtx", "NearBytes", "NearFungibleTokenEvent", "NearFungibleLedger", "NearTokenArithmetic", "NearTokenStorage", "NearMemory", "NearOutput", "NearStorageBalanceOutput", "NearStorageBalanceBoundsOutput", "NearJsonUnitOutput", "NearJsonU128Mutation", "NearJsonAccountInput", "NearJsonAmountInput", "NearJsonMemoInput", "NearJsonMessageInput", "NearJsonFtTransferInput", "NearJsonFtTransferCallInput", "NearJsonFtOnTransferInput", "NearFtReceiverValue", "NearPromiseOrValue", "NearFtReceiverDual", "NearJsonFtResolveInput", "NearJsonStorageDepositInput", "NearJsonStorageUnregisterInput", "NearJsonStorageWithdrawInput", "NearJsonBooleanMutation", "NearStorage", "NearStorageEconomics", "NearStorageRegistration", "NearVector",
     "NearLookup", "NearQueue", "NearIterable", "NearPromise", "NearPromiseResult", "NearMigration"]
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" == some "f85fa4f3182ec1eb"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "f45af507fc51f527"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "781b002ad40ccf83"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenStorage" == some "92e4c2bf2a7f74a0"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearCtx" == some "8233f27ab39f6133"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearMemory" == some "830255873ad66d7c"
@@ -51,7 +51,7 @@ open ProofForge
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearJsonStorageDepositInput" == some "d592930fd54837e9"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorage" == some "cd97bb762dac8be3"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageEconomics" == some "9c98eca433f99470"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" == some "1a2bdb2d02f88de5"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearStorageRegistration" == some "c8ee999bea20bf6d"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearVector" == some "cd60fb0f3ce40ade"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearLookup" == some "d14778ca02c69012"
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearQueue" == some "a8bf10c3476ef45f"

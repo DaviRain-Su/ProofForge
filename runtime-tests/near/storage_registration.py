@@ -70,9 +70,11 @@ def _expect_storage_balance_failure(
     raise AssertionError(f"{scene}: expected storage_balance_of failure")
 
 
-def _expect_storage_bounds(client: NearClient, contract: str, per_byte: int) -> None:
+def _expect_storage_bounds(
+    client: NearClient, contract: str, per_byte: int, wire: bytes = b""
+) -> None:
     before = client.view_state_values(contract)
-    got = client.view_on(contract, "storage_balance_bounds", b"")
+    got = client.view_on(contract, "storage_balance_bounds", wire)
     expected = (
         f'{{"min":"{66 * per_byte}","max":"{128 * per_byte}"}}'.encode("ascii")
     )
@@ -558,12 +560,9 @@ def main() -> None:
 
     baseline_state = client.view_state_values(contract)
     _expect_storage_bounds(client, contract, per_byte)
-    _expect_storage_bounds_failure(
-        client, contract, b"{}", "nonempty no-argument bounds input"
-    )
-    _expect_storage_bounds_failure(
-        client, contract, b"not-json", "arbitrary nonempty bounds input"
-    )
+    _expect_storage_bounds(client, contract, per_byte, b"{}")
+    _expect_storage_bounds(client, contract, per_byte, b"not-json")
+    _expect_storage_bounds(client, contract, per_byte, b"\xff" * 4096)
     _expect_storage_balance(client, contract, short, None)
     _register(client, contract, short, 0, success=False)
     if client.view_state_values(contract) != baseline_state:

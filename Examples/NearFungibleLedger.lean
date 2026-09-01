@@ -66,7 +66,7 @@ def balanceSelfW1 (_state : State) : UInt64 :=
 def balanceSelfHas (_state : State) : UInt64 := balances.has Context.self
 
 /-- Public-shaped total-supply view over the closed ledger state. -/
-@[pf_entry]
+@[pf_entry, pf_near_no_args]
 def ft_total_supply (state : State) : ProofForge.Core.Value.UInt128 :=
   ⟨state.supplyW0, state.supplyW1⟩
 

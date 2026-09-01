@@ -70,9 +70,8 @@ def storage_balance_of (state : State)
 
 /-- Global closed bounds for the variable 2..64-byte AccountId policy. Unlike the stock FT's fixed
 max-account measurement, this reports the true minimum and maximum accepted retained cost. The
-existing no-parameter wrapper accepts only an empty request body, which is narrower than near-sdk's
-generated wrapper that ignores request bytes. -/
-@[pf_entry]
+explicit no-args wrapper matches near-sdk by ignoring request bytes. -/
+@[pf_entry, pf_near_no_args]
 def storage_balance_bounds (state : State) :
     ProofForge.Wasm.Near.Runtime.StorageBalanceBoundsResult :=
   let perByteCost : NearToken := ⟨state.perByteCostW0, state.perByteCostW1⟩
