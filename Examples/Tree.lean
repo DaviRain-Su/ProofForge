@@ -2077,7 +2077,8 @@ private def linksAllocated (s : State) : Prop :=
 
 private theorem allocated_mono {s t : State} {a : UInt64}
     (ha : allocated s a) (hbump : s.bumpIndex ≤ t.bumpIndex) : allocated t a := by
-  exact ⟨ha.1, lt_of_lt_of_le ha.2 hbump⟩
+  unfold allocated at *
+  exact ⟨ha.1, by omega⟩
 
 /-- `fixInserted` 不改 allocator 元数据；颜色翻转和 N=4 紧凑重接线只写入
 哨兵或已分配地址，因此保持 `wf`。 -/
@@ -2118,7 +2119,8 @@ private theorem fixInserted_wf (before s : State)
       obtain ⟨rfl, rfl⟩ := h
       have hfinal := ptr_bound_set s.bumpIndex s.nodes parentIndex
         { s.nodes[parentIndex]! with color := 0 } hpi hptr
-        hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1 (by decide)
+        hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1
+        (show (0 : UInt64) ≤ 1 by decide)
       exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
     · rename_i hgrand0
       change grandAddress ≠ 0 at hgrand0
@@ -2145,10 +2147,9 @@ private theorem fixInserted_wf (before s : State)
       · let uncleAddress := before.nodes[grandIndex]!.right
         let uncleIndex := (uncleAddress.toNat - 1) % 4
         have hui : uncleIndex < 4 := Nat.mod_lt _ (by decide)
-        split at h
-        · rename_i huncleRed
-          change (if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color) = 1
-            at huncleRed
+        by_cases huncleRed :
+            (if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color) = 1
+        · rw [if_pos huncleRed] at h
           have huncle0 : uncleAddress ≠ 0 := by
             intro hzero
             simp only [hzero, if_pos, OfNat.zero_ne_ofNat] at huncleRed
@@ -2173,7 +2174,8 @@ private theorem fixInserted_wf (before s : State)
               nodesP[(x.toNat - 1) % 4]!.color ≤ 1 :=
             ptr_bound_set s.bumpIndex s.nodes parentIndex
               { s.nodes[parentIndex]! with color := 0 } hpi hptr
-              hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1 (by decide)
+              hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1
+              (show (0 : UInt64) ≤ 1 by decide)
           let nodesU :=
             nodesP.set uncleIndex { s.nodes[uncleIndex]! with color := 0 }
           have hnU : ∀ x : UInt64, 1 ≤ x → x < s.bumpIndex →
@@ -2183,12 +2185,15 @@ private theorem fixInserted_wf (before s : State)
               nodesU[(x.toNat - 1) % 4]!.color ≤ 1 :=
             ptr_bound_set s.bumpIndex nodesP uncleIndex
               { s.nodes[uncleIndex]! with color := 0 } hui hnP
-              hunclePtr.1 hunclePtr.2.1 hunclePtr.2.2.1 (by decide)
+              hunclePtr.1 hunclePtr.2.1 hunclePtr.2.2.1
+              (show (0 : UInt64) ≤ 1 by decide)
           have hfinal := ptr_bound_set s.bumpIndex nodesU grandIndex
             { s.nodes[grandIndex]! with color := 0 } hgi hnU
-            hgrandPtr.1 hgrandPtr.2.1 hgrandPtr.2.2.1 (by decide)
+            hgrandPtr.1 hgrandPtr.2.1 hgrandPtr.2.2.1
+            (show (0 : UInt64) ≤ 1 by decide)
           exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-        · split at h
+        · rw [if_neg huncleRed] at h
+          split at h
           · simp only [Except.ok.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             let nodesP :=
@@ -2203,7 +2208,8 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex s.nodes parentIndex
                 { s.nodes[parentIndex]! with
                   right := 0, parent := nodeAddress, color := 1 } hpi hptr
-                hparentPtr.1 (Nat.zero_le _) hnodeLe (by decide)
+                hparentPtr.1 (Nat.zero_le _) hnodeLe
+                (show (1 : UInt64) ≤ 1 by decide)
             let nodesG :=
               nodesP.set grandIndex
                 { s.nodes[grandIndex]! with
@@ -2216,13 +2222,15 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex nodesP grandIndex
                 { s.nodes[grandIndex]! with
                   left := 0, parent := nodeAddress, color := 1 } hgi hnP
-                (Nat.zero_le _) hgrandPtr.2.1 hnodeLe (by decide)
+                (Nat.zero_le _) hgrandPtr.2.1 hnodeLe
+                (show (1 : UInt64) ≤ 1 by decide)
             let nodeIndex := (nodeAddress.toNat - 1) % 4
             have hni : nodeIndex < 4 := Nat.mod_lt _ (by decide)
             have hfinal := ptr_bound_set s.bumpIndex nodesG nodeIndex
               { s.nodes[nodeIndex]! with
                 left := parentAddress, right := grandAddress, parent := 0, color := 0 }
-              hni hnG hparentLe hgrandLe (Nat.zero_le _) (by decide)
+              hni hnG hparentLe hgrandLe (Nat.zero_le _)
+              (show (0 : UInt64) ≤ 1 by decide)
             exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
           · simp only [Except.ok.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
@@ -2238,19 +2246,20 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex s.nodes grandIndex
                 { s.nodes[grandIndex]! with
                   left := 0, parent := parentAddress, color := 1 } hgi hptr
-                (Nat.zero_le _) hgrandPtr.2.1 hparentLe (by decide)
+                (Nat.zero_le _) hgrandPtr.2.1 hparentLe
+                (show (1 : UInt64) ≤ 1 by decide)
             have hfinal := ptr_bound_set s.bumpIndex nodesG parentIndex
               { s.nodes[parentIndex]! with
                 right := grandAddress, parent := 0, color := 0 } hpi hnG
-              hparentPtr.1 hgrandLe (Nat.zero_le _) (by decide)
+              hparentPtr.1 hgrandLe (Nat.zero_le _)
+              (show (0 : UInt64) ≤ 1 by decide)
             exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
       · let uncleAddress := before.nodes[grandIndex]!.left
         let uncleIndex := (uncleAddress.toNat - 1) % 4
         have hui : uncleIndex < 4 := Nat.mod_lt _ (by decide)
-        split at h
-        · rename_i huncleRed
-          change (if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color) = 1
-            at huncleRed
+        by_cases huncleRed :
+            (if uncleAddress = 0 then 0 else before.nodes[uncleIndex]!.color) = 1
+        · rw [if_pos huncleRed] at h
           have huncle0 : uncleAddress ≠ 0 := by
             intro hzero
             simp only [hzero, if_pos, OfNat.zero_ne_ofNat] at huncleRed
@@ -2275,7 +2284,8 @@ private theorem fixInserted_wf (before s : State)
               nodesP[(x.toNat - 1) % 4]!.color ≤ 1 :=
             ptr_bound_set s.bumpIndex s.nodes parentIndex
               { s.nodes[parentIndex]! with color := 0 } hpi hptr
-              hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1 (by decide)
+              hparentPtr.1 hparentPtr.2.1 hparentPtr.2.2.1
+              (show (0 : UInt64) ≤ 1 by decide)
           let nodesU :=
             nodesP.set uncleIndex { s.nodes[uncleIndex]! with color := 0 }
           have hnU : ∀ x : UInt64, 1 ≤ x → x < s.bumpIndex →
@@ -2285,12 +2295,15 @@ private theorem fixInserted_wf (before s : State)
               nodesU[(x.toNat - 1) % 4]!.color ≤ 1 :=
             ptr_bound_set s.bumpIndex nodesP uncleIndex
               { s.nodes[uncleIndex]! with color := 0 } hui hnP
-              hunclePtr.1 hunclePtr.2.1 hunclePtr.2.2.1 (by decide)
+              hunclePtr.1 hunclePtr.2.1 hunclePtr.2.2.1
+              (show (0 : UInt64) ≤ 1 by decide)
           have hfinal := ptr_bound_set s.bumpIndex nodesU grandIndex
             { s.nodes[grandIndex]! with color := 0 } hgi hnU
-            hgrandPtr.1 hgrandPtr.2.1 hgrandPtr.2.2.1 (by decide)
+            hgrandPtr.1 hgrandPtr.2.1 hgrandPtr.2.2.1
+            (show (0 : UInt64) ≤ 1 by decide)
           exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
-        · split at h
+        · rw [if_neg huncleRed] at h
+          split at h
           · simp only [Except.ok.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             let nodesP :=
@@ -2305,7 +2318,8 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex s.nodes parentIndex
                 { s.nodes[parentIndex]! with
                   left := 0, parent := nodeAddress, color := 1 } hpi hptr
-                (Nat.zero_le _) hparentPtr.2.1 hnodeLe (by decide)
+                (Nat.zero_le _) hparentPtr.2.1 hnodeLe
+                (show (1 : UInt64) ≤ 1 by decide)
             let nodesG :=
               nodesP.set grandIndex
                 { s.nodes[grandIndex]! with
@@ -2318,13 +2332,15 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex nodesP grandIndex
                 { s.nodes[grandIndex]! with
                   right := 0, parent := nodeAddress, color := 1 } hgi hnP
-                hgrandPtr.1 (Nat.zero_le _) hnodeLe (by decide)
+                hgrandPtr.1 (Nat.zero_le _) hnodeLe
+                (show (1 : UInt64) ≤ 1 by decide)
             let nodeIndex := (nodeAddress.toNat - 1) % 4
             have hni : nodeIndex < 4 := Nat.mod_lt _ (by decide)
             have hfinal := ptr_bound_set s.bumpIndex nodesG nodeIndex
               { s.nodes[nodeIndex]! with
                 left := grandAddress, right := parentAddress, parent := 0, color := 0 }
-              hni hnG hgrandLe hparentLe (Nat.zero_le _) (by decide)
+              hni hnG hgrandLe hparentLe (Nat.zero_le _)
+              (show (0 : UInt64) ≤ 1 by decide)
             exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
           · simp only [Except.ok.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
@@ -2340,11 +2356,13 @@ private theorem fixInserted_wf (before s : State)
               ptr_bound_set s.bumpIndex s.nodes grandIndex
                 { s.nodes[grandIndex]! with
                   right := 0, parent := parentAddress, color := 1 } hgi hptr
-                hgrandPtr.1 (Nat.zero_le _) hparentLe (by decide)
+                hgrandPtr.1 (Nat.zero_le _) hparentLe
+                (show (1 : UInt64) ≤ 1 by decide)
             have hfinal := ptr_bound_set s.bumpIndex nodesG parentIndex
               { s.nodes[parentIndex]! with
                 left := grandAddress, parent := 0, color := 0 } hpi hnG
-              hgrandLe hparentPtr.2.1 (Nat.zero_le _) (by decide)
+              hgrandLe hparentPtr.2.1 (Nat.zero_le _)
+              (show (0 : UInt64) ≤ 1 by decide)
             exact ⟨hsz, hb1, hb5, hf5, hfb, hfinal⟩
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
