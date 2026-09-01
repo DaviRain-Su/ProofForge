@@ -1,11 +1,12 @@
 # SVM 组件形式化收口计划
 
-> 权威排期：2026-09-01。本文件是 **SVM（Solana）全部组件形式化做到做完** 的执行计划。
+> 权威排期：2026-09-01。本文件是 **SVM 形式化轨道（Track A）** 详案。
+> SVM 侧能力/应用/语义桥/工程的总图见 **[svm-work-plan.md](svm-work-plan.md)**。
 > 继承 [p-005](tasks/p-005.md) 三层策略与 [`ProofForge/Svm/Sdk/StorageModel.lean`](../../ProofForge/Svm/Sdk/StorageModel.lean) 已落地基础。
 > WASM 线（PR #4 XRPL / PR #5 NEAR）**保持开着**：本计划不触碰、不阻塞、不合入前提。
 > EVM 形式化不在本计划范围。
 
-入口：[plan README](README.md) · [capability matrix](capability-matrix.md) · [runtime/SDK roadmap](runtime-sdk-roadmap.md) · [solanalib](../modules/solanalib.md)
+入口：[SVM 总计划](svm-work-plan.md) · [plan README](README.md) · [capability matrix](capability-matrix.md) · [runtime/SDK roadmap](runtime-sdk-roadmap.md) · [solanalib](../modules/solanalib.md)
 
 ---
 

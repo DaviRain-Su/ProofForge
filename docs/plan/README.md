@@ -8,8 +8,10 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
 
-**当前主线（形式化）**：[SVM 组件形式化收口计划](svm-formalization-plan.md)
-（`sf-000`…`sf-016`）。先把 Solana 侧 L1/L2 全部证完；WASM PR #4/#5 继续开着。
+**当前主线（SVM 全轨）**：[SVM 全面工作计划](svm-work-plan.md)
+（能力 Runtime/SDK + 应用 + 语义桥 + 工程 + 形式化）。
+形式化子计划：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
+WASM PR #4/#5 继续开着，不阻塞本轨。
 
 任务：
 
@@ -176,15 +178,24 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 | [p-004](tasks/p-004.md) | done | removeNode size 守恒 + wf 良构谓词第一批切片 |
 | [p-005](tasks/p-005.md) | done | SDK 组件验证：三层策略 + 几何安全定理第一批 |
 
-## SVM 组件形式化收口（当前主线）
+## SVM 全面工作计划（当前主线）
 
-权威计划：[svm-formalization-plan.md](svm-formalization-plan.md)。
-目标：把 SVM SDK + Component 的 L1/L2 形式化全部做完；**不做** sBPF L3 refinement。
-WASM PR #4 / #5 保持开着，不阻塞本轨。
+总图：[svm-work-plan.md](svm-work-plan.md)。五条轨道并行、写集隔离：
+
+| 轨道 | 任务前缀 | 内容 |
+|---|---|---|
+| A 形式化 | `sf-*` | L1/L2 kernel 证明收口 → [详案](svm-formalization-plan.md) |
+| B Runtime | `svm-rt-*` | signed Clock、Token-2022 extension、alias walk、动态返回… |
+| C SDK | `svm-sdk-*` | rent top-up、owner 政策、POD/transient、Memo/migration… |
+| D 应用 | `svm-app-*` | Phoenix-v1 指令面、matching/fee、非 Phoenix 例子 |
+| E 语义桥 | `svm-sem-*` | Solanalib / assembler-semantics 加深 |
+| F 工程 | `svm-eng-*` | 形式化 CI 门、双矩阵收口页 |
+
+### Track A — 形式化（`sf-000`…`sf-016`）
 
 | ID | 状态 | 内容 |
 |---|---|---|
-| [sf-000](tasks/sf-000.md) | todo | 证明基础设施成文（wf-parts / word 引理习惯） |
+| [sf-000](tasks/sf-000.md) | todo | 证明基础设施成文 |
 | [sf-001](tasks/sf-001.md) | todo | Queue 非空 push 读回 |
 | [sf-002](tasks/sf-002.md) | todo | Queue pop / peek / initialize / 往返 |
 | [sf-003](tasks/sf-003.md) | todo | BoundedVec pop + setAt 读回 |
@@ -202,7 +213,31 @@ WASM PR #4 / #5 保持开着，不阻塞本轨。
 | [sf-015](tasks/sf-015.md) | todo | Token / ATA / Pda / System / Memo 扫尾 |
 | [sf-016](tasks/sf-016.md) | todo | SVM 形式化收口审计 |
 
-开工顺序：`sf-000` → `sf-001` → `sf-002`（先收口 Queue），再按计划波次下行。
+### Track B–F — 能力 / 应用 / 语义 / 工程
+
+| ID | 状态 | 内容 |
+|---|---|---|
+| [svm-rt-001](tasks/svm-rt-001.md) | todo | Clock signed timestamp |
+| [svm-rt-002](tasks/svm-rt-002.md) | todo | Token-2022 第一个 typed extension |
+| [svm-rt-003](tasks/svm-rt-003.md) | todo | AccountView+mutation alias-aware walk |
+| [svm-rt-004](tasks/svm-rt-004.md) | todo | Instructions / sliced sysvar |
+| [svm-rt-005](tasks/svm-rt-005.md) | todo | nested/wide dynamic return 政策 |
+| [svm-sdk-001](tasks/svm-sdk-001.md) | todo | resize rent top-up |
+| [svm-sdk-002](tasks/svm-sdk-002.md) | todo | owner-reassign 政策 |
+| [svm-sdk-003](tasks/svm-sdk-003.md) | todo | generic POD transient shapes |
+| [svm-sdk-004](tasks/svm-sdk-004.md) | todo | 更多 manifest-bounded handles |
+| [svm-sdk-005](tasks/svm-sdk-005.md) | todo | Token-2022 extension Sdk facade |
+| [svm-sdk-006](tasks/svm-sdk-006.md) | todo | UTF-8 Memo + migration payload |
+| [svm-sdk-007](tasks/svm-sdk-007.md) | todo | 持久容器有界 iteration |
+| [svm-app-001](tasks/svm-app-001.md) | todo | Phoenix-v1 下一组 instruction |
+| [svm-app-002](tasks/svm-app-002.md) | todo | matching/fee/remainder 宣称面 |
+| [svm-app-003](tasks/svm-app-003.md) | todo | 非 Phoenix SDK 小例子集 |
+| [svm-sem-001](tasks/svm-sem-001.md) | todo | Solanalib correspondence 加深 |
+| [svm-sem-002](tasks/svm-sem-002.md) | todo | assembler-semantics golden 扩样 |
+| [svm-eng-001](tasks/svm-eng-001.md) | todo | 形式化门进 CI |
+| [svm-eng-002](tasks/svm-eng-002.md) | todo | 能力+证明双矩阵收口页 |
+
+本周默认：`sf-000`→`sf-001`；并行可选 `svm-rt-001` 或 `svm-sdk-001`；顺手 `svm-eng-001`。
 
 
 积压：[backlog.md](backlog.md)

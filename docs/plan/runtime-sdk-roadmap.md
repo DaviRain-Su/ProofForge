@@ -2,6 +2,8 @@
 
 > 更新：2026-08-30。本文是 SVM 与 EVM 后续 Runtime / SDK 工作的权威排期；
 > [backlog.md](backlog.md) 记录已经落地的证据和当前 Phoenix 切片。
+> **SVM 侧剩余能力 + 形式化 + 应用的执行总图**见 [svm-work-plan.md](svm-work-plan.md)
+> （2026-09-01）；形式化详案见 [svm-formalization-plan.md](svm-formalization-plan.md)。
 > 多 agent 并行时的 write set、shared-lock 和交付合同见
 > [并行开发执行图](parallel-workstreams.md)。
 > “达到主流环境能力”的完整定义和 F0–F3 优先级见
