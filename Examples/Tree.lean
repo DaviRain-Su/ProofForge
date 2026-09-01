@@ -1516,6 +1516,10 @@ private theorem ptr_bound_set_unalloc (bump : UInt64) (nodes : Vector Node 4)
 `insertRoot_wf` / `insertNode_wf_empty` / `insertNode_wf_update`。
 待补：`rotateLeft_wf` / `rotateRight_wf`、`insertAt` 臂、`removeNode_wf`。 -/
 
+/-! ### sf-011：旋转 `wf`（待续）与插入保持
+
+`rotateLeft_wf` / `rotateRight_wf` 仍待补；下方先收 `insertRoot` 臂。 -/
+
 /-- `insertRoot` 成功路径保持 `wf`（对齐 `allocNode_wf` 的 bump / free-list 两臂）。 -/
 private theorem insertRoot_wf (s : State) (k v : UInt64) {t : State} {a : UInt64}
     (h : insertRoot s k v = .ok (t, a)) (hwf : wf s) : wf t := by
@@ -1671,6 +1675,55 @@ theorem insertNode_wf_update (s : State) (i : Nat) (v : UInt64) (hi : i < 4)
     (hwf : wf s) :
     wf { s with nodes := s.nodes.set i { s.nodes[i]! with value := v } } :=
   set_value_wf s i v hi hwf
+
+/-- `releaseRemoved` 保持 `wf`（回收地址已分配且 size > 0）。 -/
+private theorem releaseRemoved_wf (s : State) (addr : UInt64)
+    (hwf : wf s) (ha : 1 ≤ addr ∧ addr < s.bumpIndex)
+    (hsz0 : (0 : Nat) < s.size.toNat) : wf (releaseRemoved s addr) := by
+  unfold releaseRemoved
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  have ha0n : (1 : Nat) ≤ addr.toNat := ha.1
+  have ha1n : addr.toNat < s.bumpIndex.toNat := ha.2
+  have hb5n : s.bumpIndex.toNat ≤ 5 := hb5
+  have haddr5 : addr.toNat ≤ 5 := by omega
+  refine ⟨?_, hb1, hb5, ?_, ?_, ?_⟩
+  · show (s.size - 1).toNat ≤ 4
+    have hsz' : s.size.toNat ≤ 4 := hsz
+    -- (size - 1).toNat ≤ size.toNat when size > 0
+    have hsub : (s.size - 1).toNat ≤ s.size.toNat := by
+      have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+      rw [UInt64.toNat_sub]
+      -- size.toNat ≥ 1
+      have : (1 : Nat) ≤ s.size.toNat := hsz0
+      have hone : UInt64.toNat 1 = 1 := rfl
+      simp only [hone, h2]
+      have hszlt : s.size.toNat < 4294967296 * 4294967296 := UInt64.toNat_lt_size _
+      omega
+    omega
+  · show addr.toNat ≤ 5
+    exact haddr5
+  · show addr ≤ s.bumpIndex
+    exact Nat.le_of_lt ha.2
+  · intro a ha0 ha1
+    have ha0n' : (1 : Nat) ≤ a.toNat := ha0
+    have ha1n' : a.toNat < s.bumpIndex.toNat := ha1
+    have hslot : (a.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    have hi4 : (addr.toNat - 1) % 4 < 4 := Nat.mod_lt _ (by decide)
+    by_cases hia : (addr.toNat - 1) % 4 = (a.toNat - 1) % 4
+    · have hold := hptr a ha0 ha1
+      have hget : (s.nodes.set ((addr.toNat - 1) % 4)
+          { s.nodes[(addr.toNat - 1) % 4]! with
+            left := s.freeHead, right := 0, parent := 0, color := 0 } hi4)[(a.toNat - 1) % 4]! =
+          { s.nodes[(addr.toNat - 1) % 4]! with
+            left := s.freeHead, right := 0, parent := 0, color := 0 } := by
+        rw [← hia, vec_set_self]
+      rw [hget]
+      exact ⟨hfb, Nat.zero_le _, Nat.zero_le _, Nat.zero_le _⟩
+    · have hget := vec_set_ne s.nodes ((addr.toNat - 1) % 4) ((a.toNat - 1) % 4)
+        { s.nodes[(addr.toNat - 1) % 4]! with
+          left := s.freeHead, right := 0, parent := 0, color := 0 } hi4 hia hslot
+      rw [hget]
+      exact hptr a ha0 ha1
 
 end Proofs
 
