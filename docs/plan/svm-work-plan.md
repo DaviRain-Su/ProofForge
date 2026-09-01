@@ -95,9 +95,9 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | 应用 | Phoenix N=4 + Phoenix-v1 profile（部分 instruction）；新增 `BatchSizer`（吃 Core.Math） | **CancelUpTo 之后的指令面**、matching/fee（现可直接用 mulDiv/FixedPoint）、跨 target conformance |
 | 语义桥 / L3 | checked arith / CFG branch correspondence；assembler-semantics golden（E0） | E1–E5 ladder |
 | 工程 | 三 lane CI、Lean/SVM/EVM 门 | 形式化门进 CI、artifact/digest 漂移说明 |
-| WASM（外分支） | PR #4 XRPL / PR #5 NEAR 仍开；`wasm-near` 有 force-push | **不并入本轨、不阻塞** |
+| WASM（外分支） | PR #4 XRPL / PR #5 NEAR 仍开、持续推进 | **不并入本轨、不阻塞**；合入时只做窄缝适配（§3.2） |
 
-### 3.1 相对本计划起草点的 delta
+### 3.1 相对本计划起草点的 delta（main 已吸收）
 
 | 来源 | 变更 | 对本轨影响 |
 |---|---|---|
@@ -105,13 +105,34 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | **main** R1-024…031 | shared UInt64 math + fixed-point | Track D fee/matching **少造轮子**；不新增 Runtime leaf |
 | **main** R5-022/023 | SafeCast→UInt8/16 | 共享层；非 blocker |
 | **main** docs | backlog / roadmap / capability / parity 刷新 | 本分支已 merge；总图入口保留 |
-| **wasm-near** | storage deposit / unregister 等推进 | 与 SVM 写集正交；继续开着 |
 
-本计划分支已 **merge 当日 `origin/main`**，后续开工以合并后树为准。
+本计划分支已 **merge 当日 `origin/main`**（与 `origin/main` 无 ahead commits）。后续开工以合并后树为准；再拉 main 只防新 Queue/math 提交。
+
+### 3.2 外分支快照与对本轨影响（2026-09-01 复核）
+
+| 分支 / PR | 相对 main | 实质内容 | 碰到的 SVM/共享面 | 对本轨 |
+|---|---|---|---|---|
+| **main** | = 本计划 merge-base | Queue 证明 + Core.Math（已吃） | `StorageModel` / `Core.*` | **已吸收**；Phase 1 勿重做 |
+| **wasm-near** #5 | ~10 commits behind main；持续 force-push 风格推进 | NEAR FT / storage deposit·unregister / JSON / Promise 竖切 | `Svm/IR.lean`（reject `.near`）、`Svm/EntryAdapter.lean`（拒 foreign annotation）、`Tests/SvmSdkPubkeySpec.lean`、大量 `docs/plan/README` wsm 行 | **能力正交**；合入时机械补 exhaustiveness，**不改** StorageModel / L3 / Phoenix |
+| **wasm-feature** #4 | ~86 commits behind main | XRPL Bedrock 能力长尾（escrow/lock/trustline 探针等） | `Svm/IR.lean`（reject `.xrpl`）、`docs/plan/README` wsm 行 | 同上；比 near 更旧，合入冲突主要在 **文档表** |
+
+**窄缝详情（合入 WASM 时必做，平时不做）**
+
+1. `Extract.IR.ValKind` / `OpExt` 一旦出现 `.xrpl` / `.near`，`ProofForge/Svm/IR.lean` 的 `projectValExt` / `projectOpExt` / `projectionError` 必须补 reject 臂（外分支已有补丁形状可抄）。  
+2. `EntryAdapter.decode` 若合入 near 的「拒非 `svm.raw.*` annotation」策略，与本轨 Runtime/SDK 工作不冲突，合并时保留即可。  
+3. `docs/plan/README.md` 任务表会大面积冲突：以 **保留本轨 `sf-*` / `svm-*` 入口 + 并入 wsm 行** 为策略，勿让 WASM 表冲掉 SVM 计划链接。  
+4. NEAR `Queue64` / XRPL 容器与 SVM `StorageModel` Queue **无共享实现**；概念对标可参考，**禁止**为对齐 WASM 去改 SVM 证明目标。
+
+**规划结论（不改 Phase 顺序）**
+
+- Phase 1–7 **不变**；外分支不插入新 Phase。  
+- 本轨实现 PR **禁止**以 `wasm-near` / `wasm-feature` 为 base。  
+- 若 WASM 先合 main：本轨下一次 `merge origin/main` 时只做 §3.2 窄缝 + README 表合并，然后继续 sf-001。  
+- 若本轨证明先合：WASM 合入时由他们补 reject 臂（他们分支上已有）。
 
 ---
 
-## 4 推荐总序（给人排期用）
+## 4. 推荐总序（给人排期用）
 
 不必严格串行；下列是 **依赖友好** 的默认顺序。括号内是并行建议。
 

@@ -197,8 +197,9 @@ SF-9 可与 SF-1..4 **并行**（不同文件），但不得改 `StorageModel.le
 
 1. 读 §2 §7 与 [p-005](tasks/p-005.md)  
 2. [sf-000](tasks/sf-000.md)  
-3. [sf-001](tasks/sf-001.md) → [sf-002](tasks/sf-002.md) 把 Queue 标 done  
+3. [sf-001](tasks/sf-001.md)（**只补 wrap + 读回**；nowrap 已在 main）→ [sf-002](tasks/sf-002.md)（**wrap/peek/往返**）  
 4. 按波次向下，每片更新矩阵  
 5. [sf-016](tasks/sf-016.md) 收口  
 
-WASM PR #4 / #5：继续开着；本轨不要求它们先合，也不在其上叠 SVM 形式化提交。
+WASM PR #4 / #5：继续开着；本轨不要求它们先合。已 merge 2026-09-01 main。
+外分支对 SVM 的真实重叠仅 `Svm/IR` reject 臂 / EntryAdapter 拒 foreign annotation / README 任务表——见 [svm-work-plan.md §3.2](svm-work-plan.md)；**不改** Queue 证明目标与 L3 阶梯。
