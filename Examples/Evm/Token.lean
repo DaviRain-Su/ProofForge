@@ -31,6 +31,10 @@ attribute [pf_inline]
     nonces := Storage.Layout.root.addressMap256 |>.next |>.addressPairMap256 |>.next
       |>.addressMap256 |>.handle }
 
+/-- Soft-abort state copy for `Effect.ensure` gates (supply / cap / pause unchanged). -/
+@[reducible, pf_inline] private def hold (s : State) : State :=
+  { dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply }
+
 @[pf_entry]
 def init (_owner : Address) : State :=
   { dummy := 0, paused := Pausable.running, cap := ⟨1000, 0, 0, 0⟩, supply := UInt256.zero }
@@ -108,16 +112,13 @@ def permit (s : State) (owner spender : Address) (value deadline : UInt256)
   else
     .error .overflow
 
+/-- Pause-gated approve: sequential `Effect.ensure` soft-aborts (R5-012 Bool ABI). -/
 @[pf_entry]
 def approve (s : State) (spender : Address) (amount : UInt256) :
     Except Error (State × Bool) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Access.runningViolation)
-  else if Address.isZero spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Revert.zeroAddress)
-  else if (0 : UInt64) ≠ 1 then
+  Effect.ensure (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensure (!Address.isZero spender) (hold s) Revert.zeroAddress fun _ =>
+  if (0 : UInt64) ≠ 1 then
     .ok ({ dummy := Fungible.Allowances.approve storage.allowances Context.caller spender amount,
            paused := s.paused, cap := s.cap, supply := s.supply },
       Effect.thenTrue (Event.approval Context.caller spender amount))
@@ -409,19 +410,20 @@ theorem approve_preserves_supply (s : State) (sp : Address) (a : UInt256)
     {t : State} {r : Bool}
     (h : approve s sp a = .ok (t, r)) : t.supply = s.supply := by
   unfold approve at h
+  simp only [Effect.ensure, Effect.abort, hold] at h
   split at h
-  · simp at h
-    obtain ⟨rfl, rfl⟩ := h
-    rfl
   · split at h
-    · simp at h
-      obtain ⟨rfl, rfl⟩ := h
-      rfl
     · split at h
       · simp at h
         obtain ⟨rfl, rfl⟩ := h
         rfl
       · simp at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
 
 end Proofs
 

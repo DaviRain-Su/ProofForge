@@ -22,11 +22,17 @@ instead of nested `if`/`match`.
 3. `Tests.EvmTokenErgonomicsSpec` + registry pin; EVM artifact count → 46
 4. Full `Examples.Token` migration deferred (kernel supply proofs are nested-`if`-shaped)
 
+## Landed (Token `approve` port)
+
+5. `Examples.Evm.Token.approve` uses `Effect.ensure` / `hold` (pause + zero-address gates);
+   `approve_preserves_supply` retargeted; registry digest `1dc6b7a9d09f1478`
+   (was `b69773a11a64286e`)
+
 ## Follow-up
 
-- Port `Examples.Token` `approve`/`transfer`/`transferFrom` to `Effect.ensure` and regenerate
-  supply-preservation proofs
-- Update `docs/plan/do-notation-guide.md` once Token itself is sequential
+- Port `Examples.Evm.Token` `transfer` / `transferFrom` (and later mint/burn Bool-shaped
+  gates) to `Effect.ensure`; regenerate remaining nested-`if` supply proofs
+- Update `docs/plan/do-notation-guide.md` once transfer/transferFrom are sequential too
 
 ## Non-goals
 
@@ -37,3 +43,4 @@ instead of nested `if`/`match`.
 ## Acceptance (slice)
 
 §5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.
+Token `approve` is sequential; `transfer` / `transferFrom` remain nested-`if`.
