@@ -14,6 +14,13 @@ the same checked account load/store and bounded tree/allocator routines that
 
 ## Physical-state contract
 
+Account-resident allocators recycle one-based slots inside a **compile-time** region
+capacity; they do not make containers unbounded. Size `capacity` so
+`header + stride * capacity` fits the account (`Memory.maxAccountDataBytes` = 10 MiB,
+per-tx resize ≤ 10240) and `capacity ≤ containerCapacityLimit`. See
+`docs/modules/allocator-bounds.md`.
+
+
 Every persistent value in this facade is a `u64` account word addressed by an explicit
 one-based slot index into a static `Region` (`account`, `baseWord`, `strideWords`,
 `capacity`, `indexBase`, `access`). The integer `0` is the universal null sentinel: map
@@ -155,6 +162,24 @@ next push reinitializes them. -/
     let value := read vec.slots size
     let _ := write vec.count 0 (size - 1)
     value
+
+/-- Alias of `initialize`: reset the count header. Payload words stay unreachable. -/
+@[pf_inline] def BoundedVec.clear (vec : BoundedVec) : UInt64 :=
+  BoundedVec.initialize vec
+
+/-- One-based unordered swap-remove. OOB or null position returns `0` with no store; success
+returns `1`. Forward positions after the hole are not stable. -/
+@[pf_inline] def BoundedVec.removeAt (vec : BoundedVec) (position : UInt64) : UInt64 :=
+  let size := BoundedVec.size vec
+  if position = 0 || size < position then 0
+  else if position = size then
+    let _ := BoundedVec.pop vec
+    1
+  else
+    let last := read vec.slots size
+    let _ := write vec.slots position last
+    let _ := write vec.count 0 (size - 1)
+    1
 
 /-! ## Ordered maps -/
 

@@ -15,9 +15,15 @@ namespace ProofForge.Svm.Runtime
 /--
 当前 epoch。抽出器认这个名字，发射 `sol_get_clock_sysvar` 后读
 `Clock.epoch`（偏移 16）。宿主侧是不可约 stub。
-`epoch_start_timestamp` 本剖面 fail closed。
 -/
 @[irreducible] def clockEpoch : UInt64 := 0
+
+/--
+`Clock.epoch_start_timestamp` at native `repr(C)` offset 8. Official layout stores this as
+`i64`; the Runtime leaf carries the same 64-bit pattern in a `UInt64` register. Signed
+interpretation is `Sdk.Sysvar.Clock.asSigned`. The host stub is irreducible.
+-/
+@[irreducible] def clockEpochStartTimestamp : UInt64 := 0
 
 /--
 Future epoch for which the leader schedule was most recently calculated. Extracted programs read
@@ -27,8 +33,8 @@ Future epoch for which the leader schedule was most recently calculated. Extract
 
 /--
 当前 unix 时间戳。抽出后发射 `sol_get_clock_sysvar`，读
-`Clock.unix_timestamp`（偏移 32）为无符号 `u64`。
-宿主侧是不可约 stub。有符号语义本剖面不建模。
+`Clock.unix_timestamp`（偏移 32）的原生 `i64` 位型，装在 `UInt64` 寄存器里。
+有符号解读见 `Sdk.Sysvar.Clock.asSigned`。宿主侧是不可约 stub。
 -/
 @[irreducible] def unixTime : UInt64 := 0
 
@@ -628,6 +634,22 @@ def token2022TransferChecked (amount : UInt64) (decimals : UInt64) : UInt64 :=
     #[.u8le 12, .u64le amount, .u8le decimals]
 
 /--
+Token-2022 `TransferChecked` whose mint may carry exactly one official `MintCloseAuthority`
+extension (ordinal 3). Source/destination accounts still use the closed base TLV policy; every
+other mint extension remains fail closed.
+-/
+def token2022TransferCheckedMintClose (amount : UInt64) (decimals : UInt64) : UInt64 :=
+  invoke 4
+    #[{ acc := 1, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
+      { acc := 2, signer := false, writable := false,
+        accountData := some .token2022MintClose },
+      { acc := 3, signer := false, writable := true,
+        accountData := some (.token2022Base .account) },
+      { acc := 0, signer := true, writable := false }]
+    #[.u8le 12, .u64le amount, .u8le decimals]
+
+/--
 Token `TransferChecked` with a statically indexed outer account recipe. Every index must reduce
 to a literal during extraction. This is the multi-vault form of `tokenTransferChecked`; the
 authority is an ordinary transaction signer.
@@ -672,6 +694,18 @@ def tokenTransferSignedIx
       { acc := authorityIx, signer := true, writable := false }]
     #[.u8le 3, .u64le amount]
     seeds bump
+
+/--
+Statically indexed classic SPL Token `Transfer` (tag 3) with an ordinary transaction signer.
+Account metas are source / destination / authority; no mint account or decimals byte.
+-/
+def tokenTransferIx
+    (programIx sourceIx destinationIx authorityIx amount : UInt64) : UInt64 :=
+  invoke programIx
+    #[{ acc := sourceIx, signer := false, writable := true },
+      { acc := destinationIx, signer := false, writable := true },
+      { acc := authorityIx, signer := true, writable := false }]
+    #[.u8le 3, .u64le amount]
 
 /--
 Token `MintToChecked`：普通包装。decimals 编译期常量。

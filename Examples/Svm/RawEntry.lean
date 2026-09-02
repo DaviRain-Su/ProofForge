@@ -242,4 +242,12 @@ def bytesFindIndex (_s : State) (haystack needle : BoundedBytes 8) : Option UInt
 def stringsFindIndex (_s : State) (text needle : BoundedString 8) : Option UInt64 :=
   text.findIndex? needle
 
+/-- Wide dynamic return (`svm-rt-005`): each `UInt128` element is two little-endian limbs. -/
+@[pf_entry, pf_svm_raw 39 2 0]
+def echoBoundedU128 (_s : State) (items : BoundedVec UInt128 2) : BoundedVec UInt128 2 := items
+
+/-- Wide tagged return: `Option UInt128` uses tag + two payload limbs. -/
+@[pf_entry, pf_svm_raw 40 2 0]
+def echoOptionU128 (_s : State) (value : Option UInt128) : Option UInt128 := value
+
 end Examples.Svm.RawEntry

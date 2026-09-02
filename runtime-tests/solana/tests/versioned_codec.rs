@@ -12,6 +12,7 @@ use {
 const SOURCE_STATE_LEN: usize = 2 * 8;
 const LEDGER_STORAGE_LEN: usize = 4 * 8;
 const MIGRATOR_STORAGE_LEN: usize = 5 * 8;
+const PAYLOAD_MIGRATOR_STORAGE_LEN: usize = 6 * 8;
 
 const UNINITIALIZED: u64 = 0;
 const READY: u64 = 1;
@@ -28,6 +29,7 @@ const ALREADY_CURRENT: u64 = 2;
 
 const LEDGER_DISCRIMINATOR: u64 = 0x4c45_4447_4552_3101;
 const CONFIG_DISCRIMINATOR: u64 = 0x434f_4e46_4947_3201;
+const PAYLOAD_CONFIG_DISCRIMINATOR: u64 = 0x5041_594c_4f41_4401;
 
 struct Fixture {
     program_id: Pubkey,
@@ -260,4 +262,41 @@ fn migration_policy_requires_the_single_explicit_version_edge() {
         fixture.storage.data, before_unlisted,
         "unlisted source version must not move"
     );
+}
+
+#[test]
+fn payload_migration_copies_legacy_word_then_publishes_version() {
+    let mut fixture = Fixture::new(
+        "VersionedPayloadMigrator",
+        "PF_VERSIONED_PAYLOAD_MIGRATOR_SO",
+        PAYLOAD_MIGRATOR_STORAGE_LEN,
+    );
+    set_word(&mut fixture.storage, 1, PAYLOAD_CONFIG_DISCRIMINATOR);
+    set_word(&mut fixture.storage, 2, 1);
+    set_word(&mut fixture.storage, 4, 77);
+    set_word(&mut fixture.storage, 5, 0);
+
+    fixture.call("inspectStorage", &[], UNSUPPORTED_VERSION);
+    let before_initialize = fixture.storage.data.clone();
+    fixture.call("initializeStorage", &[], REJECTED);
+    assert_eq!(
+        fixture.storage.data, before_initialize,
+        "initialization must not migrate payload"
+    );
+
+    fixture.call("migrateV1", &[], TRANSITIONED);
+    assert_eq!(word(&fixture.storage, 2), 2);
+    assert_eq!(word(&fixture.storage, 5), 77, "legacy word 4 must copy into word 5");
+    fixture.call("inspectStorage", &[], READY);
+    fixture.call("current", &[], 77);
+
+    let before_replay = fixture.storage.data.clone();
+    fixture.call("migrateV1", &[], ALREADY_CURRENT);
+    assert_eq!(
+        fixture.storage.data, before_replay,
+        "payload transition replay must not write"
+    );
+
+    fixture.call("setCurrent", &[88], 88);
+    fixture.call("current", &[], 88);
 }

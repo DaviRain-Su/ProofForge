@@ -241,6 +241,29 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 
 [proof_forge](https://github.com/DaviRain-Su/proof_forge) 是早期的 `program … where` DSL。本仓复用 Lean 语法本身，抽出能 fail-closed 降到链上的子集。
 
+## 证明
+
+第一批 kernel-checked 合约性质已落在合约文件内的 `Proofs` 节
+（`Examples/Counter.lean`、`Examples/Capped.lean`、`Examples/Token.lean`）：
+成功路径精确后置条件、单调性、Token supply 效应与 Capped cap 不变量，
+全部只依赖标准公理 `propext` / `Quot.sound`。
+
+### 本地形式化门（`svm-eng-001`）
+
+在开 PR 或合并前，本地可复现 Lean / SVM lane 的门禁：
+
+```bash
+python3 scripts/check_ownership.py
+python3 scripts/check_no_sorry.py
+lake build
+lake build Tests.ProofSpec Tests.SolanalibSpec Tests.SemanticsSpec
+lake build Tests
+```
+
+- `check_ownership.py`：拦截 `Examples`→`Emit` 越界 import 与 Runtime/SDK 协议词泄漏；失败打印 `path:line: …`。
+- `check_no_sorry.py`：扫描 `ProofForge/`、`Examples/`、`Tests/` 中的 `sorry` / `sorryAx`；白名单仅负向夹具（见脚本头注释）；失败打印 `rel:line: message`。
+- `Tests.ProofSpec` / `SolanalibSpec` / `SemanticsSpec`：Track A 与 L3 桥的具名形式化目标；CI 的 Lean lane 会先钉这三项，再跑全量 `lake build Tests`。SVM lane 同样跑 ownership + no-sorry，再构建/跑 Mollusk。
+
 ## 文档
 
 从 [docs/INDEX.md](docs/INDEX.md) 进。

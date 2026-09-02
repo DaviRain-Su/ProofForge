@@ -76,6 +76,16 @@ def lineSize (_s : State) : UInt64 :=
 def linePeek (_s : State) : UInt64 :=
   BoundedQueue.peek (small 1).line
 
+/-- Zero-based offset from the front across the ring. Empty/OOB returns `0`. -/
+@[pf_entry]
+def lineGetAt (_s : State) (offset : UInt64) : UInt64 :=
+  BoundedQueue.getAt (small 1).line offset
+
+/-- Reset queue headers; payload words stay unreachable. -/
+@[pf_entry]
+def lineClear (_s : State) : UInt64 :=
+  BoundedQueue.clear (small 1).line
+
 /-- Enqueue one ticket; a full line returns the `0` sentinel without mutating state. -/
 @[pf_entry]
 def lineEnqueue (_s : State) (ticket : UInt64) : UInt64 :=

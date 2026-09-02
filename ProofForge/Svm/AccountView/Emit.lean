@@ -8,11 +8,21 @@ structure Context where
   loadValue : Ops.Val → Nat → Nat → String → Except String String
   headerStack : Nat → Nat
   accountCount : Nat
+  /-- When true, `base + index` inside the static prefix loads the prelude's canonical header
+  (required once AccountView shares an alias-aware walk with direct mutation). View-only programs
+  keep the historical walk-from-r6 path so their ELF digest stays stable. -/
+  useWalkedHeaders : Bool := false
 
 /-- Walk from the first transaction account header to `base + index`, checking every account tag
 and advancing through the real account geometry. This is the dynamic twin of the static
 `emitWalkAccounts` prelude walk: same 88-byte header layout, same data-length/alignment skip, no
-copies and no pointers outside the invocation. -/
+copies and no pointers outside the invocation.
+
+When `base + index` falls inside the already-walked static prefix (`accountCount`) and
+`useWalkedHeaders` is set, load the canonical header pointer saved by the prelude walk. That path
+is required for `svm-rt-003` programs that combine AccountView with alias-aware direct mutation:
+the prelude has already resolved Loader-v3 duplicates, so selection must not re-demand a fresh
+`0xff` tag. -/
 private def emitSelect (context : Context) (view : View) (index : Ops.Val)
     (stackOff nonce : Nat) (scope : String) : Except String String := do
   let loadIndex ← context.loadValue index (stackOff + 8) (nonce + 1) (scope ++ "_index")
@@ -23,6 +33,7 @@ private def emitSelect (context : Context) (view : View) (index : Ops.Val)
   let ok := s!"ok_view_{token}"
   let loop := s!"view_walk_{token}"
   let align := s!"view_al_{token}"
+  let fromStack := s!"view_from_stack_{token}"
   return loadIndex ++
     s!"\
   ; select bounded remaining account base={view.base} capacity={view.capacity}
@@ -34,6 +45,8 @@ private def emitSelect (context : Context) (view : View) (index : Ops.Val)
   add64 r9, r2
   ldxdw r2, [r6 + NUM_ACCOUNTS]
   jge r9, r2, {fail}
+  lddw r2, {if context.useWalkedHeaders then context.accountCount else 0}
+  jlt r9, r2, {fromStack}
   mov64 r8, r6
   add64 r8, 8
 {loop}:
@@ -60,6 +73,14 @@ private def emitSelect (context : Context) (view : View) (index : Ops.Val)
 {selected}:
   ldxb r1, [r8 + 0]
   jne r1, 0xff, {fail}
+  ja {ok}
+{fromStack}:
+  mov64 r1, r9
+  mul64 r1, 8
+  add64 r1, {context.headerStack 0}
+  mov64 r8, r10
+  sub64 r8, r1
+  ldxdw r8, [r8 + 0]
   ja {ok}
 {fail}:
   lddw r0, 0x1

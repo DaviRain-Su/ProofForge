@@ -94,6 +94,22 @@ unreachable while `head = count = 0`; success returns `1`. -/
   let head := BoundedQueue.headSlot queue
   if head = 0 then 0 else read queue.slots head
 
+/-- Zero-based logical offset from the front. Empty, OOB, or empty-head returns `0` with no
+store. Because `offset < size ≤ capacity`, the ring wraps at most once. -/
+@[pf_inline] def BoundedQueue.getAt (queue : BoundedQueue) (offset : UInt64) : UInt64 :=
+  let size := BoundedQueue.size queue
+  let head := BoundedQueue.headSlot queue
+  if size = 0 || head = 0 || size ≤ offset then 0
+  else
+    let capacity := BoundedQueue.capacity queue
+    let raw := head + offset
+    let slot := if capacity < raw then raw - capacity else raw
+    read queue.slots slot
+
+/-- Alias of `initialize`: reset both ring headers. Payload words stay unreachable. -/
+@[pf_inline] def BoundedQueue.clear (queue : BoundedQueue) : UInt64 :=
+  BoundedQueue.initialize queue
+
 /-- Append `value` at the ring tail. A full queue returns `0` and performs no store; success
 returns the one-based tail slot that received the value and initializes `head` when the
 queue was empty. -/

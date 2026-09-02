@@ -36,6 +36,52 @@ def Span.overlaps (left right : Span) : Bool :=
   left.account == right.account &&
     left.offsetBytes < right.endOffset && right.offsetBytes < left.endOffset
 
+/-! ### sf-014：Span 几何 -/
+
+theorem Span.wellFormed_account_lt
+    (span : Span) (accountLimit : Nat) (h : span.wellFormed accountLimit = true) :
+    span.account < accountLimit := by
+  simp [Span.wellFormed] at h
+  exact h.1.1
+
+theorem Span.wellFormed_length_pos
+    (span : Span) (accountLimit : Nat) (h : span.wellFormed accountLimit = true) :
+    0 < span.lengthBytes := by
+  simp [Span.wellFormed] at h
+  exact h.1.2
+
+theorem Span.wellFormed_endOffset_le
+    (span : Span) (accountLimit : Nat) (h : span.wellFormed accountLimit = true) :
+    span.endOffset ≤ maxAccountDataBytes := by
+  simp [Span.wellFormed] at h
+  exact h.2
+
+theorem Span.overlaps_symm (left right : Span) :
+    left.overlaps right = right.overlaps left := by
+  by_cases ha : left.account = right.account
+  · -- same account: overlap is symmetric in the two offset tests
+    have hb : (left.account == right.account) = true := by simp [ha]
+    have hc : (right.account == left.account) = true := by simp [ha]
+    simp only [Span.overlaps, hb, hc, true_and]
+    exact Bool.and_comm
+      (decide (left.offsetBytes < right.endOffset))
+      (decide (right.offsetBytes < left.endOffset))
+  · -- distinct accounts: both sides false
+    have hb : (left.account == right.account) = false := by
+      simp [beq_eq_false_iff_ne, ha]
+    have hc : (right.account == left.account) = false := by
+      simp [beq_eq_false_iff_ne, Ne.symm ha]
+    simp [Span.overlaps, hb, hc]
+
+/-- Same-account spans that abut (`end = start`) do not overlap. -/
+theorem Span.abut_not_overlaps (account start mid finish : Nat)
+    (hle : start ≤ mid) (hle' : mid ≤ finish) :
+    ({ account, offsetBytes := start, lengthBytes := mid - start } : Span).overlaps
+        { account, offsetBytes := mid, lengthBytes := finish - mid } = false := by
+  simp [Span.overlaps, Span.endOffset]
+  intro _
+  omega
+
 private def Span.canonical (span : Span) : String :=
   s!"{span.account}.{span.offsetBytes}.{span.lengthBytes}"
 

@@ -242,73 +242,65 @@ private def logicalReturnSchema (env : Environment) (kind : Core.IR.MethodKind) 
         throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
       return ← codecSchemaOfType env successArgs[successArgs.size - 1]!
 
-/-- Source limbs for one boundary scalar (`ceil(byteWidth / 8)`, capped at four). -/
-private def scalarReturnLimbCount (type : Core.Codec.Scalar) : Except String Nat := do
-  unless Core.Codec.Scalar.isWellFormed type do
-    throw "extract/unsupported: bounded result has a malformed scalar element"
-  let limbs := (type.byteWidth + 7) / 8
-  unless 1 ≤ limbs && limbs ≤ 4 do
-    throw "extract/unsupported: bounded result scalar element limb count is out of range"
-  pure limbs
-
-/-- Project a static leaf path through one bounded-array element carrier. -/
-private def projectBoundedElementLeaf (elem : Ops.Val) (path : Array Core.Codec.PathStep) :
-    Except String Ops.Val := do
-  let mut cur := elem
-  for step in path do
-    match step with
-    | .field name => cur := flattenField cur name
-    | .tuple 0 => cur := flattenField cur "fst"
-    | .tuple 1 => cur := flattenField cur "snd"
-    | .tuple ordinal => cur := flattenField cur (toString ordinal)
-    | .index _ =>
-        throw "extract/unsupported: bounded result element path must not contain fixed indexes"
-  pure cur
-
-/-- Expand one wide/one-limb scalar element into source limbs. Prefer `indexGet` byte offsets so
-return projection does not depend on a State-schema vector leaf table. -/
-private def expandScalarElementReturns (elem : Ops.Val) (type : Core.Codec.Scalar) :
-    Except String (Array Ops.Op) := do
-  let limbs ← scalarReturnLimbCount type
-  match elem with
-  | .indexGet base name index capacity _ =>
-      pure ((List.range limbs).toArray.map fun limb =>
-        .returnU64 (.indexGet base name index capacity (limb * 8)))
+/-- How many UInt64 source limbs one static return element occupies. -/
+private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except String Nat := do
+  match schema with
+  | .scalar type =>
+      unless Core.Codec.Scalar.isWellFormed type do
+        throw "extract/unsupported: bounded result has malformed scalar element"
+      let width := Core.Codec.Scalar.byteWidth type
+      unless 0 < width && width ≤ 32 do
+        throw "extract/unsupported: bounded result scalar exceeds 32-byte limb budget"
+      pure ((width + 7) / 8)
+  | .tuple items => do
+      let mut total := 0
+      for item in items do
+        total := total + (← staticReturnLimbCount item)
+      unless total ≤ 4 do
+        throw "extract/unsupported: bounded result tuple exceeds limb budget"
+      pure total
+  | .record _ fields => do
+      let mut total := 0
+      for field in fields do
+        total := total + (← staticReturnLimbCount field.2)
+      unless total ≤ 4 do
+        throw "extract/unsupported: bounded result record exceeds limb budget"
+      pure total
   | _ =>
-      if limbs == 1 then
-        pure #[.returnU64 elem]
-      else
-        let names := #["w0", "w1", "w2", "w3"].extract 0 limbs
-        pure (names.map fun n => .returnU64 (flattenField elem n))
+      throw "extract/unsupported: bounded result requires static scalar/tuple/record elements"
+
+/-- Expand one static element at `values[i]` into its fixed UInt64 return limbs. -/
+private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
+    (element : Core.Codec.Schema) : Except String (Array Ops.Op) := do
+  -- Limb offsets ride on `indexGet`'s final argument so vector leaf resolution stays flat
+  -- (`values` + limb), matching wide-scalar input projection. Nested product elements remain
+  -- schema-legal at the SVM Borsh adapter but are not yet expanded through this shared path.
+  match element with
+  | .scalar _ =>
+      let parts ← staticReturnLimbCount element
+      let mut limbs : Array Ops.Op := #[]
+      for part in [0:parts] do
+        limbs := limbs.push
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity part))
+      pure limbs
+  | .tuple _ | .record _ _ =>
+      throw "extract/unsupported: bounded result product elements are not yet projected through shared Extract"
+  | _ => throw "extract/unsupported: bounded result requires static scalar elements"
 
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
 output wire format. This is source projection only: Borsh/ABI length and padding remain target
-owned. Wide one-ABI-word scalars and constructed static (one-limb-leaf) products are in scope;
-nested dynamics and tagged element shapes stay closed. -/
+owned. v1 (`svm-rt-005`) admits wide scalars and one-level static tuple/record elements; dynamic
+children inside elements stay fail closed. -/
 private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.Op) :
     Except String (Array Ops.Op) :=
   match ops.toList, schema with
   | [.returnU64 root], .boundedArray capacity element
   | [.returnState root], .boundedArray capacity element => do
+      let _ ← staticReturnLimbCount element
       let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
-      match element with
-      | .scalar type =>
-          for i in [0:capacity] do
-            let elem := .indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0
-            result := result ++ (← expandScalarElementReturns elem type)
-          pure result
-      | _ => do
-          let leaves ← Core.Codec.staticLeaves element
-          unless !leaves.isEmpty do
-            throw "extract/unsupported: constructed bounded result element must contain a scalar"
-          for leaf in leaves do
-            unless (← scalarReturnLimbCount leaf.type) == 1 do
-              throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
-          for i in [0:capacity] do
-            for leafIdx in [0:leaves.size] do
-              result := result.push (.returnU64
-                (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity (leafIdx * 8)))
-          pure result
+      for i in [0:capacity] do
+        result := result ++ (← expandStaticElementReturns root capacity i element)
+      pure result
   | [.returnU64 root], .boundedBytes capacity | [.returnU64 root], .boundedString capacity
   | [.returnState root], .boundedBytes capacity | [.returnState root], .boundedString capacity => do
       let mut result : Array Ops.Op := #[.returnU64 (.field root "length")]
@@ -316,18 +308,8 @@ private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops
         result := result.push (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat i)) capacity 0))
       pure result
   | leaves, .boundedArray capacity element => do
-      let expected ←
-        match element with
-        | .scalar type => pure (1 + capacity * (← scalarReturnLimbCount type))
-        | _ => do
-            let static ← Core.Codec.staticLeaves element
-            unless !static.isEmpty do
-              throw "extract/unsupported: constructed bounded result element must contain a scalar"
-            for leaf in static do
-              unless (← scalarReturnLimbCount leaf.type) == 1 do
-                throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
-            pure (1 + capacity * static.size)
-      unless leaves.length == expected do
+      let limbs ← staticReturnLimbCount element
+      unless leaves.length == 1 + capacity * limbs do
         throw "extract/unsupported: constructed bounded result has the wrong fixed-frame size"
       leaves.toArray.mapM fun
         | .returnU64 value | .returnState value => pure (.returnU64 value)
@@ -385,22 +367,44 @@ private def expandTaggedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops.
     | [.returnU64 root] | [.returnState root] => some root
     | _ => none
   match schema, root? with
-  | .option (.scalar type), some root =>
-      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
-        throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
-      pure #[
-        .returnU64 (.field root "slot_tag"),
-        .returnU64 (.field root "slot_p0")
-      ]
-  | .option _, some _ =>
-      throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+  | .option (.scalar type), some root => do
+      unless Core.Codec.Scalar.isWellFormed type do
+        throw "extract/unsupported: tagged Option result has malformed scalar payload"
+      let width := Core.Codec.Scalar.byteWidth type
+      unless 0 < width && width ≤ 32 do
+        throw "extract/unsupported: tagged Option result scalar exceeds 32-byte limb budget"
+      let parts := (width + 7) / 8
+      let mut result : Array Ops.Op := #[.returnU64 (.field root "slot_tag")]
+      -- Payload projections are rooted at `slot_p0` (see EntryAdapter.borshPlanAt); wide
+      -- scalars expose limbs as `slot_p0` / `slot_p0_w1` / ... rather than `slot_p1`.
+      if parts == 1 then
+        result := result.push (.returnU64 (.field root "slot_p0"))
+      else
+        for part in [0:parts] do
+          result := result.push (.returnU64 (.field root s!"slot_p0_w{part}"))
+      pure result
+  | .option payload, some root => do
+      let parts ← staticReturnLimbCount payload
+      let mut result : Array Ops.Op := #[.returnU64 (.field root "slot_tag")]
+      if parts == 1 then
+        result := result.push (.returnU64 (.field root "slot_p0"))
+      else
+        for part in [0:parts] do
+          result := result.push (.returnU64 (.field root s!"slot_p0_w{part}"))
+      pure result
   | .option (.scalar type), none => do
-      unless Core.Codec.Scalar.isWellFormed type && Core.Codec.Scalar.byteWidth type ≤ 8 do
-        throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
-      validateConstructedReturnFrame ops 2
+      unless Core.Codec.Scalar.isWellFormed type do
+        throw "extract/unsupported: tagged Option result has malformed scalar payload"
+      let width := Core.Codec.Scalar.byteWidth type
+      unless 0 < width && width ≤ 32 do
+        throw "extract/unsupported: tagged Option result scalar exceeds 32-byte limb budget"
+      let parts := (width + 7) / 8
+      validateConstructedReturnFrame ops (1 + parts)
       pure ops
-  | .option _, none =>
-      throw "extract/unsupported: tagged Option result currently requires a one-limb scalar payload"
+  | .option payload, none => do
+      let parts ← staticReturnLimbCount payload
+      validateConstructedReturnFrame ops (1 + parts)
+      pure ops
   | .enumeration _ tagBits variants, some root => do
       unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
         throw "extract/unsupported: tagged enum result requires a nonempty u8 tag space"

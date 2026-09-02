@@ -2,11 +2,9 @@ import ProofForge.Svm.Sdk.StorageModel
 import ProofForge.Svm.Sdk.Versioned
 
 /-!
-# Versioned header 的 AccountWords 模型（sf-004）
+# Versioned header model (sf-004)
 
-把 `Header.classify` / `Header.initialize` / `Transition.apply` 在抽象账户字上解释，
-与 SDK 控制流同构：同守卫、同写序（initialize：先 version 后 discriminator；
-apply：只写 version）。宿主 `read`/`write` stub 不进入证明。
+L1 wf-parts + L2 AccountWords algebra for `Sdk.Versioned`.
 -/
 
 namespace ProofForge.Svm.Sdk.VersionedModel
@@ -16,19 +14,87 @@ open ProofForge.Svm.Sdk.Storage
 open ProofForge.Svm.Sdk.StorageModel
 open ProofForge.Svm.Sdk.Versioned
 
-/-- 模型版读双字。 -/
-def mVersionedRead (mem : AccountWords) (header : Header) : UInt64 × UInt64 :=
-  (mReadField mem header.discriminatorField 0,
-    mReadField mem header.versionField 0)
+/-! ## L1 wf parts -/
 
-/-- 模型版 classify：委托纯函数。 -/
-def mVersionedClassify (header : Header) (disc ver : UInt64) : UInt64 :=
-  header.classify disc ver
+theorem header_wf_parts {header : Header} (hwf : header.wellFormed = true) :
+    scalarHeaderWellFormed header.discriminatorField
+        header.discriminatorField.region.account = true ∧
+    scalarHeaderWellFormed header.versionField
+        header.discriminatorField.region.account = true ∧
+    header.discriminatorField.firstWord + 1 = header.versionField.firstWord ∧
+    header.expectedDiscriminator ≠ 0 ∧
+    header.supportedVersion ≠ 0 := by
+  simp only [Header.wellFormed, Bool.and_eq_true, beq_iff_eq, bne_iff_ne] at hwf
+  exact ⟨hwf.1.1.1.1, hwf.1.1.1.2, hwf.1.1.2, hwf.1.2, hwf.2⟩
 
-/-- 模型版 initialize：与 `Header.initialize` 同守卫与写序。 -/
-def mVersionedInitialize (mem : AccountWords) (header : Header) : AccountWords × UInt64 :=
-  let status := header.classify (mReadField mem header.discriminatorField 0)
+theorem transition_wf_parts {t : Transition} (hwf : t.wellFormed = true) :
+    t.header.wellFormed = true ∧
+    t.fromVersion ≠ 0 ∧
+    t.fromVersion ≠ t.header.supportedVersion := by
+  simp only [Transition.wellFormed, Bool.and_eq_true, bne_iff_ne] at hwf
+  exact ⟨hwf.1.1, hwf.1.2, hwf.2⟩
+
+theorem mFieldWord_header_disc {header : Header} (hwf : header.wellFormed = true) :
+    mFieldWord header.discriminatorField 0 = some header.discriminatorField.firstWord :=
+  mFieldWord_scalar_header (header_wf_parts hwf).1
+
+theorem mFieldWord_header_ver {header : Header} (hwf : header.wellFormed = true) :
+    mFieldWord header.versionField 0 = some header.versionField.firstWord := by
+  have hv := (header_wf_parts hwf).2.1
+  have hacc : header.versionField.region.account =
+      header.discriminatorField.region.account := by
+    simp only [scalarHeaderWellFormed, Bool.and_eq_true, beq_iff_eq] at hv
+    -- nested ands: account = body is left.left.left.left.left.right
+    exact hv.1.1.1.1.1.2
+  have hsw : scalarHeaderWellFormed header.versionField
+      header.versionField.region.account = true := by
+    simpa [hacc.symm] using hv
+  exact mFieldWord_scalar_header hsw
+
+theorem header_disc_ne_ver {header : Header} (hwf : header.wellFormed = true) :
+    header.discriminatorField.firstWord ≠ header.versionField.firstWord := by
+  have := (header_wf_parts hwf).2.2.1
+  omega
+
+/-! ## Pure classify -/
+
+theorem classify_uninitialized {header : Header}
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0) :
+    header.classify 0 0 = Status.uninitialized := by
+  unfold Header.classify; simp [hd, hv]
+
+theorem classify_ready {header : Header}
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0) :
+    header.classify header.expectedDiscriminator header.supportedVersion = Status.ready := by
+  unfold Header.classify; simp [hd, hv]
+
+theorem classify_wrongDisc {header : Header} {d v : UInt64}
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0)
+    (hd0 : d ≠ 0) (hv0 : v ≠ 0) (hne : d ≠ header.expectedDiscriminator) :
+    header.classify d v = Status.wrongDiscriminator := by
+  unfold Header.classify; simp [hd, hv, hd0, hv0, hne]
+
+theorem classify_unsupported {header : Header} {v : UInt64}
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0)
+    (hv0 : v ≠ 0) (hne : v ≠ header.supportedVersion) :
+    header.classify header.expectedDiscriminator v = Status.unsupportedVersion := by
+  unfold Header.classify; simp [hd, hv, hv0, hne]
+
+theorem classify_malformed_mixed {header : Header} {v : UInt64}
+    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0)
+    (hv0 : v ≠ 0) :
+    header.classify 0 v = Status.malformed := by
+  unfold Header.classify; simp [hd, hv, hv0]
+
+/-! ## AccountWords model -/
+
+def mVersionedInspect (mem : AccountWords) (header : Header) : UInt64 :=
+  header.classify
+    (mReadField mem header.discriminatorField 0)
     (mReadField mem header.versionField 0)
+
+def mVersionedInitialize (mem : AccountWords) (header : Header) : AccountWords × UInt64 :=
+  let status := mVersionedInspect mem header
   if status = Status.uninitialized then
     let mem := mWriteField mem header.versionField 0 header.supportedVersion
     let mem := mWriteField mem header.discriminatorField 0 header.expectedDiscriminator
@@ -36,171 +102,155 @@ def mVersionedInitialize (mem : AccountWords) (header : Header) : AccountWords �
   else if status = Status.ready then (mem, InitializeResult.alreadyReady)
   else (mem, InitializeResult.rejected)
 
-/-- 模型版 apply：与 `Transition.apply` 同守卫与写序。 -/
-def mVersionedApply (mem : AccountWords) (transition : Transition) : AccountWords × UInt64 :=
-  let header := transition.header
-  if header.expectedDiscriminator = 0 || header.supportedVersion = 0 ||
-      transition.fromVersion = 0 || transition.fromVersion = header.supportedVersion then
+def mVersionedApply (mem : AccountWords) (t : Transition) : AccountWords × UInt64 :=
+  let header := t.header
+  if header.expectedDiscriminator = 0 ∨ header.supportedVersion = 0 ∨
+      t.fromVersion = 0 ∨ t.fromVersion = header.supportedVersion then
     (mem, TransitionResult.rejected)
   else
-    let actualDiscriminator := mReadField mem header.discriminatorField 0
-    let actualVersion := mReadField mem header.versionField 0
-    if actualDiscriminator ≠ header.expectedDiscriminator then
-      (mem, TransitionResult.rejected)
-    else if actualVersion = header.supportedVersion then
-      (mem, TransitionResult.alreadyCurrent)
-    else if actualVersion = transition.fromVersion then
+    let actualD := mReadField mem header.discriminatorField 0
+    let actualV := mReadField mem header.versionField 0
+    if actualD ≠ header.expectedDiscriminator then (mem, TransitionResult.rejected)
+    else if actualV = header.supportedVersion then (mem, TransitionResult.alreadyCurrent)
+    else if actualV = t.fromVersion then
       (mWriteField mem header.versionField 0 header.supportedVersion,
         TransitionResult.transitioned)
     else (mem, TransitionResult.rejected)
 
-/-! ## 几何桥 -/
+/-! ## Initialize / apply theorems -/
 
-theorem mFieldWord_versioned_disc (header : Header)
-    (hwf : header.wellFormed = true) :
-    mFieldWord header.discriminatorField 0 = some header.discriminatorField.firstWord := by
-  have parts := Header.wellFormed_parts (header := header) (accountLimit := 64) hwf
-  exact mFieldWord_scalar_header parts.1
-
-theorem mFieldWord_versioned_ver (header : Header)
-    (hwf : header.wellFormed = true) :
-    mFieldWord header.versionField 0 = some header.versionField.firstWord := by
-  have parts := Header.wellFormed_parts (header := header) (accountLimit := 64) hwf
-  have hacc : header.versionField.region.account =
-      header.discriminatorField.region.account :=
-    scalarHeader_wf_account header.versionField header.discriminatorField.region.account parts.2.1
-  have hsw : scalarHeaderWellFormed header.versionField
-      header.versionField.region.account = true := by
-    rw [hacc]; exact parts.2.1
-  exact mFieldWord_scalar_header hsw
-
-theorem versioned_disc_ne_ver (header : Header) (hwf : header.wellFormed = true) :
-    header.discriminatorField.firstWord ≠ header.versionField.firstWord := by
-  have parts := Header.wellFormed_parts (header := header) (accountLimit := 64) hwf
-  have hadj : header.discriminatorField.firstWord + 1 = header.versionField.firstWord :=
-    parts.2.2.1
-  omega
-
-/-- **全零 initialize**：返回 initialized，并写回 supportedVersion / expectedDiscriminator。 -/
-theorem mVersionedInitialize_from_zero (mem : AccountWords) (header : Header)
+theorem mVersionedInitialize_uninitialized (mem : AccountWords) (header : Header)
     (hwf : header.wellFormed = true)
-    (hd0 : mReadField mem header.discriminatorField 0 = 0)
-    (hv0 : mReadField mem header.versionField 0 = 0) :
+    (hzD : mReadField mem header.discriminatorField 0 = 0)
+    (hzV : mReadField mem header.versionField 0 = 0) :
     (mVersionedInitialize mem header).2 = InitializeResult.initialized ∧
-    mReadField (mVersionedInitialize mem header).1 header.versionField 0
-      = header.supportedVersion ∧
-    mReadField (mVersionedInitialize mem header).1 header.discriminatorField 0
-      = header.expectedDiscriminator := by
-  have parts := Header.wellFormed_parts (header := header) (accountLimit := 64) hwf
-  have hclass : header.classify 0 0 = Status.uninitialized :=
-    Header.classify_uninitialized header parts.2.2.2.1 parts.2.2.2.2
-  have hwd := mFieldWord_versioned_disc header hwf
-  have hwv := mFieldWord_versioned_ver header hwf
-  have hne := versioned_disc_ne_ver header hwf
-  -- Reduce definition under the zero/uninitialized hypotheses.
-  have hproj :
+    mVersionedInspect (mVersionedInitialize mem header).1 header = Status.ready := by
+  have parts := header_wf_parts hwf
+  have hwd := mFieldWord_header_disc hwf
+  have hwv := mFieldWord_header_ver hwf
+  have hne := header_disc_ne_ver hwf
+  have hstatus : mVersionedInspect mem header = Status.uninitialized := by
+    simp only [mVersionedInspect, hzD, hzV,
+      classify_uninitialized parts.2.2.2.1 parts.2.2.2.2]
+  have hpair :
       mVersionedInitialize mem header =
         (mWriteField (mWriteField mem header.versionField 0 header.supportedVersion)
           header.discriminatorField 0 header.expectedDiscriminator,
           InitializeResult.initialized) := by
     unfold mVersionedInitialize
-    simp [hd0, hv0, hclass]
-  rw [hproj]
-  refine ⟨rfl, ?_, ?_⟩
-  · -- version survives the later discriminator write
-    have step :=
-      mReadField_write_other
-        (mWriteField mem header.versionField 0 header.supportedVersion)
-        header.versionField header.discriminatorField 0 0 header.expectedDiscriminator
-        hwv hwd hne.symm
-    rw [step]
-    exact mReadField_write_same mem header.versionField 0 header.supportedVersion _ hwv
-  · exact mReadField_write_same
+    simp only [hstatus, ite_true]
+  rw [hpair]
+  refine ⟨rfl, ?_⟩
+  simp only [mVersionedInspect]
+  have hver : mReadField
+      (mWriteField (mWriteField mem header.versionField 0 header.supportedVersion)
+        header.discriminatorField 0 header.expectedDiscriminator)
+      header.versionField 0 = header.supportedVersion := by
+    have step := mReadField_write_other
       (mWriteField mem header.versionField 0 header.supportedVersion)
-      header.discriminatorField 0 header.expectedDiscriminator _ hwd
+      header.versionField header.discriminatorField 0 0 header.expectedDiscriminator
+      hwv hwd (Ne.symm hne)
+    rw [step, mReadField_write_same _ _ _ _ _ hwv]
+  have hdisc : mReadField
+      (mWriteField (mWriteField mem header.versionField 0 header.supportedVersion)
+        header.discriminatorField 0 header.expectedDiscriminator)
+      header.discriminatorField 0 = header.expectedDiscriminator :=
+    mReadField_write_same _ _ _ _ _ hwd
+  rw [hdisc, hver, classify_ready parts.2.2.2.1 parts.2.2.2.2]
 
-/-- **ready initialize**：alreadyReady，内存不变。 -/
 theorem mVersionedInitialize_alreadyReady (mem : AccountWords) (header : Header)
     (hwf : header.wellFormed = true)
-    (hd : mReadField mem header.discriminatorField 0 = header.expectedDiscriminator)
-    (hv : mReadField mem header.versionField 0 = header.supportedVersion) :
-    (mVersionedInitialize mem header).2 = InitializeResult.alreadyReady ∧
-    (mVersionedInitialize mem header).1 = mem := by
-  have parts := Header.wellFormed_parts (header := header) (accountLimit := 64) hwf
-  have hclass : header.classify header.expectedDiscriminator header.supportedVersion
-      = Status.ready :=
-    Header.classify_ready header parts.2.2.2.1 parts.2.2.2.2
-  have hproj : mVersionedInitialize mem header = (mem, InitializeResult.alreadyReady) := by
-    unfold mVersionedInitialize
-    simp [hd, hv, hclass, show Status.ready ≠ Status.uninitialized from by decide]
-  rw [hproj]
-  exact ⟨rfl, rfl⟩
-
-/-- **reject initialize**：非 uninit/ready 时不写内存。 -/
-theorem mVersionedInitialize_rejected_noop (mem : AccountWords) (header : Header)
-    (hstatus :
-      let s := header.classify (mReadField mem header.discriminatorField 0)
-        (mReadField mem header.versionField 0)
-      s ≠ Status.uninitialized ∧ s ≠ Status.ready) :
-    (mVersionedInitialize mem header).2 = InitializeResult.rejected ∧
-    (mVersionedInitialize mem header).1 = mem := by
+    (hD : mReadField mem header.discriminatorField 0 = header.expectedDiscriminator)
+    (hV : mReadField mem header.versionField 0 = header.supportedVersion) :
+    mVersionedInitialize mem header = (mem, InitializeResult.alreadyReady) := by
+  have parts := header_wf_parts hwf
+  have hstatus : mVersionedInspect mem header = Status.ready := by
+    simp only [mVersionedInspect, hD, hV,
+      classify_ready parts.2.2.2.1 parts.2.2.2.2]
+  have hne : Status.ready ≠ Status.uninitialized := by native_decide
   unfold mVersionedInitialize
-  simp [hstatus.1, hstatus.2]
+  simp only [hstatus, if_neg hne, ↓reduceIte]
 
-/-- **apply 成功**：fromVersion → supportedVersion；discriminator 不变。 -/
-theorem mVersionedApply_transitioned (mem : AccountWords) (transition : Transition)
-    (hwf : transition.wellFormed = true)
-    (hd : mReadField mem transition.header.discriminatorField 0
-      = transition.header.expectedDiscriminator)
-    (hv : mReadField mem transition.header.versionField 0 = transition.fromVersion) :
-    (mVersionedApply mem transition).2 = TransitionResult.transitioned ∧
-    mReadField (mVersionedApply mem transition).1 transition.header.versionField 0
-      = transition.header.supportedVersion ∧
-    mReadField (mVersionedApply mem transition).1 transition.header.discriminatorField 0
-      = transition.header.expectedDiscriminator := by
-  have parts := Transition.wellFormed_parts (transition := transition) (accountLimit := 64) hwf
-  have hparts := Header.wellFormed_parts (header := transition.header) (accountLimit := 64) parts.1
-  have hwd := mFieldWord_versioned_disc transition.header parts.1
-  have hwv := mFieldWord_versioned_ver transition.header parts.1
-  have hne := versioned_disc_ne_ver transition.header parts.1
-  have h0 : transition.header.expectedDiscriminator ≠ 0 := hparts.2.2.2.1
-  have h1 : transition.header.supportedVersion ≠ 0 := hparts.2.2.2.2
-  have h2 : transition.fromVersion ≠ 0 := parts.2.1
-  have h3 : transition.fromVersion ≠ transition.header.supportedVersion := parts.2.2
-  have hproj :
-      mVersionedApply mem transition =
-        (mWriteField mem transition.header.versionField 0 transition.header.supportedVersion,
+theorem mVersionedInitialize_wrongDisc (mem : AccountWords) (header : Header)
+    (hwf : header.wellFormed = true) {d v : UInt64}
+    (hD : mReadField mem header.discriminatorField 0 = d)
+    (hV : mReadField mem header.versionField 0 = v)
+    (hd0 : d ≠ 0) (hv0 : v ≠ 0) (hneD : d ≠ header.expectedDiscriminator) :
+    mVersionedInitialize mem header = (mem, InitializeResult.rejected) := by
+  have parts := header_wf_parts hwf
+  have hstatus : mVersionedInspect mem header = Status.wrongDiscriminator := by
+    simp only [mVersionedInspect, hD, hV,
+      classify_wrongDisc parts.2.2.2.1 parts.2.2.2.2 hd0 hv0 hneD]
+  have h1 : Status.wrongDiscriminator ≠ Status.uninitialized := by native_decide
+  have h2 : Status.wrongDiscriminator ≠ Status.ready := by native_decide
+  unfold mVersionedInitialize
+  simp only [hstatus, if_neg h1, if_neg h2]
+
+theorem mVersionedApply_transitioned (mem : AccountWords) (t : Transition)
+    (hwf : t.wellFormed = true)
+    (hD : mReadField mem t.header.discriminatorField 0 = t.header.expectedDiscriminator)
+    (hV : mReadField mem t.header.versionField 0 = t.fromVersion) :
+    (mVersionedApply mem t).2 = TransitionResult.transitioned ∧
+    mReadField (mVersionedApply mem t).1 t.header.versionField 0 =
+      t.header.supportedVersion ∧
+    mReadField (mVersionedApply mem t).1 t.header.discriminatorField 0 =
+      t.header.expectedDiscriminator := by
+  have tp := transition_wf_parts hwf
+  have parts := header_wf_parts tp.1
+  have hwv := mFieldWord_header_ver tp.1
+  have hwd := mFieldWord_header_disc tp.1
+  have hneWords := header_disc_ne_ver tp.1
+  have hguard : ¬ (t.header.expectedDiscriminator = 0 ∨ t.header.supportedVersion = 0 ∨
+      t.fromVersion = 0 ∨ t.fromVersion = t.header.supportedVersion) := by
+    intro h; rcases h with h | h | h | h
+    · exact parts.2.2.2.1 h
+    · exact parts.2.2.2.2 h
+    · exact tp.2.1 h
+    · exact tp.2.2 h
+  have happly :
+      mVersionedApply mem t =
+        (mWriteField mem t.header.versionField 0 t.header.supportedVersion,
           TransitionResult.transitioned) := by
     unfold mVersionedApply
-    have hguard :
-        ¬((transition.header.expectedDiscriminator = 0 ||
-            transition.header.supportedVersion = 0 ||
-            transition.fromVersion = 0 ||
-            transition.fromVersion = transition.header.supportedVersion) = true) := by
-      intro h
-      simp only [Bool.or_eq_true, decide_eq_true_eq] at h
-      -- Nested or: (((a ∨ b) ∨ c) ∨ d)
-      rcases h with h | h
-      · rcases h with h | h
-        · rcases h with h | h
-          · exact h0 h
-          · exact h1 h
-        · exact h2 h
-      · exact h3 h
-    rw [if_neg hguard, hd]
-    have hdisc : ¬(transition.header.expectedDiscriminator ≠
-        transition.header.expectedDiscriminator) := fun h => h rfl
-    rw [if_neg hdisc, hv]
-    have hcur : ¬(transition.fromVersion = transition.header.supportedVersion) := h3
-    rw [if_neg hcur, if_pos rfl]
-  rw [hproj]
-  refine ⟨rfl, ?_, ?_⟩
-  · exact mReadField_write_same mem transition.header.versionField 0
-      transition.header.supportedVersion _ hwv
-  · have step :=
-      mReadField_write_other mem transition.header.discriminatorField
-        transition.header.versionField 0 0 transition.header.supportedVersion
-        hwd hwv hne
-    simpa [hd] using step
+    rw [if_neg hguard]
+    -- disc mismatch branch
+    have hneDisc : ¬ (mReadField mem t.header.discriminatorField 0 ≠
+        t.header.expectedDiscriminator) := by simp [hD]
+    rw [if_neg hneDisc]
+    -- already-current branch
+    have hneCur : ¬ (mReadField mem t.header.versionField 0 =
+        t.header.supportedVersion) := by
+      rw [hV]; exact tp.2.2
+    rw [if_neg hneCur]
+    -- fromVersion match
+    have hfrom : mReadField mem t.header.versionField 0 = t.fromVersion := hV
+    simp only [hfrom, ite_true]
+  rw [happly]
+  refine ⟨rfl, mReadField_write_same _ _ _ _ _ hwv, ?_⟩
+  have hkeep := mReadField_write_other mem t.header.discriminatorField t.header.versionField
+      0 0 t.header.supportedVersion hwd hwv hneWords
+  exact hkeep.trans hD
+
+theorem mVersionedApply_alreadyCurrent (mem : AccountWords) (t : Transition)
+    (hwf : t.wellFormed = true)
+    (hD : mReadField mem t.header.discriminatorField 0 = t.header.expectedDiscriminator)
+    (hV : mReadField mem t.header.versionField 0 = t.header.supportedVersion) :
+    mVersionedApply mem t = (mem, TransitionResult.alreadyCurrent) := by
+  have tp := transition_wf_parts hwf
+  have parts := header_wf_parts tp.1
+  have hguard : ¬ (t.header.expectedDiscriminator = 0 ∨ t.header.supportedVersion = 0 ∨
+      t.fromVersion = 0 ∨ t.fromVersion = t.header.supportedVersion) := by
+    intro h; rcases h with h | h | h | h
+    · exact parts.2.2.2.1 h
+    · exact parts.2.2.2.2 h
+    · exact tp.2.1 h
+    · exact tp.2.2 h
+  unfold mVersionedApply
+  rw [if_neg hguard]
+  have hneDisc : ¬ (mReadField mem t.header.discriminatorField 0 ≠
+      t.header.expectedDiscriminator) := by simp [hD]
+  rw [if_neg hneDisc]
+  simp only [hV, ite_true]
 
 end ProofForge.Svm.Sdk.VersionedModel
+

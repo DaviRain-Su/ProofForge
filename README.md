@@ -253,6 +253,29 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 
 [proof_forge](https://github.com/DaviRain-Su/proof_forge) is the earlier `program … where` DSL. This repository reuses Lean syntax itself and extracts the fail-closed subset that can lower on-chain.
 
+## Proofs
+
+The first kernel-checked contract properties live in each example's `Proofs` section
+(`Examples/Counter.lean`, `Examples/Capped.lean`, `Examples/Token.lean`): exact success
+postconditions, monotonicity, Token supply effects, and the Capped cap invariant, all on
+standard axioms `propext` / `Quot.sound` only.
+
+### Local formalization gate (`svm-eng-001`)
+
+Before opening or merging a PR, reproduce the Lean / SVM lane gates locally:
+
+```bash
+python3 scripts/check_ownership.py
+python3 scripts/check_no_sorry.py
+lake build
+lake build Tests.ProofSpec Tests.SolanalibSpec Tests.SemanticsSpec
+lake build Tests
+```
+
+- `check_ownership.py`: blocks `Examples`→`Emit` imports and Runtime/SDK protocol-word leaks; failures print `path:line: …`.
+- `check_no_sorry.py`: scans `ProofForge/`, `Examples/`, `Tests/` for `sorry` / `sorryAx`; whitelist is negative fixtures only (see script header); failures print `rel:line: message`.
+- `Tests.ProofSpec` / `SolanalibSpec` / `SemanticsSpec`: named Track A and L3-bridge goals; CI's Lean lane pins these before full `lake build Tests`. The SVM lane also runs ownership + no-sorry, then builds/runs Mollusk.
+
 ## Documentation
 
 Start at [docs/INDEX.md](docs/INDEX.md).

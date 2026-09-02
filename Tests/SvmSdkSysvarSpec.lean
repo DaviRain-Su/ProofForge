@@ -16,8 +16,13 @@ open ProofForge.Svm.Sdk
 
 #guard Sysvar.Clock.slot == ProofForge.Svm.Runtime.clockSlot
 #guard Sysvar.Clock.epoch == ProofForge.Svm.Runtime.clockEpoch
+#guard Sysvar.Clock.epochStartTimestamp == ProofForge.Svm.Runtime.clockEpochStartTimestamp
 #guard Sysvar.Clock.leaderScheduleEpoch == ProofForge.Svm.Runtime.clockLeaderScheduleEpoch
 #guard Sysvar.Clock.unixTimestamp == ProofForge.Svm.Runtime.unixTime
+#guard Sysvar.Clock.asSigned (UInt64.ofNat 0) == (0 : Int)
+#guard Sysvar.Clock.asSigned (UInt64.ofNat 1) == (1 : Int)
+#guard Sysvar.Clock.asSigned (~~~(0 : UInt64)) == (-1 : Int)
+#guard Sysvar.Clock.asSigned (UInt64.ofNat 0xFFFFFFFFFFFFFFFF) == (-1 : Int)
 #guard Sysvar.EpochSchedule.slotsPerEpoch == ProofForge.Svm.Runtime.slotsPerEpoch
 #guard
   Sysvar.EpochSchedule.leaderScheduleSlotOffset ==
@@ -62,7 +67,9 @@ private def expectSysvarCall (module : Name) (needles : Array String) : CommandE
 
 elab "#pf_guard_sdk_sysvars" : command => do
   expectSysvarCall `Examples.Svm.Clock #["call sol_get_clock_sysvar",
-    "load clock.leaderScheduleEpoch", "ldxdw r1, [r10 - 3048]"]
+    "load clock.leaderScheduleEpoch", "ldxdw r1, [r10 - 3048]",
+    "load clock.epochStartTimestamp", "ldxdw r1, [r10 - 3064]",
+    "load clock.unix", "ldxdw r1, [r10 - 3040]"]
   expectSysvarCall `Examples.Svm.Epoch #["call sol_get_epoch_schedule_sysvar",
     "load leaderScheduleSlotOffset", "ldxdw r1, [r10 - 3064]", "load warmup",
     "ldxb r1, [r10 - 3056]", "load firstNormalEpoch", "ldxdw r1, [r10 - 3048]",

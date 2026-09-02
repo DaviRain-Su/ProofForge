@@ -31,6 +31,10 @@ inductive Error where
 @[pf_entry] def identityAt (_s : State) (index : UInt64) : UInt64 :=
   (roster 1).valueAt index
 
+/-- Idempotent header reset. -/
+@[pf_entry] def clearRoster (_s : State) : UInt64 :=
+  (roster 1).clear
+
 /-- Existing membership is an idempotent success; only a genuinely absent full insert fails. -/
 @[pf_entry] def enroll (_s : State) (identity : UInt64) : Except Error (State × UInt64) :=
   let result := (roster 1).insert identity

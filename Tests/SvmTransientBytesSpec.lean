@@ -246,7 +246,7 @@ elab "#pf_guard_transient_bytes" : command => do
     throwError "bounded byte allocator, mutation, canonical range, or explicit failure gates are missing"
   -- The dedicated multi-handle program: same-kind second-slot metadata cells (pointer 2432,
   -- length 2440, active 2456) back the shared lifecycle, below the unchanged
-  -- `sol_log_data` descriptor window at 2465..2480.
+  -- `sol_log_data` descriptor window at 2649..2664.
   let pairAsm ←
     match ProofForge.Svm.Emit.emitAsm pairProgram with
     | .ok asm => pure asm
@@ -255,7 +255,7 @@ elab "#pf_guard_transient_bytes" : command => do
       pairAsm.contains "stxdw [r10 - 2440], r2" &&
       pairAsm.contains "stxb [r10 - 2432]" == false do
     throwError "same-kind second-slot byte metadata cells are missing"
-  unless pairAsm.contains "add64 r9, -2480" && pairAsm.contains "lddw r0, 0x1213" do
+  unless pairAsm.contains "add64 r9, -2664" && pairAsm.contains "lddw r0, 0x1213" do
     throwError "second-slot byte handles did not keep the descriptor and state gates"
 
 end Tests.SvmTransientBytesSpec

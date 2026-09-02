@@ -3,33 +3,35 @@ import ProofForge.Svm.BatchRecorder
 namespace ProofForge.Svm.FifoCancel
 
 /-- Invocation-local cells shared by the bid and ask passes. They occupy the component deep-scratch
-bank above CPI's 1,024..2,048 range. Complete tree validators finish before the side calls and may
-therefore reuse the higher deep bank. Account headers and source scalar locals remain below 1,024.
-Only scalar counters and keys survive a component call; no account or heap pointer does. -/
-def eventIndexStack : Nat := 2056
-def quoteReleasedStack : Nat := 2064
-def baseReleasedStack : Nat := 2072
-def hasCursorStack : Nat := 2080
-def cursorPriceStack : Nat := 2088
-def cursorSequenceStack : Nat := 2096
-def traderIndexStack : Nat := 2104
-def priceStack : Nat := 2112
-def sequenceStack : Nat := 2120
-def ownerStack : Nat := 2128
-def sizeStack : Nat := 2136
-def releasedStack : Nat := 2144
-def lockedStack : Nat := 2152
-def freeStack : Nat := 2160
-def queryTempStack : Nat := 2168
-def loopStack : Nat := 2176
-def activeStack : Nat := 2184
-def orderIndexStack : Nat := 2200
-def tickLimitStack : Nat := 2264
-def searchLimitStack : Nat := 2272
-def cancelLimitStack : Nat := 2280
-def scannedStack : Nat := 2288
-def canceledStack : Nat := 2296
-def queryScratchEnd : Nat := 2304
+bank `[2248, 4096)`, fully above CPI's `[1216, 2240]` boundary (CPI owns `r10-2240`) so log/Token `sol_invoke` cannot clobber
+cancel or released-lot state. Complete tree validators finish before the side calls and may
+therefore reuse the higher deep bank. Account headers and source scalar locals remain in the
+scalar bank `[0, 1216)`. Only scalar counters and keys survive a component call; no account or
+heap pointer does. -/
+def eventIndexStack : Nat := 2248
+def quoteReleasedStack : Nat := 2256
+def baseReleasedStack : Nat := 2264
+def hasCursorStack : Nat := 2272
+def cursorPriceStack : Nat := 2280
+def cursorSequenceStack : Nat := 2288
+def traderIndexStack : Nat := 2296
+def priceStack : Nat := 2304
+def sequenceStack : Nat := 2312
+def ownerStack : Nat := 2320
+def sizeStack : Nat := 2328
+def releasedStack : Nat := 2336
+def lockedStack : Nat := 2344
+def freeStack : Nat := 2352
+def queryTempStack : Nat := 2360
+def loopStack : Nat := 2368
+def activeStack : Nat := 2376
+def orderIndexStack : Nat := 2392
+def tickLimitStack : Nat := 2456
+def searchLimitStack : Nat := 2464
+def cancelLimitStack : Nat := 2472
+def scannedStack : Nat := 2480
+def canceledStack : Nat := 2488
+def queryScratchEnd : Nat := 2496
 
 /-- Highest low-bank offset used transitively by the embedded recorder. Deep component scratch is
 outside scalar-local planning and must not move account headers into the CPI bank. -/

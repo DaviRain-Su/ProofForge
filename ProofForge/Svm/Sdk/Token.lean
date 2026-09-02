@@ -190,6 +190,110 @@ def MintState.wellFormed (view : MintState) (accountLimit : Nat := 64) : Bool :=
       account.dataLen = 82 && flavor.owns tokenProgram account &&
         authorityTag ≤ 1 && freezeTag ≤ 1 && initialized = 1
 
+/-! ### sf-015: exact packed-state guard tables -/
+
+/-- `packedValid` accepts exactly the base length, authenticated owner, and state-tag bound. -/
+theorem accountState_packedValid_iff_guards (view : AccountState) :
+    view.packedValid = true ↔
+      view.account.dataLen = 165 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      view.state ≤ 2 := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [AccountState.packedValid, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hState⟩
+      simp only [AccountState.packedValid, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨hLen, hOwns⟩, hState⟩
+
+/-- `isInitialized` accepts exactly initialized or frozen state after the common guards. -/
+theorem accountState_isInitialized_iff_guards (view : AccountState) :
+    view.isInitialized = true ↔
+      view.account.dataLen = 165 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      (view.state = 1 ∨ view.state = 2) := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [AccountState.isInitialized, Bool.and_eq_true, Bool.or_eq_true,
+        decide_eq_true_eq] at h
+      exact ⟨h.1.1, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hState⟩
+      simp only [AccountState.isInitialized, Bool.and_eq_true, Bool.or_eq_true,
+        decide_eq_true_eq]
+      exact ⟨⟨hLen, hOwns⟩, hState⟩
+
+/-- `isUsable` is the common account guard table with the ordinary initialized tag. -/
+theorem accountState_isUsable_iff_guards (view : AccountState) :
+    view.isUsable = true ↔
+      view.account.dataLen = 165 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      view.state = 1 := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [AccountState.isUsable, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hState⟩
+      simp only [AccountState.isUsable, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨hLen, hOwns⟩, hState⟩
+
+/-- `isFrozen` is the common account guard table with the frozen tag. -/
+theorem accountState_isFrozen_iff_guards (view : AccountState) :
+    view.isFrozen = true ↔
+      view.account.dataLen = 165 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      view.state = 2 := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [AccountState.isFrozen, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hState⟩
+      simp only [AccountState.isFrozen, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨hLen, hOwns⟩, hState⟩
+
+/-- Mint packed validity exposes every length/owner/COption/bool guard without omission. -/
+theorem mintState_packedValid_iff_guards (view : MintState) :
+    view.packedValid = true ↔
+      view.account.dataLen = 82 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      view.mintAuthorityTag ≤ 1 ∧
+      view.freezeAuthorityTag ≤ 1 ∧
+      view.initializedByte ≤ 1 := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [MintState.packedValid, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hAuthority, hFreeze, hInitialized⟩
+      simp only [MintState.packedValid, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨⟨⟨hLen, hOwns⟩, hAuthority⟩, hFreeze⟩, hInitialized⟩
+
+/-- Mint initialization differs only by requiring the canonical true byte. -/
+theorem mintState_isInitialized_iff_guards (view : MintState) :
+    view.isInitialized = true ↔
+      view.account.dataLen = 82 ∧
+      view.flavor.owns view.tokenProgram view.account = true ∧
+      view.mintAuthorityTag ≤ 1 ∧
+      view.freezeAuthorityTag ≤ 1 ∧
+      view.initializedByte = 1 := by
+  cases view with
+  | mk account tokenProgram flavor =>
+    constructor
+    · intro h
+      simp only [MintState.isInitialized, Bool.and_eq_true, decide_eq_true_eq] at h
+      exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+    · rintro ⟨hLen, hOwns, hAuthority, hFreeze, hInitialized⟩
+      simp only [MintState.isInitialized, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨⟨⟨⟨hLen, hOwns⟩, hAuthority⟩, hFreeze⟩, hInitialized⟩
+
 /-- Role-named classic Token `TransferChecked` account geometry. Every handle is relative to the
 external-account region after state, exactly like Runtime CPI metas and `PdaSeed.accKey`; the
 descriptor is compile-time data and is erased during extraction. -/
@@ -291,6 +395,16 @@ signer group. Metas are source / destination / authority; no mint account or dec
     (UInt64.ofNat accounts.destination.index)
     (UInt64.ofNat accounts.authority.index)
     amount seeds bump
+
+/-- Execute a statically described unchecked `Transfer` with an ordinary transaction signer. -/
+@[pf_inline] def transferWith
+    (accounts : UncheckedTransferAccounts) (amount : UInt64) : UInt64 :=
+  ProofForge.Svm.Runtime.tokenTransferIx
+    (UInt64.ofNat accounts.tokenProgram.index)
+    (UInt64.ofNat accounts.source.index)
+    (UInt64.ofNat accounts.destination.index)
+    (UInt64.ofNat accounts.authority.index)
+    amount
 
 /-- Closed classic Token `MintToChecked`: external account 0 is the signing mint authority;
 mint is account 1 (writable), destination account 2 (writable). `decimals` must reduce to an

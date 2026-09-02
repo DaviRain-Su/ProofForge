@@ -82,6 +82,31 @@ theorem id_ofWords_eq (w0 w1 w2 w3 : UInt64) :
 theorem system_key_zero :
     system.key = Pubkey.ofWords 0 0 0 0 := rfl
 
+/-- Program matching delegates exactly to executable + complete-key authentication. -/
+theorem id_matches_eq (id : Id) (program : Account.Handle) :
+    id.matches program =
+      (program.isExecutable = 1 && id.key.matchesKey program) := by
+  cases id
+  rfl
+
+/-- The word-valued validity facade delegates to the Boolean matcher. -/
+theorem id_validWord_eq (id : Id) (program : Account.Handle) :
+    id.validWord program = if id.matches program then 1 else 0 := by
+  cases id
+  rfl
+
+/-- Ownership is program matching followed by complete owner/key equality. -/
+theorem id_owns_eq (id : Id) (program account : Account.Handle) :
+    id.owns program account =
+      (id.matches program && account.ownerIsKeyOf program) := by
+  cases id
+  rfl
+
+/-- The SPL helper is exactly the disjunction of both canonical Token matchers. -/
+theorem isSplToken_eq (program : Account.Handle) :
+    isSplToken program =
+      (classicToken.matches program || token2022.matches program) := rfl
+
 end Proofs
 
 end ProofForge.Svm.Sdk.Program

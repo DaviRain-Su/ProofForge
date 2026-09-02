@@ -200,6 +200,32 @@ theorem recoverNestedAccounts_wf_parts (accounts : RecoverNestedAccounts) (L : N
     ProofForge.Svm.Sdk.CpiAccount.Handle.wellFormed, decide_eq_true_eq] at h
   exact ⟨h.1.1.1.1.1.1.1, h.1.1.1.1.1.1.2, h.1.1.1.1.1.2, h.1.1.1.1.2, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
+/-- Every ordinary/idempotent Create role is a valid external index below `L`. -/
+theorem createAccounts_wf_bounds (accounts : CreateAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.associatedTokenProgram.index < L ∧ accounts.payer.index < L ∧
+    accounts.associatedAccount.index < L ∧ accounts.wallet.index < L ∧
+    accounts.mint.index < L ∧ accounts.systemProgram.index < L ∧
+    accounts.tokenProgram.index < L := by
+  have hp := createAccounts_wf_parts accounts L h
+  rcases hp with ⟨hAta, hPayer, hAssociated, hWallet, hMint, hSystem, hToken⟩
+  omega
+
+/-- Every RecoverNested callee/meta role is a valid external index below `L`. -/
+theorem recoverNestedAccounts_wf_bounds (accounts : RecoverNestedAccounts) (L : Nat)
+    (h : accounts.wellFormed L = true) :
+    accounts.associatedTokenProgram.index < L ∧
+    accounts.nestedAssociatedAccount.index < L ∧
+    accounts.nestedMint.index < L ∧
+    accounts.destinationAssociatedAccount.index < L ∧
+    accounts.ownerAssociatedAccount.index < L ∧
+    accounts.ownerMint.index < L ∧
+    accounts.wallet.index < L ∧
+    accounts.tokenProgram.index < L := by
+  have hp := recoverNestedAccounts_wf_parts accounts L h
+  rcases hp with ⟨hAta, hNested, hNestedMint, hDestination, hOwner, hOwnerMint, hWallet, hToken⟩
+  omega
+
 end Proofs
 
 end ProofForge.Svm.Sdk.AssociatedToken

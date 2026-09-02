@@ -16,8 +16,9 @@ and publishes the discriminator last. An already-ready header is an idempotent r
 other state is rejected without a write.
 
 Version movement is deliberately separate. `Transition` describes exactly one compile-time edge
-from a nonzero source version to the header's supported version. It never scans a range, chooses a
-version at runtime, or silently migrates during inspection/initialization.
+from a nonzero source version to the header's supported version. `PayloadTransition` adds exactly
+one compile-time payload-word copy on that same edge. Neither scans a range, chooses a version at
+runtime, nor silently migrates during inspection/initialization.
 -/
 
 namespace ProofForge.Svm.Sdk.Versioned
@@ -161,87 +162,61 @@ repairs malformed state, accepts a foreign discriminator, or upgrades an unliste
       TransitionResult.transitioned
     else TransitionResult.rejected
 
+/-! ## Single-edge payload reshape (`svm-sdk-006`)
 
-/-! ## L1 / pure classify 代数（sf-004） -/
+`PayloadTransition` extends the version edge with exactly one compile-time word copy. It still
+admits no multi-hop graph, no runtime-selected layout, and no silent reshape during inspect/init.
+-/
 
-/-- `Header.wellFormed` 的结构化分解。 -/
-theorem Header.wellFormed_parts {header : Header} {accountLimit : Nat}
-    (h : header.wellFormed accountLimit = true) :
-    scalarHeaderWellFormed header.discriminatorField
-        header.discriminatorField.region.account accountLimit = true ∧
-    scalarHeaderWellFormed header.versionField
-        header.discriminatorField.region.account accountLimit = true ∧
-    header.discriminatorField.firstWord + 1 = header.versionField.firstWord ∧
-    header.expectedDiscriminator ≠ 0 ∧
-    header.supportedVersion ≠ 0 := by
-  simp only [Header.wellFormed, Bool.and_eq_true, bne_iff_ne, beq_iff_eq] at h
-  exact ⟨h.1.1.1.1, h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
+/-- One explicit version edge that also copies exactly one payload word before publishing the
+target version. -/
+structure PayloadTransition where
+  header : Header
+  fromVersion : UInt64
+  source : Field
+  destination : Field
+  deriving BEq, Repr, Inhabited
 
-/-- `Transition.wellFormed` 的结构化分解。 -/
-theorem Transition.wellFormed_parts {transition : Transition} {accountLimit : Nat}
-    (h : transition.wellFormed accountLimit = true) :
-    transition.header.wellFormed accountLimit = true ∧
-    transition.fromVersion ≠ 0 ∧
-    transition.fromVersion ≠ transition.header.supportedVersion := by
-  simp only [Transition.wellFormed, Bool.and_eq_true, bne_iff_ne] at h
-  exact ⟨h.1.1, h.1.2, h.2⟩
+attribute [pf_inline] PayloadTransition.header PayloadTransition.fromVersion
+  PayloadTransition.source PayloadTransition.destination
 
-/-- 全零物理字 → uninitialized（codec 身份非零）。 -/
-theorem Header.classify_uninitialized (header : Header)
-    (hd : header.expectedDiscriminator ≠ 0) (hv : header.supportedVersion ≠ 0) :
-    header.classify 0 0 = Status.uninitialized := by
-  unfold Header.classify
-  simp [hd, hv]
+/-- Name a single-edge payload reshape: copy `source → destination`, then publish the header's
+supported version. -/
+@[pf_inline] def PayloadTransition.mkEdge (header : Header) (fromVersion : UInt64)
+    (source destination : Field) : PayloadTransition :=
+  { header, fromVersion, source, destination }
 
-/-- 精确匹配 → ready。 -/
-theorem Header.classify_ready (header : Header)
-    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0) :
-    header.classify header.expectedDiscriminator header.supportedVersion = Status.ready := by
-  unfold Header.classify
-  simp [hd0, hv0]
+/-- Static contract: valid version edge, two distinct scalar payload words on the same account,
+both strictly after the version word. -/
+def PayloadTransition.wellFormed (transition : PayloadTransition)
+    (accountLimit : Nat := 64) : Bool :=
+  (Transition.from transition.header transition.fromVersion).wellFormed accountLimit &&
+    scalarHeaderWellFormed transition.source
+      transition.header.discriminatorField.region.account accountLimit &&
+    scalarHeaderWellFormed transition.destination
+      transition.header.discriminatorField.region.account accountLimit &&
+    transition.source != transition.destination &&
+    transition.header.versionField.firstWord < transition.source.firstWord &&
+    transition.header.versionField.firstWord < transition.destination.firstWord
 
-/-- 混零（disc=0, ver≠0）→ malformed。 -/
-theorem Header.classify_malformed_discZero (header : Header) (actualVersion : UInt64)
-    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
-    (hver : actualVersion ≠ 0) :
-    header.classify 0 actualVersion = Status.malformed := by
-  unfold Header.classify
-  simp [hd0, hv0, hver]
-
-/-- 混零（disc≠0, ver=0）→ malformed。 -/
-theorem Header.classify_malformed_verZero (header : Header) (actualDiscriminator : UInt64)
-    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
-    (hdisc : actualDiscriminator ≠ 0) :
-    header.classify actualDiscriminator 0 = Status.malformed := by
-  unfold Header.classify
-  simp [hd0, hv0, hdisc]
-
-/-- 外源 discriminator → wrongDiscriminator。 -/
-theorem Header.classify_wrongDiscriminator (header : Header)
-    (actualDiscriminator actualVersion : UInt64)
-    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
-    (hdisc : actualDiscriminator ≠ 0) (hver : actualVersion ≠ 0)
-    (hne : actualDiscriminator ≠ header.expectedDiscriminator) :
-    header.classify actualDiscriminator actualVersion = Status.wrongDiscriminator := by
-  unfold Header.classify
-  simp [hd0, hv0, hdisc, hver, hne]
-
-/-- 同 disc、错 version → unsupportedVersion。 -/
-theorem Header.classify_unsupportedVersion (header : Header) (actualVersion : UInt64)
-    (hd0 : header.expectedDiscriminator ≠ 0) (hv0 : header.supportedVersion ≠ 0)
-    (hver : actualVersion ≠ 0)
-    (hne : actualVersion ≠ header.supportedVersion) :
-    header.classify header.expectedDiscriminator actualVersion = Status.unsupportedVersion := by
-  unfold Header.classify
-  simp [hd0, hv0, hver, hne]
-
-/-- codec 身份含零 → malformed。 -/
-theorem Header.classify_malformed_identity (header : Header)
-    (hbad : header.expectedDiscriminator = 0 ∨ header.supportedVersion = 0)
-    (d v : UInt64) :
-    header.classify d v = Status.malformed := by
-  unfold Header.classify
-  rcases hbad with h | h <;> simp [h]
-
+/-- Apply the version edge and copy the one named payload word. On replay of an already-current
+header the copy is skipped. Unlisted sources and foreign discriminators remain rejected with no
+writes. -/
+@[pf_inline] def PayloadTransition.apply (transition : PayloadTransition) : UInt64 :=
+  let header := transition.header
+  if header.expectedDiscriminator = 0 || header.supportedVersion = 0 ||
+      transition.fromVersion = 0 || transition.fromVersion = header.supportedVersion then
+    TransitionResult.rejected
+  else
+    let actualDiscriminator := read header.discriminatorField 0
+    let actualVersion := read header.versionField 0
+    if actualDiscriminator ≠ header.expectedDiscriminator then TransitionResult.rejected
+    else if actualVersion = header.supportedVersion then TransitionResult.alreadyCurrent
+    else if actualVersion = transition.fromVersion then
+      let value := read transition.source 0
+      let _ := write transition.destination 0 value
+      let _ := write header.versionField 0 header.supportedVersion
+      TransitionResult.transitioned
+    else TransitionResult.rejected
 
 end ProofForge.Svm.Sdk.Versioned

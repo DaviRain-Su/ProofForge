@@ -192,8 +192,29 @@ distinguish it from fallback pair this view with `index < size`. -/
   | ⟨values, map, _⟩ =>
     let count := Source.liveCount map
     let capacity := UInt64.ofNat values.region.capacity
-    if Core.Collections.BoundedSet.canValueAt capacity count index then
+    if canValueAt capacity count index then
       Source.read values (index + 1)
     else 0
+
+/-- True iff `index` is a live zero-based enumeration slot under the shared position policy. -/
+@[pf_inline] def Descriptor.canIndex (set : Descriptor) (index : UInt64) : Bool :=
+  match set with
+  | ⟨values, map, _⟩ =>
+    canValueAt (UInt64.ofNat values.region.capacity) (Source.liveCount map) index
+
+/-- Remove the member currently at zero-based `index` via the existing swap-remove path.
+OOB or malformed count returns `0` with no write. After success, only reverse (or fresh
+`size`) scans remain valid — forward indexes past the hole are not stable. -/
+@[pf_inline] def Descriptor.removeAt (set : Descriptor) (index : UInt64) : UInt64 :=
+  match set with
+  | ⟨values, map, _⟩ =>
+    let count := Source.liveCount map
+    let capacity := UInt64.ofNat values.region.capacity
+    if !canValueAt capacity count index then 0
+    else Descriptor.remove set (Source.read values (index + 1))
+
+/-- Alias of `initialize`: reset tree/allocator headers. Stale payload words stay unreachable. -/
+@[pf_inline] def Descriptor.clear (set : Descriptor) : UInt64 :=
+  Descriptor.initialize set
 
 end ProofForge.Svm.Sdk.StorageEnumerableSet

@@ -30,6 +30,16 @@ def era (_s : State) : UInt64 :=
 def leaderEra (_s : State) : UInt64 :=
   Sysvar.Clock.leaderScheduleEpoch
 
+/-- view：当前 epoch 起始时间戳（官方 `i64` 位型，装在 `UInt64`）。 -/
+@[pf_entry]
+def epochStart (_s : State) : UInt64 :=
+  Sysvar.Clock.epochStartTimestamp
+
+/-- view：当前 unix 时间戳（官方 `i64` 位型，装在 `UInt64`）。 -/
+@[pf_entry]
+def unix (_s : State) : UInt64 :=
+  Sysvar.Clock.unixTimestamp
+
 /-- view：账户 0 公钥的第一个小端 u64。入口会要求 signer。 -/
 @[pf_entry]
 def key0 (_s : State) : UInt64 :=

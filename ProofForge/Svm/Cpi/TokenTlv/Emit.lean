@@ -3,12 +3,16 @@ import ProofForge.Svm.Cpi.TokenTlv
 /-!
 # Emitter for the bounded Token-2022 TLV account-data policy
 
-Lowers `TokenTlv.Plan` to the sBPF preflight that runs before the Token-2022 `TransferChecked`
-CPI. The machine is the straight-line specialization of `TokenTlv.evaluate` for the closed
-classifier (`evaluate_closed_eq_straightline`): only the classic base layout or an extension-form
-account whose TLV region starts with an official end/padding form proceeds; every other form exits
-`Custom(1)` atomically before any persistent write or CPI. Scalar registers only: no heap object,
-no pointer beyond the live account header, no runtime-selected geometry.
+Lowers a closed `TokenTlv.Policy` to the sBPF preflight that runs before Token-2022
+`TransferChecked`. Two straight-line specializations are owned here:
+
+* `token2022Base` — classic base layout or TLV region that starts with an official end/padding
+  form; every other extension rejects (`evaluate_closed_eq_straightline`).
+* `token2022MintClose` — mint-only path that accepts exactly one official `MintCloseAuthority`
+  (type 3, length 32) followed by an end marker; every other extension rejects.
+
+Scalar registers only: no heap object, no pointer beyond the live account header, no
+runtime-selected geometry.
 -/
 
 namespace ProofForge.Svm.Cpi.TokenTlv.Emit
@@ -21,29 +25,11 @@ def dataLenOffset : Nat := 80
 
 def dataPtrOffset : Nat := 88
 
-/--
-Emit the TLV policy preflight for the account at physical index `physical`. All rejection paths
-jump to the shared `cpi_data_len_err_{label}` exit; the accept path falls through to
-`cpi_data_len_ok_{label}`, which the ordinary data-length policy also uses.
--/
-def emitPreflight (ctx : Context) (label : String) (physical : Nat) (plan : Plan) :
-    Except String String := do
-  unless plan.wellFormed do
-    throw "extract/unsupported: malformed Token-2022 TLV account-data plan"
-  let err := s!"cpi_data_len_err_{label}"
-  -- The short-remainder probe target is unique per account: two constrained accounts in one
-  -- invocation must not share a label.
-  let okFull := s!"cpi_data_len_ok_{label}_p{physical}_full"
-  -- Accepting this account continues into the next account's policy; only the final
-  -- fall-through reaches the shared `ok` exit, so no account's checks can be skipped.
-  let next := s!"cpi_data_len_next_{label}_p{physical}"
-  let src := ctx.headerStack physical
-
+private def emitBase (src err next : String) (plan : Plan) : String :=
   let padding :=
     (List.range plan.paddingBytes).foldl (init := "") fun out i =>
       out ++ s!"  ldxb r4, [r3 + {plan.baseLen + i}]\n  jne r4, 0, {err}\n"
-  return s!"\
-  ; token-2022 TLV account-data policy ({repr plan.kind}) for physical account {physical}
+  s!"\
   ldxdw r1, [r10 - {src}]
   ldxdw r2, [r1 + {dataLenOffset}]
   ; the account data bytes follow the fixed 88-byte header inline, so the data pointer is
@@ -60,12 +46,17 @@ def emitPreflight (ctx : Context) (label : String) (physical : Nat) (plan : Plan
 {padding}  ; AccountType byte must match the constrained base state
   ldxb r4, [r3 + {typeByteOffset}]
   jne r4, {plan.typeByte}, {err}
+"
+
+/-- Closed classifier: first TLV entry must be end/padding. -/
+private def emitClosedTlv (err next okFull : String) : String :=
+  s!"\
   ; forward-only bounded TLV cursor, first entry: every non-end entry rejects
   mov64 r4, r2
   sub64 r4, {tlvStart}
   jeq r4, 0, {next}
   jeq r4, 1, {next}
-  ; rem \u2265 2 proves both type bytes are inside data_len; rem \u2265 4 proves the full header
+  ; rem ≥ 2 proves both type bytes are inside data_len; rem ≥ 4 proves the full header
   ldxb r5, [r3 + {tlvStart}]
   jne r5, 0, {err}
   ldxb r5, [r3 + {tlvStart + 1}]
@@ -77,7 +68,78 @@ def emitPreflight (ctx : Context) (label : String) (physical : Nat) (plan : Plan
   ; Uninitialized(0) ends the region; everything after is ignored, as on-chain
   jne r5, 0, {err}
   ja {next}
-{next}:
+"
+
+/--
+Mint-close specialization: accept type=3/len=32 once, then require end (or no further bytes).
+-/
+private def emitMintCloseTlv (err next endCheck afterClose : String) : String :=
+  let afterBody := tlvStart + 4 + 32
+  s!"\
+  ; mint-close TLV: allow MintCloseAuthority(3,32) then end, or end alone
+  mov64 r4, r2
+  sub64 r4, {tlvStart}
+  jeq r4, 0, {next}
+  jeq r4, 1, {next}
+  ldxb r5, [r3 + {tlvStart}]
+  ldxb r6, [r3 + {tlvStart + 1}]
+  jne r6, 0, {err}
+  jeq r5, 0, {endCheck}
+  jne r5, {mintCloseAuthorityType.toNat}, {err}
+  ; need full header + 32-byte body
+  jlt r4, {4 + 32}, {err}
+  ldxb r5, [r3 + {tlvStart + 2}]
+  jne r5, {mintCloseAuthorityBodyLen.toNat}, {err}
+  ldxb r5, [r3 + {tlvStart + 3}]
+  jne r5, 0, {err}
+  ; after body: require end/padding
+  mov64 r4, r2
+  sub64 r4, {afterBody}
+  jeq r4, 0, {next}
+  jeq r4, 1, {next}
+  ldxb r5, [r3 + {afterBody}]
+  jne r5, 0, {err}
+  ldxb r5, [r3 + {afterBody + 1}]
+  jne r5, 0, {err}
+  ja {next}
+{endCheck}:
+  jgt r4, 3, {afterClose}
+  ja {next}
+{afterClose}:
+  ; Uninitialized(0) ends the region
+  jne r6, 0, {err}
+  ja {next}
+"
+
+/--
+Emit the TLV policy preflight for the account at physical index `physical`. All rejection paths
+jump to the shared `cpi_data_len_err_{label}` exit; the accept path falls through to
+`cpi_data_len_next_{label}_p{physical}` then onward.
+-/
+def emitPreflight (ctx : Context) (label : String) (physical : Nat) (policy : Policy) :
+    Except String String := do
+  let plan ← match planFor policy with
+    | .error reason => throw reason
+    | .ok plan => pure plan
+  unless plan.wellFormed do
+    throw "extract/unsupported: malformed Token-2022 TLV account-data plan"
+  let err := s!"cpi_data_len_err_{label}"
+  let next := s!"cpi_data_len_next_{label}_p{physical}"
+  let src := toString (ctx.headerStack physical)
+  let base := emitBase src err next plan
+  match policy with
+  | .token2022Base _ =>
+    let okFull := s!"cpi_data_len_ok_{label}_p{physical}_full"
+    return s!"\
+  ; token-2022 TLV account-data policy ({repr plan.kind}) for physical account {physical}
+{base}{emitClosedTlv err next okFull}{next}:
+"
+  | .token2022MintClose =>
+    let endCheck := s!"cpi_data_len_ok_{label}_p{physical}_end"
+    let afterClose := s!"cpi_data_len_ok_{label}_p{physical}_after_close"
+    return s!"\
+  ; token-2022 TLV mint-close policy for physical account {physical}
+{base}{emitMintCloseTlv err next endCheck afterClose}{next}:
 "
 
 end ProofForge.Svm.Cpi.TokenTlv.Emit

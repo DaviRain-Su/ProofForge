@@ -66,6 +66,7 @@ opcode。`BatchRecorder` 是第二个 backend：固定 header/record recipe 经 
 compute-budget 上限 256 KiB；首 8 字节保存 bump，allocation 向下并向下对齐，OOM 返回
 空，deallocation 不回收。这里的 transient heap 只活一个 invocation；账户内 Sokoban/Phoenix
 allocator 仍是固定容量、index/offset based 的持久字节布局，绝不能保存 heap pointer。
+账户内 allocator 与有界容器的关系见 [allocator-bounds.md](allocator-bounds.md)。
 SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假设 Agave 可选的大 frame。
 `Svm.Heap.Emit` 是这份协议的唯一 assembly interpreter，BatchRecorder 与
 `Svm.TransientVec` 共用它。source-facing `Sdk.Transient.Vector64` 只携带编译期 capacity；
@@ -90,5 +91,6 @@ inactive/capacity mismatch、OOM 分别 fail with `0x1202`、`0x1203`、`0x1201`
 ## Tests
 
 `Tests/EmitSpec.lean`、`Tests/IdlSpec.lean`、`Tests/BuildSpec.lean`、
-`Tests/SvmHeapSpec.lean`、`Tests/SvmTransientVectorSpec.lean`、`Tests/AccountViewSpec.lean`。
+`Tests/SvmHeapSpec.lean`、`Tests/SvmTransientVectorSpec.lean`、`Tests/AccountViewSpec.lean`、
+`Tests/SemanticsSpec.lean`（E2：Counter+Window emit→parse→step；见 [semantics-bridge.md](semantics-bridge.md)）。
 汇编门在 `pfAssemble`。Mollusk 在 `runtime-tests/solana`。

@@ -10,6 +10,8 @@ open ProofForge.Svm.Sdk
 #guard height (init 0) == Sysvar.Clock.slot
 #guard era (init 0) == Sysvar.Clock.epoch
 #guard leaderEra (init 0) == Sysvar.Clock.leaderScheduleEpoch
+#guard epochStart (init 0) == Sysvar.Clock.epochStartTimestamp
+#guard unix (init 0) == Sysvar.Clock.unixTimestamp
 #guard key0 (init 0) == ProofForge.Svm.Runtime.signerKey0
 
 #guard

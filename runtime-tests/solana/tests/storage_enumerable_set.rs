@@ -600,3 +600,197 @@ fn roster_policy_is_idempotent_but_still_bounded() {
     );
     assert_eq!(slot(&accounts.storage, 9), 4, "roster count at word 10");
 }
+
+#[test]
+fn directory_capacity_bounded_scan_remove_at_and_clear() {
+    let (program_id, mollusk, state_key, storage_key, mut accounts) = initialized(
+        "MemberDirectory",
+        "PF_MEMBER_DIRECTORY_SO",
+        DIRECTORY_STORAGE_LEN,
+    );
+    for member in [0, 11, 22] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "add",
+            &[member],
+            1,
+        );
+    }
+    let mut sum = 0u64;
+    for (index, member) in [(0u64, 0u64), (1, 11), (2, 22), (3, 0)] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "valueAt",
+            &[index],
+            member,
+        );
+        if index < 3 {
+            sum = sum.wrapping_add(member);
+        }
+    }
+    assert_eq!(sum, 33, "capacity-bounded valueAt scan");
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "removeAt",
+        &[1],
+        1,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "size",
+        &[],
+        2,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "contains",
+        &[11],
+        0,
+    );
+    accounts = call_error(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "removeAt",
+        &[7],
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "clearStorage",
+        &[],
+        1,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "size",
+        &[],
+        0,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "add",
+        &[99],
+        1,
+    );
+}
+
+#[test]
+fn roster_index_scan_withdraw_and_clear_are_idempotent() {
+    let (program_id, mollusk, state_key, storage_key, mut accounts) =
+        initialized("UniqueRoster", "PF_UNIQUE_ROSTER_SO", ROSTER_STORAGE_LEN);
+    for identity in [1, 2, 4] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "enroll",
+            &[identity],
+            1,
+        );
+    }
+    let mut fold = 0u64;
+    for (index, identity) in [(0u64, 1u64), (1, 2), (2, 4), (3, 0), (4, 0)] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "identityAt",
+            &[index],
+            identity,
+        );
+        if index < 3 {
+            fold ^= identity;
+        }
+    }
+    assert_eq!(fold, 1 ^ 2 ^ 4, "capacity-bounded identityAt scan");
+    for identity in [1u64, 2, 4] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "withdraw",
+            &[identity],
+            1,
+        );
+    }
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "size",
+        &[],
+        0,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "clearRoster",
+        &[],
+        1,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "enroll",
+        &[5],
+        1,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "size",
+        &[],
+        1,
+    );
+}

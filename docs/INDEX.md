@@ -14,7 +14,7 @@
 | [05-test-spec.md](05-test-spec.md) | 怎样算对 |
 | [plan/README.md](plan/README.md) | 交付队列 |
 | [plan/svm-work-plan.md](plan/svm-work-plan.md) | **当前主线**：SVM 全面工作计划（能力+应用+语义+工程+形式化） |
-| [plan/svm-formalization-plan.md](plan/svm-formalization-plan.md) | SVM 形式化轨道详案（sf-000..sf-016） |
+| [plan/svm-formalization-plan.md](plan/svm-formalization-plan.md) | SVM 形式化 Track A 详案（sf-000..sf-016；**L1/L2 已收口**） |
 | [plan/runtime-sdk-roadmap.md](plan/runtime-sdk-roadmap.md) | SVM / EVM Runtime 与 SDK 的权威边界、排期和验收门 |
 | [plan/multi-target-strategy.md](plan/multi-target-strategy.md) | **三 target 推进战略**：EVM Feature A/B（powdr）、SVM、NEAR、人体工程学 |
 | [plan/productization.md](plan/productization.md) | **产品化拆分**：CLI / SDK 可单独导入、init 模板、Release 打包 |
@@ -39,4 +39,4 @@
 | [plan/analysis/xrpl-xls.md](plan/analysis/xrpl-xls.md) | XLS-30 等协议对象 vs WASM：不要用合约重写主网 amendment |
 | [modules/near.md](modules/near.md) | WASM 家族成员：NEAR Protocol Lean → WAT → `.wasm`（raw-u64） |
 
-当前阶段：**SVM 全面收口**（见 [plan/svm-work-plan.md](plan/svm-work-plan.md)）；形式化是其中 Track A。Runtime/SDK 主体已落地，剩余缺口与证明/应用并行推进；WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。
+当前阶段：**SVM Track A（L1/L2）已收口**；继续 Track B–F（`svm-rt-*` / `svm-sdk-*` / `svm-app-*` / `svm-sem-*` / `svm-eng-*`），见 [plan/svm-work-plan.md](plan/svm-work-plan.md)。WASM PR 保持开放不阻塞。仓库名 ProofForge；入口 `@[pf_entry]`；CLI `pf`。

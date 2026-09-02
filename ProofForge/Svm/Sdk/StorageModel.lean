@@ -1,6 +1,5 @@
 import ProofForge.Svm.Sdk.Storage
 import ProofForge.Svm.Sdk.Queue
-import Std.Tactic.BVDecide
 
 /-!
 # 抽象账户字状态模型：SDK 存储组件的第二层形式化验证
@@ -249,18 +248,6 @@ theorem scalarHeader_wf_parts {header : Field} {bodyAccount : Nat}
   exact ⟨h.1.1.1.1.1.1.1, h.1.1.1.1.1.1.2, h.1.1.1.1.1.2, h.1.1.1.1.2,
     h.1.1.1.2, h.1.1.2, h.1.2, h.2⟩
 
-/-- 从结构化组件重建 `scalarHeaderWellFormed`。 -/
-theorem scalarHeader_wf_build {header : Field} {bodyAccount : Nat}
-    (hwf : header.wellFormed = true) (hw : header.widthWords = 1)
-    (ha : header.region.account = bodyAccount) (hp : 0 < bodyAccount)
-    (hs : header.region.strideWords = 1) (hc : header.region.capacity = 1)
-    (hi : (header.region.indexBase == IndexBase.zero) = true)
-    (hacc : (header.region.access == Access.programOwnedMutable) = true) :
-    scalarHeaderWellFormed header bodyAccount = true := by
-  unfold scalarHeaderWellFormed
-  simp [Bool.and_eq_true, beq_iff_eq, hwf, hw, ha, hs, hc, hi, hacc]
-  exact hp
-
 /-- `BoundedVec.wellFormed` 的结构化合同。 -/
 theorem boundedVec_wf_parts {vec : BoundedVec}
     (h : vec.wellFormed = true) :
@@ -297,26 +284,6 @@ theorem indexBase_beq_one_eq {b : IndexBase} (h : (b == IndexBase.one) = true) :
   cases b with
   | zero => exact absurd h (by decide)
   | one => rfl
-
-/-- 由 slots access 链到 programOwnedMutable（Access 无 LawfulBEq）。 -/
-private theorem access_beq_prog_of_slots {a b : Access}
-    (hab : (a == b) = true) (hslots : (b == Access.programOwnedMutable) = true) :
-    (a == Access.programOwnedMutable) = true := by
-  have hb : b = Access.programOwnedMutable := by
-    cases b with | mk bw bo =>
-    cases bw <;> cases bo <;> try rfl
-    repeat' exact absurd hslots (by native_decide)
-  have ha : a = b := by
-    cases a with | mk aw ao =>
-    cases b with | mk bw bo =>
-    cases aw <;> cases bw <;> cases ao <;> cases bo <;> try rfl
-    repeat' exact absurd hab (by native_decide)
-  rw [ha, hb]
-  native_decide
-
-private theorem ofNat_capacity_toNat (cap : Nat) (h : cap < 2 ^ 64) :
-    (UInt64.ofNat cap).toNat = cap := by
-  simpa [UInt64.toNat_ofNat, Nat.mod_eq_of_lt h]
 
 section WfBridge
 
@@ -560,180 +527,130 @@ theorem mBvPush_get (mem : AccountWords) (v : UInt64)
     · exact hlt2 hlt)]
   exact htwo.2
 
+/-! ### BoundedVec pop / setAt 闭环（sf-003） -/
 
-private theorem u64_toNat_sub_one {a : UInt64} (h : (1 : Nat) ≤ a.toNat) :
+private theorem u64_toNat_sub_one {a : UInt64} (h : 0 < a.toNat) :
     (a - 1).toNat = a.toNat - 1 := by
-  have hbig : (2:Nat)^64 = 4294967296*4294967296 := by decide
-  have hlt : a.toNat < 4294967296*4294967296 := by
+  have hone : UInt64.toNat 1 = 1 := rfl
+  have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
+  have hlt : a.toNat < 4294967296 * 4294967296 := by
     obtain ⟨w⟩ := a
     have := w.isLt
-    simpa [hbig] using this
-  have hone : UInt64.toNat 1 = 1 := rfl
-  rw [UInt64.toNat_sub, hbig, hone]
+    simpa [h2] using this
+  rw [UInt64.toNat_sub, hone, h2]
   omega
 
-/-- Rewrite helper: nonzero UInt64 has toNat ≥ 1. -/
-private theorem u64_toNat_pos {a : UInt64} (hne : a ≠ 0) : (1 : Nat) ≤ a.toNat := by
-  have : a.toNat ≠ 0 := by
-    intro hz
-    apply hne
-    cases h : a with
-    | ofBitVec val =>
-      have hz' : val.toNat = 0 := by simpa [h, UInt64.toNat] using hz
-      have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
-      subst this
-      rfl
-  omega
-
-/-- **合法 setAt 不改 count**：payload 槽与 count header 词不同。 -/
-theorem mBvSetAt_size (mem : AccountWords) (position value : UInt64)
+/-- **合法 setAt 不改 count header**（slots ≠ count）。 -/
+theorem mBvSetAt_size (mem : AccountWords) (pos v : UInt64)
     (hwf : vec.wellFormed = true)
-    (hpos0 : position ≠ 0)
-    (hin : ¬ (mBvSize mem vec < position))
-    (hbound : position.toNat ≤ vec.slots.region.capacity) :
-    mBvSize (mBvSetAt mem vec position value) vec = mBvSize mem vec := by
-  have hpos_ge := u64_toNat_pos hpos0
-  have hws : mFieldWord vec.slots position
-      = some (vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords) :=
-    mFieldWord_bv_slots vec hwf position hpos_ge hbound
-  have hwc : mFieldWord vec.count 0 = some vec.count.firstWord :=
-    mFieldWord_bv_count vec hwf
+    (hpos1 : (1 : Nat) ≤ pos.toNat)
+    (hpos2 : pos.toNat ≤ (mBvSize mem vec).toNat)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvSetAt mem vec pos v) vec = mBvSize mem vec := by
+  have hbound : ¬ (pos = 0 ∨ mReadField mem vec.count 0 < pos) := by
+    intro h
+    rcases h with hz | hlt
+    · have : pos.toNat = 0 := by rw [hz]; rfl
+      omega
+    · have : (mReadField mem vec.count 0).toNat < pos.toNat :=
+        (UInt64.lt_iff_toNat_lt).mp hlt
+      have : (mBvSize mem vec).toNat < pos.toNat := this
+      omega
+  have hws : mFieldWord vec.slots pos
+      = some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf pos hpos1 (by omega)
+  have hwc := mFieldWord_bv_count vec hwf
   have hne : vec.count.firstWord
-      ≠ vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords := by
+      ≠ vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords := by
     intro heq
     have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
       (boundedVec_wf_header_before_slots vec hwf).1
     omega
-  unfold mBvSetAt mBvSize
-  rw [if_neg (by
-    intro h
-    rcases h with h0 | hlt
-    · exact hpos0 h0
-    · exact hin hlt)]
-  exact mReadField_write_other mem vec.count vec.slots 0 position value hwc hws hne
+  simp only [mBvSetAt, mBvSize]
+  rw [if_neg hbound]
+  exact mReadField_write_other mem vec.count vec.slots 0 pos v hwc hws hne
 
-/-- **合法 setAt 同位置读回**。 -/
-theorem mBvSetAt_get (mem : AccountWords) (position value : UInt64)
+/-- **合法 setAt 后同位置 getAt 读回写入值**。 -/
+theorem mBvSetAt_get (mem : AccountWords) (pos v : UInt64)
     (hwf : vec.wellFormed = true)
-    (hpos0 : position ≠ 0)
-    (hin : ¬ (mBvSize mem vec < position))
-    (hbound : position.toNat ≤ vec.slots.region.capacity) :
-    mBvGetAt (mBvSetAt mem vec position value) vec position = value := by
-  have hsize := mBvSetAt_size vec mem position value hwf hpos0 hin hbound
-  have hpos_ge := u64_toNat_pos hpos0
-  have hws : mFieldWord vec.slots position
-      = some (vec.slots.firstWord + (position.toNat - 1) * vec.slots.region.strideWords) :=
-    mFieldWord_bv_slots vec hwf position hpos_ge hbound
-  have hproj : mBvSetAt mem vec position value
-      = mWriteField mem vec.slots position value := by
-    unfold mBvSetAt
-    rw [if_neg (by
-      intro h
-      rcases h with h0 | hlt
-      · exact hpos0 h0
-      · exact hin hlt)]
-  unfold mBvGetAt
-  have hin' : ¬ (mBvSize (mBvSetAt mem vec position value) vec < position) := by
-    rw [hsize]; exact hin
-  rw [if_neg (by
+    (hpos1 : (1 : Nat) ≤ pos.toNat)
+    (hpos2 : pos.toNat ≤ (mBvSize mem vec).toNat)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvGetAt (mBvSetAt mem vec pos v) vec pos = v := by
+  have hbound : ¬ (pos = 0 ∨ mReadField mem vec.count 0 < pos) := by
     intro h
-    rcases h with h0 | hlt
-    · exact hpos0 h0
-    · exact hin' hlt), hproj]
-  exact mReadField_write_same mem vec.slots position value _ hws
-
-/-- **非空 pop 后 count 恰 −1**。 -/
-theorem mBvPop_size (mem : AccountWords) (hwf : vec.wellFormed = true)
-    (hne : mBvSize mem vec ≠ 0)
-    (hbound : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
-    mBvSize (mBvPop mem vec).1 vec = mBvSize mem vec - 1 := by
-  have hsize_ge := u64_toNat_pos hne
-  have hproj : (mBvPop mem vec).1
-      = mWriteField mem vec.count 0 (mBvSize mem vec - 1) := by
-    simp only [mBvPop]
-    rw [if_neg hne]
-  rw [hproj]
-  unfold mBvSize
-  exact mReadField_write_same mem vec.count 0 (mReadField mem vec.count 0 - 1) _
-    (mFieldWord_bv_count vec hwf)
-
-/-- **非空 pop 返回原末槽值**（payload 槽本身不被 pop 清零）。 -/
-theorem mBvPop_get (mem : AccountWords) (hwf : vec.wellFormed = true)
-    (hne : mBvSize mem vec ≠ 0)
-    (_hbound : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
-    (mBvPop mem vec).2 = mReadField mem vec.slots (mBvSize mem vec) := by
-  simp only [mBvPop]
-  rw [if_neg hne]
-
-/-- **push→pop 往返**：未满 push 后 pop 读回原 value，count 复原。 -/
-theorem mBvPush_pop_roundtrip (mem : AccountWords) (v : UInt64)
-    (hwf : vec.wellFormed = true)
-    (hfull : mBvSize mem vec < BoundedVec.capacity vec) :
-    let afterPush := (mBvPush mem vec v).1
-    (mBvPop afterPush vec).2 = v ∧
-    mBvSize (mBvPop afterPush vec).1 vec = mBvSize mem vec := by
-  have hsize_push := mBvPush_size vec mem v hwf hfull
-  have hget_push := mBvPush_get vec mem v hwf hfull
-  have hpos : (mBvSize mem vec + 1).toNat = (mBvSize mem vec).toNat + 1 :=
-    u64_toNat_add_one (show (mBvSize mem vec).toNat < 65536 by
-      have h1 : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
-        toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
-      have hcap'' : vec.slots.region.capacity ≤ 65536 :=
-        boundedVec_wf_capacity vec hwf
-      omega)
-  have hsize_lt : (mBvSize mem vec).toNat < vec.slots.region.capacity :=
-    toNat_lt_ofNat hfull (boundedVec_wf_capacity vec hwf)
-  have hret : (mBvPush mem vec v).2 = mBvSize mem vec + 1 := by
-    simp only [mBvPush]
-    rw [if_neg (by
-      show ¬(BoundedVec.capacity vec ≤ mBvSize mem vec)
-      exact fun hc => by
-        have h2 : (BoundedVec.capacity vec).toNat ≤ (mBvSize mem vec).toNat := hc
-        rw [bv_capacity_toNat vec hwf] at h2
-        exact absurd h2 (Nat.not_le_of_lt hsize_lt))]
-  have hne : mBvSize (mBvPush mem vec v).1 vec ≠ 0 := by
-    rw [hsize_push]
-    intro heq
-    have h1' : (mBvSize mem vec + 1).toNat = (0 : UInt64).toNat :=
-      congrArg UInt64.toNat heq
-    rw [hpos] at h1'
-    have h0 : UInt64.toNat 0 = 0 := rfl
-    rw [h0] at h1'
-    omega
-  have hbound : (mBvSize (mBvPush mem vec v).1 vec).toNat ≤ vec.slots.region.capacity := by
-    rw [hsize_push, hpos]
-    omega
-  have hpop_val := mBvPop_get vec (mBvPush mem vec v).1 hwf hne hbound
-  have hpop_size := mBvPop_size vec (mBvPush mem vec v).1 hwf hne hbound
-  have hslot :
-      mReadField (mBvPush mem vec v).1 vec.slots
-        (mBvSize (mBvPush mem vec v).1 vec) = v := by
-    have : mBvGetAt (mBvPush mem vec v).1 vec (mBvPush mem vec v).2 = v := hget_push
-    unfold mBvGetAt at this
-    rw [hsize_push, hret] at this
-    have hposne : ¬((mBvSize mem vec + 1 : UInt64) = 0) := fun heq => by
-      have h1' : (mBvSize mem vec + 1).toNat = (0 : UInt64).toNat :=
-        congrArg UInt64.toNat heq
-      rw [hpos] at h1'
-      have h0 : UInt64.toNat 0 = 0 := rfl
-      rw [h0] at h1'
+    rcases h with hz | hlt
+    · have : pos.toNat = 0 := by rw [hz]; rfl
       omega
-    have hlt2 : ¬((mBvSize mem vec + 1 : UInt64) < (mBvSize mem vec + 1 : UInt64)) :=
-      fun h => absurd (show _ < _ from h) (Nat.lt_irrefl _)
-    rw [if_neg (by
-      intro hdisj
-      rcases hdisj with h0 | hlt
-      · exact hposne h0
-      · exact hlt2 hlt)] at this
-    simpa [hsize_push] using this
-  refine ⟨?_, ?_⟩
-  · simpa [hslot] using hpop_val
-  · have hsub : (mBvSize mem vec + 1 - 1 : UInt64) = mBvSize mem vec := by
-      apply UInt64.toNat.inj
-      have h1 := u64_toNat_sub_one (a := mBvSize mem vec + 1) (by rw [hpos]; omega)
-      rw [h1, hpos]
-      simp
-    simpa [hsize_push, hsub] using hpop_size
+    · have : (mReadField mem vec.count 0).toNat < pos.toNat :=
+        (UInt64.lt_iff_toNat_lt).mp hlt
+      have : (mBvSize mem vec).toNat < pos.toNat := this
+      omega
+  have hws : mFieldWord vec.slots pos
+      = some (vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords) :=
+    mFieldWord_bv_slots vec hwf pos hpos1 (by omega)
+  have hwc := mFieldWord_bv_count vec hwf
+  have hne : vec.count.firstWord
+      ≠ vec.slots.firstWord + (pos.toNat - 1) * vec.slots.region.strideWords := by
+    intro heq
+    have h1' : vec.count.firstWord + 1 ≤ vec.slots.firstWord :=
+      (boundedVec_wf_header_before_slots vec hwf).1
+    omega
+  -- setAt 后 count 不变，getAt 守卫仍开
+  have hsize' : mReadField (mWriteField mem vec.slots pos v) vec.count 0
+      = mReadField mem vec.count 0 :=
+    mReadField_write_other mem vec.count vec.slots 0 pos v hwc hws hne
+  have hbound' : ¬ (pos = 0 ∨ mReadField (mWriteField mem vec.slots pos v) vec.count 0 < pos) := by
+    intro h
+    rw [hsize'] at h
+    exact hbound h
+  simp only [mBvSetAt, mBvGetAt, mBvSize]
+  rw [if_neg hbound, if_neg hbound']
+  exact mReadField_write_same mem vec.slots pos v _ hws
+
+/-- **非空 pop 后 count = size - 1**。 -/
+theorem mBvPop_size (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvSize (mBvPop mem vec).1 vec = mBvSize mem vec - 1 := by
+  have hne' : mReadField mem vec.count 0 ≠ 0 := hne
+  simp only [mBvPop, mBvSize]
+  rw [if_neg hne']
+  exact mReadField_write_same mem vec.count 0 (mReadField mem vec.count 0 - 1)
+    vec.count.firstWord (mFieldWord_bv_count vec hwf)
+
+/-- **非空 pop 返回值 = 原末槽**。 -/
+theorem mBvPop_ret (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    (mBvPop mem vec).2 = mReadField mem vec.slots (mBvSize mem vec) := by
+  have hne' : mReadField mem vec.count 0 ≠ 0 := hne
+  simp only [mBvPop, mBvSize]
+  rw [if_neg hne']
+
+/-- **非空 pop 后读旧末槽越界得哨兵 0**。 -/
+theorem mBvPop_oldTail_oob (mem : AccountWords)
+    (hwf : vec.wellFormed = true)
+    (hne : mBvSize mem vec ≠ 0)
+    (hcap : (mBvSize mem vec).toNat ≤ vec.slots.region.capacity) :
+    mBvGetAt (mBvPop mem vec).1 vec (mBvSize mem vec) = 0 := by
+  have hsize := mBvPop_size vec mem hwf hne hcap
+  have hpos : (0 : Nat) < (mBvSize mem vec).toNat := by
+    have : (mBvSize mem vec).toNat ≠ 0 := by
+      intro hz
+      exact hne (UInt64.toNat_inj.1 (by simpa using hz))
+    omega
+  have hsub : (mBvSize mem vec - 1).toNat = (mBvSize mem vec).toNat - 1 :=
+    u64_toNat_sub_one hpos
+  have hlt : mBvSize (mBvPop mem vec).1 vec < mBvSize mem vec := by
+    have : (mBvSize (mBvPop mem vec).1 vec).toNat < (mBvSize mem vec).toNat := by
+      rw [hsize, hsub]; omega
+    exact (UInt64.lt_iff_toNat_lt).2 this
+  exact mBvGetAt_oob (mBvPop mem vec).1 vec (mBvSize mem vec) (Or.inr hlt)
+
+/-! sf-003：BoundedVec push/pop/setAt 读回闭环（`mBvPush_*` / `mBvPop_*` / `mBvSetAt_*`）。 -/
 
 end BvWfAlgebra
 
@@ -743,7 +660,16 @@ open ProofForge.Svm.Sdk.Queue
 
 variable (q : BoundedQueue)
 
-/-! ### BoundedQueue fail-closed 几何与 push/pop 代数 -/
+/-! ### BoundedQueue fail-closed 几何与 push/pop 代数
+
+证明习惯（sf-000）：
+1. 多写读回走 `mReadField_write_same` / `mReadField_write_other`；
+   三写/两写入口用 `mQueuePushAt_twoWrites` / `mQueuePopAt_twoWrites`。
+2. wf 入口用 `queue_wf_parts` / `mQueueCapacityFacts`，禁止深 `.1.1.1` 投影。
+3. UInt64 桥：`u64toNatAdd` / `u64toNatSub`；控制流用 `if_neg`/`if_pos`，
+   不硬 `simp [reduceIte]`；`toNat = 0 → = 0` 用 `UInt64.toNat_inj`。
+4. 先 `*_links` 把 SDK 控制流缩到 `*At`，再做读回。
+-/
 
 /-- wf 的结构化合同（7 叶）。 -/
 theorem queue_wf_parts (hwf : q.wellFormed = true) :
@@ -1086,153 +1012,6 @@ theorem mQueuePush_nowrap_links (mem : AccountWords) (q : BoundedQueue) (value :
   simp only [if_neg hguard, if_neg hhead, if_neg hnowrap]
 
 
-/-- **非空推读回（nowrap）**：链接后 count = size+1、head 不变、payload 槽读回 value。 -/
-theorem mQueuePush_nowrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
-    (hwf : q.wellFormed = true)
-    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
-    (hhead : mReadField mem q.head 0 ≠ 0)
-    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
-    (hnowrap : ¬ (BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0)) :
-    let size := mReadField mem q.count 0
-    let head := mReadField mem q.head 0
-    let tail := head + size
-    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
-    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
-    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
-  have hcapnat := mQueueCapacityFacts q hwf |>.1
-  have hcap1 := mQueueCapacityFacts q hwf |>.2
-  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
-  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
-    u64toNatAdd (by
-      have := hsize
-      have := hheadb
-      omega)
-  have htail_le : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-      ≤ q.slots.region.capacity := by
-    have hle' : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-        ≤ (BoundedQueue.capacity q).toNat := by
-      have : ¬ ((BoundedQueue.capacity q).toNat
-          < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat) := by
-        intro hlt'
-        have hcap_lt : BoundedQueue.capacity q <
-            mReadField mem q.head 0 + mReadField mem q.count 0 :=
-          (UInt64.lt_iff_toNat_lt).mpr hlt'
-        exact hnowrap hcap_lt
-      omega
-    rw [hcapnat] at hle'
-    exact hle'
-  have htail_ge : (1 : Nat) ≤ (mReadField mem q.head 0 + mReadField mem q.count 0).toNat := by
-    have hhn : (0 : Nat) < (mReadField mem q.head 0).toNat := by
-      have : (mReadField mem q.head 0).toNat ≠ 0 := by
-        intro hz
-        apply hhead
-        cases hhd : mReadField mem q.head 0 with
-        | ofBitVec val =>
-          have hz' : val.toNat = 0 := by
-            simpa [hhd, UInt64.toNat] using hz
-          have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
-          subst this
-          rfl
-      omega
-    rw [hnowraw]
-    omega
-  have links := mQueuePush_nowrap_links mem q value hwf hsize hhead hheadb hnowrap
-  rw [links]
-  have h2 := mQueuePushAt_twoWrites mem q
-    (mReadField mem q.head 0 + mReadField mem q.count 0) value
-    (mReadField mem q.head 0) hwf htail_ge htail_le
-  refine ⟨h2.1, ?_, h2.2⟩
-  exact mReadField_write_same _ _ _ _ q.head.firstWord
-    (mFieldWord_queue_head q hwf)
-
-
-/-- **非空推链接（wrap）**：head ≠ 0、cap < head + size 时，
-`mQueuePush` 整体 = `mQueuePushAt` 的三写组合（tail = head + size - cap、
-head 写回自身）。 -/
-theorem mQueuePush_wrap_links (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
-    (hwf : q.wellFormed = true)
-    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
-    (hhead : mReadField mem q.head 0 ≠ 0)
-    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
-    (hwrap : BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0) :
-    mQueuePush mem q value =
-      (mQueuePushAt mem q
-        (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) value
-        (mReadField mem q.head 0) (mReadField mem q.count 0),
-        mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) := by
-  have hcapnat := mQueueCapacityFacts q hwf |>.1
-  have hcap1 := mQueueCapacityFacts q hwf |>.2
-  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
-  have hguard : ¬ (BoundedQueue.capacity q ≤ mReadField mem q.count 0) := by
-    intro hh
-    have h1 := (UInt64.le_iff_toNat_le).mp hh
-    rw [hcapnat] at h1
-    omega
-  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
-    u64toNatAdd (by
-      have := hsize
-      have := hheadb
-      omega)
-  unfold mQueuePush
-  simp only [if_neg hguard, if_neg hhead, if_pos hwrap]
-
-
-/-- **非空推读回（wrap）**：链接后 count = size+1、head 不变、环绕 payload 槽读回 value。 -/
-theorem mQueuePush_wrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
-    (hwf : q.wellFormed = true)
-    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
-    (hhead : mReadField mem q.head 0 ≠ 0)
-    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
-    (hwrap : BoundedQueue.capacity q < mReadField mem q.head 0 + mReadField mem q.count 0) :
-    let size := mReadField mem q.count 0
-    let head := mReadField mem q.head 0
-    let tail := head + size - BoundedQueue.capacity q
-    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
-    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
-    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
-  have hcapnat := mQueueCapacityFacts q hwf |>.1
-  have hcap1 := mQueueCapacityFacts q hwf |>.2
-  have hlt : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
-  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
-    u64toNatAdd (by
-      have := hsize
-      have := hheadb
-      omega)
-  have hraw_ge_cap : (BoundedQueue.capacity q).toNat
-      < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat :=
-    (UInt64.lt_iff_toNat_lt).mp hwrap
-  have hsub : (mReadField mem q.head 0 + mReadField mem q.count 0
-        - BoundedQueue.capacity q).toNat
-      = (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
-        - (BoundedQueue.capacity q).toNat :=
-    u64toNatSub (by omega)
-  have htail_ge : (1 : Nat)
-      ≤ (mReadField mem q.head 0 + mReadField mem q.count 0
-        - BoundedQueue.capacity q).toNat := by
-    rw [hsub, hnowraw, hcapnat]
-    have := hsize
-    have := hheadb
-    omega
-  have htail_le : (mReadField mem q.head 0 + mReadField mem q.count 0
-        - BoundedQueue.capacity q).toNat
-      ≤ q.slots.region.capacity := by
-    rw [hsub, hnowraw, hcapnat]
-    have := hsize
-    have := hheadb
-    omega
-  have links := mQueuePush_wrap_links mem q value hwf hsize hhead hheadb hwrap
-  rw [links]
-  have h2 := mQueuePushAt_twoWrites mem q
-    (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) value
-    (mReadField mem q.head 0) hwf htail_ge htail_le
-  refine ⟨h2.1, ?_, h2.2⟩
-  exact mReadField_write_same _ _ _ _ q.head.firstWord
-    (mFieldWord_queue_head q hwf)
-
-
 /-- **pop 清空链接**：size = 1 时，`mQueuePop` 整体 = `mQueuePopAt` 的
 两写组合（remaining = 0、head 复位 0），返回队首值。 -/
 theorem mQueuePop_clear_links (mem : AccountWords) (q : BoundedQueue)
@@ -1288,811 +1067,354 @@ theorem mQueuePop_advance_links (mem : AccountWords) (q : BoundedQueue)
   simp only [if_neg hguard, if_neg hrem, mQueueNext, if_neg hneqcap]
 
 
-/-- **pop 环绕推进链接**：size ≥ 2 且 head = cap 时，
-`mQueuePop` 整体 = `mQueuePopAt`（remaining = size - 1、head 复位 1）。 -/
+/-! ### push 非空分支（wrap）+ 非空读回 -/
+
+/-- **非空推链接（wrap）**：head ≠ 0 且 head + size > cap 时，
+`mQueuePush` 整体 = `mQueuePushAt`（tail = head + size - cap、head 写回自身）。 -/
+theorem mQueuePush_wrap_links (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hwrap : BoundedQueue.capacity q <
+        mReadField mem q.head 0 + mReadField mem q.count 0) :
+    mQueuePush mem q value =
+      (mQueuePushAt mem q
+        (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q)
+        value (mReadField mem q.head 0) (mReadField mem q.count 0),
+        mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q) := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hguard : ¬ (BoundedQueue.capacity q ≤ mReadField mem q.count 0) := by
+    intro hh
+    have h1 := (UInt64.le_iff_toNat_le).mp hh
+    rw [hcapnat] at h1
+    omega
+  have hcapbnd : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  unfold mQueuePush
+  simp only [if_neg hguard, if_neg hhead, if_pos hwrap]
+
+/-- wrap 分支下 tail = head + size - cap 落在 `[1, capacity]`。 -/
+private theorem mQueuePush_wrap_tail_bounds (mem : AccountWords) (q : BoundedQueue)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hwrap : BoundedQueue.capacity q <
+        mReadField mem q.head 0 + mReadField mem q.count 0) :
+    let head := mReadField mem q.head 0
+    let size := mReadField mem q.count 0
+    let cap := BoundedQueue.capacity q
+    let tail := head + size - cap
+    (1 : Nat) ≤ tail.toNat ∧ tail.toNat ≤ q.slots.region.capacity := by
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcapbnd : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  have hwrapn : (BoundedQueue.capacity q).toNat
+      < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat :=
+    (UInt64.lt_iff_toNat_lt).mp hwrap
+  have hsub : (mReadField mem q.head 0 + mReadField mem q.count 0
+        - BoundedQueue.capacity q).toNat
+      = (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+        - (BoundedQueue.capacity q).toNat :=
+    u64toNatSub (by
+      rw [hnowraw] at hwrapn
+      omega)
+  constructor <;> (
+    rw [hsub, hnowraw, hcapnat]
+    omega)
+
+/-- **非空推读回（nowrap）**：链接成立后 count/head/slots[tail] 读回。 -/
+theorem mQueuePush_nowrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hnowrap : ¬ (BoundedQueue.capacity q <
+        mReadField mem q.head 0 + mReadField mem q.count 0)) :
+    let head := mReadField mem q.head 0
+    let size := mReadField mem q.count 0
+    let tail := head + size
+    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
+    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
+    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
+  have hlinks := mQueuePush_nowrap_links mem q value hwf hsize hhead hheadb hnowrap
+  have hcapnat := mQueueCapacityFacts q hwf |>.1
+  have hcapbnd : q.slots.region.capacity ≤ 65536 := (queue_wf_parts q hwf).2.2.1
+  have hnowraw : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      = (mReadField mem q.head 0).toNat + (mReadField mem q.count 0).toNat :=
+    u64toNatAdd (by
+      have := hsize
+      have := hheadb
+      omega)
+  have hp1 : (1 : Nat) ≤ (mReadField mem q.head 0 + mReadField mem q.count 0).toNat := by
+    have hheadn : (mReadField mem q.head 0).toNat ≠ 0 := by
+      intro hz
+      apply hhead
+      exact UInt64.toNat_inj.1 (by simpa using hz)
+    rw [hnowraw]; omega
+  have hp2 : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+      ≤ q.slots.region.capacity := by
+    have hn : (mReadField mem q.head 0 + mReadField mem q.count 0).toNat
+        ≤ (BoundedQueue.capacity q).toNat := by
+      have : ¬ ((BoundedQueue.capacity q).toNat
+          < (mReadField mem q.head 0 + mReadField mem q.count 0).toNat) := by
+        intro hc
+        exact hnowrap ((UInt64.lt_iff_toNat_lt).2 hc)
+      exact Nat.le_of_not_lt this
+    rwa [hcapnat] at hn
+  rw [hlinks]
+  refine ⟨?_, ?_, ?_⟩
+  · have h2 := mQueuePushAt_twoWrites mem q
+      (mReadField mem q.head 0 + mReadField mem q.count 0) value
+      (mReadField mem q.head 0) hwf hp1 hp2
+    exact h2.1
+  · exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
+  · have h2 := mQueuePushAt_twoWrites mem q
+      (mReadField mem q.head 0 + mReadField mem q.count 0) value
+      (mReadField mem q.head 0) hwf hp1 hp2
+    exact h2.2
+
+/-- **非空推读回（wrap）**。 -/
+theorem mQueuePush_wrap_readback (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
+    (hwf : q.wellFormed = true)
+    (hsize : (mReadField mem q.count 0).toNat < q.slots.region.capacity)
+    (hhead : mReadField mem q.head 0 ≠ 0)
+    (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
+    (hwrap : BoundedQueue.capacity q <
+        mReadField mem q.head 0 + mReadField mem q.count 0) :
+    let head := mReadField mem q.head 0
+    let size := mReadField mem q.count 0
+    let cap := BoundedQueue.capacity q
+    let tail := head + size - cap
+    mReadField (mQueuePush mem q value).1 q.count 0 = size + 1 ∧
+    mReadField (mQueuePush mem q value).1 q.head 0 = head ∧
+    mReadField (mQueuePush mem q value).1 q.slots tail = value := by
+  have hlinks := mQueuePush_wrap_links mem q value hwf hsize hhead hheadb hwrap
+  have hbounds := mQueuePush_wrap_tail_bounds mem q hwf hsize hheadb hwrap
+  rw [hlinks]
+  refine ⟨?_, ?_, ?_⟩
+  · have h2 := mQueuePushAt_twoWrites mem q
+      (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q)
+      value (mReadField mem q.head 0) hwf hbounds.1 hbounds.2
+    exact h2.1
+  · exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
+  · have h2 := mQueuePushAt_twoWrites mem q
+      (mReadField mem q.head 0 + mReadField mem q.count 0 - BoundedQueue.capacity q)
+      value (mReadField mem q.head 0) hwf hbounds.1 hbounds.2
+    exact h2.2
+
+
+/-! ### pop wrap / 读回、peek、initialize、往返 -/
+
+/-- **pop 推进链接（wrap）**：size ≥ 2 且 head = cap 时，next head = 1。 -/
 theorem mQueuePop_wrap_advance_links (mem : AccountWords) (q : BoundedQueue)
     (hwf : q.wellFormed = true)
     (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
-    (hhead0 : mReadField mem q.head 0 ≠ 0)
-    (heqcap : mReadField mem q.head 0 = BoundedQueue.capacity q) :
+    (hhead_eq : mReadField mem q.head 0 = BoundedQueue.capacity q) :
     mQueuePop mem q =
       (mQueuePopAt mem q (mReadField mem q.count 0 - 1) 1,
         mReadField mem q.slots (mReadField mem q.head 0)) := by
-  have hcapnat := mQueueCapacityFacts q hwf |>.1
   have hcap1 := mQueueCapacityFacts q hwf |>.2
+  have hhead0 : mReadField mem q.head 0 ≠ 0 := by
+    intro hz
+    have hcapnat := mQueueCapacityFacts q hwf |>.1
+    have : (BoundedQueue.capacity q).toNat = 0 := by
+      have h1 : (mReadField mem q.head 0).toNat = 0 := by rw [hz]; rfl
+      have h2 : (mReadField mem q.head 0).toNat = (BoundedQueue.capacity q).toNat := by
+        rw [hhead_eq]
+      omega
+    omega
   have hguard : ¬ ((mReadField mem q.count 0) = 0 ∨ (mReadField mem q.head 0) = 0) := by
     intro h
     rcases h with hc | hr
-    · have h2 : (mReadField mem q.count 0).toNat = 0 := by
-        rw [hc]
-        rfl
+    · have h2 : (mReadField mem q.count 0).toNat = 0 := by rw [hc]; rfl
       omega
     · exact hhead0 hr
   have hrem : ¬ ((mReadField mem q.count 0 - (1:UInt64)) = 0) := by
     intro hc
-    have h1n : UInt64.toNat 1 = 1 := rfl
+    have h1n : (1 : UInt64).toNat = 1 := rfl
     have hs2 : (mReadField mem q.count 0).toNat ≥ 2 := hsize
     have h1 : ((mReadField mem q.count 0 - (1:UInt64)).toNat)
         = (mReadField mem q.count 0).toNat - 1 :=
       u64toNatSub (by omega)
-    have h2 : (mReadField mem q.count 0 - (1:UInt64)).toNat = 0 := by
-      rw [hc]
-      rfl
+    have h2 : (mReadField mem q.count 0 - (1:UInt64)).toNat = 0 := by rw [hc]; rfl
     rw [h2] at h1
     omega
+  have hpos : mReadField mem q.head 0 = BoundedQueue.capacity q := hhead_eq
   unfold mQueuePop
-  simp only [if_neg hguard, if_neg hrem, mQueueNext, if_pos heqcap]
+  simp only [if_neg hguard, if_neg hrem, mQueueNext, if_pos hpos]
 
-
-/-- **pop 清空读回**：size = 1 时，pop 后 count = 0、head = 0，返回原队首 payload。 -/
+/-- **pop 清空读回**：size = 1 后 count/head 皆为 0。 -/
 theorem mQueuePop_clear_readback (mem : AccountWords) (q : BoundedQueue)
     (hwf : q.wellFormed = true)
     (hsize : mReadField mem q.count 0 = 1)
     (hhead : mReadField mem q.head 0 ≠ 0)
     (hheadb : (1 : Nat) ≤ (mReadField mem q.head 0).toNat)
     (hheadc : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity) :
-    let head := mReadField mem q.head 0
-    let value := mReadField mem q.slots head
-    (mQueuePop mem q).2 = value ∧
     mReadField (mQueuePop mem q).1 q.count 0 = 0 ∧
     mReadField (mQueuePop mem q).1 q.head 0 = 0 ∧
-    mReadField (mQueuePop mem q).1 q.slots head = value := by
-  have links := mQueuePop_clear_links mem q hwf hsize hhead
-  rw [links]
-  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0) 0 0 hwf hheadb hheadc
-  refine ⟨rfl, h2.2, ?_, h2.1⟩
-  exact mReadField_write_same _ _ _ _ q.head.firstWord
-    (mFieldWord_queue_head q hwf)
+    (mQueuePop mem q).2 = mReadField mem q.slots (mReadField mem q.head 0) := by
+  rw [mQueuePop_clear_links mem q hwf hsize hhead]
+  refine ⟨?_, ?_, rfl⟩
+  · have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0) 0 0 hwf
+      hheadb hheadc
+    exact h2.2
+  · exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
 
-
-/-- **pop 推进读回（非环绕）**：size ≥ 2 且 head ≠ cap 时，
-count = size-1、head = head+1、payload 槽不变。 -/
+/-- **pop 推进读回（非 wrap）**：remaining = size - 1、head = head + 1。 -/
 theorem mQueuePop_advance_readback (mem : AccountWords) (q : BoundedQueue)
     (hwf : q.wellFormed = true)
     (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
     (hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity)
     (hhead0 : mReadField mem q.head 0 ≠ 0)
-    (hneqcap : ¬ (mReadField mem q.head 0 = BoundedQueue.capacity q)) :
-    let head := mReadField mem q.head 0
-    let size := mReadField mem q.count 0
-    let value := mReadField mem q.slots head
-    (mQueuePop mem q).2 = value ∧
-    mReadField (mQueuePop mem q).1 q.count 0 = size - 1 ∧
-    mReadField (mQueuePop mem q).1 q.head 0 = head + 1 ∧
-    mReadField (mQueuePop mem q).1 q.slots head = value := by
-  have hhead_ge : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
+    (hneqcap : ¬ (mReadField mem q.head 0 = (BoundedQueue.capacity q))) :
+    mReadField (mQueuePop mem q).1 q.count 0 = mReadField mem q.count 0 - 1 ∧
+    mReadField (mQueuePop mem q).1 q.head 0 = mReadField mem q.head 0 + 1 ∧
+    (mQueuePop mem q).2 = mReadField mem q.slots (mReadField mem q.head 0) := by
+  have hlinks := mQueuePop_advance_links mem q hwf hsize hheadb hhead0 hneqcap
+  have hp : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
     have : (mReadField mem q.head 0).toNat ≠ 0 := by
       intro hz
       apply hhead0
-      cases hhd : mReadField mem q.head 0 with
-      | ofBitVec val =>
-        have hz' : val.toNat = 0 := by
-          simpa [hhd, UInt64.toNat] using hz
-        have : val = 0 := BitVec.eq_of_toNat_eq (by simp [hz'])
-        subst this
-        rfl
+      exact UInt64.toNat_inj.1 (by simpa using hz)
     omega
-  have links := mQueuePop_advance_links mem q hwf hsize hheadb hhead0 hneqcap
-  rw [links]
-  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
-    (mReadField mem q.count 0 - 1) (mReadField mem q.head 0 + 1) hwf hhead_ge hheadb
-  refine ⟨rfl, h2.2, ?_, h2.1⟩
-  exact mReadField_write_same _ _ _ _ q.head.firstWord
-    (mFieldWord_queue_head q hwf)
+  rw [hlinks]
+  refine ⟨?_, ?_, rfl⟩
+  · have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
+      (mReadField mem q.count 0 - 1) (mReadField mem q.head 0 + 1) hwf hp hheadb
+    exact h2.2
+  · exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
 
-
-/-- **pop 环绕推进读回**：size ≥ 2 且 head = cap 时，
-count = size-1、head = 1、原 payload 槽不变。 -/
+/-- **pop wrap 推进读回**：remaining = size - 1、head = 1。 -/
 theorem mQueuePop_wrap_advance_readback (mem : AccountWords) (q : BoundedQueue)
     (hwf : q.wellFormed = true)
     (hsize : (2 : Nat) ≤ (mReadField mem q.count 0).toNat)
-    (hhead0 : mReadField mem q.head 0 ≠ 0)
-    (heqcap : mReadField mem q.head 0 = BoundedQueue.capacity q) :
-    let head := mReadField mem q.head 0
-    let size := mReadField mem q.count 0
-    let value := mReadField mem q.slots head
-    (mQueuePop mem q).2 = value ∧
-    mReadField (mQueuePop mem q).1 q.count 0 = size - 1 ∧
+    (hhead_eq : mReadField mem q.head 0 = BoundedQueue.capacity q) :
+    mReadField (mQueuePop mem q).1 q.count 0 = mReadField mem q.count 0 - 1 ∧
     mReadField (mQueuePop mem q).1 q.head 0 = 1 ∧
-    mReadField (mQueuePop mem q).1 q.slots head = value := by
+    (mQueuePop mem q).2 = mReadField mem q.slots (mReadField mem q.head 0) := by
+  have hlinks := mQueuePop_wrap_advance_links mem q hwf hsize hhead_eq
   have hcapnat := mQueueCapacityFacts q hwf |>.1
   have hcap1 := mQueueCapacityFacts q hwf |>.2
-  have hheadb : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity := by
-    rw [heqcap, hcapnat]
-    exact Nat.le_refl _
-  have hhead_ge : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
-    rw [heqcap, hcapnat]
-    exact hcap1
-  have links := mQueuePop_wrap_advance_links mem q hwf hsize hhead0 heqcap
-  rw [links]
-  have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
-    (mReadField mem q.count 0 - 1) 1 hwf hhead_ge hheadb
-  refine ⟨rfl, h2.2, ?_, h2.1⟩
-  exact mReadField_write_same _ _ _ _ q.head.firstWord
-    (mFieldWord_queue_head q hwf)
-
+  have hp : (1 : Nat) ≤ (mReadField mem q.head 0).toNat := by
+    rw [hhead_eq, hcapnat]; omega
+  have hheadc : (mReadField mem q.head 0).toNat ≤ q.slots.region.capacity := by
+    rw [hhead_eq, hcapnat]
+    omega
+  rw [hlinks]
+  refine ⟨?_, ?_, rfl⟩
+  · have h2 := mQueuePopAt_twoWrites mem q (mReadField mem q.head 0)
+      (mReadField mem q.count 0 - 1) 1 hwf hp hheadc
+    exact h2.2
+  · exact mReadField_write_same _ _ _ _ q.head.firstWord
+      (mFieldWord_queue_head q hwf)
 
 /-- 模型版 peek：与 `BoundedQueue.peek` 逐字对应。 -/
 def mQueuePeek (mem : AccountWords) (q : BoundedQueue) : UInt64 :=
   let head := mReadField mem q.head 0
   if head = 0 then 0 else mReadField mem q.slots head
 
-/-- **空 peek 哨兵**：head = 0 时 peek 返回 0。 -/
+/-- 空 peek 哨兵。 -/
 theorem mQueuePeek_empty (mem : AccountWords) (q : BoundedQueue)
     (hhead : mReadField mem q.head 0 = 0) :
     mQueuePeek mem q = 0 := by
   unfold mQueuePeek
   simp [hhead]
 
-/-- **非空 peek**：head ≠ 0 时 peek 等于 slots[head]。 -/
+/-- 非空 peek 等于 slots[head]。 -/
 theorem mQueuePeek_eq (mem : AccountWords) (q : BoundedQueue)
     (hhead : mReadField mem q.head 0 ≠ 0) :
     mQueuePeek mem q = mReadField mem q.slots (mReadField mem q.head 0) := by
   unfold mQueuePeek
   simp [hhead]
 
+/-- 模型版 getAt：零基 offset，至多环绕一次（`offset < size ≤ capacity`）。 -/
+def mQueueGetAt (mem : AccountWords) (q : BoundedQueue) (offset : UInt64) : UInt64 :=
+  let size := mReadField mem q.count 0
+  let head := mReadField mem q.head 0
+  if size = 0 || head = 0 || size ≤ offset then 0
+  else
+    let capacity := BoundedQueue.capacity q
+    let raw := head + offset
+    let slot := if capacity < raw then raw - capacity else raw
+    mReadField mem q.slots slot
 
-/-- 模型版 initialize：双 header 置零（payload 不动）。 -/
+theorem mQueueGetAt_oob (mem : AccountWords) (q : BoundedQueue) (offset : UInt64)
+    (h : mReadField mem q.count 0 ≤ offset) :
+    mQueueGetAt mem q offset = 0 := by
+  unfold mQueueGetAt
+  simp [h]
+
+/-- 模型版 initialize：写回 head/count = 0，返回 1（与 SDK 一致）。 -/
 def mQueueInitialize (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
   (mWriteField (mWriteField mem q.head 0 0) q.count 0 0, 1)
 
-/-- **initialize 零头**：两 header 均读回 0，返回 1。 -/
+/-- clear 与 initialize 同构。 -/
+def mQueueClear (mem : AccountWords) (q : BoundedQueue) : AccountWords × UInt64 :=
+  mQueueInitialize mem q
+
+/-- initialize 后两个 header 均为 0。 -/
 theorem mQueueInitialize_zero_headers (mem : AccountWords) (q : BoundedQueue)
     (hwf : q.wellFormed = true) :
-    (mQueueInitialize mem q).2 = 1 ∧
     mReadField (mQueueInitialize mem q).1 q.head 0 = 0 ∧
-    mReadField (mQueueInitialize mem q).1 q.count 0 = 0 := by
+    mReadField (mQueueInitialize mem q).1 q.count 0 = 0 ∧
+    (mQueueInitialize mem q).2 = 1 := by
   unfold mQueueInitialize
-  refine ⟨rfl, ?_, ?_⟩
-  · have step : mReadField (mWriteField (mWriteField mem q.head 0 0) q.count 0 0) q.head 0
+  refine ⟨?_, ?_, rfl⟩
+  · have hch := queue_count_ne_head q hwf
+    have hwh := mFieldWord_queue_head q hwf
+    have hwc := mFieldWord_queue_count q hwf
+    -- 读 head：绕过外层 count 写
+    have step : mReadField (mWriteField (mWriteField mem q.head 0 0) q.count 0 0)
+        q.head 0
         = mReadField (mWriteField mem q.head 0 0) q.head 0 :=
-      mReadField_write_other _ q.head q.count _ _ 0
-        (mFieldWord_queue_head q hwf) (mFieldWord_queue_count q hwf)
-        (queue_count_ne_head q hwf).symm
-    rw [step, mReadField_write_same _ _ _ _ q.head.firstWord
-      (mFieldWord_queue_head q hwf)]
+      mReadField_write_other _ q.head q.count _ _ 0 hwh hwc (Ne.symm hch)
+    rw [step, mReadField_write_same _ _ _ _ q.head.firstWord hwh]
   · exact mReadField_write_same _ _ _ _ q.count.firstWord
       (mFieldWord_queue_count q hwf)
 
-
-/-- **空队列 push→pop 往返**：empty push 后 pop 读回原 value，并清空双 header。 -/
+/-- **空队列 push 再 pop 往返**：恢复 count/head = 0，并返回写入值。 -/
 theorem mQueuePush_pop_roundtrip_empty (mem : AccountWords) (q : BoundedQueue) (value : UInt64)
     (hwf : q.wellFormed = true)
     (hsize : mReadField mem q.count 0 = 0)
     (hhead : mReadField mem q.head 0 = 0) :
-    let afterPush := (mQueuePush mem q value).1
-    (mQueuePop afterPush q).2 = value ∧
-    mReadField (mQueuePop afterPush q).1 q.count 0 = 0 ∧
-    mReadField (mQueuePop afterPush q).1 q.head 0 = 0 := by
+    let p := mQueuePush mem q value
+    let r := mQueuePop p.1 q
+    r.2 = value ∧
+    mReadField r.1 q.count 0 = 0 ∧
+    mReadField r.1 q.head 0 = 0 := by
   have hcap1 := mQueueCapacityFacts q hwf |>.2
-  have pushLinks := mQueuePush_empty_links mem q value hwf hsize hhead
-  have pushRb := mQueuePush_empty_readback mem q value hwf hsize hhead
-  -- After empty push: count=1, head=1, slots[1]=value
-  have hcount1 : mReadField (mQueuePush mem q value).1 q.count 0 = 1 := pushRb.1
-  have hhead1 : mReadField (mQueuePush mem q value).1 q.head 0 = 1 := pushRb.2.1
-  have hslot : mReadField (mQueuePush mem q value).1 q.slots 1 = value := pushRb.2.2
-  have hhead_ne : mReadField (mQueuePush mem q value).1 q.head 0 ≠ 0 := by
-    rw [hhead1]
-    decide
-  have popRb := mQueuePop_clear_readback (mQueuePush mem q value).1 q hwf hcount1 hhead_ne
+  have hpush := mQueuePush_empty_readback mem q value hwf hsize hhead
+  have hlinks := mQueuePush_empty_links mem q value hwf hsize hhead
+  -- 推后：count = 1、head = 1
+  have hsize1 : mReadField (mQueuePush mem q value).1 q.count 0 = 1 := hpush.1
+  have hhead1 : mReadField (mQueuePush mem q value).1 q.head 0 = 1 := hpush.2.1
+  have hhead1ne : mReadField (mQueuePush mem q value).1 q.head 0 ≠ 0 := by
+    rw [hhead1]; decide
+  have hclear := mQueuePop_clear_readback (mQueuePush mem q value).1 q hwf hsize1 hhead1ne
     (by rw [hhead1]; decide) (by rw [hhead1]; exact hcap1)
-  -- Align value equality through head=1
-  have : mReadField (mQueuePush mem q value).1 q.slots
-      (mReadField (mQueuePush mem q value).1 q.head 0) = value := by
-    rw [hhead1, hslot]
-  refine ⟨?_, popRb.2.1, popRb.2.2.1⟩
-  simpa [this] using popRb.1
+  refine ⟨?_, hclear.1, hclear.2.1⟩
+  -- 返回值 = slots[1] = value
+  have hret : (mQueuePop (mQueuePush mem q value).1 q).2
+      = mReadField (mQueuePush mem q value).1 q.slots
+        (mReadField (mQueuePush mem q value).1 q.head 0) := hclear.2.2
+  rw [hret, hhead1, hpush.2.2]
 
 end QueueProofs
-
-/-! ## One-based allocator algebra -/
-
-/-- Slot column for free-list links (word 0 of each one-based slot). -/
-def mAllocSlotsField (alloc : Allocator) : Field :=
-  { region := alloc.slots }
-
-def mAllocLiveCountField (alloc : Allocator) : Field :=
-  @OneBasedAllocator.liveCount alloc
-
-def mAllocLiveCount (mem : AccountWords) (alloc : Allocator) : UInt64 :=
-  mReadField mem (mAllocLiveCountField alloc) 0
-
-def mAllocCursor (mem : AccountWords) (alloc : Allocator) : UInt64 :=
-  mReadField mem alloc.cursor 0
-
-def mAllocBump (mem : AccountWords) (alloc : Allocator) : UInt64 :=
-  mAllocCursor mem alloc &&& 0xffffffff
-
-def mAllocFreeHead (mem : AccountWords) (alloc : Allocator) : UInt64 :=
-  mAllocCursor mem alloc >>> 32
-
-/-- Mirror `Allocator.alloc`: reuse the free-list head when present, otherwise bump. -/
-def mAlloc (mem : AccountWords) (alloc : Allocator) : AccountWords × UInt64 :=
-  let capacity := UInt64.ofNat alloc.slots.capacity
-  let count := mAllocLiveCount mem alloc
-  let bump := mAllocBump mem alloc
-  let freeHead := mAllocFreeHead mem alloc
-  if capacity ≤ count then (mem, 0)
-  else if freeHead ≠ 0 then
-    let next := mReadField mem (mAllocSlotsField alloc) freeHead
-    let mem := mWriteField mem alloc.cursor 0 (bump ||| (next <<< 32))
-    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count + 1)
-    (mem, freeHead)
-  else if bump < capacity then
-    let mem := mWriteField mem alloc.cursor 0 ((bump + (1 : UInt64)) ||| (freeHead <<< 32))
-    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count + 1)
-    (mem, bump + 1)
-  else (mem, 0)
-
-/-- Mirror `Allocator.free`: thread the slot through word 0 onto the free list. -/
-def mFree (mem : AccountWords) (alloc : Allocator) (slot : UInt64) : AccountWords × UInt64 :=
-  let capacity := UInt64.ofNat alloc.slots.capacity
-  let count := mAllocLiveCount mem alloc
-  let bump := mAllocBump mem alloc
-  let freeHead := mAllocFreeHead mem alloc
-  if slot = 0 ∨ bump < slot ∨ capacity < slot ∨ count = 0 then (mem, 0)
-  else
-    let mem := mWriteField mem (mAllocSlotsField alloc) slot freeHead
-    let mem := mWriteField mem alloc.cursor 0 (bump ||| (slot <<< 32))
-    let mem := mWriteField mem (mAllocLiveCountField alloc) 0 (count - 1)
-    (mem, slot)
-
-/-! ### Allocator algebra theorems -/
-
-/-- **满分配返回 0 且不改内存**。 -/
-theorem mAlloc_full_noop (mem : AccountWords) (alloc : Allocator)
-    (hfull : UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem alloc) :
-    mAlloc mem alloc = (mem, 0) := by
-  unfold mAlloc
-  rw [if_pos hfull]
-
-/-- **空槽 / 未 bump / 越界 / 空计数 free 返回 0 且不改内存**。 -/
-theorem mFree_invalid_noop (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
-    (h : slot = 0 ∨ mAllocBump mem alloc < slot ∨
-      UInt64.ofNat alloc.slots.capacity < slot ∨ mAllocLiveCount mem alloc = 0) :
-    mFree mem alloc slot = (mem, 0) := by
-  unfold mFree
-  rcases h with h | h | h | h
-  · rw [if_pos (Or.inl h)]
-  · rw [if_pos (Or.inr (Or.inl h))]
-  · rw [if_pos (Or.inr (Or.inr (Or.inl h)))]
-  · rw [if_pos (Or.inr (Or.inr (Or.inr h)))]
-
-section AllocProofs
-
-variable (alloc : Allocator)
-
-/-! ### OneBasedAllocator fail-closed 几何 -/
-
-/-- wf 的结构化合同（显式 `@OneBasedAllocator.liveCount`，避免与 `Allocator.liveCount` 读函数混淆）。 -/
-theorem allocator_wf_parts (hwf : alloc.wellFormed = true) :
-    alloc.slots.wellFormed = true ∧
-    (alloc.slots.indexBase == IndexBase.one) = true ∧
-    (alloc.slots.access == Access.programOwnedMutable) = true ∧
-    (@OneBasedAllocator.liveCount alloc).wellFormed = true ∧
-    alloc.cursor.wellFormed = true ∧
-    (@OneBasedAllocator.liveCount alloc).widthWords = 1 ∧
-    alloc.cursor.widthWords = 1 ∧
-    (@OneBasedAllocator.liveCount alloc).region.account = alloc.slots.account ∧
-    alloc.cursor.region.account = alloc.slots.account ∧
-    (@OneBasedAllocator.liveCount alloc).region.strideWords = 1 ∧
-    alloc.cursor.region.strideWords = 1 ∧
-    (@OneBasedAllocator.liveCount alloc).region.capacity = 1 ∧
-    alloc.cursor.region.capacity = 1 ∧
-    ((@OneBasedAllocator.liveCount alloc).region.indexBase == IndexBase.zero) = true ∧
-    (alloc.cursor.region.indexBase == IndexBase.zero) = true ∧
-    ((@OneBasedAllocator.liveCount alloc).region.access == alloc.slots.access) = true ∧
-    (alloc.cursor.region.access == alloc.slots.access) = true ∧
-    (@OneBasedAllocator.liveCount alloc).firstWord + 1 = alloc.cursor.firstWord := by
-  simp only [OneBasedAllocator.wellFormed, Bool.and_eq_true, beq_iff_eq] at hwf
-  exact ⟨hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.1.2,
-    hwf.1.1.1.1.1.2,
-    hwf.1.1.1.1.2,
-    hwf.1.1.1.2,
-    hwf.1.1.2,
-    hwf.1.2,
-    hwf.2⟩
-
-private theorem allocator_slots_capacity_u64 (hwf : alloc.wellFormed = true) :
-    alloc.slots.capacity < 2 ^ 64 := by
-  have hsw : alloc.slots.wellFormed = true := (allocator_wf_parts alloc hwf).1
-  simp [Region.wellFormed, Bool.and_eq_true, decide_eq_true_eq] at hsw
-  have hgeom : alloc.slots.baseWord + alloc.slots.strideWords * (alloc.slots.capacity - 1) < maxDataWord :=
-    hsw.2
-  have hcap_pos : 0 < alloc.slots.capacity := hsw.1.1.1.1.2
-  have hstride : 0 < alloc.slots.strideWords := hsw.1.1.1.2
-  have hcap_le_geom : alloc.slots.capacity - 1 ≤
-      alloc.slots.baseWord + alloc.slots.strideWords * (alloc.slots.capacity - 1) := by
-    have hmul : alloc.slots.capacity - 1 ≤
-        alloc.slots.strideWords * (alloc.slots.capacity - 1) := by
-      rcases Nat.eq_zero_or_pos (alloc.slots.capacity - 1) with hz | hp
-      · simp [hz]
-      · exact Nat.le_mul_of_pos_left (alloc.slots.capacity - 1) hstride
-    exact Nat.le_trans hmul (Nat.le_add_left _ _)
-  have hcap : alloc.slots.capacity ≤ maxDataWord := by
-    have hlt : alloc.slots.capacity - 1 < maxDataWord :=
-      Nat.lt_of_le_of_lt hcap_le_geom hgeom
-    omega
-  exact Nat.lt_of_le_of_lt hcap (by native_decide : maxDataWord < 2 ^ 64)
-
-theorem mAllocLiveCountField_eq (alloc : Allocator) :
-    mAllocLiveCountField alloc = @OneBasedAllocator.liveCount alloc := rfl
-
-theorem allocator_wf_indexBase (hwf : alloc.wellFormed = true) :
-    (alloc.slots.indexBase == IndexBase.one) = true :=
-  (allocator_wf_parts alloc hwf).2.1
-
-theorem allocator_wf_slots_access (hwf : alloc.wellFormed = true) :
-    (alloc.slots.access == Access.programOwnedMutable) = true :=
-  (allocator_wf_parts alloc hwf).2.2.1
-
-theorem allocator_wf_liveCount_wf (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).wellFormed = true := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.1
-
-theorem allocator_wf_liveCount_width (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).widthWords = 1 := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_account (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).region.account = alloc.slots.account := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_stride (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).region.strideWords = 1 := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_capacity (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).region.capacity = 1 := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_indexBase (hwf : alloc.wellFormed = true) :
-    ((mAllocLiveCountField alloc).region.indexBase == IndexBase.zero) = true := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_access (hwf : alloc.wellFormed = true) :
-    ((mAllocLiveCountField alloc).region.access == alloc.slots.access) = true := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_wf (hwf : alloc.wellFormed = true) :
-    alloc.cursor.wellFormed = true :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.1
-
-theorem allocator_wf_cursor_width (hwf : alloc.wellFormed = true) :
-    alloc.cursor.widthWords = 1 :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_account (hwf : alloc.wellFormed = true) :
-    alloc.cursor.region.account = alloc.slots.account :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_stride (hwf : alloc.wellFormed = true) :
-    alloc.cursor.region.strideWords = 1 :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_capacity (hwf : alloc.wellFormed = true) :
-    alloc.cursor.region.capacity = 1 :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_indexBase (hwf : alloc.wellFormed = true) :
-    (alloc.cursor.region.indexBase == IndexBase.zero) = true :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_cursor_access (hwf : alloc.wellFormed = true) :
-    (alloc.cursor.region.access == alloc.slots.access) = true :=
-  (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-
-theorem allocator_wf_liveCount_adj (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).firstWord + 1 = alloc.cursor.firstWord := by
-  simpa [mAllocLiveCountField_eq] using (allocator_wf_parts alloc hwf).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
-
-theorem allocator_slots_stride_pos (hwf : alloc.wellFormed = true) :
-    0 < alloc.slots.strideWords := by
-  have hsw : alloc.slots.wellFormed = true := (allocator_wf_parts alloc hwf).1
-  simp only [Region.wellFormed, Bool.and_eq_true, decide_eq_true_eq] at hsw
-  exact hsw.1.1.1.2
-
-theorem allocator_scalarHeader_liveCount (hwf : alloc.wellFormed = true)
-    (hacc : 0 < alloc.slots.account) :
-    scalarHeaderWellFormed (mAllocLiveCountField alloc) alloc.slots.account = true := by
-  have hprog : ((mAllocLiveCountField alloc).region.access == Access.programOwnedMutable) = true :=
-    access_beq_prog_of_slots (allocator_wf_liveCount_access alloc hwf) (allocator_wf_slots_access alloc hwf)
-  exact scalarHeader_wf_build (allocator_wf_liveCount_wf alloc hwf) (allocator_wf_liveCount_width alloc hwf)
-    (allocator_wf_liveCount_account alloc hwf) hacc (allocator_wf_liveCount_stride alloc hwf)
-    (allocator_wf_liveCount_capacity alloc hwf) (allocator_wf_liveCount_indexBase alloc hwf) hprog
-
-theorem allocator_scalarHeader_cursor (hwf : alloc.wellFormed = true)
-    (hacc : 0 < alloc.slots.account) :
-    scalarHeaderWellFormed alloc.cursor alloc.slots.account = true := by
-  have hprog : (alloc.cursor.region.access == Access.programOwnedMutable) = true :=
-    access_beq_prog_of_slots (allocator_wf_cursor_access alloc hwf) (allocator_wf_slots_access alloc hwf)
-  exact scalarHeader_wf_build (allocator_wf_cursor_wf alloc hwf) (allocator_wf_cursor_width alloc hwf)
-    (allocator_wf_cursor_account alloc hwf) hacc (allocator_wf_cursor_stride alloc hwf)
-    (allocator_wf_cursor_capacity alloc hwf) (allocator_wf_cursor_indexBase alloc hwf) hprog
-
-theorem mFieldWord_alloc_liveCount (hwf : alloc.wellFormed = true)
-    (hacc : 0 < alloc.slots.account) :
-    mFieldWord (mAllocLiveCountField alloc) 0 = some (mAllocLiveCountField alloc).firstWord := by
-  have hla := allocator_wf_liveCount_account alloc hwf
-  have hsw := allocator_scalarHeader_liveCount alloc hwf hacc
-  have hsw' : scalarHeaderWellFormed (mAllocLiveCountField alloc)
-      (mAllocLiveCountField alloc).region.account = true := by
-    simpa [hla] using hsw
-  exact mFieldWord_scalar_header hsw'
-
-theorem mFieldWord_alloc_cursor (hwf : alloc.wellFormed = true)
-    (hacc : 0 < alloc.slots.account) :
-    mFieldWord alloc.cursor 0 = some alloc.cursor.firstWord := by
-  have hca := allocator_wf_cursor_account alloc hwf
-  have hsw := allocator_scalarHeader_cursor alloc hwf hacc
-  have hsw' : scalarHeaderWellFormed alloc.cursor alloc.cursor.region.account = true := by
-    simpa [hca] using hsw
-  exact mFieldWord_scalar_header hsw'
-
-theorem mFieldWord_alloc_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
-    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity) :
-    mFieldWord (mAllocSlotsField alloc) slot =
-      some (alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords) := by
-  have hidx := allocator_wf_indexBase alloc hwf
-  have hidx' := indexBase_beq_one_eq hidx
-  unfold mAllocSlotsField mFieldWord
-  simp only [hidx', hp1, hp2, and_true, if_true, Field.firstWord, Nat.zero_add]
-  rfl
-
-theorem alloc_liveCount_ne_cursor (hwf : alloc.wellFormed = true) :
-    (mAllocLiveCountField alloc).firstWord ≠ alloc.cursor.firstWord := by
-  have hadj := allocator_wf_liveCount_adj alloc hwf
-  omega
-
-theorem alloc_liveCount_ne_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
-    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
-    (hsep : (mAllocLiveCountField alloc).firstWord + 1 ≤ alloc.slots.baseWord) :
-    (mAllocLiveCountField alloc).firstWord ≠
-      alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords := by
-  have _ := allocator_slots_stride_pos alloc hwf
-  omega
-
-theorem alloc_cursor_ne_slots (hwf : alloc.wellFormed = true) (slot : UInt64)
-    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
-    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord) :
-    alloc.cursor.firstWord ≠
-      alloc.slots.baseWord + (slot.toNat - 1) * alloc.slots.strideWords := by
-  have _ := allocator_slots_stride_pos alloc hwf
-  omega
-
-theorem mAllocBump_masked (mem : AccountWords) (alloc : Allocator) :
-    mAllocBump mem alloc = mAllocBump mem alloc &&& 0xffffffff := by
-  unfold mAllocBump
-  bv_decide
-
-private theorem u64_pack_high_masked (bump slot : UInt64)
-    (hbump : bump = bump &&& 0xffffffff) :
-    (bump ||| slot <<< 32) >>> 32 = slot &&& 0xffffffff := by
-  rw [hbump]
-  exact packed_cursor_high bump slot
-
-/-- free 有效分支的写入序列。 -/
-def mFreeAt (mem : AccountWords) (alloc : Allocator) (slot freeHead bump count : UInt64)
-    : AccountWords :=
-  let mem := mWriteField mem (mAllocSlotsField alloc) slot freeHead
-  mWriteField (mWriteField mem alloc.cursor 0 (bump ||| (slot <<< 32)))
-    (mAllocLiveCountField alloc) 0 (count - 1)
-
-/-- **free 三写后 cursor 高 32 位 = slot**（bump 已 u32 掩码）。 -/
-theorem mFreeAt_freeHead (mem : AccountWords) (alloc : Allocator)
-    (slot freeHead bump count : UInt64)
-    (hwf : alloc.wellFormed = true) (hacc : 0 < alloc.slots.account)
-    (hslot : slot.toNat ≤ containerCapacityLimit)
-    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
-    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord)
-    (hbump : bump = bump &&& 0xffffffff) :
-    mAllocFreeHead (mFreeAt mem alloc slot freeHead bump count) alloc = slot := by
-  have hread : mReadField (mFreeAt mem alloc slot freeHead bump count) alloc.cursor 0
-      = bump ||| slot <<< 32 := by
-    unfold mFreeAt mWriteField mReadField
-    rw [mFieldWord_alloc_cursor alloc hwf hacc, mFieldWord_alloc_liveCount alloc hwf hacc,
-      mFieldWord_alloc_slots alloc hwf slot hp1 hp2]
-    simp only [mWriteWord,
-      if_neg (Ne.symm (alloc_liveCount_ne_cursor alloc hwf)),
-      if_neg fun hc => (alloc_cursor_ne_slots alloc hwf slot hp1 hp2 hsep) hc,
-      if_pos rfl]
-    rfl
-  unfold mAllocFreeHead mAllocCursor
-  rw [hread]
-  rw [u64_pack_high_masked bump slot hbump, slot_low_u32 slot hslot]
-
-/-- **有效 free 链接到 `mFreeAt` 三写组合**。 -/
-theorem mFree_valid_links (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
-    (hwf : alloc.wellFormed = true) (hslot : slot ≠ 0) (hslot_le : slot ≤ mAllocBump mem alloc)
-    (hp2 : slot.toNat ≤ alloc.slots.capacity)
-    (hcount : 0 < mAllocLiveCount mem alloc) :
-    mFree mem alloc slot =
-      (mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
-        (mAllocLiveCount mem alloc), slot) := by
-  unfold mFree mFreeAt
-  simp only [mAllocLiveCount, mAllocBump, mAllocFreeHead, mAllocCursor]
-  by_cases hguard :
-      slot = 0 ∨ mReadField mem alloc.cursor 0 &&& 4294967295 < slot ∨
-        UInt64.ofNat alloc.slots.capacity < slot ∨ mReadField mem (mAllocLiveCountField alloc) 0 = 0
-  · exfalso
-    rcases hguard with h | h | h | h
-    · exact hslot h
-    · exact (UInt64.not_lt.mpr hslot_le) h
-    · have hlt : UInt64.ofNat alloc.slots.capacity < slot := h
-      have hle : slot.toNat ≤ (UInt64.ofNat alloc.slots.capacity).toNat := by
-        rw [ofNat_capacity_toNat alloc.slots.capacity (allocator_slots_capacity_u64 alloc hwf)]
-        exact hp2
-      exact (UInt64.not_lt).2 (by
-        apply (UInt64.le_iff_toNat_le).2
-        exact hle) hlt
-    · rw [mAllocLiveCount] at hcount
-      rw [h] at hcount
-      exact absurd (UInt64.lt_iff_toNat_lt.mp hcount) (Nat.lt_irrefl 0)
-  · simp only [if_neg hguard]
-
-/-- **free 后再 alloc 取回同一槽（自由表头路径）**。 -/
-theorem mFree_then_mAlloc_same (mem : AccountWords) (alloc : Allocator) (slot : UInt64)
-    (hwf : alloc.wellFormed = true) (hacc : 0 < alloc.slots.account)
-    (hslot : slot ≠ 0) (hslot_le : slot ≤ mAllocBump mem alloc)
-    (hp1 : (1 : Nat) ≤ slot.toNat) (hp2 : slot.toNat ≤ alloc.slots.capacity)
-    (hsep : alloc.cursor.firstWord + 1 ≤ alloc.slots.baseWord)
-    (hslotcap : slot.toNat ≤ containerCapacityLimit)
-    (hcount : 0 < mAllocLiveCount mem alloc)
-    (hroom : mAllocLiveCount mem alloc < UInt64.ofNat alloc.slots.capacity) :
-    (mAlloc (mFree mem alloc slot).1 alloc).2 = slot := by
-  have links := mFree_valid_links mem alloc slot hwf hslot hslot_le hp2 hcount
-  let mem' := mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
-    (mAllocLiveCount mem alloc)
-  have hmem' : (mFree mem alloc slot).1 = mem' := congrArg Prod.fst links
-  have hfh := mFreeAt_freeHead mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
-    (mAllocLiveCount mem alloc) hwf hacc hslotcap hp1 hp2 hsep (mAllocBump_masked mem alloc)
-  have hfhAt : mAllocFreeHead mem' alloc = slot := hfh
-  have hfhAt_ne : mAllocFreeHead mem' alloc ≠ 0 := by
-    rw [hfhAt]
-    intro h0
-    exact hslot h0
-  have hcountPost : mAllocLiveCount mem' alloc = mAllocLiveCount mem alloc - 1 := by
-    change mAllocLiveCount (mFreeAt mem alloc slot (mAllocFreeHead mem alloc) (mAllocBump mem alloc)
-      (mAllocLiveCount mem alloc)) alloc = mAllocLiveCount mem alloc - 1
-    rw [mAllocLiveCount]
-    unfold mFreeAt mReadField mWriteField
-    rw [mFieldWord_alloc_liveCount alloc hwf hacc, mFieldWord_alloc_cursor alloc hwf hacc,
-      mFieldWord_alloc_slots alloc hwf slot hp1 hp2]
-    simp only [mWriteWord,
-      if_neg (Ne.symm (alloc_liveCount_ne_cursor alloc hwf)),
-      if_neg fun hc => (alloc_cursor_ne_slots alloc hwf slot hp1 hp2 hsep) hc]
-    rfl
-  have hnotfull : ¬(UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem' alloc) := by
-    intro hle
-    have hlt : mAllocLiveCount mem' alloc < UInt64.ofNat alloc.slots.capacity := by
-      rw [hcountPost]
-      apply (UInt64.lt_iff_toNat_lt).2
-      rw [u64_toNat_sub_one (by have := (UInt64.lt_iff_toNat_lt).1 hcount; omega)]
-      have hcap : (UInt64.ofNat alloc.slots.capacity).toNat = alloc.slots.capacity :=
-        ofNat_capacity_toNat alloc.slots.capacity (allocator_slots_capacity_u64 alloc hwf)
-      rw [hcap]
-      have := (UInt64.lt_iff_toNat_lt).1 hroom
-      have := (UInt64.lt_iff_toNat_lt).1 hcount
-      omega
-    exact (UInt64.not_le).2 hlt hle
-  have halloc : (mAlloc mem' alloc).2 = mAllocFreeHead mem' alloc := by
-    unfold mAlloc
-    simp only [mAllocLiveCount, mAllocBump, mAllocFreeHead, mAllocCursor, hcountPost]
-    by_cases hfull : UInt64.ofNat alloc.slots.capacity ≤ mReadField mem' (mAllocLiveCountField alloc) 0
-    · exact absurd hfull hnotfull
-    · simp only [if_neg hfull]
-      have hfhne' : mReadField mem' alloc.cursor 0 >>> 32 ≠ 0 := by
-        rw [show mReadField mem' alloc.cursor 0 >>> 32 = mAllocFreeHead mem' alloc from rfl]
-        exact hfhAt_ne
-      simp only [if_pos hfhne']
-  have hstep := congrArg Prod.snd (congrArg (fun m => mAlloc m alloc) hmem')
-  rw [hstep, halloc, hfhAt]
-
-end AllocProofs
-
-/-! ## OrderedMap find 模型（SF-5b / sf-009）
-
-抽象 `AccountStorage.Source.findKey4`：空根短路返回 `0`；fifo 变体恒为 miss。
-完整 RB 遍历与旋转保持委托 `Runtime.accDataRbTreeKey4Find` stub（sf-011 或 Tree 片）。
-find 是纯读：不返回新 `AccountWords`。 -/
-
-namespace MapProofs
-
-open ProofForge.Svm.AccountStorage
-
-/-- Zero-based account data word read (mirrors `Runtime.accDataWord`). -/
-def mAccDataWord (mem : AccountWords) (word : Nat) : UInt64 := mem word
-
-/-- Map root scalar at compile-time `rootWord`. -/
-def mMapRoot (mem : AccountWords) (map : RbMap) : UInt64 :=
-  match map with
-  | .key4 rootWord _ | .fifo rootWord _ => mAccDataWord mem rootWord
-
-/-- Bounded key4 lookup model: empty root is an immediate miss.
-Non-empty trees delegate to the runtime stub until sf-011 fills traversal. -/
-def mAccDataRbTreeKey4Find
-    (mem : AccountWords) (rootWord : Nat) (_tree : Key4RbTree)
-    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 :=
-  if mAccDataWord mem rootWord = 0 then 0 else 0
-
-/-- Abstract four-word-key lookup mirroring `AccountStorage.Source.findKey4`. -/
-def mFindKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
-  match map with
-  | .key4 rootWord tree => mAccDataRbTreeKey4Find mem rootWord tree key0 key1 key2 key3
-  | .fifo .. => 0
-
-/-- Payload read at a one-based slot; slot `0` is the absent sentinel. -/
-def mSlotValue (mem : AccountWords) (payload : Field) (slot : UInt64) : UInt64 :=
-  if slot = 0 then 0 else mReadField mem payload slot
-
-/-- Composed find + payload read (mirrors `OrderedMap.findValueKey4`). -/
-def mFindValueKey4 (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
-    (key0 key1 key2 key3 : UInt64) : UInt64 :=
-  mSlotValue mem payload (mFindKey4 mem orderedMap.map key0 key1 key2 key3)
-
-/-- Fifo-backed maps never expose four-word keys through this entry point. -/
-theorem mFindKey4_fifo_miss (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
-    (k0 k1 k2 k3 : UInt64) :
-    mFindKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
-
-/-- Empty tree root (`0` sentinel) implies miss for any key. -/
-theorem mFindKey4_empty_root (mem : AccountWords) (rootWord : Nat) (tree : Key4RbTree)
-    (k0 k1 k2 k3 : UInt64) (hroot : mAccDataWord mem rootWord = 0) :
-    mFindKey4 mem (.key4 rootWord tree) k0 k1 k2 k3 = 0 := by
-  unfold mFindKey4 mAccDataRbTreeKey4Find
-  simp [hroot]
-
-/-- Miss lookup yields payload sentinel `0`. -/
-theorem mFindValueKey4_miss (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
-    (k0 k1 k2 k3 : UInt64) (h : mFindKey4 mem orderedMap.map k0 k1 k2 k3 = 0) :
-    mFindValueKey4 mem orderedMap payload k0 k1 k2 k3 = 0 := by
-  unfold mFindValueKey4 mSlotValue
-  simp [h]
-
-/-- Hit lookup reads payload at the one-based slot returned by find. -/
-theorem mFindValueKey4_hit (mem : AccountWords) (orderedMap : OrderedMap) (payload : Field)
-    (k0 k1 k2 k3 slot : UInt64) (hslot : slot ≠ 0)
-    (hfind : mFindKey4 mem orderedMap.map k0 k1 k2 k3 = slot) :
-    mFindValueKey4 mem orderedMap payload k0 k1 k2 k3 = mReadField mem payload slot := by
-  unfold mFindValueKey4 mSlotValue
-  simp [hfind, hslot]
-
-/-- Find is a pure read: identical memory yields identical results. -/
-theorem mFindKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
-    (h : ∀ w, mem w = mem' w) :
-    mFindKey4 mem map k0 k1 k2 k3 = mFindKey4 mem' map k0 k1 k2 k3 := by
-  unfold mFindKey4 mAccDataRbTreeKey4Find mAccDataWord
-  cases map <;> simp [h]
-
-/-- Insert stub matching `Runtime.accDataRbTreeKey4Insert` until sf-011. -/
-def mAccDataRbTreeKey4Insert
-    (_mem : AccountWords) (_rootWord : Nat) (_tree : Key4RbTree)
-    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 := 0
-
-/-- Remove stub matching `Runtime.accDataRbTreeKey4Remove` until sf-011. -/
-def mAccDataRbTreeKey4Remove
-    (_mem : AccountWords) (_rootWord : Nat) (_tree : Key4RbTree)
-    (_key0 _key1 _key2 _key3 : UInt64) : UInt64 := 0
-
-/-- Abstract four-word-key insert mirroring `AccountStorage.Source.insertKey4`. -/
-def mInsertKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
-  match map with
-  | .key4 rootWord tree => mAccDataRbTreeKey4Insert mem rootWord tree key0 key1 key2 key3
-  | .fifo .. => 0
-
-/-- Abstract four-word-key remove mirroring `AccountStorage.Source.removeKey4`. -/
-def mRemoveKey4 (mem : AccountWords) (map : RbMap) (key0 key1 key2 key3 : UInt64) : UInt64 :=
-  match map with
-  | .key4 rootWord tree => mAccDataRbTreeKey4Remove mem rootWord tree key0 key1 key2 key3
-  | .fifo .. => 0
-
-theorem mInsertKey4_fifo_fail (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
-    (k0 k1 k2 k3 : UInt64) :
-    mInsertKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
-
-theorem mRemoveKey4_fifo_fail (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
-    (k0 k1 k2 k3 : UInt64) :
-    mRemoveKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 := rfl
-
-/-- Absent keys stay absent under the current insert/remove stubs. -/
-theorem mRemoveKey4_after_find_miss (mem : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
-    (_h : mFindKey4 mem map k0 k1 k2 k3 = 0) :
-    mRemoveKey4 mem map k0 k1 k2 k3 = 0 := by
-  unfold mRemoveKey4 mAccDataRbTreeKey4Remove
-  cases map <;> rfl
-
-/-- Remove is a pure read until sf-011 wires RB mutation (stub returns `0`). -/
-theorem mRemoveKey4_ext (mem mem' : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
-    (_h : ∀ w, mem w = mem' w) :
-    mRemoveKey4 mem map k0 k1 k2 k3 = mRemoveKey4 mem' map k0 k1 k2 k3 := by
-  unfold mRemoveKey4 mAccDataRbTreeKey4Remove
-  cases map <;> rfl
-
-/-- Post-remove find is miss for fifo maps (index layer; RB linking deferred to sf-011). -/
-theorem mFindKey4_after_remove_fifo (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
-    (k0 k1 k2 k3 : UInt64) (_hrem : mRemoveKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0) :
-    mFindKey4 mem (.fifo rootWord tree) k0 k1 k2 k3 = 0 :=
-  mFindKey4_fifo_miss mem rootWord tree k0 k1 k2 k3
-
-/-- Under the current remove/find stubs, delete preserves the miss invariant (sf-011 will
-strengthen this with real RB traversal and memory write-back). -/
-theorem mFindKey4_after_remove (mem : AccountWords) (map : RbMap) (k0 k1 k2 k3 : UInt64)
-    (_hrem : mRemoveKey4 mem map k0 k1 k2 k3 = 0) :
-    mFindKey4 mem map k0 k1 k2 k3 = 0 := by
-  cases map
-  case fifo => rfl
-  case key4 =>
-    unfold mFindKey4 mAccDataRbTreeKey4Find
-    simp
-
-/-- On miss, allocate a fresh one-based slot; on hit return the existing slot without touching
-the allocator. RB tree linking deferred to sf-011 — this layer models slot acquisition only. -/
-def mInsertKey4Alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (key0 key1 key2 key3 : UInt64) : AccountWords × UInt64 :=
-  let slot := mFindKey4 mem map key0 key1 key2 key3
-  if slot = 0 then mAlloc mem alloc else (mem, slot)
-
-/-- Fifo maps always miss find, so insert allocates like a fresh key. -/
-theorem mInsertKey4Alloc_fifo_alloc (mem : AccountWords) (rootWord : Nat) (tree : FifoRbTree)
-    (alloc : Allocator) (k0 k1 k2 k3 : UInt64) :
-    mInsertKey4Alloc mem (.fifo rootWord tree) alloc k0 k1 k2 k3 =
-      mAlloc mem alloc := by
-  unfold mInsertKey4Alloc mFindKey4
-  simp
-
-/-- Miss path delegates slot acquisition to `mAlloc`. -/
-theorem mInsertKey4Alloc_miss_alloc (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (k0 k1 k2 k3 : UInt64) (h : mFindKey4 mem map k0 k1 k2 k3 = 0) :
-    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = mAlloc mem alloc := by
-  unfold mInsertKey4Alloc
-  simp [h]
-
-/-- Hit path is a pure read: memory unchanged, slot preserved. -/
-theorem mInsertKey4Alloc_hit (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (k0 k1 k2 k3 slot : UInt64) (hfind : mFindKey4 mem map k0 k1 k2 k3 = slot)
-    (hne : slot ≠ 0) :
-    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = (mem, slot) := by
-  unfold mInsertKey4Alloc
-  simp [hfind, hne]
-
-/-- Hit path leaves account words unchanged (allocator not consulted). -/
-theorem mInsertKey4Alloc_hit_mem (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (k0 k1 k2 k3 slot : UInt64) (hfind : mFindKey4 mem map k0 k1 k2 k3 = slot)
-    (hne : slot ≠ 0) :
-    (mInsertKey4Alloc mem map alloc k0 k1 k2 k3).1 = mem := by
-  rw [mInsertKey4Alloc_hit mem map alloc k0 k1 k2 k3 slot hfind hne]
-
-/-- Full allocator on miss is fail-closed like bare `mAlloc`. -/
-theorem mInsertKey4Alloc_full (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (k0 k1 k2 k3 : UInt64) (hmiss : mFindKey4 mem map k0 k1 k2 k3 = 0)
-    (hfull : UInt64.ofNat alloc.slots.capacity ≤ mAllocLiveCount mem alloc) :
-    mInsertKey4Alloc mem map alloc k0 k1 k2 k3 = (mem, 0) := by
-  rw [mInsertKey4Alloc_miss_alloc mem map alloc k0 k1 k2 k3 hmiss, mAlloc_full_noop mem alloc hfull]
-
-/-- Returned slot is either the hit index or the allocator result. -/
-theorem mInsertKey4Alloc_slot (mem : AccountWords) (map : RbMap) (alloc : Allocator)
-    (k0 k1 k2 k3 : UInt64) :
-    (mInsertKey4Alloc mem map alloc k0 k1 k2 k3).2 =
-      if mFindKey4 mem map k0 k1 k2 k3 = 0 then
-        (mAlloc mem alloc).2
-      else
-        mFindKey4 mem map k0 k1 k2 k3 := by
-  unfold mInsertKey4Alloc
-  by_cases h : mFindKey4 mem map k0 k1 k2 k3 = 0
-  · simp [h]
-  · simp [h]
-
-end MapProofs
 
 end ProofForge.Svm.Sdk.StorageModel

@@ -72,6 +72,12 @@ def headerBytes : Nat := 4
 /-- `AccountType::Uninitialized` = `ExtensionType::Uninitialized` (ordinal 0). -/
 def uninitializedType : UInt64 := 0
 
+/-- Official `ExtensionType::MintCloseAuthority` ordinal. -/ 
+def mintCloseAuthorityType : UInt64 := 3
+
+/-- Official `MintCloseAuthority` payload size (`OptionalNonZeroPubkey`). -/ 
+def mintCloseAuthorityBodyLen : UInt64 := 32
+
 /-- `AccountType::Mint`. -/
 def mintTypeByte : Nat := 1
 
@@ -154,6 +160,12 @@ inductive Policy where
   proceeds; every TLV extension entry rejects atomically before CPI.
   -/
   | token2022Base (kind : BaseKind)
+  /--
+  Mint-only `TransferChecked` policy that accepts exactly one official `MintCloseAuthority`
+  (ordinal 3, 32-byte body) and then an end marker. Every other extension stays fail closed.
+  Account metas must still use `token2022Base .account`.
+  -/
+  | token2022MintClose
   deriving BEq, DecidableEq, Repr, Inhabited
 
 /-! ## Typed target plan -/
@@ -185,6 +197,7 @@ def accountPlan : Plan :=
 def planFor : Policy → Except String Plan
   | .token2022Base .mint => .ok mintPlan
   | .token2022Base .account => .ok accountPlan
+  | .token2022MintClose => .ok mintPlan
 
 def Plan.wellFormed (plan : Plan) : Bool :=
   plan.baseLen + plan.paddingBytes + 1 == tlvStart &&
@@ -256,7 +269,8 @@ def firstEntry (view : View) (offset rem : UInt64) (fallback : UInt64 → Verdic
       if rem < 4 then if t == 0 then .accept else .reject .truncatedHeader
       else if t == 0 then .accept else fallback t
 
-def acceptedEntry (plan : Plan) (accept? : UInt64 → Bool) (view : View)
+def acceptedEntry (plan : Plan) (accept? : UInt64 → Bool)
+    (requiredBodyLen? : UInt64 → Option UInt64) (view : View)
     (recurse : State → Verdict) (st : State) (t : UInt64) : Verdict :=
   if !accept? t then .reject (rejectReason t)
   else if t > UInt64.ofNat knownExtensionMax then .reject (.unknown t)
@@ -267,22 +281,29 @@ def acceptedEntry (plan : Plan) (accept? : UInt64 → Bool) (view : View)
       match readU16 view lengthOffset with
       | none => .reject .truncatedHeader
       | some bodyLen =>
-        match addBounded st.cursor 4 with
-        | none => .reject .arithmeticOverflow
-        | some valueStart =>
-          if bodyLen > view.dataLen - valueStart then .reject .bodyOutOfBounds
-          else
-            match addBounded valueStart bodyLen with
-            | none => .reject .arithmeticOverflow
-            | some next =>
-              if st.count ≥ UInt64.ofNat plan.maxHeaders then .reject .headerCount
-              else
-                let bit := (1 : UInt64) <<< t
-                if st.seenMask &&& bit != 0 then .reject (.duplicate t)
-                else recurse
-                  { cursor := next, count := st.count + 1, seenMask := st.seenMask ||| bit }
+        let bodyOk :=
+          match requiredBodyLen? t with
+          | some want => bodyLen == want
+          | none => true
+        if !bodyOk then .reject .bodyOutOfBounds
+        else
+          match addBounded st.cursor 4 with
+          | none => .reject .arithmeticOverflow
+          | some valueStart =>
+            if bodyLen > view.dataLen - valueStart then .reject .bodyOutOfBounds
+            else
+              match addBounded valueStart bodyLen with
+              | none => .reject .arithmeticOverflow
+              | some next =>
+                if st.count ≥ UInt64.ofNat plan.maxHeaders then .reject .headerCount
+                else
+                  let bit := (1 : UInt64) <<< t
+                  if st.seenMask &&& bit != 0 then .reject (.duplicate t)
+                  else recurse
+                    { cursor := next, count := st.count + 1, seenMask := st.seenMask ||| bit }
 
-def run (plan : Plan) (accept? : UInt64 → Bool) (view : View) : Nat → State → Verdict
+def run (plan : Plan) (accept? : UInt64 → Bool)
+    (requiredBodyLen? : UInt64 → Option UInt64) (view : View) : Nat → State → Verdict
   | 0, _ => .reject .headerCount
   | fuel + 1, st =>
     let len := view.dataLen
@@ -290,7 +311,8 @@ def run (plan : Plan) (accept? : UInt64 → Bool) (view : View) : Nat → State 
     else
       let rem := len - st.cursor
       firstEntry view st.cursor rem
-        (acceptedEntry plan accept? view (run plan accept? view fuel) st)
+        (acceptedEntry plan accept? requiredBodyLen? view
+          (run plan accept? requiredBodyLen? view fuel) st)
 
 /--
 Padding and `AccountType` checks for the extension form (`data_len ≥ tlvStart`), shared by the
@@ -330,11 +352,27 @@ atomically with a classified reason.
 -/
 def closedAccept? (_ : UInt64) : Bool := false
 
+/-- Accept only official `MintCloseAuthority` (ordinal 3). -/
+def mintCloseAccept? (t : UInt64) : Bool :=
+  t == mintCloseAuthorityType
+
+/-- Classifier selected by the closed policy vocabulary. -/
+def acceptFor : Policy → (UInt64 → Bool)
+  | .token2022Base _ => closedAccept?
+  | .token2022MintClose => mintCloseAccept?
+
+/-- Fixed official body length required when a policy accepts a type; `none` means reject. -/
+def requiredBodyLen? : Policy → UInt64 → Option UInt64
+  | .token2022MintClose, t =>
+      if t == mintCloseAuthorityType then some mintCloseAuthorityBodyLen else none
+  | .token2022Base _, _ => none
+
 /--
 Full policy verdict for one account: official base checks, then the bounded cursor. This is the
 single function the emitted preflight realizes.
 -/
-def evaluate (plan : Plan) (accept? : UInt64 → Bool) (view : View) : Verdict :=
+def evaluate (plan : Plan) (accept? : UInt64 → Bool)
+    (requiredBodyLen? : UInt64 → Option UInt64 := fun _ => none) (view : View) : Verdict :=
   let len := view.dataLen.toNat
   if len == multisigLen then .reject .multisigLength
   else if len < plan.baseLen then .reject .tooShort
@@ -343,7 +381,13 @@ def evaluate (plan : Plan) (accept? : UInt64 → Bool) (view : View) : Verdict :
   else
     match extensionFormCheck plan view with
     | some reason => .reject reason
-    | none => run plan accept? view (plan.maxHeaders + 1) initialState
+    | none => run plan accept? requiredBodyLen? view (plan.maxHeaders + 1) initialState
+
+/-- Evaluate a closed source `Policy` against one account view. -/
+def evaluatePolicy (policy : Policy) (view : View) : Verdict :=
+  match planFor policy with
+  | .error _ => .reject .tooShort
+  | .ok plan => evaluate plan (acceptFor policy) (requiredBodyLen? policy) view
 
 /--
 Straight-line mirror of the emitted specialization for a classifier that accepts no extension:
@@ -369,7 +413,7 @@ acceptable extension, the cursor never advances past the first header, so the st
 preflight and the full bounded cursor agree on every view.
 -/
 theorem evaluate_closed_eq_straightline (plan : Plan) (view : View) :
-    evaluate plan closedAccept? view = straightline plan view := by
+    evaluate plan closedAccept? (fun _ => none) view = straightline plan view := by
   simp only [evaluate, straightline]
   split <;> rename_i h1
   · rfl
@@ -403,6 +447,7 @@ theorem planFor_yields_wellFormed : ∀ p, ∃ plan, planFor p = .ok plan ∧ pl
     cases kind with
     | mint => exact ⟨mintPlan, rfl, mintPlan_wellFormed⟩
     | account => exact ⟨accountPlan, rfl, accountPlan_wellFormed⟩
+  | token2022MintClose => exact ⟨mintPlan, rfl, mintPlan_wellFormed⟩
 
 /-- The classifier partitions every ordinal into the three official shapes. -/
 theorem classify_total (t : UInt64) :

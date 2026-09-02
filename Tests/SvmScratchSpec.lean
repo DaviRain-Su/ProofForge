@@ -9,8 +9,8 @@ open ProofForge.Svm.Scratch
 #guard scalarBank.wellFormed
 #guard deepBank.wellFormed
 #guard cpiBank.lifetime == .invocationOnly
-#guard cpiBank.lowWater == 1024
-#guard deepBank.lowWater == 2048
+#guard cpiBank.lowWater == 1216
+#guard deepBank.lowWater == 2240
 #guard Bank.disjoint cpiBank scalarBank
 #guard Bank.disjoint deepBank cpiBank
 #guard !Bank.disjoint cpiBank cpiBank

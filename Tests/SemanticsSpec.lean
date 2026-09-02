@@ -77,14 +77,14 @@ private def counterSeq
   let data1 : Array UInt8 := markerBytes ++ (leU64 5)
   let (m2, o2) ← runSfNext? asm P m1 { ix := mkIx "increment" #[3], data := data1 } 4096
   -- get
-  let (m3, o3) ← runSfNext? asm P m2
+  let (_m3, o3) ← runSfNext? asm P m2
     { ix := mkIx "get" #[], data := markerBytes ++ (leU64 8) } 4096
   .ok (o1.returnData, o2.r0, o2.returnData, o3.r0, o3.returnData)
 
 /-- fail-closed：畸形 discriminator（全 0）走 `err_unknown_disc`，r0 = 1。 -/
 private def counterBadDisc : Except String SbpfSemantics.Word := do
   let asm ← counterAsm
-  let (m, o) ← runSfInitial? asm
+  let (_m, o) ← runSfInitial? asm
     { ix := Array.replicate 16 0, data := Array.replicate 16 0 } 4096
   .ok o.r0
 
@@ -101,24 +101,81 @@ private theorem counter_seq_matches_model :
   native_decide
 
 
-/-! ## 全量 Golden 管线门：所有合约的发射文本必须可解析
+/-! ## E2 corpus gate (`svm-sem-002`)
 
-这一个定理覆盖 `ProofForge.Golden.programs` 的全部合约，
-比逐合约写差分更通用：发射器若引入解析器不认识的语法，这里会立即失败。 -/
+Named parse sweep: every Golden program that emits must parse. The first failure
+string includes the program name so CI logs localize the culprit.
 
-private def allGoldenParseOk : Bool :=
-  (ProofForge.Golden.programs.toList.map
-      (fun p =>
-        -- 跨树合约（含 EVM 叶子）由发射器 fail-closed 拒绝，属于合法跳过；
-        -- 凡是发射成功的 .s，必须全部可解析（fail-closed 对齐）。
-        match ProofForge.Svm.Emit.emitCounterAsm p with
-        | .error _ => true
-        | .ok asm => match assembleSf asm with
-          | .ok _ => true
-          | .error _ => false))
-    |>.foldl (fun acc b => acc && b) true
+Window (two-cell container) adds a second step golden beside Counter.
+-/
+
+/-- First failing Golden program name, or `none` when the emit→parse corpus is green. -/
+private def firstGoldenParseFailure : Option String :=
+  ProofForge.Golden.programs.foldl
+    (fun acc p =>
+      match acc with
+      | some _ => acc
+      | none =>
+          match ProofForge.Svm.Emit.emitCounterAsm p with
+          | .error _ => none  -- emitter fail-closed skip (EVM leaf / unsupported)
+          | .ok asm =>
+              match assembleSf asm with
+              | .ok _ => none
+              | .error e => some s!"{p.name}: {e.take 120}")
+    none
+
+private def allGoldenParseOk : Bool := firstGoldenParseFailure.isNone
 
 private theorem golden_corpus_parses : allGoldenParseOk = true := by
+  native_decide
+
+/-- Window emit text (Golden fixture; two-cell container). -/
+private def windowAsm : Except String String :=
+  match ProofForge.Golden.programs.find? (·.name == "Window") with
+  | some p => ProofForge.Svm.Emit.emitCounterAsm p
+  | none => .error "semantics: Window golden missing"
+
+private def windowParsed : Except String Nat := do
+  let asm ← windowAsm
+  let P ← assembleSf asm
+  .ok P.size
+
+private theorem window_asm_parses_impl :
+    (match windowParsed with | .ok n => 100 ≤ n && n ≤ 300 | .error _ => false) = true := by
+  native_decide
+
+private def windowMarkerHex : Except String String := do
+  let some p := ProofForge.Golden.programs.find? (·.name == "Window")
+    | .error "semantics: Window golden missing"
+  let ir ← match ProofForge.Svm.IR.fromProgram p with
+    | .ok p => .ok p
+    | .error e => .error e
+  ProofForge.Svm.IR.layoutMarkerHex ir
+
+/-- Window: initialize(7) → setTail(9) → getHead. Head stays 7; both mutations exit r0=0. -/
+private def windowSeq
+    : Except String (Array UInt8 × SbpfSemantics.Word × Array UInt8 × SbpfSemantics.Word × Array UInt8) := do
+  let asm ← windowAsm
+  let P ← assembleSf asm
+  let markerHex ← windowMarkerHex
+  let markerW : Word ←
+    match numInt? markerHex.toList with
+    | some v => .ok (BitVec.ofNat 64 v.toNat)
+    | none => .error "semanticsBridge: bad Window marker hex"
+  let markerBytes : Array UInt8 := le64Bytes markerW
+  let (m1, o1) ← runSfInitial? asm
+    { ix := mkIx "initialize" #[7], data := Array.replicate 24 0 } 4096
+  let data1 : Array UInt8 := markerBytes ++ leU64 7 ++ leU64 0
+  let (m2, o2) ← runSfNext? asm P m1 { ix := mkIx "setTail" #[9], data := data1 } 4096
+  let (_m3, o3) ← runSfNext? asm P m2
+    { ix := mkIx "getHead" #[], data := markerBytes ++ leU64 7 ++ leU64 9 } 4096
+  .ok (o1.returnData, o2.r0, o2.returnData, o3.r0, o3.returnData)
+
+private theorem window_seq_matches_model :
+    (match windowSeq with
+      | .ok (a, r02, b, r03, c) =>
+          a == #[] && b == leU64 9 && c == leU64 7 && r02 == 0 && r03 == 0
+      | .error _ => false) = true := by
   native_decide
 
 end Tests.SemanticsSpec

@@ -20,13 +20,13 @@ namespace ProofForge.Svm.TransientBytes
 
 open Sdk.Transient
 
-/-- Deep invocation-only metadata, disjoint from FIFO's `2056..2304` cells and from
-`TransientVec`'s `2312..2375` cells. Slot 0 owns `2400..2431`; slot 1 owns `2432..2463`. These
+/-- Deep invocation-only metadata, disjoint from FIFO's `2248..2496` cells and from
+`TransientVec`'s `2496..2559` cells. Slot 0 owns `2584..2615`; slot 1 owns `2616..2647`. These
 cells may survive across ordinary component calls but never across invocations. -/
-def pointerStack : Nat := 2400
-def lengthStack : Nat := 2408
-def capacityStack : Nat := 2416
-def activeStack : Nat := 2424
+def pointerStack : Nat := 2584
+def lengthStack : Nat := 2592
+def capacityStack : Nat := 2600
+def activeStack : Nat := 2608
 
 /-- Distinct terminal errors let clients and runtime tests distinguish allocator OOM, bounds/full,
 byte-range, and handle-lifetime violations. -/
@@ -38,10 +38,10 @@ def rangeErrorCode : Nat := 0x1214
 /-- Deepest stack offset of the 16-byte `SolBytes` descriptor used by `sol_log_data`. Its base is
 `r10 - descriptorStack`; the target emitter stores the active payload pointer at `[base + 0]` and
 its current length at `[base + 8]`. The descriptor exists only adjacent to syscall emission; the
-pointer never enters a source value, generic IR, or account state. The occupied `2465..2480` bytes
-are disjoint from FIFO's `2056..2304`, `TransientVec`'s `2312..2375`, and `AccountStorage`'s
-deep scratch at `2489..4096`. -/
-def descriptorStack : Nat := 2480
+pointer never enters a source value, generic IR, or account state. The occupied `2649..2664` bytes
+are disjoint from FIFO's `2248..2496`, `TransientVec`'s `2496..2559`, and `AccountStorage`'s
+deep scratch at `2680..4096`. -/
+def descriptorStack : Nat := 2664
 
 /-- Compiler-erased byte-buffer geometry. The `capacity` field is the reusable `Sdk.Transient`
 handle word: byte capacity in its low 32 bits, handle slot above bit 32. -/
@@ -62,8 +62,11 @@ def Config.fixedVec (config : Config) : FixedVec :=
     elementBytes := 1
     capacity := config.payload }
 
-def Config.wellFormed (config : Config) : Bool :=
-  config.slot < maxHandleSlots && config.fixedVec.wellFormed
+/-- Geometry gate under the default two-slot resource manifest (`svm-sdk-004`). A future
+program-attached manifest can tighten this further; declaring more than two slots remains
+ill-formed until deep-scratch relayout. -/
+def Config.wellFormed (config : Config) (manifest : ResourceManifest := defaultManifest) : Bool :=
+  manifest.admitsBytesSlot config.slot && config.fixedVec.wellFormed
 
 /-- Static precondition for one fixed-width little-endian append: the completed record must be
 representable inside this buffer. -/
