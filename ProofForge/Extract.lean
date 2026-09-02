@@ -266,8 +266,20 @@ private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except 
       unless total ≤ 4 do
         throw "extract/unsupported: bounded result record exceeds limb budget"
       pure total
+  | .option (.scalar type) => do
+      unless Core.Codec.Scalar.isWellFormed type do
+        throw "extract/unsupported: tagged array Option payload is malformed"
+      let width := Core.Codec.Scalar.byteWidth type
+      unless 0 < width && width ≤ 32 do
+        throw "extract/unsupported: tagged array Option payload exceeds 32-byte limb budget"
+      let parts := (width + 7) / 8
+      unless parts == 1 do
+        throw "extract/unsupported: tagged array Option payload must be one limb"
+      pure 2
+  | .option _ =>
+      throw "extract/unsupported: tagged array Option requires a one-limb scalar payload"
   | _ =>
-      throw "extract/unsupported: bounded result requires static scalar/tuple/record elements"
+      throw "extract/unsupported: bounded result requires static scalar/tuple/record/option elements"
 
 /-- Expand one static element at `values[i]` into its fixed UInt64 return limbs. -/
 private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
@@ -297,7 +309,14 @@ private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
         limbs := limbs.push
           (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (leafIdx * 8)))
       pure limbs
-  | _ => throw "extract/unsupported: bounded result requires static scalar elements"
+  | .option (.scalar _) => do
+      -- Tagged Tuple v1 Option element: tag limb at byte 0, one-limb payload at byte 8.
+      let _ ← staticReturnLimbCount element
+      pure #[
+        .returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0),
+        .returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 8)
+      ]
+  | _ => throw "extract/unsupported: bounded result requires static scalar or tagged Option elements"
 
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
 output wire format. This is source projection only: Borsh/ABI length and padding remain target

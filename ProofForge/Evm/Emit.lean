@@ -1493,7 +1493,17 @@ private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonSh
   | .enumeration .. => throw "evm/codec: enum ABI JSON requires an explicit tag policy"
   | .option _ => throw "evm/codec: option ABI JSON requires an explicit tag policy"
   | .boundedArray _ element => do
-      let shape ← abiJsonShape element
+      let shape ← match element with
+        | .option payload => do
+            let _ ← Codec.taggedTupleV1InputPlan (.option payload)
+            pure {
+              type := "tuple"
+              components := #[
+                ("present", { type := "bool" }),
+                ("value", ← abiJsonShape payload)
+              ]
+            }
+        | _ => abiJsonShape element
       return { shape with type := shape.type ++ "[]" }
   | .boundedBytes _ => return { type := "bytes" }
   | .boundedString _ => return { type := "string" }
