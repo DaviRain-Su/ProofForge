@@ -896,6 +896,21 @@ private theorem slot_inj {a b : UInt64} (ha : 1 ≤ a) (ha4 : a < 5) (hb : 1 ≤
   have h3 : b.toNat < 5 := hb4
   omega
 
+private theorem vec_set2_get_right {α : Type} [Inhabited α] {n : Nat} (xs : Vector α n)
+    (i j : Nat) (x y : α) (hi : i < n) (hj : j < n) :
+    ((xs.set i x hi).set j y hj)[j]! = y := by
+  show ((xs.set i x hi).set j y hj)[j]?.get! = y
+  have h2 : ((xs.set i x hi).set j y hj)[j]? = some y := by simp [Vector.getElem_set, hj]
+  rw [h2]; rfl
+
+private theorem vec_set2_get_left {α : Type} [Inhabited α] {n : Nat} (xs : Vector α n)
+    (i j : Nat) (x y : α) (hi : i < n) (hj : j < n) (hne : i ≠ j) :
+    ((xs.set i x hi).set j y hj)[i]! = x := by
+  show ((xs.set i x hi).set j y hj)[i]?.get! = x
+  have h2 : ((xs.set i x hi).set j y hj)[i]? = some x := by
+    simp [Vector.getElem_set, Ne.symm hne, hi]
+  rw [h2]; rfl
+
 private theorem u64_toNat_add_one {a : UInt64} (h : a < 6) : (a + 1).toNat = a.toNat + 1 := by
   have hone : UInt64.toNat 1 = 1 := rfl
   have h2 : (2 : Nat) ^ 64 = 4294967296 * 4294967296 := by decide
@@ -1476,6 +1491,10 @@ BST 有序性仍是后续切片；此处先把 p-004 的几何不变量闭包补
 private theorem u64_le_of_lt {a b : UInt64} (h : a < b) : a ≤ b :=
   (UInt64.le_iff_toNat_le).2 (Nat.le_of_lt ((UInt64.lt_iff_toNat_lt).1 h))
 
+private theorem u64_le_trans {a b c : UInt64} (hab : a ≤ b) (hbc : b ≤ c) : a ≤ c :=
+  (UInt64.le_iff_toNat_le).2
+    (Nat.le_trans ((UInt64.le_iff_toNat_le).1 hab) ((UInt64.le_iff_toNat_le).1 hbc))
+
 /-- 单槽 `nodes.set` 保持几何 `wf`，新节点指针不超过原 `bumpIndex`。 -/
 private theorem wf_nodes_set (s : State) (idx : Nat) (n : Node) (hi : idx < 4) (hwf : wf s)
     (hl : n.left ≤ s.bumpIndex) (hr : n.right ≤ s.bumpIndex) (hp : n.parent ≤ s.bumpIndex)
@@ -1657,6 +1676,280 @@ theorem linkRight_wf (s : State) (parent child : UInt64) (hwf : wf s)
     · exact ⟨hpn.1, u64_le_of_lt hc1, hpn.2.2.1, hpn.2.2.2⟩
     · have hcn := hwf.2.2.2.2.2 child hc0 hc1
       exact ⟨hcn.1, hcn.2.1, u64_le_of_lt hp1, hcn.2.2.2⟩
+
+private def insertAtLinkedBump (s : State) (parentAddress direction k v : UInt64) : State :=
+  let address := s.bumpIndex
+  let parentIndex := (parentAddress.toNat - 1) % 4
+  let i := (address.toNat - 1) % 4
+  let parent := s.nodes[parentIndex]!
+  let linkedParent :=
+    if direction = 0 then { parent with left := address }
+    else { parent with right := address }
+  let nodes :=
+    (s.nodes.set parentIndex linkedParent).set i
+      { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+  { s with size := s.size + 1, bumpIndex := s.bumpIndex + 1, freeHead := s.bumpIndex + 1, nodes := nodes }
+
+private def insertAtLinkedFree (s : State) (parentAddress direction k v : UInt64) : State :=
+  let address := s.freeHead
+  let parentIndex := (parentAddress.toNat - 1) % 4
+  let i := (address.toNat - 1) % 4
+  let freeNext := s.nodes[i]!.left
+  let parent := s.nodes[parentIndex]!
+  let linkedParent :=
+    if direction = 0 then { parent with left := address }
+    else { parent with right := address }
+  let nodes :=
+    (s.nodes.set parentIndex linkedParent).set i
+      { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+  { s with size := s.size + 1, freeHead := freeNext, nodes := nodes }
+
+private theorem insertAt_linked_nodes_wf (s : State) (parentAddress direction address k v : UInt64)
+    (hwf : wf s) (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (haddr : address ≤ s.bumpIndex) :
+    wf { s with
+      nodes := let parentIndex := (parentAddress.toNat - 1) % 4
+        let i := (address.toNat - 1) % 4
+        let parent := s.nodes[parentIndex]!
+        let linkedParent :=
+          if direction = 0 then { parent with left := address }
+          else { parent with right := address }
+        (s.nodes.set parentIndex linkedParent).set i
+          { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+          (by omega) } := by
+  obtain ⟨hp0, hp1⟩ := hparent
+  have hpn := hwf.2.2.2.2.2 parentAddress hp0 hp1
+  by_cases hdir : direction = 0
+  · simp only [hdir, ↓reduceIte]
+    apply wf_nodes_set2 s ((parentAddress.toNat - 1) % 4) ((address.toNat - 1) % 4)
+      ({ s.nodes[(parentAddress.toNat - 1) % 4]! with left := address } : Node)
+      { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+      (by omega) (by omega) hwf
+    · exact ⟨haddr, hpn.2.1, hpn.2.2.1, hpn.2.2.2⟩
+    · exact ⟨Nat.zero_le _, Nat.zero_le _, u64_le_of_lt hp1, (by decide : (1 : UInt64) ≤ 1)⟩
+  · have hdir0 : direction ≠ 0 := hdir
+    simp only [if_neg hdir0, ↓reduceIte]
+    apply wf_nodes_set2 s ((parentAddress.toNat - 1) % 4) ((address.toNat - 1) % 4)
+      ({ s.nodes[(parentAddress.toNat - 1) % 4]! with right := address } : Node)
+      { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+      (by omega) (by omega) hwf
+    · exact ⟨hpn.1, haddr, hpn.2.2.1, hpn.2.2.2⟩
+    · exact ⟨Nat.zero_le _, Nat.zero_le _, u64_le_of_lt hp1, (by decide : (1 : UInt64) ≤ 1)⟩
+
+theorem insertAt_linked_wf_bump (s : State) (parentAddress direction k v : UInt64)
+    (hwf : wf s) (hsize : s.size.toNat < 4)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hb0 : s.bumpIndex ≠ 0) (hb4 : s.bumpIndex < 5) (hfresh : s.freeHead = s.bumpIndex) :
+    wf (insertAtLinkedBump s parentAddress direction k v) := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  have hwf' : wf s := ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩
+  have haddr : s.bumpIndex ≤ s.bumpIndex := (UInt64.le_iff_toNat_le).2 (Nat.le_refl _)
+  have hwf_nodes := insertAt_linked_nodes_wf s parentAddress direction s.bumpIndex k v hwf' hparent haddr
+  have hb : s.bumpIndex.toNat < 5 := (UInt64.lt_iff_toNat_lt).mp hb4
+  have hbi : (s.bumpIndex + 1).toNat = s.bumpIndex.toNat + 1 :=
+    u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)
+  unfold insertAtLinkedBump
+  dsimp only
+  refine ⟨?_, ?_, ?_, ?_, Nat.le_refl _, ?_⟩
+  · show (s.size + 1).toNat ≤ 4
+    rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]; omega
+  · show (1 : Nat) ≤ (s.bumpIndex + 1).toNat
+    rw [hbi]; omega
+  · show (s.bumpIndex + 1).toNat ≤ 5
+    rw [hbi]; omega
+  · show (s.bumpIndex + 1).toNat ≤ 5
+    rw [hbi]; omega
+  · intro a ha0 ha1
+    have ha1' : a.toNat < (s.bumpIndex + 1).toNat := ha1
+    rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)] at ha1'
+    by_cases hab : a = s.bumpIndex
+    · rw [hab]
+      have hget := vec_set2_get_right s.nodes ((parentAddress.toNat - 1) % 4)
+        ((s.bumpIndex.toNat - 1) % 4)
+        (if direction = 0 then { s.nodes[(parentAddress.toNat - 1) % 4]! with left := s.bumpIndex }
+          else { s.nodes[(parentAddress.toNat - 1) % 4]! with right := s.bumpIndex })
+        { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+        (by omega) (by omega)
+      rw [hget]
+      have hbump_succ : s.bumpIndex < s.bumpIndex + 1 := by
+        rw [UInt64.lt_iff_toNat_lt]; omega
+      exact ⟨Nat.zero_le _, Nat.zero_le _, u64_le_trans (u64_le_of_lt hparent.2) (u64_le_of_lt hbump_succ),
+        (by decide : (1 : UInt64) ≤ 1)⟩
+    · have hlt : a < s.bumpIndex := by
+        have hne : a.toNat ≠ s.bumpIndex.toNat := fun heq => hab (UInt64.toNat_inj.mp heq)
+        show a.toNat < s.bumpIndex.toNat; omega
+      obtain ⟨hl, hr, hp, hc⟩ := hwf_nodes.2.2.2.2.2 a ha0 hlt
+      have hbump_succ : s.bumpIndex < s.bumpIndex + 1 := by
+        rw [UInt64.lt_iff_toNat_lt]; omega
+      exact ⟨u64_le_trans hl (u64_le_of_lt hbump_succ), u64_le_trans hr (u64_le_of_lt hbump_succ),
+        u64_le_trans hp (u64_le_of_lt hbump_succ), hc⟩
+
+theorem insertAt_linked_wf_free (s : State) (parentAddress direction k v : UInt64)
+    (hwf : wf s) (hsize : s.size.toNat < 4)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hfresh : s.freeHead ≠ s.bumpIndex) (he0 : s.freeHead ≠ 0) (hf4 : s.freeHead < 5) :
+    wf (insertAtLinkedFree s parentAddress direction k v) := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  have hwf' : wf s := ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩
+  have hfblt : s.freeHead < s.bumpIndex := by
+    rw [UInt64.lt_iff_toNat_lt]
+    have hfb' : s.freeHead.toNat ≤ s.bumpIndex.toNat := (UInt64.le_iff_toNat_le).1 hfb
+    have hne : s.freeHead.toNat ≠ s.bumpIndex.toNat := fun heq => hfresh (UInt64.toNat_inj.mp heq)
+    omega
+  have hwf_nodes := insertAt_linked_nodes_wf s parentAddress direction s.freeHead k v hwf' hparent
+    (u64_le_of_lt hfblt)
+  have hfh : (1 : UInt64) ≤ s.freeHead := by
+    rw [UInt64.le_iff_toNat_le]
+    exact Nat.one_le_iff_ne_zero.mpr (fun heq => he0 (UInt64.toNat_inj.mp heq))
+  have hptr' := hptr s.freeHead hfh hfblt
+  obtain ⟨hl, _, _, _⟩ := hptr'
+  unfold insertAtLinkedFree
+  dsimp only
+  refine ⟨?_, hb1, hb5, ?_, hl, ?_⟩
+  · show (s.size + 1).toNat ≤ 4
+    have hst : s.size.toNat < 4 := hsize
+    rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]
+    omega
+  · show (s.nodes[(s.freeHead.toNat - 1) % 4]!.left.toNat ≤ 5)
+    rw [UInt64.le_iff_toNat_le] at hl
+    have hb5' : s.bumpIndex.toNat ≤ 5 := (UInt64.le_iff_toNat_le).1 hb5
+    omega
+  · intro a ha0 ha1
+    by_cases hab : a = s.freeHead
+    · rw [hab]
+      have hget := vec_set2_get_right s.nodes ((parentAddress.toNat - 1) % 4)
+        ((s.freeHead.toNat - 1) % 4)
+        (if direction = 0 then { s.nodes[(parentAddress.toNat - 1) % 4]! with left := s.freeHead }
+          else { s.nodes[(parentAddress.toNat - 1) % 4]! with right := s.freeHead })
+        { left := 0, right := 0, parent := parentAddress, color := 1, key := k, value := v }
+        (by omega) (by omega)
+      rw [hget]
+      exact ⟨Nat.zero_le _, Nat.zero_le _, u64_le_of_lt hparent.2, (by decide : (1 : UInt64) ≤ 1)⟩
+    · exact hwf_nodes.2.2.2.2.2 a ha0 ha1
+
+theorem insertAt_linked_wf (s : State) (parentAddress direction k v : UInt64)
+    (hwf : wf s) (hsize : s.size.toNat < 4)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hvalid :
+      (s.freeHead = s.bumpIndex ∧ s.bumpIndex ≠ 0 ∧ s.bumpIndex < 5) ∨
+        (s.freeHead ≠ s.bumpIndex ∧ s.freeHead ≠ 0 ∧ s.freeHead < 5)) :
+    wf (if s.freeHead = s.bumpIndex then insertAtLinkedBump s parentAddress direction k v
+        else insertAtLinkedFree s parentAddress direction k v) := by
+  rcases hvalid with hBump | hFree
+  · simp only [(hBump.1)]
+    exact insertAt_linked_wf_bump s parentAddress direction k v hwf hsize hparent hBump.2.1 hBump.2.2 hBump.1
+  · simp only [if_neg hFree.1]
+    exact insertAt_linked_wf_free s parentAddress direction k v hwf hsize hparent hFree.1 hFree.2.1 hFree.2.2
+
+theorem insertAt_wf (s : State) (parentAddress direction k v : UInt64) {t : State} {a : UInt64}
+    (h : insertAt s parentAddress direction k v = .ok (t, a)) (hwf : wf s)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hparentBlack : s.nodes[(parentAddress.toNat - 1) % 4]!.color ≠ 1) :
+    wf t := by
+  unfold insertAt at h
+  split at h
+  · rename_i hsz4
+    by_cases hfbeq : s.freeHead = s.bumpIndex
+    · simp only [hfbeq, ↓reduceIte] at h
+      by_cases hb0 : s.bumpIndex = 0
+      · simp [hb0] at h
+      · by_cases hb4 : s.bumpIndex < 5
+        · simp only [hb0, hb4, ↓reduceIte] at h
+          unfold fixInserted at h
+          by_cases hred : s.nodes[(parentAddress.toNat - 1) % 4]!.color = 1
+          · exact absurd hred hparentBlack
+          · simp only [if_neg hred] at h
+            obtain ⟨rfl, rfl⟩ := h
+            exact insertAt_linked_wf_bump s parentAddress direction k v hwf hsz4 hparent hb0 hb4 hfbeq
+        · simp [hb4] at h
+    · simp only [if_neg hfbeq, ↓reduceIte] at h
+      by_cases he0 : s.freeHead = 0
+      · simp [he0] at h
+      · by_cases hf4 : s.freeHead < 5
+        · simp only [he0, hf4, ↓reduceIte] at h
+          unfold fixInserted at h
+          by_cases hred : s.nodes[(parentAddress.toNat - 1) % 4]!.color = 1
+          · exact absurd hred hparentBlack
+          · simp only [if_neg hred] at h
+            obtain ⟨rfl, rfl⟩ := h
+            exact insertAt_linked_wf_free s parentAddress direction k v hwf hsz4 hparent hfbeq he0 hf4
+        · simp [hf4] at h
+  · simp at h
+
+/-- 三槽只把 `color` 涂成 0：几何指针不变，经 `wf_nodes_set3` 闭包。
+`fixInserted` 红叔 recolor 分支的公共核。 -/
+private theorem paint3_black_wf (s : State) (p u g : UInt64) (hwf : wf s)
+    (hp : 1 ≤ p ∧ p < s.bumpIndex) (hu : 1 ≤ u ∧ u < s.bumpIndex)
+    (hg : 1 ≤ g ∧ g < s.bumpIndex) :
+    wf { s with
+      nodes :=
+        let pIdx := (p.toNat - 1) % 4
+        let uIdx := (u.toNat - 1) % 4
+        let gIdx := (g.toNat - 1) % 4
+        ((s.nodes.set pIdx { s.nodes[pIdx]! with color := 0 }).set
+          uIdx { s.nodes[uIdx]! with color := 0 }).set
+          gIdx { s.nodes[gIdx]! with color := 0 } } := by
+  have hpn := hwf.2.2.2.2.2 p hp.1 hp.2
+  have hun := hwf.2.2.2.2.2 u hu.1 hu.2
+  have hgn := hwf.2.2.2.2.2 g hg.1 hg.2
+  apply wf_nodes_set3 s ((p.toNat - 1) % 4) ((u.toNat - 1) % 4) ((g.toNat - 1) % 4)
+    { s.nodes[(p.toNat - 1) % 4]! with color := 0 }
+    { s.nodes[(u.toNat - 1) % 4]! with color := 0 }
+    { s.nodes[(g.toNat - 1) % 4]! with color := 0 }
+    (by omega) (by omega) (by omega) hwf
+  · exact ⟨hpn.1, hpn.2.1, hpn.2.2.1, (by decide : (0 : UInt64) ≤ 1)⟩
+  · exact ⟨hun.1, hun.2.1, hun.2.2.1, (by decide : (0 : UInt64) ≤ 1)⟩
+  · exact ⟨hgn.1, hgn.2.1, hgn.2.2.1, (by decide : (0 : UInt64) ≤ 1)⟩
+
+/-- **fixInserted 红叔 recolor（父为祖父左子）**：控制流读 `before`，
+写回只改 linked 态 `s` 上父/叔/祖三槽 `color := 0`。 -/
+theorem fixInserted_recolor_left_uncle_wf
+    (before s : State) (nodeAddress parentAddress direction : UInt64)
+    {t : State} {ret : UInt64}
+    (h : fixInserted before s nodeAddress parentAddress direction = .ok (t, ret))
+    (hwf : wf s)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hparentRed : before.nodes[(parentAddress.toNat - 1) % 4]!.color = 1)
+    (hgrandNe : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0)
+    (hgrand : 1 ≤ before.nodes[(parentAddress.toNat - 1) % 4]!.parent ∧
+      before.nodes[(parentAddress.toNat - 1) % 4]!.parent < s.bumpIndex)
+    (hleft :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left =
+        parentAddress)
+    (huncle :
+      let grandAddress := before.nodes[(parentAddress.toNat - 1) % 4]!.parent
+      let uncleAddress := before.nodes[(grandAddress.toNat - 1) % 4]!.right
+      uncleAddress ≠ 0 ∧ 1 ≤ uncleAddress ∧ uncleAddress < s.bumpIndex ∧
+        before.nodes[(uncleAddress.toNat - 1) % 4]!.color = 1) :
+    wf t := by
+  unfold fixInserted at h
+  simp only [hparentRed, ↓reduceIte] at h
+  have hgrandNe' : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0 := hgrandNe
+  simp only [if_neg hgrandNe', ↓reduceIte] at h
+  have hleft' :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left =
+        parentAddress := hleft
+  simp only [hleft', ↓reduceIte] at h
+  have huncleNe :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.right ≠ 0 :=
+    huncle.1
+  have huncleRed :
+      before.nodes[(before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) %
+          4]!.right.toNat - 1) % 4]!.color = 1 := huncle.2.2.2
+  have huncleColor :
+      (if before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.right = 0
+        then (0 : UInt64)
+        else
+          before.nodes[(before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) %
+              4]!.right.toNat - 1) % 4]!.color) = 1 := by
+    simp only [if_neg huncleNe, huncleRed]
+  simp only [huncleColor, ↓reduceIte] at h
+  simp only [Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  exact paint3_black_wf s parentAddress
+    (before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.right)
+    (before.nodes[(parentAddress.toNat - 1) % 4]!.parent) hwf hparent
+    ⟨huncle.2.1, huncle.2.2.1⟩ hgrand
 
 theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {y : UInt64}
     (h : rotateLeft s xAddress = .ok (t, y)) (hwf : wf s)
