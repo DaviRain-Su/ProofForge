@@ -1951,6 +1951,56 @@ theorem fixInserted_recolor_left_uncle_wf
     (before.nodes[(parentAddress.toNat - 1) % 4]!.parent) hwf hparent
     ⟨huncle.2.1, huncle.2.2.1⟩ hgrand
 
+/-- **fixInserted 红叔 recolor（父为祖父右子）**：与 `fixInserted_recolor_left_uncle_wf`
+镜像——控制流读 `before`，写回只改 linked 态 `s` 上父/叔/祖三槽 `color := 0`。 -/
+theorem fixInserted_recolor_right_uncle_wf
+    (before s : State) (nodeAddress parentAddress direction : UInt64)
+    {t : State} {ret : UInt64}
+    (h : fixInserted before s nodeAddress parentAddress direction = .ok (t, ret))
+    (hwf : wf s)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hparentRed : before.nodes[(parentAddress.toNat - 1) % 4]!.color = 1)
+    (hgrandNe : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0)
+    (hgrand : 1 ≤ before.nodes[(parentAddress.toNat - 1) % 4]!.parent ∧
+      before.nodes[(parentAddress.toNat - 1) % 4]!.parent < s.bumpIndex)
+    (hright :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left ≠
+        parentAddress)
+    (huncle :
+      let grandAddress := before.nodes[(parentAddress.toNat - 1) % 4]!.parent
+      let uncleAddress := before.nodes[(grandAddress.toNat - 1) % 4]!.left
+      uncleAddress ≠ 0 ∧ 1 ≤ uncleAddress ∧ uncleAddress < s.bumpIndex ∧
+        before.nodes[(uncleAddress.toNat - 1) % 4]!.color = 1) :
+    wf t := by
+  unfold fixInserted at h
+  simp only [hparentRed, ↓reduceIte] at h
+  have hgrandNe' : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0 := hgrandNe
+  simp only [if_neg hgrandNe', ↓reduceIte] at h
+  have hright' :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left ≠
+        parentAddress := hright
+  simp only [if_neg hright', ↓reduceIte] at h
+  have huncleNe :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left ≠ 0 :=
+    huncle.1
+  have huncleRed :
+      before.nodes[(before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) %
+          4]!.left.toNat - 1) % 4]!.color = 1 := huncle.2.2.2
+  have huncleColor :
+      (if before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left = 0
+        then (0 : UInt64)
+        else
+          before.nodes[(before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) %
+              4]!.left.toNat - 1) % 4]!.color) = 1 := by
+    simp only [if_neg huncleNe, huncleRed]
+  simp only [huncleColor, ↓reduceIte] at h
+  simp only [Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  exact paint3_black_wf s parentAddress
+    (before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left)
+    (before.nodes[(parentAddress.toNat - 1) % 4]!.parent) hwf hparent
+    ⟨huncle.2.1, huncle.2.2.1⟩ hgrand
+
 theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {y : UInt64}
     (h : rotateLeft s xAddress = .ok (t, y)) (hwf : wf s)
     (hx : 1 ≤ xAddress ∧ xAddress < s.bumpIndex)
