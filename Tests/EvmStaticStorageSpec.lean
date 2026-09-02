@@ -241,7 +241,9 @@ open Examples.Evm.EvmAggregateStorage in
       s.bundle.amount == 11 && s.bundle.details.side == 4 && s.bundle.details.enabled &&
         r == 11 && bundleSignal s == (11, true) &&
         bundleView s == (11, (4, true)) && detailsView s == (4, true) &&
-        amountOf s == 11 && sideOf s == 4 && enabledOf s
+        amountOf s == 11 && sideOf s == 4 && enabledOf s &&
+        (amountSidePairs s).length == 1 &&
+        (amountSidePairs s).values[0]! == (11, (4 : UInt8))
   | _ => false
 
 open Examples.Evm.EvmAggregateStorage in
@@ -356,12 +358,17 @@ elab "#pf_guard_evm_aggregate_storage" : command => do
     | throwError "missing detailsView entry"
   let some _amountOf := program.entries.find? (·.ixName == "amountOf")
     | throwError "missing amountOf entry"
+  let some amountSidePairs := program.entries.find? (·.ixName == "amountSidePairs")
+    | throwError "missing amountSidePairs entry"
   unless bundleView.retSchema ==
       .tuple #[.scalar .uint64, .tuple #[.scalar .uint8, .scalar .boolean]] do
     throwError s!"bundleView retSchema not nested product: {repr bundleView.retSchema}"
   unless detailsView.retSchema ==
       .tuple #[.scalar .uint8, .scalar .boolean] do
     throwError s!"detailsView retSchema not product: {repr detailsView.retSchema}"
+  unless amountSidePairs.retSchema ==
+      .boundedArray 1 (.tuple #[.scalar .uint64, .scalar .uint8]) do
+    throwError s!"amountSidePairs retSchema not constructed bounded product array: {repr amountSidePairs.retSchema}"
   let abi ←
     match ProofForge.Evm.Emit.emitAbiChecked program with
     | .ok abi => pure abi
@@ -370,9 +377,10 @@ elab "#pf_guard_evm_aggregate_storage" : command => do
       abi.contains "\"name\":\"bundleView\"" &&
       abi.contains "\"name\":\"detailsView\"" &&
       abi.contains "\"name\":\"amountOf\"" &&
+      abi.contains "\"name\":\"amountSidePairs\"" &&
       abi.contains "uint64" &&
       abi.contains "uint8" do
-    throwError s!"EvmAggregateStorage ABI missing nested/product surface: {abi}"
+    throwError s!"EvmAggregateStorage ABI missing nested/product/bounded surface: {abi}"
   match ProofForge.Evm.Codec.abiTypeOfSchema bundleView.retSchema with
   | .ok type =>
       unless type == "(uint64,(uint8,bool))" do
@@ -382,6 +390,11 @@ elab "#pf_guard_evm_aggregate_storage" : command => do
   | .ok type =>
       unless type == "(uint8,bool)" do
         throwError s!"detailsView ABI type mismatch: {type}"
+  | .error reason => throwError reason
+  match ProofForge.Evm.Codec.abiTypeOfSchema amountSidePairs.retSchema with
+  | .ok type =>
+      unless type == "(uint64,uint8)[]" do
+        throwError s!"amountSidePairs ABI type mismatch: {type}"
   | .error reason => throwError reason
 
 #pf_guard_evm_static_counter
