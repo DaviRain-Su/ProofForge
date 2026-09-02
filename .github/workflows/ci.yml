@@ -109,6 +109,8 @@ jobs:
               - 'ProofForge/Core/**'
             # ~10MB Phoenix ELF deploy is the slowest Surfpool step; keep it off
             # ordinary SVM SDK / fixture PRs that do not touch Phoenix emit paths.
+            # Do not list ci.yml here: workflow-only edits must not force the ~10MB
+            # PhoenixV1Profile Loader-v3 writeback. Push-to-main still runs all lanes.
             surfpool_heavy:
               - 'Examples/Svm/Phoenix.lean'
               - 'Examples/Svm/PhoenixV1Layout.lean'
@@ -119,7 +121,6 @@ jobs:
               - 'runtime-tests/solana/tests/phoenix.rs'
               - 'runtime-tests/solana/tests/phoenix_v1_profile.rs'
               - 'runtime-tests/surfpool/**'
-              - '.github/workflows/ci.yml'
               - '.agents/setup'
 
       - name: Publish lane gates
@@ -290,11 +291,11 @@ jobs:
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh Phoenix
 
-      # ~10MB ELF: Loader-v3 writeback regularly exceeds 15m on GitHub runners.
+      # ~10MB ELF: Loader-v3 writeback is slow on GitHub runners; keep gated and allow 45m.
       # Skip when the PR did not touch Phoenix / account-storage emit paths.
       - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
         if: needs.changes.outputs.surfpool_heavy == 'true'
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
       - name: Deploy packed entry adapter fixture through Surfpool Loader-v3
