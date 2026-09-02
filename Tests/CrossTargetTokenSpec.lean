@@ -15,6 +15,13 @@ SVM SPL CPI stubs (`TokenApprove` / `TokenXfer`), EVM ERC-20-shaped ergonomics
 (`EvmTokenErgonomics`), and NEAR NEP-141 ledger (`NearFungibleLedger`). Digests differ by
 design; this spec pins the approve/transfer-shaped digest table and checks method-name
 surfaces, documenting the shared conceptual subset and naming gaps.
+
+Runtime engineering gates (not digests):
+- SVM Mollusk: `runtime-tests/solana/tests/token_approve.rs`, `token_xfer.rs`
+- EVM Anvil (full Token): `runtime-tests/evm/anvil_token.sh`
+- NEAR sandbox: `runtime-tests/near/ledger.sh` → `ledger.py` (+ `ft_event.sh`, JSON FT input scripts)
+
+See `docs/plan/tasks/wsm-near-conformance-001.md` for the full matrix.
 -/
 
 namespace Tests.CrossTargetTokenSpec
