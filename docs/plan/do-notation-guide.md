@@ -44,5 +44,6 @@ plain `UInt64` when no failure path exists — Extract stays simpler.
 
 - Task: `docs/plan/tasks/erg-do-001.md`
 - Next surface: `docs/plan/tasks/erg-evm-effect-001.md` (Token sequential `Effect`) —
-  first slice landed as `Examples.EvmTokenErgonomics` (`Effect.ensure` / `abort`)
+  first slice landed as `Examples.EvmTokenErgonomics` (`Effect.ensure` / `abort`);
+  `Examples.Evm.Token.approve` now uses the same pattern (digest `1dc6b7a9d09f1478`)
 - NEAR PromiseHandle Extract through `and8Returned` landed (N13); see `wsm-near-promise-general-001`
