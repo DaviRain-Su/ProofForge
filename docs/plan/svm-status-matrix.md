@@ -182,6 +182,13 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-123](tasks/svm-sem-123.md) | E∞ Loader account-16 owner limbs 0/1 after skip chain | **done** |
 | [svm-sem-124](tasks/svm-sem-124.md) | E∞ Loader account-16 owner limbs 2/3 after skip chain | **done** |
 | [svm-sem-125](tasks/svm-sem-125.md) | E∞ Loader account-16 executable/rent after skip chain | **done** |
+| [svm-sem-126](tasks/svm-sem-126.md) | E∞ Loader account-16 → account-17 skip chain | **done** |
+| [svm-sem-127](tasks/svm-sem-127.md) | E∞ Loader account-17 header/key after skip chain | **done** |
+| [svm-sem-128](tasks/svm-sem-128.md) | E∞ Loader account-17 signer/writable after skip chain | **done** |
+| [svm-sem-129](tasks/svm-sem-129.md) | E∞ Loader account-17 lamports/data_len after skip chain | **done** |
+| [svm-sem-130](tasks/svm-sem-130.md) | E∞ Loader account-17 owner limbs 0/1 after skip chain | **done** |
+| [svm-sem-131](tasks/svm-sem-131.md) | E∞ Loader account-17 owner limbs 2/3 after skip chain | **done** |
+| [svm-sem-132](tasks/svm-sem-132.md) | E∞ Loader account-17 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Option withdraw-all; CancelMultiple already at cap 8 |
 
@@ -195,7 +202,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[125](tasks/svm-sem-125.md) | walked `r7` + account-0..16 skip host knives | **doing** — account-16 field arc landed; acc16→acc17 skip open |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[132](tasks/svm-sem-132.md) | walked `r7` + account-0..17 skip host knives | **doing** — account-17 field arc landed; acc17→acc18 skip open |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
