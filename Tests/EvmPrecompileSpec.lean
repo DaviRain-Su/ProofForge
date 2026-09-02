@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Precompile
 import ProofForge.Evm.Precompile.Emit
-import Examples.Token
+import Examples.Evm.Token
 
 namespace Tests.EvmPrecompileSpec
 

@@ -1,5 +1,5 @@
-import Examples.NearJsonU128Mutation
-import Examples.NearPromise
+import Examples.Near.NearJsonU128Mutation
+import Examples.Near.NearPromise
 import Lean
 import ProofForge
 
@@ -36,7 +36,7 @@ private partial def replaceTargetResult : Array ProofForge.Wasm.Near.Ops.Op →
 
 elab "#pf_near_json_u128_mutation_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonU128Mutation with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonU128Mutation with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceCommit := source.methods.find? (·.ixName == "commitAsymmetric")
@@ -96,7 +96,7 @@ elab "#pf_near_json_u128_mutation_check" : command => do
       (body.splitOn "(call $pf_attached_deposit").length == 2 &&
       body.contains "(i64.load (i32.const 24))" && body.contains "(i64.load (i32.const 32))" do
     throwError "mutating u128 output lost non-payable guard, asymmetric limb order, or geometry"
-  let promiseSource ← match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
+  let promiseSource ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromise with
     | .ok source => pure source
     | .error reason => throwError reason
   let promiseProgram ← match IR.fromExtracted promiseSource with

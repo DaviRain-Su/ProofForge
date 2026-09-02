@@ -1,4 +1,4 @@
-import Examples.NearJsonFtOnTransferInput
+import Examples.Near.NearJsonFtOnTransferInput
 import Lean
 import ProofForge
 
@@ -26,7 +26,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_ft_on_transfer_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonFtOnTransferInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonFtOnTransferInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName.startsWith "sender" || method.ixName.startsWith "amount" ||

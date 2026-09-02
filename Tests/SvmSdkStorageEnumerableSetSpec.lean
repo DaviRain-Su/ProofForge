@@ -1,5 +1,5 @@
-import Examples.MemberDirectory
-import Examples.UniqueRoster
+import Examples.Svm.MemberDirectory
+import Examples.Svm.UniqueRoster
 import ProofForge
 
 /-!
@@ -12,11 +12,11 @@ namespace Tests.SvmSdkStorageEnumerableSetSpec
 open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.StorageEnumerableSet
 
-#pf_build Examples.MemberDirectory
-#pf_build Examples.UniqueRoster
+#pf_build Examples.Svm.MemberDirectory
+#pf_build Examples.Svm.UniqueRoster
 
-private def directory := Examples.MemberDirectory.members 1
-private def roster := Examples.UniqueRoster.roster 1
+private def directory := Examples.Svm.MemberDirectory.members 1
+private def roster := Examples.Svm.UniqueRoster.roster 1
 
 #guard directory.wellFormed
 #guard roster.wellFormed

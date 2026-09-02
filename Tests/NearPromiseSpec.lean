@@ -1,4 +1,4 @@
-import Examples.NearPromise
+import Examples.Near.NearPromise
 import Lean
 import ProofForge
 
@@ -271,7 +271,7 @@ elab "#pf_near_promise_check" : command => do
         throwError s!"wrong payable-view rejection: {reason}"
   | .ok _ => throwError "NEAR admitted a payable view"
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromise with
     | .ok program => pure program
     | .error reason => throwError reason
   let sourceRecordValue ← match source.methods.find? (·.ixName == "recordValue") with

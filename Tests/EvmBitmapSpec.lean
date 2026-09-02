@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Sdk.StorageBitmap
-import Examples.EvmFeatureFlags
-import Examples.EvmClaimBitmap
+import Examples.Evm.EvmFeatureFlags
+import Examples.Evm.EvmClaimBitmap
 
 /-!
 R5-015 focused suite: persistent bounded EVM storage bitmap (packed UInt64 words) policy truth
@@ -160,18 +160,18 @@ def narrowWords : StorageBitmap.Descriptor 128 :=
 
 /-! ## Consumer descriptor and layout pins -/
 
-#guard Examples.EvmFeatureFlags.declared.handle.bitmap.wellFormed
-#guard Examples.EvmFeatureFlags.declared.handle.bitmap.words.baseSlot == 3
-#guard Examples.EvmFeatureFlags.declared.handle.bitmap.words.length? == some 2
-#guard Examples.EvmFeatureFlags.declared.handle.owner.wideLeaves? == some 3
-#guard Examples.EvmFeatureFlags.layout.nextSlot == 5
-#guard Examples.EvmFeatureFlags.layout.wellFormed
+#guard Examples.Evm.EvmFeatureFlags.declared.handle.bitmap.wellFormed
+#guard Examples.Evm.EvmFeatureFlags.declared.handle.bitmap.words.baseSlot == 3
+#guard Examples.Evm.EvmFeatureFlags.declared.handle.bitmap.words.length? == some 2
+#guard Examples.Evm.EvmFeatureFlags.declared.handle.owner.wideLeaves? == some 3
+#guard Examples.Evm.EvmFeatureFlags.layout.nextSlot == 5
+#guard Examples.Evm.EvmFeatureFlags.layout.wellFormed
 
-#guard Examples.EvmClaimBitmap.declared.handle.bitmap.wellFormed
-#guard Examples.EvmClaimBitmap.declared.handle.bitmap.words.baseSlot == 0
-#guard Examples.EvmClaimBitmap.declared.handle.bitmap.words.length? == some 3
-#guard Examples.EvmClaimBitmap.layout.nextSlot == 3
-#guard Examples.EvmClaimBitmap.layout.wellFormed
+#guard Examples.Evm.EvmClaimBitmap.declared.handle.bitmap.wellFormed
+#guard Examples.Evm.EvmClaimBitmap.declared.handle.bitmap.words.baseSlot == 0
+#guard Examples.Evm.EvmClaimBitmap.declared.handle.bitmap.words.length? == some 3
+#guard Examples.Evm.EvmClaimBitmap.layout.nextSlot == 3
+#guard Examples.Evm.EvmClaimBitmap.layout.wellFormed
 
 def flagsSlots : List (String × Nat) :=
   [("owner_w0", 8), ("owner_w1", 8), ("owner_w2", 8), ("flags_0", 8), ("flags_1", 8)]
@@ -179,17 +179,17 @@ def flagsSlots : List (String × Nat) :=
 def claimsSlots : List (String × Nat) :=
   [("claimed_0", 8), ("claimed_1", 8), ("claimed_2", 8)]
 
-#guard Examples.EvmFeatureFlags.layout.matchesFlattened flagsSlots
-#guard Examples.EvmClaimBitmap.layout.matchesFlattened claimsSlots
+#guard Examples.Evm.EvmFeatureFlags.layout.matchesFlattened flagsSlots
+#guard Examples.Evm.EvmClaimBitmap.layout.matchesFlattened claimsSlots
 
 /-! ## Consumer host behavior through ordinary typed state -/
 
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard (init ⟨1, 2, 3⟩).flags == #v[0, 0] && isEnabled (init ⟨1, 2, 3⟩) 0 == 0 &&
   isEnabled (init ⟨1, 2, 3⟩) 127 == 0 && isEnabled (init ⟨1, 2, 3⟩) 128 == 0
 
 -- enable at the word boundary and the final bit: exact words, exact reads, idempotent rewrite
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match enable (init ⟨1, 2, 3⟩) 63 with
   | .ok (s1, r1) =>
       r1 == 1 && s1.flags == #v[9223372036854775808, 0] && isEnabled s1 63 == 1 &&
@@ -199,7 +199,7 @@ open Examples.EvmFeatureFlags in
          | _ => false)
   | _ => false
 
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match enable (init ⟨1, 2, 3⟩) 64 with
   | .ok (s1, _) =>
       s1.flags == #v[0, 1] && isEnabled s1 64 == 1 &&
@@ -211,7 +211,7 @@ open Examples.EvmFeatureFlags in
   | _ => false
 
 -- disable clears exactly one bit, keeps neighbors, and is idempotent
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match enable (init ⟨1, 2, 3⟩) 0 with
   | .ok (s1, _) =>
       (match enable s1 63 with
@@ -228,7 +228,7 @@ open Examples.EvmFeatureFlags in
   | _ => false
 
 -- toggle flips and reports the new value; toggling twice restores the exact word
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match toggle (init ⟨1, 2, 3⟩) 100 with
   | .ok (s1, r1) =>
       r1 == 1 && s1.flags == #v[0, 68719476736] && isEnabled s1 100 == 1 &&
@@ -238,12 +238,12 @@ open Examples.EvmFeatureFlags in
   | _ => false
 
 -- OOB mutations fail before any store; the boundary OOB index 128 does not alias bit 0
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match enable (init ⟨1, 2, 3⟩) 128 with
   | .error .oob => true
   | _ => false
 
-open Examples.EvmFeatureFlags in
+open Examples.Evm.EvmFeatureFlags in
 #guard match enable (init ⟨1, 2, 3⟩) 0 with
   | .ok (s1, _) =>
       (match disable s1 128 with
@@ -254,12 +254,12 @@ open Examples.EvmFeatureFlags in
          | _ => false)
   | _ => false
 
-open Examples.EvmClaimBitmap in
+open Examples.Evm.EvmClaimBitmap in
 #guard (init 0).claimed == #v[0, 0, 0] && hasClaimed (init 0) 0 == 0 &&
   hasClaimed (init 0) 129 == 0 && hasClaimed (init 0) 130 == 0
 
 -- claim at the 63/64 word boundary and the final in-range bit of the partial word
-open Examples.EvmClaimBitmap in
+open Examples.Evm.EvmClaimBitmap in
 #guard match claim (init 0) 63 with
   | .ok (s1, r1) =>
       r1 == 1 && s1.claimed == #v[9223372036854775808, 0, 0] &&
@@ -277,7 +277,7 @@ open Examples.EvmClaimBitmap in
 
 -- claim replay reverts with the typed error and stores nothing; OOB (incl. the aliasing probe
 -- 130, whose `130 % 64 = 2` would hit the live word 2) reverts with the typed error
-open Examples.EvmClaimBitmap in
+open Examples.Evm.EvmClaimBitmap in
 #guard match claim (init 0) 2 with
   | .ok (s1, _) =>
       (match claim s1 2 with
@@ -350,12 +350,12 @@ private def expectBitmapLayout (module : Name) (expectedSlots : List (String × 
     throwError s!"{module}: unexpected fixed-bytes helper call in emitted Yul"
 
 elab "#pf_guard_evm_bitmap_flags" : command =>
-  expectBitmapLayout `Examples.EvmFeatureFlags flagsSlots [("flags", 3, 2, 1)]
+  expectBitmapLayout `Examples.Evm.EvmFeatureFlags flagsSlots [("flags", 3, 2, 1)]
     ["ownerOf", "isEnabled", "enable", "disable", "toggle"] ["oob", "malformed"]
     ["div(", "mod(", "shl(", "or(", "and(", "not(", "xor("]
 
 elab "#pf_guard_evm_bitmap_claims" : command =>
-  expectBitmapLayout `Examples.EvmClaimBitmap claimsSlots [("claimed", 0, 3, 1)]
+  expectBitmapLayout `Examples.Evm.EvmClaimBitmap claimsSlots [("claimed", 0, 3, 1)]
     ["hasClaimed", "claim"] ["oob", "already", "malformed"]
     ["div(", "mod(", "shl(", "or(", "and("]
 

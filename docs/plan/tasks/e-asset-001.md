@@ -16,7 +16,7 @@ E-ASSET 整包，见 [05-evm-coverage-slices.md](../../research/05-evm-coverage-
 - `evmTokenTransfer tokenW0..W2 dstW0..W2 amt`：`transfer(address,uint256)` CALL
 - `evmTokenBalanceOfSelf tokenW0..W2`：`STATICCALL balanceOf(address(this))`，超 UInt64 revert
 - SVM 拒全部新叶/效应
-- `Examples.Vault` + Anvil + testdata ERC-20 mock
+- `Examples.Evm.Vault` + Anvil + testdata ERC-20 mock
 
 ## 不做
 

@@ -1,8 +1,8 @@
-import Examples.TokenFreeze
+import Examples.Svm.TokenFreeze
 
 namespace Tests.TokenFreezeSpec
 
-open Examples.TokenFreeze
+open Examples.Svm.TokenFreeze
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

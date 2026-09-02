@@ -1,8 +1,8 @@
-import Examples.Gate
+import Examples.Svm.Gate
 
 namespace Tests.GateSpec
 
-open Examples.Gate
+open Examples.Svm.Gate
 open ProofForge.Svm.Runtime
 
 #guard (init 0).open_ == false

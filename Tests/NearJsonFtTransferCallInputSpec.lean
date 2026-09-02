@@ -1,4 +1,4 @@
-import Examples.NearJsonFtTransferCallInput
+import Examples.Near.NearJsonFtTransferCallInput
 import Lean
 import ProofForge
 
@@ -23,7 +23,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_ft_transfer_call_input_check" : command => do
   let env ← getEnv
   let source ← match ProofForge.Extract.extractModuleIR env
-      `Examples.NearJsonFtTransferCallInput with
+      `Examples.Near.NearJsonFtTransferCallInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName != "initialize" && method.ixName != "get" then

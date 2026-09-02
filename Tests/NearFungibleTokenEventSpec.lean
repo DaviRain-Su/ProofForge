@@ -2,7 +2,7 @@ import ProofForge
 import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Commands
-import Examples.NearFungibleTokenEvent
+import Examples.Near.NearFungibleTokenEvent
 
 /-!
 # Exact NEP-141 fungible-token events
@@ -57,7 +57,7 @@ private def hasExpectedBurnMemo (method : ProofForge.Wasm.Near.IR.Method) : Bool
 elab "#pf_guard_near_ft_events" : command => do
   let env ← getEnv
   let extracted ←
-    match Extract.extractModuleIR env `Examples.NearFungibleTokenEvent none with
+    match Extract.extractModuleIR env `Examples.Near.NearFungibleTokenEvent none with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←
@@ -140,7 +140,7 @@ elab "#pf_guard_near_ft_events" : command => do
   logInfo m!"proofforge-near-ft-event-test: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_ft_events
-#pf_near_build Examples.NearFungibleTokenEvent
+#pf_near_build Examples.Near.NearFungibleTokenEvent
 
 #guard ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid 16
 #guard !ProofForge.Wasm.Near.Codec.nep141MemoCapacityValid 17

@@ -1,8 +1,8 @@
 import ProofForge
 import ProofForge.Evm.Payable
 import ProofForge.Evm.Payable.Emit
-import Examples.TipJar
-import Examples.Vault
+import Examples.Evm.TipJar
+import Examples.Evm.Vault
 
 namespace Tests.EvmPayableSpec
 

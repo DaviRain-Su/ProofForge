@@ -9,7 +9,7 @@ depends-on: [e-allow-001]
 
 ## objective
 
-`Examples.Token.decimals` 返回字面量 `18`，ABI `decimals()(uint8)`。不是 storage，不是动态 string。
+`Examples.Evm.Token.decimals` 返回字面量 `18`，ABI `decimals()(uint8)`。不是 storage，不是动态 string。
 
 - 抽出认 `UInt8` view 的 `retWidths = #[1]`
 - ABI JSON 输出 `uint8`

@@ -107,8 +107,8 @@ bindings, but the physical storage descriptor is always target-owned.
 
 | Application | Owns | Must consume | Must not create |
 |---|---|---|---|
-| `Examples.Phoenix*` | market/account layout, order comparison, crossing, fees, TIF/self-trade/funds policy, official wire and audit choices | SVM typed account storage, allocator/map/cursor, recorder, entry adapter, CPI/PDA/Token capabilities | Phoenix-named Ops/IR/Emit cases, heap-backed persistent books, pointers in accounts |
-| `Examples.Token`, `Examples.Capped`, `Examples.TwoStepCounter`, `Examples.Credits`, future EVM contracts | token/cap/access business policy and public ABI | `Evm.Sdk` typed storage/context/event/revert/closed calls and reusable Access/Pausable/Fungible policy | numeric map bases, hand-built topics/selectors, stale-nominee maps, SVM account geometry |
+| `Examples.Svm.Phoenix*` | market/account layout, order comparison, crossing, fees, TIF/self-trade/funds policy, official wire and audit choices | SVM typed account storage, allocator/map/cursor, recorder, entry adapter, CPI/PDA/Token capabilities | Phoenix-named Ops/IR/Emit cases, heap-backed persistent books, pointers in accounts |
+| `Examples.Evm.Token`, `Examples.Evm.Capped`, `Examples.Evm.TwoStepCounter`, `Examples.Evm.Credits`, future EVM contracts | token/cap/access business policy and public ABI | `Evm.Sdk` typed storage/context/event/revert/closed calls and reusable Access/Pausable/Fungible policy | numeric map bases, hand-built topics/selectors, stale-nominee maps, SVM account geometry |
 | future cross-target examples | shared behavioral fixture only | separate SVM and EVM state/ABI bindings | a fake unified storage abstraction |
 
 Registry and historical golden fixtures may name applications because they enumerate build/test

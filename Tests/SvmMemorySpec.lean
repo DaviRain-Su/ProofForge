@@ -1,4 +1,4 @@
-import Examples.MemoryOps
+import Examples.Svm.MemoryOps
 import Lean
 import ProofForge
 
@@ -43,12 +43,12 @@ private def overlap : ProofForge.Svm.Sdk.Memory.Span :=
 #guard ProofForge.Svm.Sdk.Memory.set first 0xaa == 0
 #guard ProofForge.Svm.Sdk.Memory.compareI32Bits first second == 0
 
-#pf_build Examples.MemoryOps
+#pf_build Examples.Svm.MemoryOps
 
 elab "#pf_guard_svm_memory" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.MemoryOps with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.MemoryOps with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

@@ -117,7 +117,7 @@ Contracts should import a **target SDK**, not the `ProofForge` umbrella (that pu
 | Solana / sBPF | `ProofForge.Attr` + `ProofForge.Svm.Sdk` |
 | EVM | `ProofForge.Attr` + `ProofForge.Evm.Sdk` |
 
-Good in-tree examples: [`Examples/VersionedLedger.lean`](Examples/VersionedLedger.lean) (SVM), [`Examples/TipJar.lean`](Examples/TipJar.lean) (EVM). Minimal shape:
+Good in-tree examples: [`Examples/Svm/VersionedLedger.lean`](Examples/Svm/VersionedLedger.lean) (SVM), [`Examples/Evm/TipJar.lean`](Examples/Evm/TipJar.lean) (EVM). Minimal shape:
 
 ```lean
 import ProofForge.Attr
@@ -199,7 +199,7 @@ Compiler boundary:
 
 ### Phoenix-v1 (largest SVM slice)
 
-[`Examples/PhoenixV1Profile.lean`](Examples/PhoenixV1Profile.lean) is the current stress test of that boundary — not a special-case compiler.
+[`Examples/Svm/PhoenixV1Profile.lean`](Examples/Svm/PhoenixV1Profile.lean) is the current stress test of that boundary — not a special-case compiler.
 
 | Area | What is in tree |
 | --- | --- |
@@ -221,7 +221,7 @@ Contract source opens `ProofForge.Evm.Sdk`:
 - `Address`, `UInt256`, `Context`, `Immutable`, `Event`, `Revert`
 - closed-call facade — it does not hide `.ok` / `.error`
 
-Descriptors erase at extract time and never enter storage. `Examples.Token` and `Examples.Capped` already sit on this surface with an unchanged target IR digest.
+Descriptors erase at extract time and never enter storage. `Examples.Evm.Token` and `Examples.Evm.Capped` already sit on this surface with an unchanged target IR digest.
 
 ## Trust boundary
 

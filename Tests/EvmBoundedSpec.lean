@@ -1,9 +1,9 @@
-import Examples.EvmBounded
+import Examples.Evm.EvmBounded
 import ProofForge
 
 namespace Tests.EvmBoundedSpec
 
-open Examples.EvmBounded
+open Examples.Evm.EvmBounded
 open ProofForge.Core.Value
 open Lean Elab Command
 
@@ -46,7 +46,7 @@ private def equalString : BoundedString 4 :=
 elab "#pf_guard_evm_bounded_abi" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmBounded with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmBounded with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

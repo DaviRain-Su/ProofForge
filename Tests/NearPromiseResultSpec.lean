@@ -1,4 +1,4 @@
-import Examples.NearPromiseResult
+import Examples.Near.NearPromiseResult
 import Lean
 import ProofForge
 
@@ -51,7 +51,7 @@ private partial def opUsesResultCount : ProofForge.Extract.IR.Op → Bool
 elab "#pf_near_promise_result_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearPromiseResult with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromiseResult with
     | .ok program => pure program
     | .error reason => throwError reason
   let reads := source.methods.foldl (init := #[]) fun acc method => acc ++ resultReads method.ops

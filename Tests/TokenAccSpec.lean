@@ -1,8 +1,8 @@
-import Examples.TokenAcc
+import Examples.Svm.TokenAcc
 
 namespace Tests.TokenAccSpec
 
-open Examples.TokenAcc
+open Examples.Svm.TokenAcc
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

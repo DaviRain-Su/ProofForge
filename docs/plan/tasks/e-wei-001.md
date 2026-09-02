@@ -14,7 +14,7 @@ Token / Vault 余额已经是 `UInt256`；ETH 进出还停在 `UInt64`。这一�
 - 新增 `evmCallValue256` / `evmSelfBalance256`：四叶，ABI `uint256`
 - 新增封闭 `evmDeposit256` / `evmSendEth256`：`eq(callvalue(), packed)` / value CALL 带 packed wei
 - 旧 `evmCallValue` / `evmDeposit` / `evmSendEth` 仍是 UInt64 调试叶
-- `Examples.TipJar` 的 `deposit` / `payout` / `callValue` / `selfBal` 改走 256
+- `Examples.Evm.TipJar` 的 `deposit` / `payout` / `callValue` / `selfBal` 改走 256
 - Anvil：小额仍过；`deposit(uint256)` / `payout(address,uint256)` / `selfBal()(uint256)`
 - SVM 拒新叶
 

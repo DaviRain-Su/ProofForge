@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Sdk.StorageEnumerableMap
-import Examples.EvmConfigMap
-import Examples.EvmScoreMap
+import Examples.Evm.EvmConfigMap
+import Examples.Evm.EvmScoreMap
 
 /-!
 R5-019 focused suite: descriptor composition over the enumerable-set index, disjoint position and
@@ -68,29 +68,29 @@ def configSlots : List (String × Nat) :=
 def scoreSlots : List (String × Nat) :=
   [("players_0", 8), ("players_1", 8), ("players_2", 8), ("count", 8)]
 
-#guard Examples.EvmConfigMap.declared.handle.table.wellFormed
-#guard Examples.EvmConfigMap.declared.handle.table.index.positions.base == 0
-#guard Examples.EvmConfigMap.declared.handle.table.entries.base == 1
-#guard Examples.EvmConfigMap.layout.matchesFlattened configSlots
+#guard Examples.Evm.EvmConfigMap.declared.handle.table.wellFormed
+#guard Examples.Evm.EvmConfigMap.declared.handle.table.index.positions.base == 0
+#guard Examples.Evm.EvmConfigMap.declared.handle.table.entries.base == 1
+#guard Examples.Evm.EvmConfigMap.layout.matchesFlattened configSlots
 
-#guard Examples.EvmScoreMap.declared.handle.scores.wellFormed
-#guard Examples.EvmScoreMap.declared.handle.scores.index.positions.base == 0
-#guard Examples.EvmScoreMap.declared.handle.scores.entries.base == 1
-#guard Examples.EvmScoreMap.layout.matchesFlattened scoreSlots
+#guard Examples.Evm.EvmScoreMap.declared.handle.scores.wellFormed
+#guard Examples.Evm.EvmScoreMap.declared.handle.scores.index.positions.base == 0
+#guard Examples.Evm.EvmScoreMap.declared.handle.scores.entries.base == 1
+#guard Examples.Evm.EvmScoreMap.layout.matchesFlattened scoreSlots
 
 -- Host map leaves are irreducible zero stubs, but a fresh insertion exercises the real fixed key
 -- and count transition. Key/value zero remain admissible because only position zero means absent.
-open Examples.EvmConfigMap in
+open Examples.Evm.EvmConfigMap in
 #guard match write (init ⟨1, 2, 3⟩) 0 0 with
   | .ok (s, r) => r && s.count == 1 && s.keys[0]! == 0 && keyAt s 0 == 0
   | _ => false
 
-open Examples.EvmConfigMap in
+open Examples.Evm.EvmConfigMap in
 #guard match write ({ init ⟨1, 2, 3⟩ with count := 5 }) 7 9 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmScoreMap in
+open Examples.Evm.EvmScoreMap in
 #guard match put (init 0) 7 0 with
   | .ok (s, r) => r && s.count == 1 && s.players[0]! == 7 && playerAt s 0 == 7
   | _ => false
@@ -179,12 +179,12 @@ private def expectMapLayout (module : Name) (expectedSlots : List (String × Nat
     throwError s!"{module}: unexpected capacity loop in O(1) enumerable map"
 
 elab "#pf_guard_evm_config_map" : command =>
-  expectMapLayout `Examples.EvmConfigMap configSlots ("keys", 3, 4, 1) "remove"
+  expectMapLayout `Examples.Evm.EvmConfigMap configSlots ("keys", 3, 4, 1) "remove"
     ["adminOf", "sizeOf", "keyAt", "valueAt", "valueOf", "write", "remove"]
     ["malformed"]
 
 elab "#pf_guard_evm_score_map" : command =>
-  expectMapLayout `Examples.EvmScoreMap scoreSlots ("players", 0, 3, 1) "erase"
+  expectMapLayout `Examples.Evm.EvmScoreMap scoreSlots ("players", 0, 3, 1) "erase"
     ["sizeOf", "playerAt", "scoreAt", "scoreOf", "put", "erase"]
     ["full", "malformed"]
 

@@ -1,8 +1,8 @@
 import ProofForge
 import ProofForge.Evm.CallResult
 import ProofForge.Evm.CallResult.Emit
-import Examples.Vault
-import Examples.Token
+import Examples.Evm.Vault
+import Examples.Evm.Token
 
 namespace Tests.EvmCallResultSpec
 
@@ -197,7 +197,7 @@ keeps ERC-20 success words canonical for every transfer amount. -/
 elab "#pf_guard_evm_token_bool_results" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Token with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.Token with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

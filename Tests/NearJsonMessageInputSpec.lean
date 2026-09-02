@@ -1,4 +1,4 @@
-import Examples.NearJsonMessageInput
+import Examples.Near.NearJsonMessageInput
 import Lean
 import ProofForge
 
@@ -23,7 +23,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_message_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonMessageInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonMessageInput with
     | .ok program => pure program | .error reason => throwError reason
   for name in #["messageLength", "messageW0", "messageW1", "messageW2", "messageW3",
       "messageW4", "messageW5", "messageW6", "messageW7", "commitLength"] do

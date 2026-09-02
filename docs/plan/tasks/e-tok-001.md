@@ -18,7 +18,7 @@ E-TOK 整包。本合约自己当 token，不是再调外部 ERC-20。
 - LOG：`Transfer(uint64)` / `Approval(uint64)`（仍是 `Name(uint64)`，不编 indexed address）
 - ABI JSON 带这两条 `event`
 - SVM 拒全部新效应
-- `Examples.Token` + Anvil
+- `Examples.Evm.Token` + Anvil
 
 ## 不做
 

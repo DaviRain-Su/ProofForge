@@ -105,7 +105,7 @@ lake exe pf -- build --target evm --out build/evm Counter
 | Solana / sBPF | `ProofForge.Attr` + `ProofForge.Svm.Sdk` |
 | EVM | `ProofForge.Attr` + `ProofForge.Evm.Sdk` |
 
-仓内好例子：[`Examples/VersionedLedger.lean`](Examples/VersionedLedger.lean)（SVM）、[`Examples/TipJar.lean`](Examples/TipJar.lean)（EVM）。最小形状：
+仓内好例子：[`Examples/Svm/VersionedLedger.lean`](Examples/Svm/VersionedLedger.lean)（SVM）、[`Examples/Evm/TipJar.lean`](Examples/Evm/TipJar.lean)（EVM）。最小形状：
 
 ```lean
 import ProofForge.Attr
@@ -187,7 +187,7 @@ SVM 拥有账户几何、CPI 和 IDL。持久 Map / Queue 是账户 bytes 上的
 
 ### Phoenix-v1（当前最大的 SVM 切片）
 
-[`Examples/PhoenixV1Profile.lean`](Examples/PhoenixV1Profile.lean) 是这条边界的压力测试，不是编译器特判。
+[`Examples/Svm/PhoenixV1Profile.lean`](Examples/Svm/PhoenixV1Profile.lean) 是这条边界的压力测试，不是编译器特判。
 
 | 区域 | 仓库里有什么 |
 | --- | --- |
@@ -209,7 +209,7 @@ EVM 与 SVM 共享普通 Lean、Profile、Extract 和 Core CFG，**不**复制 S
 - `Address`、`UInt256`、`Context`、`Immutable`、`Event`、`Revert`
 - 封闭 call facade，不隐藏 `.ok` / `.error`
 
-descriptor 在抽取期消去，不进入 storage。`Examples.Token` / `Examples.Capped` 已迁到该表面，target IR digest 不变。
+descriptor 在抽取期消去，不进入 storage。`Examples.Evm.Token` / `Examples.Evm.Capped` 已迁到该表面，target IR digest 不变。
 
 ## 信任边界
 

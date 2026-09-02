@@ -1,10 +1,10 @@
-import Examples.Phoenix
+import Examples.Svm.Phoenix
 import ProofForge
 import Std.Data.HashSet
 
 namespace Tests.PhoenixSpec
 
-open Examples.Phoenix
+open Examples.Svm.Phoenix
 open ProofForge.Svm.Runtime
 open Lean Elab Command
 
@@ -44,7 +44,7 @@ private partial def extractOpValSizes : ProofForge.Extract.IR.Op → Nat × Nat
 elab "#pf_guard_phoenix_artifact" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Phoenix none with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.Phoenix none with
     | .ok program => pure program
     | .error reason => throwError reason
   match ProofForge.Core.Target.projectProgram ProofForge.Svm.IR.extractRegistration source with
@@ -485,7 +485,7 @@ elab "#pf_guard_phoenix_artifact" : command => do
 
 #pf_guard_phoenix_artifact
 
-private def withSeats12 (s : Examples.Phoenix.State) : Examples.Phoenix.State :=
+private def withSeats12 (s : Examples.Svm.Phoenix.State) : Examples.Svm.Phoenix.State :=
   { s with
     traderCount := 2
     traderBumpIndex := 3
@@ -501,7 +501,7 @@ private def withSeats12 (s : Examples.Phoenix.State) : Examples.Phoenix.State :=
     traderKey3 := #v[0, 25, 0, 0] }
 
 /-- Attach a real topology to legacy hand-written ask payload fixtures. Live slots are a prefix. -/
-private def withAskBook (s : Examples.Phoenix.State) : Examples.Phoenix.State := Id.run do
+private def withAskBook (s : Examples.Svm.Phoenix.State) : Examples.Svm.Phoenix.State := Id.run do
   let mut built := { (init s.tickSize) with baseFree := u64Max }
   for i in [0:4] do
     let j : Nat := i
@@ -515,7 +515,7 @@ private def withAskBook (s : Examples.Phoenix.State) : Examples.Phoenix.State :=
   { s with askBook := built.askBook }
 
 /-- Attach a real topology to legacy hand-written bid payload fixtures. Live slots are a prefix. -/
-private def withBidBook (s : Examples.Phoenix.State) : Examples.Phoenix.State := Id.run do
+private def withBidBook (s : Examples.Svm.Phoenix.State) : Examples.Svm.Phoenix.State := Id.run do
   let mut built := { (init s.tickSize) with quoteFree := u64Max }
   for i in [0:4] do
     let j : Nat := i
@@ -563,14 +563,14 @@ private def validBookTopology (tree : BookTree4) : Bool :=
           count = tree.count.toNat && addresses.length = addresses.eraseDups.length
       | none => false
 
-private def depositTraderKeys (s : Examples.Phoenix.State) :
-    List UInt64 → Except Error Examples.Phoenix.State
+private def depositTraderKeys (s : Examples.Svm.Phoenix.State) :
+    List UInt64 → Except Error Examples.Svm.Phoenix.State
   | [] => .ok s
   | key :: rest => do
       let (next, _) ← depositFundsFor s key 0 0 0 0 0
       depositTraderKeys next rest
 
-private def traderTopologyWalk (s : Examples.Phoenix.State)
+private def traderTopologyWalk (s : Examples.Svm.Phoenix.State)
     (address parent : UInt64) : Nat → Option (Nat × Nat × List UInt64)
   | 0 => none
   | fuel + 1 =>
@@ -598,7 +598,7 @@ private def traderTopologyWalk (s : Examples.Phoenix.State)
             else none
           | _, _ => none
 
-private def validTraderTopology (s : Examples.Phoenix.State) : Bool :=
+private def validTraderTopology (s : Examples.Svm.Phoenix.State) : Bool :=
   if s.traderRoot = 0 then s.traderCount = 0
   else if 4 < s.traderRoot then false
   else
@@ -633,15 +633,15 @@ private def validTraderDeletion (order : List UInt64) (key : UInt64) : Bool :=
                   traderIndexOf reused 50 0 0 0 = address
             | .error _ => false
 
-private def postAskPrices (s : Examples.Phoenix.State) :
-    List UInt64 → Except Error Examples.Phoenix.State
+private def postAskPrices (s : Examples.Svm.Phoenix.State) :
+    List UInt64 → Except Error Examples.Svm.Phoenix.State
   | [] => .ok s
   | price :: rest => do
       let (next, _) ← postAskAt s s.sequence price 1 0 0 0 0
       postAskPrices next rest
 
-private def postBidPrices (s : Examples.Phoenix.State) :
-    List UInt64 → Except Error Examples.Phoenix.State
+private def postBidPrices (s : Examples.Svm.Phoenix.State) :
+    List UInt64 → Except Error Examples.Svm.Phoenix.State
   | [] => .ok s
   | price :: rest => do
       let (next, _) ← postBidAt s s.sequence price 1 0 0 0 0
@@ -698,21 +698,21 @@ private def validBidReuse (order : List UInt64) (address : UInt64) : Bool :=
                   validBookTopology reused.bidBook && orderedBids reused
             | .error _ => false
 
-private def askAddressAtPrice (s : Examples.Phoenix.State) (price : UInt64) : UInt64 :=
+private def askAddressAtPrice (s : Examples.Svm.Phoenix.State) (price : UInt64) : UInt64 :=
   if s.sizes[0]! ≠ 0 && s.priceTicks[0]! = price then 1
   else if s.sizes[1]! ≠ 0 && s.priceTicks[1]! = price then 2
   else if s.sizes[2]! ≠ 0 && s.priceTicks[2]! = price then 3
   else if s.sizes[3]! ≠ 0 && s.priceTicks[3]! = price then 4
   else 0
 
-private def bidAddressAtPrice (s : Examples.Phoenix.State) (price : UInt64) : UInt64 :=
+private def bidAddressAtPrice (s : Examples.Svm.Phoenix.State) (price : UInt64) : UInt64 :=
   if s.bidSizes[0]! ≠ 0 && s.bidPriceTicks[0]! = price then 1
   else if s.bidSizes[1]! ≠ 0 && s.bidPriceTicks[1]! = price then 2
   else if s.bidSizes[2]! ≠ 0 && s.bidPriceTicks[2]! = price then 3
   else if s.bidSizes[3]! ≠ 0 && s.bidPriceTicks[3]! = price then 4
   else 0
 
-private def removeAskPrices (s : Examples.Phoenix.State) : List UInt64 → Bool
+private def removeAskPrices (s : Examples.Svm.Phoenix.State) : List UInt64 → Bool
   | [] => s.askBook.count = 0 && s.askBook.root = 0 && validBookTopology s.askBook && orderedAsks s
   | price :: rest =>
       let address := askAddressAtPrice s price
@@ -724,7 +724,7 @@ private def removeAskPrices (s : Examples.Phoenix.State) : List UInt64 → Bool
         | .ok (next, _) =>
             validBookTopology next.askBook && orderedAsks next && removeAskPrices next rest
 
-private def removeBidPrices (s : Examples.Phoenix.State) : List UInt64 → Bool
+private def removeBidPrices (s : Examples.Svm.Phoenix.State) : List UInt64 → Bool
   | [] => s.bidBook.count = 0 && s.bidBook.root = 0 && validBookTopology s.bidBook && orderedBids s
   | price :: rest =>
       let address := bidAddressAtPrice s price
@@ -750,8 +750,8 @@ private def validBidDeletionOrder (insertOrder removeOrder : List UInt64) : Bool
   | .ok full => removeBidPrices full removeOrder
 
 private def sameBusinessResult :
-    Except Error (Examples.Phoenix.State × UInt64) →
-      Except Error (Examples.Phoenix.State × UInt64) → Bool
+    Except Error (Examples.Svm.Phoenix.State × UInt64) →
+      Except Error (Examples.Svm.Phoenix.State × UInt64) → Bool
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.sizes == b.sizes &&
@@ -768,8 +768,8 @@ private def sameBusinessResult :
   | _, _ => false
 
 private def sameSellResult :
-    Except Error (Examples.Phoenix.State × UInt64) →
-      Except Error (Examples.Phoenix.State × UInt64) → Bool
+    Except Error (Examples.Svm.Phoenix.State × UInt64) →
+      Except Error (Examples.Svm.Phoenix.State × UInt64) → Bool
   | .error a, .error b => a == b
   | .ok (a, ar), .ok (b, br) =>
       ar == br && a.bidSizes == b.bidSizes &&
@@ -786,7 +786,7 @@ private def sameSellResult :
         a.events == b.events && a.eventCount == b.eventCount && a.lastEvent == b.lastEvent
   | _, _ => false
 
-private def matchingSamples : List Examples.Phoenix.State := [
+private def matchingSamples : List Examples.Svm.Phoenix.State := [
   withAskBook { (init 1) with
     sizes := #v[2, 3, 1, 0], priceTicks := #v[10, 11, 12, 0],
     quoteLocked := 1000, baseLocked := 6 },
@@ -815,7 +815,7 @@ private def matchingSamples : List Examples.Phoenix.State := [
     (swapBuyAt expiredBook 4 20 10 0)
     (swapBuyAt expiredBook 4 20 0 0) == false
 
-private def sellSamples : List Examples.Phoenix.State := [
+private def sellSamples : List Examples.Svm.Phoenix.State := [
   withBidBook { (init 1) with
     bidSizes := #v[2, 3, 1, 0], bidPriceTicks := #v[12, 11, 10, 0],
     quoteLocked := 67, baseFree := 6 },

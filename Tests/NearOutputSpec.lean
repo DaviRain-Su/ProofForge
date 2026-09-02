@@ -1,4 +1,4 @@
-import Examples.NearOutput
+import Examples.Near.NearOutput
 import Lean
 import ProofForge
 
@@ -54,7 +54,7 @@ private def returnCount (method : IR.Method) : Nat :=
 elab "#pf_near_output_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearOutput with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearOutput with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceBytes := source.methods.find? (·.ixName == "staticBytes")

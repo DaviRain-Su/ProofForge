@@ -9,7 +9,7 @@ depends-on: [e-permit-001]
 
 ## objective
 
-`Examples.Ownable.owner` 不再占三槽 storage。ctor `Addr20` 烘焙进 bytecode，runtime `loadimmutable("immAddr")`。
+`Examples.Evm.Ownable.owner` 不再占三槽 storage。ctor `Addr20` 烘焙进 bytecode，runtime `loadimmutable("immAddr")`。
 
 - State 只留 `value`
 - `bump` / `ownerOf` 读 `evmImm20`

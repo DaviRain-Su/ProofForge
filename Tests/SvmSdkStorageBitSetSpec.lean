@@ -1,5 +1,5 @@
-import Examples.FeatureBits
-import Examples.ClaimBits
+import Examples.Svm.FeatureBits
+import Examples.Svm.ClaimBits
 import ProofForge
 
 /-!
@@ -14,8 +14,8 @@ open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.Storage
 open ProofForge.Svm.Sdk.StorageBitSet
 
-#pf_build Examples.FeatureBits
-#pf_build Examples.ClaimBits
+#pf_build Examples.Svm.FeatureBits
+#pf_build Examples.Svm.ClaimBits
 
 -- Shared Core/EVM/SVM packed-word geometry.
 #guard wordCount 1 == 1 && wordCount 64 == 1
@@ -24,17 +24,17 @@ open ProofForge.Svm.Sdk.StorageBitSet
 #guard wordCount 130 == ProofForge.Core.Collections.bitSetWordCount 130
 
 -- Exact account geometry and descriptor failures.
-#guard (Examples.FeatureBits.flags 1).wellFormed
-#guard (Examples.ClaimBits.claims 1).wellFormed
-#guard (Examples.FeatureBits.flags 1).words == Field.oneBased 1 2 1 2
-#guard (Examples.ClaimBits.claims 1).words == Field.oneBased 1 2 1 3
+#guard (Examples.Svm.FeatureBits.flags 1).wellFormed
+#guard (Examples.Svm.ClaimBits.claims 1).wellFormed
+#guard (Examples.Svm.FeatureBits.flags 1).words == Field.oneBased 1 2 1 2
+#guard (Examples.Svm.ClaimBits.claims 1).words == Field.oneBased 1 2 1 3
 #guard !(BitSet.oneBased 0 2 128).wellFormed
 
 private def wrongWordCount : BitSet :=
   { words := Field.oneBased 1 2 1 3, bitCapacity := 128 }
 
 private def readonlyWords : BitSet :=
-  { words := { (Examples.FeatureBits.flags 1).words with
+  { words := { (Examples.Svm.FeatureBits.flags 1).words with
       region.access := { writable := false, currentProgramOwned := true } }
     bitCapacity := 128 }
 

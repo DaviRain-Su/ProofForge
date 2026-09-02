@@ -1,5 +1,5 @@
-import Examples.NearJsonUnitOutput
-import Examples.NearPromise
+import Examples.Near.NearJsonUnitOutput
+import Examples.Near.NearPromise
 import Lean
 import ProofForge
 
@@ -16,7 +16,7 @@ private partial def hasUnitTerminal : Array ProofForge.Extract.IR.Op → Bool :=
 elab "#pf_near_json_unit_output_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearJsonUnitOutput with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonUnitOutput with
     | .ok program => pure program
     | .error reason => throwError reason
   let some method := source.methods.find? (·.ixName == "setMarker")
@@ -113,7 +113,7 @@ elab "#pf_near_json_unit_output_check" : command => do
       !voidBody.contains "(call $pf_arena_alloc (i64.const 4)" do
     throwError "empty Unit wrapper must persist state without allocating or calling value_return"
   let promiseSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromise with
     | .ok program => pure program
     | .error reason => throwError reason
   let promiseMethods := promiseSource.methods.map fun candidate =>

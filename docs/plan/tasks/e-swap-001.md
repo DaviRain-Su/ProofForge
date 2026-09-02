@@ -14,7 +14,7 @@ depends-on: [e-cmp20-001]
 - 新增 `evmSwapExact2 router tokenA tokenB amtIn minOut`
 - Yul：selector `0x38ed1739`，path 长度 2，`to = address()`，`deadline = uint256.max`
 - CALL 失败则 revert。返回是动态 `uint256[]`，不按 ERC-20 bool 规则解析。
-- `Examples.Vault.swap2`
+- `Examples.Evm.Vault.swap2`
 - Anvil：最小 router mock（`transferFrom` tokenA，mint tokenB 给 `to`）
 - SVM / Legacy adapter 拒新叶
 

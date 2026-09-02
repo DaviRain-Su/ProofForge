@@ -1,7 +1,7 @@
 import ProofForge
 import Examples.Counter
 import Examples.Maybe
-import Examples.Tree
+import Examples.Svm.Tree
 import Examples.Window
 import Tests.Fixtures
 
@@ -287,7 +287,7 @@ elab "#pf_guard_core_evaluation" : command => do
     throwError s!"Option.some 0 lost its constructor identity: {repr setZero.ops}"
 
   let tree ←
-    match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
+    match ProofForge.Extract.extractModule env `Examples.Svm.Tree none with
     | .ok program => pure program
     | .error reason => throwError reason
   let some rotate := tree.methods.find? (·.ixName == "rotateLeft")
@@ -305,13 +305,13 @@ elab "#pf_guard_core_evaluation" : command => do
 elab "#pf_guard_tree_schema" : command => do
   let env ← getEnv
   let schema ←
-    match ProofForge.Extract.inferSchema env ``Examples.Tree.init with
+    match ProofForge.Extract.inferSchema env ``Examples.Svm.Tree.init with
     | .ok schema => pure schema
     | .error reason => throwError reason
   let some vector := schema.vector? "nodes"
     | throwError "typed schema is missing Tree.nodes"
   let names := schema.vectorElementLeaves vector |>.map (vector.relativeLeafName ·)
-  unless schema.rootType == "Examples.Tree.State" &&
+  unless schema.rootType == "Examples.Svm.Tree.State" &&
       schema.leaves.size == 28 && vector.length == 4 &&
       vector.elementBytes == 48 && vector.elementLeaves == 6 &&
       names == #["left", "right", "parent", "color", "key", "value"] do
@@ -444,7 +444,7 @@ elab "#pf_guard_target_lowering" : command => do
     throwError "Solanalib CFG branch bridge accepted an argumented edge"
 
   let tree ←
-    match ProofForge.Extract.extractModule env (Name.mkSimple "Examples" |>.str "Tree") none with
+    match ProofForge.Extract.extractModule env `Examples.Svm.Tree none with
     | .ok program => pure program
     | .error reason => throwError reason
   let svmTree ←

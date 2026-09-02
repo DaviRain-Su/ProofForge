@@ -235,7 +235,7 @@ lean_lib ProofForge where
     `ProofForge.Wasm.Xrpl.Sdk
   ]
 
-/-- Build every module under `Examples/`, not only what `Examples.lean` imports.
+/-- Build every module under `Examples/`, including `Examples/{Svm,Evm,Xrpl,Near}/`.
 Without `.submodules`, Registry NEAR fixtures (NearQueue/Iterable/Promise/…) never
 get oleans from `lake build Examples`, so CI `pf build --target near` fails. -/
 lean_lib Examples where

@@ -39,7 +39,7 @@ existing hashed `U64Map` component — exactly the way `StorageVec` binds
 
 The current EVM extraction lowers dynamic-index `Vector` reads/writes only when the vector is a
 `State` field and the index proof is an explicit `if h : … < capacity` hypothesis in the
-consumer (`Examples.EvmStaticRoster.setSeat`, `Examples.EvmVecLog.record`), and the hashed-map
+consumer (`Examples.Evm.EvmStaticRoster.setSeat`, `Examples.Evm.EvmVecLog.record`), and the hashed-map
 component is reached only through the existing `Runtime.evmMapGetU64` / `evmMapSetU64` leaves
 against a compile-time `U64Map` base. A generic helper returning an updated set value is not an
 extractable shape today, so — exactly like `StorageVec` and `StorageRing` — this module owns
@@ -59,7 +59,7 @@ else …
 ```
 
 The map puts chain as one `UInt64` carrier expression (`put … ||| put …`), the repo's exact
-effect-result sequencing (`Sdk.Erc721.burn`, `Examples.Token.transferFrom`), and stay in the
+effect-result sequencing (`Sdk.Erc721.burn`, `Examples.Evm.Token.transferFrom`), and stay in the
 second component of the consumer's `Except Error (State × …)` result. `Effect.thenTrue` turns
 the carrier into a canonical Boolean ABI value.
 

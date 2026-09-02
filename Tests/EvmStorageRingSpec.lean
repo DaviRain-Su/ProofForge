@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Sdk.StorageRing
-import Examples.EvmRingMailbox
-import Examples.EvmRingHistory
+import Examples.Evm.EvmRingMailbox
+import Examples.Evm.EvmRingHistory
 
 /-!
 Focused suite: persistent fixed-capacity EVM storage ring queue (UInt64) policy truth tables,
@@ -127,20 +127,20 @@ def wrongScalarWidth : StorageRing.Descriptor 2 :=
 
 /-! ## Consumer descriptor and layout pins -/
 
-#guard Examples.EvmRingMailbox.declared.handle.queue.wellFormed
-#guard Examples.EvmRingMailbox.declared.handle.queue.values.baseSlot == 3
-#guard Examples.EvmRingMailbox.declared.handle.queue.head.slot? == some 7
-#guard Examples.EvmRingMailbox.declared.handle.queue.live.slot? == some 8
-#guard Examples.EvmRingMailbox.declared.handle.admin.wideLeaves? == some 3
-#guard Examples.EvmRingMailbox.layout.nextSlot == 9
-#guard Examples.EvmRingMailbox.layout.wellFormed
+#guard Examples.Evm.EvmRingMailbox.declared.handle.queue.wellFormed
+#guard Examples.Evm.EvmRingMailbox.declared.handle.queue.values.baseSlot == 3
+#guard Examples.Evm.EvmRingMailbox.declared.handle.queue.head.slot? == some 7
+#guard Examples.Evm.EvmRingMailbox.declared.handle.queue.live.slot? == some 8
+#guard Examples.Evm.EvmRingMailbox.declared.handle.admin.wideLeaves? == some 3
+#guard Examples.Evm.EvmRingMailbox.layout.nextSlot == 9
+#guard Examples.Evm.EvmRingMailbox.layout.wellFormed
 
-#guard Examples.EvmRingHistory.declared.handle.history.wellFormed
-#guard Examples.EvmRingHistory.declared.handle.history.values.baseSlot == 0
-#guard Examples.EvmRingHistory.declared.handle.history.head.slot? == some 3
-#guard Examples.EvmRingHistory.declared.handle.history.live.slot? == some 4
-#guard Examples.EvmRingHistory.layout.nextSlot == 5
-#guard Examples.EvmRingHistory.layout.wellFormed
+#guard Examples.Evm.EvmRingHistory.declared.handle.history.wellFormed
+#guard Examples.Evm.EvmRingHistory.declared.handle.history.values.baseSlot == 0
+#guard Examples.Evm.EvmRingHistory.declared.handle.history.head.slot? == some 3
+#guard Examples.Evm.EvmRingHistory.declared.handle.history.live.slot? == some 4
+#guard Examples.Evm.EvmRingHistory.layout.nextSlot == 5
+#guard Examples.Evm.EvmRingHistory.layout.wellFormed
 
 def mailboxSlots : List (String × Nat) :=
   [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8),
@@ -150,23 +150,23 @@ def mailboxSlots : List (String × Nat) :=
 def historySlots : List (String × Nat) :=
   [("tape_0", 8), ("tape_1", 8), ("tape_2", 8), ("head", 8), ("live", 8)]
 
-#guard Examples.EvmRingMailbox.layout.matchesFlattened mailboxSlots
-#guard Examples.EvmRingHistory.layout.matchesFlattened historySlots
+#guard Examples.Evm.EvmRingMailbox.layout.matchesFlattened mailboxSlots
+#guard Examples.Evm.EvmRingHistory.layout.matchesFlattened historySlots
 
 /-! ## Consumer host behavior through ordinary typed state -/
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard (init ⟨1, 2, 3⟩).live == 0 && (init ⟨1, 2, 3⟩).head == 0 &&
   frontOf (init ⟨1, 2, 3⟩) == 0 && messageAt (init ⟨1, 2, 3⟩) 0 == 0
 
 -- deliveries land at the ring tail and the front view observes the active ring
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, r) => r == 1 && s.live == 1 && s.head == 0 && s.pending[0]! == 11 &&
       frontOf s == 11 && messageAt s 0 == 11 && messageAt s 1 == 0
   | _ => false
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s1, _) =>
       (match deliver s1 22 with
@@ -177,7 +177,7 @@ open Examples.EvmRingMailbox in
   | _ => false
 
 -- a full mailbox rejects delivery with the CapExceeded revert value and stores nothing
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s1, _) =>
       (match deliver s1 22 with
@@ -196,7 +196,7 @@ open Examples.EvmRingMailbox in
   | _ => false
 
 -- after one take the head advances, and the next delivery wraps back to physical slot 0
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s1, _) =>
       (match deliver s1 22 with
@@ -223,7 +223,7 @@ open Examples.EvmRingMailbox in
 
 -- take returns messages in FIFO order, advances the head around the ring, and canonicalizes
 -- the head to 0 when the mailbox empties; the empty take is the typed error
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s1, _) =>
       (match deliver s1 22 with
@@ -243,7 +243,7 @@ open Examples.EvmRingMailbox in
   | _ => false
 
 -- purge resets only the metadata slots; stale backing slots stay unreachable and are reused
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, _) =>
       (match purge s with
@@ -252,7 +252,7 @@ open Examples.EvmRingMailbox in
        | _ => false)
   | _ => false
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, _) =>
       (match purge s with
@@ -267,31 +267,31 @@ open Examples.EvmRingMailbox in
 
 -- messageAt falls back to 0 outside the live range; corrupted persistent metadata fails every
 -- mutation before changing state, including a masked non-canonical empty head
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard messageAt ({ init ⟨1, 2, 3⟩ with head := 1, live := 2 }) 2 == 0
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match deliver ({ init ⟨1, 2, 3⟩ with head := 5, live := 1 }) 11 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match take ({ init ⟨1, 2, 3⟩ with live := 5 }) with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmRingMailbox in
+open Examples.Evm.EvmRingMailbox in
 #guard match purge ({ init ⟨1, 2, 3⟩ with head := 2, live := 0 }) with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard (init 7).live == 1 && (init 7).head == 0 && (init 7).tape[0]! == 7 &&
   currentOf (init 7) == 7 && liveOf (init 7) == 1
 
 -- appends fill the tape; the full tape has its own typed `full` error; appends return the
 -- physical slot so wraparound reuse is observable
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match append (init 7) 8 with
   | .ok (s1, r1) =>
       r1 == 1 && s1.live == 2 && s1.tape[1]! == 8 &&
@@ -306,7 +306,7 @@ open Examples.EvmRingHistory in
 
 -- drain in FIFO order, refill across the wrap boundary (tail slot 0), then drain to the
 -- canonical empty state
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match append (init 7) 8 with
   | .ok (a1, _) =>
       (match append a1 9 with
@@ -340,7 +340,7 @@ open Examples.EvmRingHistory in
   | _ => false
 
 -- reset clears only the metadata; stale slots stay unreachable and the next append reuses slot 0
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match append (init 7) 8 with
   | .ok (s, _) =>
       (match reset s with
@@ -353,17 +353,17 @@ open Examples.EvmRingHistory in
        | _ => false)
   | _ => false
 
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match append ({ init 7 with head := 3, live := 1 }) 8 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match advance ({ init 7 with live := 4 }) with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmRingHistory in
+open Examples.Evm.EvmRingHistory in
 #guard match reset ({ init 7 with head := 2, live := 0 }) with
   | .error .malformed => true
   | _ => false
@@ -415,12 +415,12 @@ private def expectQueueLayout (module : Name) (expectedSlots : List (String × N
     throwError s!"{module}: expected the fixed-vector dynamic-index load path in emitted Yul"
 
 elab "#pf_guard_evm_ring_mailbox" : command =>
-  expectQueueLayout `Examples.EvmRingMailbox mailboxSlots [("pending", 3, 4, 1)]
+  expectQueueLayout `Examples.Evm.EvmRingMailbox mailboxSlots [("pending", 3, 4, 1)]
     ["deliver", "take", "purge", "liveOf", "headOf", "frontOf", "messageAt", "adminOf"]
     ["empty", "malformed"]
 
 elab "#pf_guard_evm_ring_history" : command =>
-  expectQueueLayout `Examples.EvmRingHistory historySlots [("tape", 0, 3, 1)]
+  expectQueueLayout `Examples.Evm.EvmRingHistory historySlots [("tape", 0, 3, 1)]
     ["append", "advance", "reset", "liveOf", "headOf", "currentOf"]
     ["full", "empty", "malformed"]
 

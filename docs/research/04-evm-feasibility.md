@@ -166,7 +166,7 @@ Selector 也不神秘：PF `Keccak.selector "increment" #["uint64"]` = `keccak25
 | `signerKey0` | 账户 0 公钥首 u64 | 不是 `caller()`（20 字节 address） |
 | `systemTransfer` | 三账户 `invoke` System Program | 不是 `CALL` + value（重入模型也不同） |
 
-v0 EVM **不要**抽这些叶子。`Examples/Transfer.lean` / `Clock.lean` 不是双 target 夹具。
+v0 EVM **不要**抽这些叶子。`Examples/Svm/Transfer.lean` / `Clock.lean` 不是双 target 夹具。
 
 ### 4. PF EVM 发射器吃错 IR
 

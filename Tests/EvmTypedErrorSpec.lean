@@ -1,5 +1,5 @@
 import ProofForge
-import Examples.EvmTypedErrors
+import Examples.Evm.EvmTypedErrors
 
 /-!
 Parameterized source-error qualification: Core retains one typed fixed frame, EVM derives its
@@ -28,28 +28,28 @@ private def sampleFrame : ProofForge.Core.Ops.ErrorFrame ProofForge.Evm.Ops.Val 
   ({ sampleFrame with args := sampleFrame.args.push sampleFrame.args[0]! } :
     ProofForge.Core.Ops.ErrorFrame ProofForge.Evm.Ops.Val))
 
-open Examples.EvmTypedErrors in
+open Examples.Evm.EvmTypedErrors in
 #guard match update (init 3) 5 1 with
   | .error (.denied code) => code == 1
   | _ => false
 
-open Examples.EvmTypedErrors in
+open Examples.Evm.EvmTypedErrors in
 #guard match update (init 3) 3 7 with
   | .error (.conflict expected actual) => expected == 3 && actual == 3
   | _ => false
 
-open Examples.EvmTypedErrors in
+open Examples.Evm.EvmTypedErrors in
 #guard match update (init 3) 5 8 with
   | .error (.exhausted current requested authorization limit) =>
       current == 3 && requested == 5 && authorization == 8 && limit == 7
   | _ => false
 
-open Examples.EvmTypedErrors in
+open Examples.Evm.EvmTypedErrors in
 #guard match update (init 3) 0 7 with
   | .error .locked => true
   | _ => false
 
-open Examples.EvmTypedErrors in
+open Examples.Evm.EvmTypedErrors in
 #guard match update (init 3) 5 7 with
   | .ok (state, result) => state.value == 5 && result == 5
   | _ => false
@@ -144,7 +144,7 @@ end Unsupported
 elab "#pf_guard_evm_typed_errors" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmTypedErrors with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmTypedErrors with
     | .ok source => pure source
     | .error reason => throwError reason
   let some sourceUpdate := source.methods.find? (·.ixName == "update")

@@ -1,4 +1,4 @@
-import Examples.NearFtReceiverValue
+import Examples.Near.NearFtReceiverValue
 import Lean
 import ProofForge
 
@@ -9,7 +9,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_ft_receiver_value_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearFtReceiverValue with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearFtReceiverValue with
     | .ok program => pure program | .error reason => throwError reason
   let some sourceReceiver := source.methods.find? (·.ixName == "ft_on_transfer")
     | throwError "missing source ft_on_transfer"

@@ -1,4 +1,4 @@
-import Examples.NearJsonMemoInput
+import Examples.Near.NearJsonMemoInput
 import Lean
 import ProofForge
 
@@ -20,7 +20,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_memo_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonMemoInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonMemoInput with
     | .ok program => pure program | .error reason => throwError reason
   for name in #["memoPresent", "memoLength", "memoW0", "memoW1", "commitLength"] do
     let some method := source.methods.find? (·.ixName == name) | throwError s!"missing {name}"

@@ -1,6 +1,6 @@
 import ProofForge
 import ProofForge.Evm.Commands
-import Examples.Credits
+import Examples.Evm.Credits
 
 /-!
 EVM-SDK-1 consumer B spec (independent of `Tests.TwoStepCounterSpec`). Host guards pin the
@@ -14,7 +14,7 @@ Run focused:
 
 namespace Tests.CreditsSpec
 
-open Examples.Credits
+open Examples.Evm.Credits
 open ProofForge.Evm.Runtime
 open ProofForge.Evm.Sdk
 
@@ -70,7 +70,7 @@ def zero256 : UInt256 := ⟨0, 0, 0, 0⟩
   | .ok (st, ret) => ret == 0 && st.owner == sample
   | .error _ => false
 
-#pf_evm_build Examples.Credits
+#pf_evm_build Examples.Evm.Credits
 
 open Lean Elab Command
 
@@ -78,7 +78,7 @@ open Lean Elab Command
 elab "#pf_guard_credits" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Credits with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.Credits with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

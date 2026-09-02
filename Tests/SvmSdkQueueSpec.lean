@@ -1,23 +1,23 @@
-import Examples.TicketLine
+import Examples.Svm.TicketLine
 import ProofForge
 
 /-!
 Focused checks for the `Svm.Sdk.Queue` fixed-capacity FIFO and the `Svm.Sdk.Storage`
-POD/ordered-map handles via the non-Phoenix `Examples.TicketLine` consumer. The `#pf_build`
+POD/ordered-map handles via the non-Phoenix `Examples.Svm.TicketLine` consumer. The `#pf_build`
 commands run the same extraction and sBPF emission path as the CLI without touching the
 shared registry; `#guard`s pin the static descriptor geometry and the fail-closed
 well-formedness boundaries.
 -/
 namespace Tests.SvmSdkQueueSpec
 
-open Examples.TicketLine
+open Examples.Svm.TicketLine
 open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.Queue
 open ProofForge.Svm.Sdk.Storage
 
 -- Focused extract + emit through the generic target path.
-#pf_build Examples.TicketLine
-#pf_build Examples.TicketLine
+#pf_build Examples.Svm.TicketLine
+#pf_build Examples.Svm.TicketLine
 
 -- Layout descriptors are fully static and well formed.
 #guard (small 1).wellFormed

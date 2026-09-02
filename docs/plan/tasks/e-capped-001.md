@@ -10,7 +10,7 @@ depends-on: [e-cap-001]
 ## objective
 
 第二个合约证明 SDK 能组合，不用回改 Extract / Ops / IR / 主 Emit。
-`Examples.Capped` 不是 Token：没有 hashed map、没有 ERC-20。只有构造期
+`Examples.Evm.Capped` 不是 Token：没有 hashed map、没有 ERC-20。只有构造期
 owner、`paused`、固定 `cap`、账户里的 `supply`。
 
 - ctor `constructor(address)`，owner 走 immutable `evmImm20`

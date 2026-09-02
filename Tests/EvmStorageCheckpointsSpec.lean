@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Sdk.StorageCheckpoints
-import Examples.EvmCheckpointBook
-import Examples.EvmCheckpointTrace
+import Examples.Evm.EvmCheckpointBook
+import Examples.Evm.EvmCheckpointTrace
 
 /-!
 R5-018 focused suite: bounded UInt64 checkpoint descriptor geometry, strict-order/update/lower-
@@ -92,7 +92,7 @@ def wrongValues : StorageCheckpoints.Descriptor 2 :=
 
 /-! ## Consumer host behavior -/
 
-open Examples.EvmCheckpointBook in
+open Examples.Evm.EvmCheckpointBook in
 #guard match push (init ⟨1, 2, 3⟩) 10 100 with
   | .ok (s1, n1) =>
       n1 == 1 && s1.count == 1 && latestValue s1 == 100 && lowerValue s1 0 == 100 &&
@@ -108,19 +108,19 @@ open Examples.EvmCheckpointBook in
          | _ => false)
   | _ => false
 
-open Examples.EvmCheckpointBook in
+open Examples.Evm.EvmCheckpointBook in
 #guard match push (init ⟨1, 2, 3⟩) 10 100 with
   | .ok (s, _) =>
       (match push s 9 90 with | .error .unordered => true | _ => false)
   | _ => false
 
-open Examples.EvmCheckpointBook in
+open Examples.Evm.EvmCheckpointBook in
 #guard match push ({ init ⟨1, 2, 3⟩ with
     keys := #v[10, 10, 0, 0], values := #v[1, 2, 0, 0], count := 2 }) 11 3 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmCheckpointTrace in
+open Examples.Evm.EvmCheckpointTrace in
 #guard match push (init 0) 5 50 with
   | .ok (s1, r1) =>
       r1 == 50 &&
@@ -148,10 +148,10 @@ def traceSlots : List (String × Nat) :=
   [("keys_0", 8), ("keys_1", 8), ("keys_2", 8),
     ("values_0", 8), ("values_1", 8), ("values_2", 8), ("count", 8)]
 
-#guard Examples.EvmCheckpointBook.declared.handle.trace.wellFormed
-#guard Examples.EvmCheckpointBook.layout.matchesFlattened bookSlots
-#guard Examples.EvmCheckpointTrace.declared.handle.trace.wellFormed
-#guard Examples.EvmCheckpointTrace.layout.matchesFlattened traceSlots
+#guard Examples.Evm.EvmCheckpointBook.declared.handle.trace.wellFormed
+#guard Examples.Evm.EvmCheckpointBook.layout.matchesFlattened bookSlots
+#guard Examples.Evm.EvmCheckpointTrace.declared.handle.trace.wellFormed
+#guard Examples.Evm.EvmCheckpointTrace.layout.matchesFlattened traceSlots
 
 private def expectCheckpointLayout (module : Name) (expectedSlots : List (String × Nat))
     (expectedVectors : List (String × Nat × Nat × Nat)) (expectedErrors : List String) :
@@ -191,11 +191,11 @@ private def expectCheckpointLayout (module : Name) (expectedSlots : List (String
     throwError s!"{module}: fixed-vector checkpoint load/store path is missing"
 
 elab "#pf_guard_evm_checkpoint_book" : command =>
-  expectCheckpointLayout `Examples.EvmCheckpointBook bookSlots
+  expectCheckpointLayout `Examples.Evm.EvmCheckpointBook bookSlots
     [("keys", 3, 4, 1), ("values", 7, 4, 1)] ["unordered", "malformed"]
 
 elab "#pf_guard_evm_checkpoint_trace" : command =>
-  expectCheckpointLayout `Examples.EvmCheckpointTrace traceSlots
+  expectCheckpointLayout `Examples.Evm.EvmCheckpointTrace traceSlots
     [("keys", 0, 3, 1), ("values", 3, 3, 1)] ["unordered", "full", "malformed"]
 
 #pf_guard_evm_checkpoint_book

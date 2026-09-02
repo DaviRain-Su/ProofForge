@@ -1,8 +1,8 @@
-import Examples.TokenNative
+import Examples.Svm.TokenNative
 
 namespace Tests.TokenNativeSpec
 
-open Examples.TokenNative
+open Examples.Svm.TokenNative
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

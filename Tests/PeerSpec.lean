@@ -1,8 +1,8 @@
-import Examples.Peer
+import Examples.Svm.Peer
 
 namespace Tests.PeerSpec
 
-open Examples.Peer
+open Examples.Svm.Peer
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

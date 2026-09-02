@@ -35,7 +35,7 @@ ProofForge 不是“在 sBPF / Yul 汇编上持续堆 helper”，而是用普�
 └─────────────┬─────────────┘  └──────────────┬─────────────┘
               ▼                               ▼
 ┌───────────────────────────┐  ┌────────────────────────────┐
-│ Examples.Phoenix / apps   │  │ Examples.Token / apps      │
+│ Examples.Svm.Phoenix / apps   │  │ Examples.Evm.Token / apps      │
 └───────────────────────────┘  └────────────────────────────┘
 ```
 

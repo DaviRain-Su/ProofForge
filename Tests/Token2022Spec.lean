@@ -1,9 +1,9 @@
-import Examples.Token2022
+import Examples.Svm.Token2022
 
 namespace Tests.Token2022Spec
 
 open Lean Elab Command
-open Examples.Token2022
+open Examples.Svm.Token2022
 open ProofForge.Svm
 open ProofForge.Svm.Runtime
 
@@ -19,7 +19,7 @@ open ProofForge.Svm.Runtime
 elab "#pf_guard_token_2022_ir" : command => do
   let env ← getEnv
   let extracted ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Token2022 with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.Token2022 with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

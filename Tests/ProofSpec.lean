@@ -1,8 +1,8 @@
 import ProofForge
 import Examples.Counter
-import Examples.Capped
-import Examples.Token
-import Examples.Tree
+import Examples.Evm.Capped
+import Examples.Evm.Token
+import Examples.Svm.Tree
 import ProofForge.Evm.Sdk.Pausable
 import ProofForge.Evm.Sdk.Fungible
 import ProofForge.Evm.Sdk.Reentrancy
@@ -16,8 +16,8 @@ import ProofForge.Svm.Sdk.Pubkey
 /-!
 # 第一批 kernel 证明的连通性抽查
 
-权威证明在合约文件内（`Examples/Counter.lean`、`Examples/Capped.lean`、
-`Examples/Token.lean` 的 `Proofs` 节），由 `lake build Examples` 直接做 kernel 检查。
+权威证明在合约文件内（`Examples/Counter.lean`、`Examples/Evm/Capped.lean`、
+`Examples/Evm/Token.lean` 的 `Proofs` 节），由 `lake build Examples` 直接做 kernel 检查。
 本文件只做两件事：
 
 1. 抽查定理在具体值上可用（防止签名漂移后测试面失联）。
@@ -29,14 +29,14 @@ import ProofForge.Svm.Sdk.Pubkey
 - `Examples.Counter.increment_ok` / `decrement_ok` / `scale_zero` / `scale_ok`
   / `divide_zero_error` / `modulo_zero_error` / `increment_ok_bound`
   / `decrement_ok_le`：`propext`、`Quot.sound`（标准公理，无未完成占位公理）
-- `Examples.Capped.mint_supply_within_cap` / `mint_supply_effect`：`propext`
-- `Examples.Token.transfer_preserves_supply` / `mint_supply_effect`
+- `Examples.Evm.Capped.mint_supply_within_cap` / `mint_supply_effect`：`propext`
+- `Examples.Evm.Token.transfer_preserves_supply` / `mint_supply_effect`
   / `burn_supply_effect` / `transferFrom_preserves_supply`
   / `approve_preserves_supply`：`propext`（部分含 `Quot.sound`）
-- `Examples.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
+- `Examples.Svm.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
-- `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
+- `Examples.Svm.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
   `propext`（部分含 `Quot.sound`）
 - `Evm.Sdk.Payments` 委托透明性（accept/send/transfer/transferFrom/...）：零公理（rfl 级）
 - `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
@@ -71,12 +71,12 @@ open Examples.Counter
 
 -- Tree：旋转不改变节点数、分配器成功恰好占一槽
 #guard
-  match Examples.Tree.allocNode (Examples.Tree.init 0) 7 7 with
-  | .ok (t, a) => Examples.Tree.getSize t == 1 && a == 1
+  match Examples.Svm.Tree.allocNode (Examples.Svm.Tree.init 0) 7 7 with
+  | .ok (t, a) => Examples.Svm.Tree.getSize t == 1 && a == 1
   | .error _ => false
 
 -- Tree wf：init 良构（wf 谓词第一批切片；kernel 检查，不求值）
-example : Examples.Tree.wf (Examples.Tree.init 0) := Examples.Tree.init_wf 0
+example : Examples.Svm.Tree.wf (Examples.Svm.Tree.init 0) := Examples.Svm.Tree.init_wf 0
 
 -- Pausable fail-closed：unknown flag 门关且不误报 paused
 #guard

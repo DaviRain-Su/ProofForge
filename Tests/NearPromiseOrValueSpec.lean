@@ -1,4 +1,4 @@
-import Examples.NearPromiseOrValue
+import Examples.Near.NearPromiseOrValue
 import Lean
 import ProofForge
 
@@ -9,7 +9,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_promise_or_value_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearPromiseOrValue with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromiseOrValue with
     | .ok program => pure program | .error reason => throwError reason
   let some sourceChoose := source.methods.find? (·.ixName == "choose")
     | throwError "missing source choose"

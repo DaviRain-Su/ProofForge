@@ -1,10 +1,10 @@
-import Examples.EvmSearch
-import Examples.EvmFindIndex
+import Examples.Evm.EvmSearch
+import Examples.Evm.EvmFindIndex
 import ProofForge
 
 namespace Tests.EvmSearchSpec
 
-open Examples.EvmSearch
+open Examples.Evm.EvmSearch
 open ProofForge.Core.Value
 open Lean Elab Command
 
@@ -31,11 +31,11 @@ private def empty : BoundedString 1 :=
 elab "#pf_guard_evm_search" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmSearch with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmSearch with
     | .ok source => pure source
     | .error reason => throwError reason
   let findSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmFindIndex with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmFindIndex with
     | .ok source => pure source
     | .error reason => throwError reason
   let some sourceBytes := source.methods.find? (·.ixName == "bytesContains")

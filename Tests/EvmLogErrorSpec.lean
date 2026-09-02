@@ -1,8 +1,8 @@
 import ProofForge
 import ProofForge.Evm.LogError
 import ProofForge.Evm.LogError.Emit
-import Examples.Vault
-import Examples.Token
+import Examples.Evm.Vault
+import Examples.Evm.Token
 
 namespace Tests.EvmLogErrorSpec
 

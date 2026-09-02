@@ -1,4 +1,4 @@
-import Examples.NearStorageBalanceBoundsOutput
+import Examples.Near.NearStorageBalanceBoundsOutput
 import Lean
 import ProofForge
 
@@ -34,7 +34,7 @@ private def returnCount (method : IR.Method) : Nat :=
 elab "#pf_near_storage_balance_bounds_output_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearStorageBalanceBoundsOutput with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearStorageBalanceBoundsOutput with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceAsymmetric := source.methods.find? (·.ixName == "someAsymmetric")

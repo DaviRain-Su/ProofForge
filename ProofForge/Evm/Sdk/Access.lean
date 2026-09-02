@@ -11,7 +11,7 @@ This module owns contract *policy gates*, not storage geometry. Every combinator
 - gates read `Context.caller` and compare through `Address.eq` (the `WideWord`
   component query), or delegate an explicit `UInt8` paused flag to `Sdk.Pausable`;
   construction-time immutable owners keep using the existing `Address.eqImmutable` directly
-  (e.g. `Examples.Token`),
+  (e.g. `Examples.Evm.Token`),
 - failure terminals are the closed `Revert` set (`Unauthorized(caller)`, `Paused()`),
   never new error selectors;
 - two-step ownership is one fixed `Ownership` value containing the sole pending address; the

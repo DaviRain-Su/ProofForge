@@ -1,7 +1,7 @@
 import ProofForge
 import ProofForge.Evm.Sdk.StorageEnumerableSet
-import Examples.EvmAllowlist
-import Examples.EvmIdRegistry
+import Examples.Evm.EvmAllowlist
+import Examples.Evm.EvmIdRegistry
 
 /-!
 Focused suite for the persistent bounded EVM enumerable-set policy: descriptor geometry,
@@ -102,20 +102,20 @@ def wrongCount : StorageEnumerableSet.Descriptor 2 :=
 
 /-! ## Consumer layouts and host-visible state transitions -/
 
-#guard Examples.EvmAllowlist.declared.handle.set.wellFormed
-#guard Examples.EvmAllowlist.declared.handle.admin.wideLeaves? == some 3
-#guard Examples.EvmAllowlist.declared.handle.set.values.baseSlot == 3
-#guard Examples.EvmAllowlist.declared.handle.set.count.slot? == some 7
-#guard Examples.EvmAllowlist.declared.handle.set.positions.base == 0
-#guard Examples.EvmAllowlist.layout.nextSlot == 8
-#guard Examples.EvmAllowlist.layout.wellFormed
+#guard Examples.Evm.EvmAllowlist.declared.handle.set.wellFormed
+#guard Examples.Evm.EvmAllowlist.declared.handle.admin.wideLeaves? == some 3
+#guard Examples.Evm.EvmAllowlist.declared.handle.set.values.baseSlot == 3
+#guard Examples.Evm.EvmAllowlist.declared.handle.set.count.slot? == some 7
+#guard Examples.Evm.EvmAllowlist.declared.handle.set.positions.base == 0
+#guard Examples.Evm.EvmAllowlist.layout.nextSlot == 8
+#guard Examples.Evm.EvmAllowlist.layout.wellFormed
 
-#guard Examples.EvmIdRegistry.declared.handle.registry.wellFormed
-#guard Examples.EvmIdRegistry.declared.handle.registry.values.baseSlot == 0
-#guard Examples.EvmIdRegistry.declared.handle.registry.count.slot? == some 3
-#guard Examples.EvmIdRegistry.declared.handle.registry.positions.base == 1
-#guard Examples.EvmIdRegistry.layout.nextSlot == 4
-#guard Examples.EvmIdRegistry.layout.wellFormed
+#guard Examples.Evm.EvmIdRegistry.declared.handle.registry.wellFormed
+#guard Examples.Evm.EvmIdRegistry.declared.handle.registry.values.baseSlot == 0
+#guard Examples.Evm.EvmIdRegistry.declared.handle.registry.count.slot? == some 3
+#guard Examples.Evm.EvmIdRegistry.declared.handle.registry.positions.base == 1
+#guard Examples.Evm.EvmIdRegistry.layout.nextSlot == 4
+#guard Examples.Evm.EvmIdRegistry.layout.wellFormed
 
 def allowlistSlots : List (String × Nat) :=
   [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8),
@@ -125,39 +125,39 @@ def allowlistSlots : List (String × Nat) :=
 def registrySlots : List (String × Nat) :=
   [("ids_0", 8), ("ids_1", 8), ("ids_2", 8), ("count", 8)]
 
-#guard Examples.EvmAllowlist.layout.matchesFlattened allowlistSlots
-#guard Examples.EvmIdRegistry.layout.matchesFlattened registrySlots
+#guard Examples.Evm.EvmAllowlist.layout.matchesFlattened allowlistSlots
+#guard Examples.Evm.EvmIdRegistry.layout.matchesFlattened registrySlots
 
 -- Runtime map reads are intentionally host stubs, but insertion still exercises the real
 -- ordinary-State vector/count transition. Key 0 is accepted as data because only map value 0 is
 -- the absence sentinel.
-open Examples.EvmAllowlist in
+open Examples.Evm.EvmAllowlist in
 #guard match grant (init ⟨1, 2, 3⟩) 0 with
   | .ok (s, r) => r && s.count == 1 && s.members[0]! == 0 && memberAt s 0 == 0
   | _ => false
 
-open Examples.EvmAllowlist in
+open Examples.Evm.EvmAllowlist in
 #guard match grant (init ⟨1, 2, 3⟩) 9 with
   | .ok (s, r) => r && s.count == 1 && s.members[0]! == 9 && memberAt s 0 == 9 &&
       memberAt s 1 == 0
   | _ => false
 
-open Examples.EvmAllowlist in
+open Examples.Evm.EvmAllowlist in
 #guard match grant ({ init ⟨1, 2, 3⟩ with count := 5 }) 9 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmIdRegistry in
+open Examples.Evm.EvmIdRegistry in
 #guard match enroll (init 0) 0 with
   | .ok (s, r) => r && s.count == 1 && s.ids[0]! == 0 && idAt s 0 == 0
   | _ => false
 
-open Examples.EvmIdRegistry in
+open Examples.Evm.EvmIdRegistry in
 #guard match enroll (init 0) 7 with
   | .ok (s, r) => r && s.count == 1 && s.ids[0]! == 7 && idAt s 0 == 7 && idAt s 1 == 0
   | _ => false
 
-open Examples.EvmIdRegistry in
+open Examples.Evm.EvmIdRegistry in
 #guard match enroll ({ init 0 with count := 4 }) 7 with
   | .error .malformed => true
   | _ => false
@@ -247,13 +247,13 @@ private def expectEnumerableLayout (module : Name) (expectedSlots : List (String
     throwError s!"{module}: unexpected loop over enumerable-set capacity"
 
 elab "#pf_guard_evm_allowlist" : command =>
-  expectEnumerableLayout `Examples.EvmAllowlist allowlistSlots ("members", 3, 4, 1)
+  expectEnumerableLayout `Examples.Evm.EvmAllowlist allowlistSlots ("members", 3, 4, 1)
     "revoke"
     ["adminOf", "sizeOf", "containsOf", "memberAt", "grant", "revoke"]
     ["malformed", "duplicate"]
 
 elab "#pf_guard_evm_id_registry" : command =>
-  expectEnumerableLayout `Examples.EvmIdRegistry registrySlots ("ids", 0, 3, 1)
+  expectEnumerableLayout `Examples.Evm.EvmIdRegistry registrySlots ("ids", 0, 3, 1)
     "release" ["sizeOf", "containsOf", "idAt", "enroll", "release"]
     ["malformed", "duplicate", "full"]
 

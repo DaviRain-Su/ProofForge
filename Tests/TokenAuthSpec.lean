@@ -1,8 +1,8 @@
-import Examples.TokenAuth
+import Examples.Svm.TokenAuth
 
 namespace Tests.TokenAuthSpec
 
-open Examples.TokenAuth
+open Examples.Svm.TokenAuth
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

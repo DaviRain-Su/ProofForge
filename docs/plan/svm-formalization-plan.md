@@ -43,7 +43,7 @@
 | 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue 几何 + **空 push 读回** + **非空 nowrap push 链接** + **pop clear/advance(head≠cap) 链接**（2026-09-01 main） |
 | L1 几何包 | `ProofForge/Svm/Sdk/Storage.lean` | scalarHeader / BoundedVec / RbTree 等一批 wf 定理 |
 | Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / OrderedMap 委托 | 有定理但不齐 |
-| RB 结构 | `Examples/Tree.lean`（p-003/p-004） | size / 局部 wf；**全树保持未完** |
+| RB 结构 | `Examples/Svm/Tree.lean`（p-003/p-004） | size / 局部 wf；**全树保持未完** |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
 **Queue 下一刀（main 已推进，2026-09-01）**：
@@ -71,7 +71,7 @@
 | BoundedQueue | `Sdk/Queue.lean` | wf parts done | 空 push + nowrap push 链接 + pop clear/advance(非 wrap) **done**；wrap / 读回 / peek / 往返 **待补** | **当前主线** |
 | BitSet | `Sdk/StorageBitSet.lean` | wf 待定理化 | 单字 mask 代数待建 | 可先纯函数后桥账户 |
 | EnumerableSet | `Sdk/StorageEnumerableSet.lean` | wf 待 | 依赖 map + values 槽 | 后置 |
-| OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | **模型层几乎空白** | 最大块；对齐 `Examples/Tree.lean` |
+| OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` | 部分委托 done | **模型层几乎空白** | 最大块；对齐 `Examples/Svm/Tree.lean` |
 | Versioned | `Sdk/Versioned.lean` | wf 待 | classify / initialize / apply | 宜早做 |
 
 ### 4.2 薄 facade（几乎只要 L1）

@@ -1,9 +1,9 @@
 import ProofForge.Svm.Sdk.Pda
 import ProofForge.Svm.Sdk.System
-import Examples.Pda
-import Examples.Transfer
-import Examples.Create
-import Examples.CreatePda
+import Examples.Svm.Pda
+import Examples.Svm.Transfer
+import Examples.Svm.Create
+import Examples.Svm.CreatePda
 
 open Lean Elab Command
 
@@ -65,17 +65,17 @@ private def extractModule (env : Environment) (module : Name) :
   ProofForge.Svm.IR.fromExtracted source
 
 elab "#pf_guard_svm_pda_system_facades" : command => do
-  expectCanonical `Examples.Pda "1f1a994e206aa42b"
-  expectCanonical `Examples.Transfer "f2da40e6199ba343"
-  expectCanonical `Examples.Create "6ee1719e05c53163"
-  expectCanonical `Examples.CreatePda "ef405b71cc52f3ec"
+  expectCanonical `Examples.Svm.Pda "1f1a994e206aa42b"
+  expectCanonical `Examples.Svm.Transfer "f2da40e6199ba343"
+  expectCanonical `Examples.Svm.Create "6ee1719e05c53163"
+  expectCanonical `Examples.Svm.CreatePda "ef405b71cc52f3ec"
   let env ← getEnv
   let create ←
-    match extractModule env `Examples.Create with
+    match extractModule env `Examples.Svm.Create with
     | .ok program => pure program
     | .error reason => throwError reason
   let createPda ←
-    match extractModule env `Examples.CreatePda with
+    match extractModule env `Examples.Svm.CreatePda with
     | .ok program => pure program
     | .error reason => throwError reason
   unless hasRentAwareCreate create "createRentExempt" &&

@@ -53,14 +53,14 @@ inline 到 Runtime stub。无存储 SDK、无 Promise。
 `ProofForge/Wasm/Near/{Runtime,Ops,Sdk,IR,Emit}.lean`，
 `ProofForge/Extract/{IR,Ops,Decode}.lean`，`ProofForge/Wasm/Family.lean`，
 `ProofForge/Svm/IR.lean`，`ProofForge/Evm/IR.lean`，
-`Examples/NearCtx.lean`，`Tests/NearCtxSpec.lean`，
+`Examples/Near/NearCtx.lean`，`Tests/NearCtxSpec.lean`，
 `runtime-tests/near/context.sh`
 
 ## verification
 
-- `#pf_near_build Examples.NearCtx` digest 钉死
-- `#pf_near_reject Examples.Clock` / `Examples.EvmCtx` 仍拒 svm/evm
-- `#pf_xrpl_reject Examples.NearCtx`（near 叶）
+- `#pf_near_build Examples.Near.NearCtx` digest 钉死
+- `#pf_near_reject Examples.Svm.Clock` / `Examples.Evm.EvmCtx` 仍拒 svm/evm
+- `#pf_xrpl_reject Examples.Near.NearCtx`（near 叶）
 - WAT 锚点：`block_index` / `block_timestamp` / `predecessor_account_id` /
   `attached_deposit` / `account_balance`；**没有** `host_lib`
 - view 用 `predecessor` / `attachedDeposit` 在发射期拒绝

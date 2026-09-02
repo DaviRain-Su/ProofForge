@@ -1,8 +1,8 @@
-import Examples.TokenMs
+import Examples.Svm.TokenMs
 
 namespace Tests.TokenMsSpec
 
-open Examples.TokenMs
+open Examples.Svm.TokenMs
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
