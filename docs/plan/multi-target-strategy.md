@@ -174,14 +174,14 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 - `ft_transfer` / `ft_transfer_call` / `ft_resolve_transfer` + storage 全套 + NEP-141 events
 - near-sandbox 矩阵见 `runtime-tests/near/ledger.py`
-- **剩余**：N13 handle Extract 已收口（`And3`..`And8`）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；三 target conformance（N15）
+- **剩余**：N13 handle Extract 已收口（`And3`..`And8`）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；N15 Counter digest 表已钉（Token follow-up）
 
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
 | **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；N>8 ops 仍开 |
 | **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | ~~collection prefix/metadata Handle~~（Vector+Queue+Lookup+Iterable done；仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | ✓ all N14 Handles；digests unchanged |
-| **N15** | `wsm-near-conformance-001` | Counter/Token 形 cross-target 示例（SVM/EVM 已有对照） | N12d | 三 target digest 表 |
+| **N15** | [`wsm-near-conformance-001`](tasks/wsm-near-conformance-001.md) | Counter 形 cross-target digest 表（Token follow-up） | N12d | ✓ Counter 三 target digest + method surface |
 
 **明确不做（与计划一致）：**
 
