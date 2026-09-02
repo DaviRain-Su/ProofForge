@@ -36,7 +36,7 @@ import ProofForge.Svm.Sdk.Pubkey
 - `Examples.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
-- `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf` / `paintNode_wf`：
+- `Examples.Tree.removeNode_size` / `init_wf` / `allocNode_wf` / `paintNode_wf` / `linkLeft_wf` / `linkRight_wf`：
   `propext`（部分含 `Quot.sound`）
 - `Evm.Sdk.Payments` 委托透明性（accept/send/transfer/transferFrom/...）：零公理（rfl 级）
 - `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
@@ -79,6 +79,8 @@ open Examples.Counter
 example : Examples.Tree.wf (Examples.Tree.init 0) := Examples.Tree.init_wf 0
 
 #check Examples.Tree.paintNode_wf
+#check Examples.Tree.linkLeft_wf
+#check Examples.Tree.linkRight_wf
 
 -- Pausable fail-closed：unknown flag 门关且不误报 paused
 #guard
