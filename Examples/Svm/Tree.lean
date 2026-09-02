@@ -1901,6 +1901,30 @@ private theorem paint3_black_wf (s : State) (p u g : UInt64) (hwf : wf s)
   · exact ⟨hun.1, hun.2.1, hun.2.2.1, (by decide : (0 : UInt64) ≤ 1)⟩
   · exact ⟨hgn.1, hgn.2.1, hgn.2.2.1, (by decide : (0 : UInt64) ≤ 1)⟩
 
+/-- **fixInserted grand=0 涂父黑**：红父且祖父地址为 0（父即 root）时，
+只把 linked 态 `s` 上父槽 `color := 0`；几何指针不变，经 `wf_nodes_set`。 -/
+theorem fixInserted_grand0_paint_parent_wf
+    (before s : State) (nodeAddress parentAddress direction : UInt64)
+    {t : State} {ret : UInt64}
+    (h : fixInserted before s nodeAddress parentAddress direction = .ok (t, ret))
+    (hwf : wf s)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hparentRed : before.nodes[(parentAddress.toNat - 1) % 4]!.color = 1)
+    (hgrand0 : before.nodes[(parentAddress.toNat - 1) % 4]!.parent = 0) :
+    wf t := by
+  unfold fixInserted at h
+  simp only [hparentRed, ↓reduceIte] at h
+  simp only [hgrand0, ↓reduceIte] at h
+  simp only [Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  have hpn := hwf.2.2.2.2.2 parentAddress hparent.1 hparent.2
+  apply wf_nodes_set s ((parentAddress.toNat - 1) % 4)
+    { s.nodes[(parentAddress.toNat - 1) % 4]! with color := 0 } (by omega) hwf
+  · exact hpn.1
+  · exact hpn.2.1
+  · exact hpn.2.2.1
+  · exact (by decide : (0 : UInt64) ≤ 1)
+
 /-- **fixInserted 红叔 recolor（父为祖父左子）**：控制流读 `before`，
 写回只改 linked 态 `s` 上父/叔/祖三槽 `color := 0`。 -/
 theorem fixInserted_recolor_left_uncle_wf
