@@ -21773,4 +21773,1681 @@ theorem walkAccount17ExecRentAfterSkipChain_eq_absLoad :
       some true := by
   native_decide
 
+/-!
+## E-infinity knife 128 - Loader account-17 → account-18 marker skip chain (`svm-sem-133`)
+
+Knife 127 completes account-17 fields after the skip chain. Emit chains the same
+`emitSkipAccount` geometry from the account-17 header cursor to reach the next dup marker.
+This knife composes the account-0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17 skip chain with an account-17 zero-dataLen skip
+and proves the loaded account-18 marker matches an absolute `r6`-relative load. Still not
+account-18 meta fields, full vectors, syscalls, CPI, or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-18 dup marker after account-18 zero-dataLen rent. -/
+def account18HeaderOffset : Nat := account17RentEpochOffset + 8
+def account18HeaderAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18HeaderOffset
+
+/-- Seed account-0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17 layout plus account-18 zero data_len and account-18 dup marker. -/
+def account17SkipNextInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8)
+ : Option Mem := do
+  let m₁ ← account17ExecRentInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+  let m₂ ← storev .m64 m₁ account17DataLenAddr (.vlong 0)
+  storev .m8 m₂ account18HeaderAddr (.vbyte acc18Marker)
+
+/-- Typed octodecuple skip: account-0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17 zero-dataLen skips land on account-18 marker. -/
+def walkAccount17SkipNextAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,    .alu64 .mov .br2 (.reg .br8),    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,    .alu64 .add .br2 (.imm accountHeaderToDataBytes),    .alu64 .add .br2 (.reg .br1),    .alu64 .add .br2 (.imm maxPermittedDataIncrease),    .ldx .m64 .br3 .br2 zeroOff,    .alu64 .add .br2 (.imm 8),    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .st .m64 .br10 (.reg .br1) stackOff]
+
+/-- Run chained account-0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17 skip-to-account-18-marker walk against seeded input memory. -/
+def evalWalkAccount17SkipNextAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount17SkipNextAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+/-- Absolute `r6`-relative load of the account-18 dup marker. -/
+def evalAbsAccount18Marker? (memory : Mem) : Option U8 := do
+  let marker ← loadv .m8 memory account18HeaderAddr
+  match marker with
+  | .vbyte m => some m
+  | _ => none
+
+theorem walkAccount17SkipNextAfterSkipChain_verified :
+    (walkAccount17SkipNextAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount17_skip_next_marker_0xff :
+    (do
+      let mem ← account17SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker
+      let (regs, finalMem) ← evalWalkAccount17SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xff))) =
+      some true := by
+  native_decide
+
+theorem walkAccount17SkipNextAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account17SkipNextInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0
+      let (regs, _) ← evalWalkAccount17SkipNextAfterSkipChainToStack? rhsStackOffset mem
+      let marker ← evalAbsAccount18Marker? mem
+      pure (regs .br1 == marker.setWidth 64 && marker == 0xC0)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 129 - Loader account-18 header/key after skip chain (`svm-sem-134`)
+
+Knife 128 proves the octodecuple skip lands on the account-18 dup marker. Emit then treats that
+address as the account-18 header cursor (marker byte, key at `+8`). This knife composes the
+account-0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/15/16/17 skip chain with an account-18 meta load and proves agreement with absolute
+`r6`-relative loads. Still not account-18 flags/budget/owner, full vectors, syscalls, CPI,
+or ELF accept.
+-/
+
+/-- Absolute offset/VA of account-18 first key limb. -/
+def account18KeyOffset : Nat := account18HeaderOffset + 8
+def account18KeyAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18KeyOffset
+
+/-- Seed octodecuple-skip layout plus account-18 first key limb. -/
+def account18MetaInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64)
+ : Option Mem := do
+  let m ← account17SkipNextInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker
+  storev .m64 m account18KeyAddr (.vlong key18Word)
+
+/-- Typed octodecuple skip then account-18 meta: `ldxb r1,[r2+0]`; `ldxdw r2,[r2+8]`; stage key. -/
+def walkAccount18MetaAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let keyOff ← positiveOffset? 8
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 zeroOff,
+    .ldx .m64 .br4 .br2 keyOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br2) stackOff]
+def evalWalkAccount18MetaAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18MetaAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18Meta? (memory : Mem) : Option (U8 × U64) := do
+  let dup ← loadv .m8 memory account18HeaderAddr
+  let key ← loadv .m64 memory account18KeyAddr
+  match dup, key with
+  | .vbyte d, .vlong k => some (d, k)
+  | _, _ => none
+
+theorem walkAccount18MetaAfterSkipChain_verified :
+    (walkAccount18MetaAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_key_0x82 :
+    (do
+      let mem ← account18MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82
+      let (regs, finalMem) ← evalWalkAccount18MetaAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == account0NonDupMarker.setWidth 64 &&
+        regs .br2 == 0x82 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x82))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18MetaAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18MetaInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82
+      let (regs, _) ← evalWalkAccount18MetaAfterSkipChainToStack? rhsStackOffset mem
+      let (dup, key) ← evalAbsAccount18Meta? mem
+      pure (regs .br1 == dup.setWidth 64 && regs .br2 == key &&
+        dup == 0xC0 && key == 0x82)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 130 - Loader account-18 signer/writable after skip chain (`svm-sem-135`)
+
+Knife 129 lands the cursor on account-18 meta. Emit then gates with `ldxb` of header+1 (signer)
+and +2 (writable). This knife composes the octodecuple skip chain with those flag loads and proves
+agreement with absolute `r6`-relative loads. Still not budget/owner/exec-rent for account-18,
+full vectors, syscalls, CPI, or ELF accept.
+-/
+
+def account18SignerAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account18HeaderOffset + 1)
+def account18WritableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 (account18HeaderOffset + 2)
+
+/-- Seed octodecuple-skip layout plus account-18 signer/writable flags. -/
+def account18FlagsInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64) (acc18Signer acc18Writable : U8)
+ : Option Mem := do
+  let m₁ ← account18MetaInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker key18Word
+  let m₂ ← storev .m8 m₁ account18SignerAddr (.vbyte acc18Signer)
+  storev .m8 m₂ account18WritableAddr (.vbyte acc18Writable)
+
+/-- Typed octodecuple skip then account-18 flags: `ldxb r1,[r2+1]`; `ldxb r2,[r2+2]`; stage signer. -/
+def walkAccount18FlagsAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let signerOff ← positiveOffset? 1
+  let writableOff ← positiveOffset? 2
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 signerOff,
+    .ldx .m8 .br4 .br2 writableOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+def evalWalkAccount18FlagsAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18FlagsAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18Flags? (memory : Mem) : Option (U8 × U8) := do
+  let signer ← loadv .m8 memory account18SignerAddr
+  let writable ← loadv .m8 memory account18WritableAddr
+  match signer, writable with
+  | .vbyte s, .vbyte w => some (s, w)
+  | _, _ => none
+
+theorem walkAccount18FlagsAfterSkipChain_verified :
+    (walkAccount18FlagsAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_signer_writable_1 :
+    (do
+      let mem ← account18FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82 1 1
+      let (regs, finalMem) ← evalWalkAccount18FlagsAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 1 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18FlagsAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18FlagsInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82 1 0
+      let (regs, _) ← evalWalkAccount18FlagsAfterSkipChainToStack? rhsStackOffset mem
+      let (signer, writable) ← evalAbsAccount18Flags? mem
+      pure (regs .br1 == signer.setWidth 64 && regs .br2 == writable.setWidth 64 &&
+        signer == 1 && writable == 0)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 131 - Loader account-18 lamports/data_len after skip chain (`svm-sem-136`)
+
+Knife 130 completes account-18 flags after the skip chain. Emit then reads lamports and data_len.
+This knife composes the octodecuple skip chain with those budget loads and proves agreement with
+absolute `r6`-relative loads. Still not owner/exec-rent for account-18, full vectors, syscalls,
+CPI, or ELF accept.
+-/
+
+def account18LamportsOffset : Nat :=
+  account18HeaderOffset + (account0LamportsOffset - account0HeaderOffset)
+def account18DataLenOffset : Nat :=
+  account18HeaderOffset + (account0DataLenOffset - account0HeaderOffset)
+def account18LamportsAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18LamportsOffset
+def account18DataLenAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18DataLenOffset
+
+/-- Seed octodecuple-skip layout plus account-18 lamports/data_len. -/
+def account18BudgetInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64) (acc18Signer acc18Writable : U8)
+    (acc18Lamports acc18DataLen : U64)
+ : Option Mem := do
+  let m₁ ← account18FlagsInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker key18Word acc18Signer acc18Writable
+  let m₂ ← storev .m64 m₁ account18LamportsAddr (.vlong acc18Lamports)
+  storev .m64 m₂ account18DataLenAddr (.vlong acc18DataLen)
+
+/-- Typed octodecuple skip then account-18 budget: `ldxdw r1,[r2+0x48]`; `ldxdw r2,[r2+0x50]`. -/
+def walkAccount18BudgetAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let lamportsOff ← positiveOffset? (account0LamportsOffset - account0HeaderOffset)
+  let dataLenFieldOff ← positiveOffset? (account0DataLenOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 lamportsOff,
+    .ldx .m64 .br4 .br2 dataLenFieldOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+def evalWalkAccount18BudgetAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18BudgetAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18Budget? (memory : Mem) : Option (U64 × U64) := do
+  let v1 ← loadv .m64 memory account18LamportsAddr
+  let v2 ← loadv .m64 memory account18DataLenAddr
+  match v1, v2 with
+  | .vlong a, .vlong b => some (a, b)
+  | _, _ => none
+
+theorem walkAccount18BudgetAfterSkipChain_verified :
+    (walkAccount18BudgetAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_lamports_18000_dataLen_336 :
+    (do
+      let mem ← account18BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82 1 1 18000 336
+      let (regs, finalMem) ← evalWalkAccount18BudgetAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 18000 && regs .br2 == 336 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 18000))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18BudgetAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18BudgetInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82 1 0 18000 336
+      let (regs, _) ← evalWalkAccount18BudgetAfterSkipChainToStack? rhsStackOffset mem
+      let (lamports, dataLen) ← evalAbsAccount18Budget? mem
+      pure (regs .br1 == lamports && regs .br2 == dataLen &&
+        lamports == 18000 && dataLen == 336)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 132 - Loader account-18 owner limbs 0/1 after skip chain (`svm-sem-137`)
+
+Knife 131 completes account-18 budget after the skip chain. Emit then reads owner pubkey limbs 0/1.
+This knife composes the octodecuple skip chain with those owner loads and proves agreement with
+absolute `r6`-relative loads. Still not owner hi/exec-rent for account-18, full vectors, syscalls,
+CPI, or ELF accept.
+-/
+
+def account18Owner0Offset : Nat :=
+  account18HeaderOffset + (account0Owner0Offset - account0HeaderOffset)
+def account18Owner1Offset : Nat :=
+  account18HeaderOffset + (account0Owner1Offset - account0HeaderOffset)
+def account18Owner0Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18Owner0Offset
+def account18Owner1Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18Owner1Offset
+
+/-- Seed octodecuple-skip layout plus account-18 owner limbs 0/1. -/
+def account18OwnerInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64) (acc18Signer acc18Writable : U8)
+    (acc18Lamports acc18DataLen : U64) (acc18Owner0 acc18Owner1 : U64)
+ : Option Mem := do
+  let m₁ ← account18BudgetInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker key18Word acc18Signer acc18Writable acc18Lamports acc18DataLen
+  let m₂ ← storev .m64 m₁ account18Owner0Addr (.vlong acc18Owner0)
+  storev .m64 m₂ account18Owner1Addr (.vlong acc18Owner1)
+
+/-- Typed octodecuple skip then account-18 owner lo: `ldxdw r1,[r2+0x28]`; `ldxdw r2,[r2+0x30]`. -/
+def walkAccount18OwnerAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let owner0Off ← positiveOffset? (account0Owner0Offset - account0HeaderOffset)
+  let owner1Off ← positiveOffset? (account0Owner1Offset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 owner0Off,
+    .ldx .m64 .br4 .br2 owner1Off,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+def evalWalkAccount18OwnerAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18OwnerAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18Owner? (memory : Mem) : Option (U64 × U64) := do
+  let v1 ← loadv .m64 memory account18Owner0Addr
+  let v2 ← loadv .m64 memory account18Owner1Addr
+  match v1, v2 with
+  | .vlong a, .vlong b => some (a, b)
+  | _, _ => none
+
+theorem walkAccount18OwnerAfterSkipChain_verified :
+    (walkAccount18OwnerAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_owner0_0xF1_owner1_0x02 :
+    (do
+      let mem ← account18OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82 1 1 18000 336 0xF5 0x06
+      let (regs, finalMem) ← evalWalkAccount18OwnerAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0xF5 && regs .br2 == 0x06 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0xF5))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18OwnerAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18OwnerInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82 1 0 18000 336 0xF5 0x06
+      let (regs, _) ← evalWalkAccount18OwnerAfterSkipChainToStack? rhsStackOffset mem
+      let (owner0, owner1) ← evalAbsAccount18Owner? mem
+      pure (regs .br1 == owner0 && regs .br2 == owner1 &&
+        owner0 == 0xF5 && owner1 == 0x06)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 133 - Loader account-18 owner limbs 2/3 after skip chain (`svm-sem-138`)
+
+Knife 132 completes account-18 owner lo after the skip chain. Emit then reads owner pubkey limbs 2/3.
+This knife composes the octodecuple skip chain with those owner loads and proves agreement with
+absolute `r6`-relative loads. Still not exec-rent for account-18, full vectors, syscalls,
+CPI, or ELF accept.
+-/
+
+def account18Owner2Offset : Nat :=
+  account18HeaderOffset + (account0Owner2Offset - account0HeaderOffset)
+def account18Owner3Offset : Nat :=
+  account18HeaderOffset + (account0Owner3Offset - account0HeaderOffset)
+def account18Owner2Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18Owner2Offset
+def account18Owner3Addr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18Owner3Offset
+
+/-- Seed octodecuple-skip layout plus account-18 owner limbs 2/3. -/
+def account18OwnerHiInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64) (acc18Signer acc18Writable : U8)
+    (acc18Lamports acc18DataLen : U64) (acc18Owner0 acc18Owner1 acc18Owner2 acc18Owner3 : U64)
+ : Option Mem := do
+  let m₁ ← account18OwnerInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker key18Word acc18Signer acc18Writable acc18Lamports acc18DataLen acc18Owner0 acc18Owner1
+  let m₂ ← storev .m64 m₁ account18Owner2Addr (.vlong acc18Owner2)
+  storev .m64 m₂ account18Owner3Addr (.vlong acc18Owner3)
+
+/-- Typed octodecuple skip then account-18 owner hi: `ldxdw r1,[r2+0x38]`; `ldxdw r2,[r2+0x40]`. -/
+def walkAccount18OwnerHiAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let owner2Off ← positiveOffset? (account0Owner2Offset - account0HeaderOffset)
+  let owner3Off ← positiveOffset? (account0Owner3Offset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 owner2Off,
+    .ldx .m64 .br4 .br2 owner3Off,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+def evalWalkAccount18OwnerHiAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18OwnerHiAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18OwnerHi? (memory : Mem) : Option (U64 × U64) := do
+  let v1 ← loadv .m64 memory account18Owner2Addr
+  let v2 ← loadv .m64 memory account18Owner3Addr
+  match v1, v2 with
+  | .vlong a, .vlong b => some (a, b)
+  | _, _ => none
+
+theorem walkAccount18OwnerHiAfterSkipChain_verified :
+    (walkAccount18OwnerHiAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_owner2_0x27_owner3_0x38 :
+    (do
+      let mem ← account18OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82 1 1 18000 336 0xF5 0x06 0x27 0x38
+      let (regs, finalMem) ← evalWalkAccount18OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 0x27 && regs .br2 == 0x38 &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 0x27))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18OwnerHiAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18OwnerHiInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82 1 0 18000 336 0xF5 0x06 0x27 0x38
+      let (regs, _) ← evalWalkAccount18OwnerHiAfterSkipChainToStack? rhsStackOffset mem
+      let (owner2, owner3) ← evalAbsAccount18OwnerHi? mem
+      pure (regs .br1 == owner2 && regs .br2 == owner3 &&
+        owner2 == 0x27 && owner3 == 0x38)) =
+      some true := by
+  native_decide
+
+/-!
+## E-infinity knife 134 - Loader account-18 executable + rent_epoch after skip chain (`svm-sem-139`)
+
+Knife 133 completes account-18 owner pubkey after the skip chain. Emit then reads account-18
+executable (header+3) and rent_epoch. This knife composes the octodecuple skip chain with those
+loads and proves agreement with absolute `r6`-relative loads. Still not account-18→account-19 skip,
+full multi-account vectors, syscalls, CPI, or ELF accept.
+-/
+
+def account18ExecutableOffset : Nat := account18HeaderOffset + 3
+def account18RentEpochOffset : Nat :=
+  account18HeaderOffset + (account0RentEpochOffset - account0HeaderOffset)
+def account18ExecutableAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18ExecutableOffset
+def account18RentEpochAddr : U64 :=
+  mmInputStart + BitVec.ofNat 64 account18RentEpochOffset
+
+/-- Seed octodecuple-skip layout plus account-18 executable/rent_epoch. -/
+def account18ExecRentInputMem (value arg0 key0Limb : U64) (acc1Marker : U8)
+    (acc0Rent key1Limb : U64) (signer writable : U8) (lamports dataLen : U64)
+    (owner0 owner1 owner2 owner3 : U64) (executable : U8) (acc1RentWord : U64)
+    (acc2Marker : U8) (key2Word : U64) (acc2Signer acc2Writable : U8)
+    (acc2Lamports acc2DataLen acc2Owner0 acc2Owner1 acc2Owner2 acc2Owner3 : U64)
+    (acc2Executable : U8) (acc2Rent : U64) (acc3Marker : U8) (key3Word : U64)
+    (acc3Signer acc3Writable : U8) (acc3Lamports acc3DataLen acc3Owner0 acc3Owner1
+    acc3Owner2 acc3Owner3 : U64) (acc3Executable : U8) (acc3Rent : U64) (acc4Marker : U8)
+    (key4Word : U64) (acc4Signer acc4Writable : U8) (acc4Lamports acc4DataLen acc4Owner0
+    acc4Owner1 acc4Owner2 acc4Owner3 : U64) (acc4Executable : U8) (acc4Rent : U64)
+    (acc5Marker : U8) (key5Word : U64) (acc5Signer acc5Writable : U8)
+    (acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 : U64)
+    (acc5Executable : U8) (acc5Rent : U64) (acc6Marker : U8) (key6Word : U64)
+    (acc6Signer acc6Writable : U8) (acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+    acc6Owner2 acc6Owner3 : U64) (acc6Executable : U8) (acc6Rent : U64)
+    (acc7Marker : U8) (key7Word : U64) (acc7Signer acc7Writable : U8)
+    (acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 : U64)
+    (acc7Executable : U8) (acc7Rent : U64) (acc8Marker : U8) (key8Word : U64)
+    (acc8Signer acc8Writable : U8) (acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+    acc8Owner2 acc8Owner3 : U64) (acc8Executable : U8) (acc8Rent : U64)
+    (acc9Marker : U8) (key9Word : U64) (acc9Signer acc9Writable : U8)
+    (acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 : U64)
+    (acc9Executable : U8) (acc9Rent : U64)
+    (acc10Marker : U8) (key10Word : U64)
+    (acc10Signer acc10Writable : U8)
+    (acc10Lamports acc10DataLen : U64)
+    (acc10Owner0 acc10Owner1 : U64)
+    (acc10Owner2 acc10Owner3 : U64)
+    (acc10Executable : U8) (acc10Rent : U64) (acc11Marker : U8) (key11Word : U64)
+    (acc11Signer acc11Writable : U8)
+    (acc11Lamports acc11DataLen : U64)
+    (acc11Owner0 acc11Owner1 : U64)
+    (acc11Owner2 acc11Owner3 : U64)
+    (acc11Executable : U8) (acc11Rent : U64)
+    (acc12Marker : U8) (key12Word : U64) (acc12Signer acc12Writable : U8)
+    (acc12Lamports acc12DataLen : U64) (acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3 : U64)
+    (acc12Executable : U8) (acc12Rent : U64)
+    (acc17Marker : U8) (key17Word : U64) (acc17Signer acc17Writable : U8)
+    (acc17Lamports acc17DataLen : U64) (acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3 : U64)
+    (acc17Executable : U8) (acc17Rent : U64)
+    (acc18Marker : U8) (key18Word : U64) (acc18Signer acc18Writable : U8)
+    (acc18Lamports acc18DataLen : U64) (acc18Owner0 acc18Owner1 acc18Owner2 acc18Owner3 : U64)
+    (acc18Executable : U8) (acc18Rent : U64)
+ : Option Mem := do
+  let m₁ ← account18OwnerHiInputMem value arg0 key0Limb acc1Marker acc0Rent key1Limb
+      signer writable lamports dataLen owner0 owner1 owner2 owner3 executable acc1RentWord
+      acc2Marker key2Word acc2Signer acc2Writable acc2Lamports acc2DataLen acc2Owner0 acc2Owner1
+      acc2Owner2 acc2Owner3 acc2Executable acc2Rent acc3Marker key3Word acc3Signer acc3Writable
+      acc3Lamports acc3DataLen acc3Owner0 acc3Owner1 acc3Owner2 acc3Owner3 acc3Executable acc3Rent
+      acc4Marker key4Word acc4Signer acc4Writable acc4Lamports acc4DataLen acc4Owner0 acc4Owner1
+      acc4Owner2 acc4Owner3 acc4Executable acc4Rent acc5Marker key5Word acc5Signer acc5Writable
+      acc5Lamports acc5DataLen acc5Owner0 acc5Owner1 acc5Owner2 acc5Owner3 acc5Executable acc5Rent
+      acc6Marker key6Word acc6Signer acc6Writable acc6Lamports acc6DataLen acc6Owner0 acc6Owner1
+      acc6Owner2 acc6Owner3 acc6Executable acc6Rent acc7Marker key7Word acc7Signer acc7Writable
+      acc7Lamports acc7DataLen acc7Owner0 acc7Owner1 acc7Owner2 acc7Owner3 acc7Executable acc7Rent
+      acc8Marker key8Word acc8Signer acc8Writable acc8Lamports acc8DataLen acc8Owner0 acc8Owner1
+      acc8Owner2 acc8Owner3 acc8Executable acc8Rent
+      acc9Marker key9Word acc9Signer acc9Writable
+      acc9Lamports acc9DataLen acc9Owner0 acc9Owner1 acc9Owner2 acc9Owner3 acc9Executable acc9Rent
+      acc10Marker key10Word acc10Signer acc10Writable
+      acc10Lamports acc10DataLen acc10Owner0 acc10Owner1 acc10Owner2 acc10Owner3
+      acc10Executable acc10Rent acc11Marker key11Word acc11Signer acc11Writable
+      acc11Lamports acc11DataLen acc11Owner0 acc11Owner1 acc11Owner2 acc11Owner3
+      acc11Executable acc11Rent
+      acc12Marker key12Word acc12Signer acc12Writable acc12Lamports acc12DataLen acc12Owner0 acc12Owner1 acc12Owner2 acc12Owner3
+      acc12Executable acc12Rent
+      acc17Marker key17Word acc17Signer acc17Writable acc17Lamports acc17DataLen acc17Owner0 acc17Owner1 acc17Owner2 acc17Owner3
+      acc17Executable acc17Rent
+      acc18Marker key18Word acc18Signer acc18Writable acc18Lamports acc18DataLen acc18Owner0 acc18Owner1 acc18Owner2 acc18Owner3
+  let m₂ ← storev .m8 m₁ account18ExecutableAddr (.vbyte acc18Executable)
+  storev .m64 m₂ account18RentEpochAddr (.vlong acc18Rent)
+
+/-- Typed octodecuple skip then account-18 exec/rent: `ldxb r1,[r2+3]`; `ldxdw r2,[r2+rentOff]`. -/
+def walkAccount18ExecRentAfterSkipChain? (stackOff : U16) : Option EbpfAsm := do
+  let dataLenOff ← positiveOffset? account0DataLenHeaderOff
+  let zeroOff ← positiveOffset? 0
+  let execOff ← positiveOffset? (account0ExecutableOffset - account0HeaderOffset)
+  let rentOff ← positiveOffset? (account0RentEpochOffset - account0HeaderOffset)
+  return [
+    .ldx .m64 .br1 .br8 dataLenOff,
+    .alu64 .mov .br2 (.reg .br8),
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m64 .br1 .br2 dataLenOff,
+    .alu64 .add .br2 (.imm accountHeaderToDataBytes),
+    .alu64 .add .br2 (.reg .br1),
+    .alu64 .add .br2 (.imm maxPermittedDataIncrease),
+    .ldx .m64 .br3 .br2 zeroOff,
+    .alu64 .add .br2 (.imm 8),
+    .ldx .m8 .br1 .br2 execOff,
+    .ldx .m64 .br4 .br2 rentOff,
+    .alu64 .mov .br2 (.reg .br4),
+    .st .m64 .br10 (.reg .br1) stackOff]
+def evalWalkAccount18ExecRentAfterSkipChainToStack? (stackOff : U16) (memory : Mem) :
+    Option (RegMap × Mem) := do
+  let frag ← walkAccount18ExecRentAfterSkipChain? stackOff
+  let state0 := initBpfState account0WalkRegs memory 64 version
+  let after := runDecodedFrom 0 frag state0
+  match after with
+  | .ok _ regs mem _ _ _ _ _ => some (regs, mem)
+  | .success _ | .eflag | .err => none
+
+def evalAbsAccount18ExecRent? (memory : Mem) : Option (U8 × U64) := do
+  let executable ← loadv .m8 memory account18ExecutableAddr
+  let rentEpoch ← loadv .m64 memory account18RentEpochAddr
+  match executable, rentEpoch with
+  | .vbyte e, .vlong r => some (e, r)
+  | _, _ => none
+
+theorem walkAccount18ExecRentAfterSkipChain_verified :
+    (walkAccount18ExecRentAfterSkipChain? rhsStackOffset).isSome = true := by
+  native_decide
+
+theorem evalWalkAccount18_after_skip_executable_1_rent_0xFD :
+    (do
+      let mem ← account18ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 1 1000 128
+          0xA1 0xB2 0xC3 0xD4 1 0xEE account0NonDupMarker 0x72 1 1 2000 64 0xE5 0xF6 0x17 0x28 1 0xEE
+          account0NonDupMarker 0x73 1 1 3000 96 0xE6 0xF7 0x18 0x29 1 0xEE account0NonDupMarker 0x74 1 1 4000 112 0xE7 0xF8 0x19 0x2A 1 0xEF account0NonDupMarker 0x75 1 1 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 account0NonDupMarker 0x76 1 1 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 account0NonDupMarker 0x77 1 1 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 account0NonDupMarker 0x78 1 1 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 account0NonDupMarker 0x79 1 1 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 account0NonDupMarker 0x7A 1 1 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5 account0NonDupMarker
+          0x7B 1 1 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 account0NonDupMarker 0x7C 1 1 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 account0NonDupMarker 0x81 1 1 17000 320 0xF4 0x05 0x26 0x37 1 0xFC account0NonDupMarker 0x82 1 1 18000 336 0xF5 0x06 0x27 0x38 1 0xFD
+      let (regs, finalMem) ← evalWalkAccount18ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      pure (regs .br1 == 1 && regs .br2 == 0xFD &&
+        loadv .m64 finalMem rhsStackAddr == some (.vlong 1))) =
+      some true := by
+  native_decide
+
+theorem walkAccount18ExecRentAfterSkipChain_eq_absLoad :
+    (do
+      let mem ← account18ExecRentInputMem 7 5 0x42 account0NonDupMarker 0xEE 0x71 1 0 1000 128
+          0xA1 0xB2 0xC3 0xD4 0 0xEE 0xAC 0x72 1 0 2000 64 0xE5 0xF6 0x17 0x28 0 0xEE 0xAB 0x73 1 0 3000 96 0xE6 0xF7 0x18 0x29 0 0xEE 0xAD 0x74 1 0 4000 112 0xE7 0xF8 0x19 0x2A 0 0xEF 0xAF 0x75 1 0 5000 128 0xE8 0xF9 0x1A 0x2B 1 0xF0 0xB1 0x76 1 0 6000 144 0xE9 0xFA 0x1B 0x2C 1 0xF1 0xB2 0x77 1 0 7000 160 0xEA 0xFB 0x1C 0x2D 1 0xF2 0xB4 0x78 1 0 8000 176 0xEB 0xFC 0x1D 0x2E 1 0xF3 0xB6 0x79 1 0 9000 192 0xEC 0xFD 0x1E 0x2F 1 0xF4 0xB8 0x7A 1 0 10000 208 0xED 0xFE 0x1F 0x30 1 0xF5
+          0xB9 0x7B 1 0 11000 224 0xEE 0xFF 0x20 0x31 1 0xF6 0xBA 0x7C 1 0 12000 240 0xEF 0x00 0x21 0x32 1 0xF7 0xBF 0x81 1 0 17000 320 0xF4 0x05 0x26 0x37 1 0xFC 0xC0 0x82 1 0 18000 336 0xF5 0x06 0x27 0x38 1 0xFD
+      let (regs, _) ← evalWalkAccount18ExecRentAfterSkipChainToStack? rhsStackOffset mem
+      let (executable, rent) ← evalAbsAccount18ExecRent? mem
+      pure (regs .br1 == executable.setWidth 64 && regs .br2 == rent &&
+        executable == 1 && rent == 0xFD)) =
+      some true := by
+  native_decide
+
 end ProofForge.Svm.Solanalib

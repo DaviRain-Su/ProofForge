@@ -27,4 +27,4 @@ Knife 126 lands account-17 owner hi. Emit then loads account-17 executable/rent_
 
 ## 仍未覆盖
 
-account-17→account-18 skip；完整 multi-account 向量；syscall/CPI/sysvar；ELF accept。
+account-17→account-18 skip — see [svm-sem-133](svm-sem-133.md)；完整 multi-account 向量；syscall/CPI/sysvar；ELF accept。
