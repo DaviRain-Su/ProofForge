@@ -272,9 +272,10 @@ private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except 
 /-- Expand one static element at `values[i]` into its fixed UInt64 return limbs. -/
 private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
     (element : Core.Codec.Schema) : Except String (Array Ops.Op) := do
-  -- Limb offsets ride on `indexGet`'s final argument so vector leaf resolution stays flat
-  -- (`values` + limb), matching wide-scalar input projection. One-level static products flatten
-  -- through `staticLeaves` to one-limb scalar leaves; nested dynamics stay fail-closed.
+  -- `indexGet`'s final argument is a limb-aligned *byte* offset so EVM ABI rewrite and SVM
+  -- Borsh rewrite share one Extract contract (`offset % 8 == 0`, limb := offset / 8). One-level
+  -- static products flatten through `staticLeaves` to one-limb scalar leaves; nested dynamics
+  -- stay fail-closed.
   match element with
   | .scalar _ =>
       let parts ← staticReturnLimbCount element
@@ -284,9 +285,7 @@ private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
           (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (part * 8)))
       pure limbs
   | .tuple _ | .record _ _ => do
-      -- One-level static products: flatten to one-limb scalar leaves. `indexGet`'s final
-      -- argument is a byte offset (limb-aligned), matching the pre-merge Extract contract
-      -- that EVM codec validates with `elementOffset % 8 == 0`.
+      -- One-level static products: flatten to one-limb scalar leaves at byte offsets 0, 8, …
       let leaves ← Core.Codec.staticLeaves element
       unless !leaves.isEmpty do
         throw "extract/unsupported: constructed bounded result element must contain a scalar"

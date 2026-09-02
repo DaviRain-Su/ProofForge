@@ -260,9 +260,13 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
         | .boundedArray _ (.scalar type) =>
             ((Core.Codec.Scalar.byteWidth type) + 7) / 8
         | _ => 1
+      -- Shared Extract publishes limb-aligned *byte* offsets on `indexGet` (same contract as
+      -- EVM ABI rewrite). Convert to a limb index before selecting the flattened Borsh local.
       unless entry.usesSchemaBorsh && name == "values" &&
-          (length == 0 || length == capacity) && elementOffset < limbCount do
+          (length == 0 || length == capacity) &&
+          elementOffset % 8 == 0 && elementOffset / 8 < limbCount do
         throw "extract/unsupported: bounded index projection does not match its Borsh plan"
+      let limb := elementOffset / 8
       let index ← rewriteRawArg schemas entry base index
       let mut selected : Ops.Val := .lit 0
       for i in [0:capacity] do
@@ -271,7 +275,7 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
           throw "extract/unsupported: bounded index base projection must start at limb 0"
         selected :=
           .select .eq index (.lit (UInt64.ofNat i))
-            (.local (base + localStart + elementOffset)) selected
+            (.local (base + localStart + limb)) selected
       return selected
   | .arg index => do
       unless index < entry.logicalParamCount do
