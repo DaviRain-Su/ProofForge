@@ -33,7 +33,8 @@ import ProofForge.Svm.Sdk.Pubkey
 - `Examples.Evm.Token.transfer_preserves_supply` / `mint_supply_effect`
   / `burn_supply_effect` / `burnFrom_supply_effect` / `transferFrom_preserves_supply`
   / `approve_preserves_supply` / `increaseAllowance_preserves_supply`
-  / `decreaseAllowance_preserves_supply`：`propext`（部分含 `Quot.sound`）
+  / `decreaseAllowance_preserves_supply` / `pause_preserves_supply`
+  / `unpause_preserves_supply`：`propext`（部分含 `Quot.sound`）
 - `Examples.Svm.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）

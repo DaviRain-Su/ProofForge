@@ -41,9 +41,15 @@ instead of nested `if`/`match`.
    `increaseAllowance_preserves_supply` / `decreaseAllowance_preserves_supply` added;
    registry digest `18c55b9a7dd6ab7e`
 
+## Landed (Token UInt64 pause / unpause)
+
+9. `Examples.Evm.Token.pause` / `unpause` use sequential owner-gate `Effect.ensureCode` /
+   `hold`; `pause_preserves_supply` / `unpause_preserves_supply` added;
+   registry digest `4519c849c36cc5ca`
+
 ## Follow-up
 
-- Port pause/unpause/permit gates to `Effect.ensureCode` where CallResult-shaped
+- Port permit gates to `Effect.ensureCode` where CallResult-shaped
 - Nested-`if` remains on remaining UInt64-returning mutators for now
 
 ## Non-goals
@@ -55,5 +61,5 @@ instead of nested `if`/`match`.
 ## Acceptance (slice)
 
 §5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.
-Token Bool ABI trio + `mint` / `burn` / `burnFrom` / allowance are sequential;
-`pause` / `unpause` / `permit` stay nested-`if`.
+Token Bool ABI trio + `mint` / `burn` / `burnFrom` / allowance / `pause` / `unpause` are sequential;
+`permit` stays nested-`if`.
