@@ -156,9 +156,10 @@ jobs:
           svm="$(or_shared "$SVM")"
           evm="$(or_shared "$EVM")"
           near="$(or_shared "$NEAR")"
-          # Heavy Surfpool deploy (~10MB ELF) only when Phoenix/stack emit paths move,
-          # or when the SVM lane itself is forced by shared infrastructure.
-          if [ "$SHARED" = "true" ] || [ "$SURFPOOL_HEAVY" = "true" ]; then
+          # Heavy Surfpool deploy (~10MB ELF / multi-thousand Loader-v3 writes) only when
+          # Phoenix/stack emit paths move. Shared Extract/Core changes still run Mollusk plus
+          # the lighter Phoenix/RawEntry Surfpool smokes; they must not force the 30m+ writeback.
+          if [ "$SURFPOOL_HEAVY" = "true" ]; then
             surfpool_heavy=true
           else
             surfpool_heavy=false

@@ -552,15 +552,16 @@ def main() -> None:
         "near-promise: failed eighth child in 8-way join retained successful left/middle/right/fourth/fifth/sixth/seventh results"
     )
 
+    # And8 eighth-missing commits marker 94; panic/deposit failures below must leave it there.
     _call_u64(client, "sendThenFail", 111, expect_success=False)
-    if client.view_u64("get") != 82:
+    if client.view_u64("get") != 94:
         raise AssertionError("caller panic did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("caller panic did not discard its staged outgoing receipt")
     print("near-promise: caller panic discarded staged receipt and rolled back")
 
     _call_u64(client, "sendTooMuch", 222, expect_success=False)
-    if client.view_u64("get") != 82:
+    if client.view_u64("get") != 94:
         raise AssertionError("synchronous deposit failure did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("synchronous deposit failure emitted an outgoing receipt")
