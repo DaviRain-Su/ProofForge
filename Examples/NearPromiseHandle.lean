@@ -50,10 +50,64 @@ def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (Sta
 @[pf_inline] private def promiseRoot5 : Promises.PromiseHandle 5 :=
   { id := 0, depth := 0, fanIn := 0 }
 
+/-- Fan-in 6 root for `and6Returned` entry bodies (`defaultMaxFanIn` is 4). -/
+private def promiseRoot6 : Promises.PromiseHandle 6 :=
+  { id := 0, depth := 0, fanIn := 0 }
+
+/-- Fan-in 7 root for `and7Returned` entry bodies (`defaultMaxFanIn` is 4). -/
+private def promiseRoot7 : Promises.PromiseHandle 7 :=
+  { id := 0, depth := 0, fanIn := 0 }
+
+/-- Fan-in 8 root for `and8Returned` entry bodies (`defaultMaxFanIn` is 4). -/
+private def promiseRoot8 : Promises.PromiseHandle 8 :=
+  { id := 0, depth := 0, fanIn := 0 }
+
 /-- Pure child used by join fixtures to observe echoed UInt64 results. -/
 @[pf_entry]
 def echo (_state : State) (value : UInt64) : UInt64 :=
   value
+
+/-- Same DAG as `NearPromise.sendAnd8Success`; uses `promiseRoot8` for fan-in 8. -/
+@[pf_entry]
+def sendHandleAnd8 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot8.and8Returned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 888) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 93) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value, depth := 1 }, value)
+
+/-- Same DAG as `NearPromise.sendAnd7Success`; uses `promiseRoot7` for fan-in 7. -/
+@[pf_entry]
+def sendHandleAnd7 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot7.and7Returned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 91) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value, depth := 1 }, value)
+
+/-- Same DAG as `NearPromise.sendAnd6Success`; uses `promiseRoot6` for fan-in 6. -/
+@[pf_entry]
+def sendHandleAnd6 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot6.and6Returned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 89) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value, depth := 1 }, value)
 
 /-- Same DAG as `NearPromise.sendAnd5Success`; uses `promiseRoot5` for fan-in 5. -/
 @[pf_entry]
@@ -155,5 +209,20 @@ def handleAnd5Smoke : Bool :=
   joined.fanInOk && joined.fanIn.toNat == 5
 
 #guard handleAnd5Smoke
+
+def handleAnd8Smoke : Bool :=
+  let joined := promiseRoot8.and8Returned
+    receiver "echo" (borshUInt64 1) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 2) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 3) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 4) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 5) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 6) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 7) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 8) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 0) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  joined.fanInOk && joined.fanIn.toNat == 8
+
+#guard handleAnd8Smoke
 
 end Examples.NearPromiseHandle

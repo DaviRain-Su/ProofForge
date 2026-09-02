@@ -22,6 +22,12 @@ elab "#pf_guard_near_promise_handle" : command => do
     throwError "NEAR PromiseHandle fixture missing sendHandleAnd4 entry"
   unless program.entries.any (·.ixName == "sendHandleAnd5") do
     throwError "NEAR PromiseHandle fixture missing sendHandleAnd5 entry"
+  unless program.entries.any (·.ixName == "sendHandleAnd6") do
+    throwError "NEAR PromiseHandle fixture missing sendHandleAnd6 entry"
+  unless program.entries.any (·.ixName == "sendHandleAnd7") do
+    throwError "NEAR PromiseHandle fixture missing sendHandleAnd7 entry"
+  unless program.entries.any (·.ixName == "sendHandleAnd8") do
+    throwError "NEAR PromiseHandle fixture missing sendHandleAnd8 entry"
   let sendHandleThen ← match program.entries.find? (·.ixName == "sendHandleThen") with
     | some method => pure method
     | none => throwError "missing sendHandleThen entry"
@@ -57,6 +63,33 @@ elab "#pf_guard_near_promise_handle" : command => do
   unless and5Wat.contains "(call $pf_promise_and (local.get " &&
       and5Wat.contains "(i64.const 5)))" do
     throwError "PromiseHandle 5-way join lost promise_and count=5"
+  let sendHandleAnd6 ← match program.entries.find? (·.ixName == "sendHandleAnd6") with
+    | some method => pure method
+    | none => throwError "missing sendHandleAnd6 entry"
+  let and6Wat ← match ProofForge.Wasm.Near.Emit.emit { program with entries := #[sendHandleAnd6] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless and6Wat.contains "(call $pf_promise_and (local.get " &&
+      and6Wat.contains "(i64.const 6)))" do
+    throwError "PromiseHandle 6-way join lost promise_and count=6"
+  let sendHandleAnd7 ← match program.entries.find? (·.ixName == "sendHandleAnd7") with
+    | some method => pure method
+    | none => throwError "missing sendHandleAnd7 entry"
+  let and7Wat ← match ProofForge.Wasm.Near.Emit.emit { program with entries := #[sendHandleAnd7] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless and7Wat.contains "(call $pf_promise_and (local.get " &&
+      and7Wat.contains "(i64.const 7)))" do
+    throwError "PromiseHandle 7-way join lost promise_and count=7"
+  let sendHandleAnd8 ← match program.entries.find? (·.ixName == "sendHandleAnd8") with
+    | some method => pure method
+    | none => throwError "missing sendHandleAnd8 entry"
+  let and8Wat ← match ProofForge.Wasm.Near.Emit.emit { program with entries := #[sendHandleAnd8] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless and8Wat.contains "(call $pf_promise_and (local.get " &&
+      and8Wat.contains "(i64.const 8)))" do
+    throwError "PromiseHandle 8-way join lost promise_and count=8"
   logInfo m!"proofforge-near-promise-handle: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_promise_handle
@@ -65,3 +98,4 @@ elab "#pf_guard_near_promise_handle" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Promises.maxPromiseDepth == 8
 #guard Examples.NearPromiseHandle.handleDepthSmoke
 #guard Examples.NearPromiseHandle.handleAnd5Smoke
+#guard Examples.NearPromiseHandle.handleAnd8Smoke

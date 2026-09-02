@@ -19,4 +19,4 @@ depends-on: []
 ## Follow-up
 
 - ~~Optional `do` notation guide in docs~~ — **done** (`docs/plan/do-notation-guide.md`)
-- Extract `PromiseHandle`-typed entry bodies for NEAR N13 — **done** (`sendHandleThen` / `sendHandleAnd3` use `promiseRoot.thenReturned` / `and3Returned`; Extract decode in `Decode.lean`)
+- Extract `PromiseHandle`-typed entry bodies for NEAR N13 — **done** (`sendHandleThen` / `sendHandleAnd3`..`sendHandleAnd8`; Extract decode in `Decode.lean`)
