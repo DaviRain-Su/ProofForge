@@ -91,15 +91,13 @@ def nonceOf (_s : State) (who : Address) : UInt256 :=
 def DOMAIN_SEPARATOR (_s : State) : Bytes32 :=
   Permit.domainSeparator
 
+/-- Pause-gated permit: sequential `Effect.ensureCode` soft-aborts (UInt64 CallResult ABI). -/
 @[pf_entry]
 def permit (s : State) (owner spender : Address) (value deadline : UInt256)
     (v : UInt8) (r signature : Bytes32) : Except Error (State × UInt64) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
-  else if (0 : UInt64) ≠ 1 then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Permit.authorize owner spender value deadline v r signature)
+  Effect.ensureCode (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  if (0 : UInt64) ≠ 1 then
+    .ok (hold s, Permit.authorize owner spender value deadline v r signature)
   else
     .error .overflow
 

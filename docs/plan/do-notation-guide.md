@@ -46,5 +46,5 @@ plain `UInt64` when no failure path exists — Extract stays simpler.
 - Next surface: `docs/plan/tasks/erg-evm-effect-001.md` (Token sequential `Effect`) —
   first slice landed as `Examples.EvmTokenErgonomics` (`Effect.ensure` / `abort`);
   `Examples.Evm.Token.approve` / `transfer` / `transferFrom` use Bool `Effect.ensure`;
-  `mint` / `burn` / `burnFrom` / allowance / `pause` / `unpause` use UInt64 `Effect.ensureCode` (digest `4519c849c36cc5ca`)
+  `mint` / `burn` / `burnFrom` / allowance / `pause` / `unpause` / `permit` use UInt64 `Effect.ensureCode` (digest `7d01d10202d87dd3`)
 - NEAR PromiseHandle Extract through `and8Returned` landed (N13); `maxFanIn>8` fail-closes at Extract (ceiling 8, no And9); see `wsm-near-promise-general-001`
