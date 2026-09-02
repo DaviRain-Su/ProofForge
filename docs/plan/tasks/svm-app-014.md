@@ -29,4 +29,4 @@ exact lots; both-`None` withdraws all free quote+base).
 
 ## 仍未覆盖
 
-`Option` DepositFunds；tags 0–2 / 14–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。
+`Option` DepositFunds — see [svm-app-015](svm-app-015.md)；tags 0–2 / 14–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。
