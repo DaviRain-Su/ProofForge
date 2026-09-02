@@ -276,6 +276,7 @@ jobs:
         with:
           path: runtime-tests/solana/target
           key: mollusk-${{ runner.os }}-${{ hashFiles('runtime-tests/solana/Cargo.lock', 'runtime-tests/solana/Cargo.toml') }}
+          restore-keys: mollusk-${{ runner.os }}-
 
       - name: Prepare pinned toolchains
         run: |
@@ -343,6 +344,7 @@ jobs:
         with:
           path: runtime-tests/phoenix/target
           key: mollusk-phoenix-${{ runner.os }}-${{ hashFiles('runtime-tests/phoenix/Cargo.lock', 'runtime-tests/phoenix/Cargo.toml') }}
+          restore-keys: mollusk-phoenix-${{ runner.os }}-
 
       - name: Prepare pinned toolchains
         run: |
