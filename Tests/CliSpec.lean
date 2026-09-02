@@ -17,8 +17,12 @@ namespace Tests.CliSpec
   | .ok o => o.target == .evm && o.outDir.toString == "out" && o.names == #["Counter", "Pair"]
   | .error _ => false
 
-#guard ProofForge.Cli.svmModuleName "Phoenix" == `Examples.Phoenix
+#guard ProofForge.Cli.svmModuleName "Phoenix" == `Examples.Svm.Phoenix
 #guard ProofForge.Cli.svmModuleName "Counter" == `Examples.Counter
+#guard ProofForge.Cli.fixtureModule .evm "Counter" == `Examples.Counter
+#guard ProofForge.Cli.fixtureModule .evm "TipJar" == `Examples.Evm.TipJar
+#guard ProofForge.Cli.fixtureModule .xrpl "XrplSmoke" == `Examples.Xrpl.XrplSmoke
+#guard ProofForge.Cli.fixtureModule .near "NearCtx" == `Examples.Near.NearCtx
 
 #guard
   match ProofForge.Cli.parseArgs ["build", "--target", "xrpl-alphanet", "XrplSmoke"] with

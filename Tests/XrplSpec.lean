@@ -3,31 +3,31 @@ import ProofForge.Wasm.Xrpl.IR
 import ProofForge.Wasm.Xrpl.Emit
 import ProofForge.Wasm.Xrpl.Commands
 import Examples.Counter
-import Examples.Clock
-import Examples.EvmCtx
-import Examples.XrplCtx
-import Examples.XrplOwn
-import Examples.Hash
-import Examples.XrplHash
-import Examples.XrplRt2
-import Examples.XrplVec
-import Examples.XrplSmoke
-import Examples.XrplGate
-import Examples.XrplHold
-import Examples.XrplMark
-import Examples.XrplBal
-import Examples.XrplBalRt
-import Examples.XrplRoot
-import Examples.XrplTx
-import Examples.XrplSend
-import Examples.XrplNest
-import Examples.XrplStep
-import Examples.XrplRole
-import Examples.XrplPeer
-import Examples.XrplFlag
-import Examples.XrplTab
-import Examples.XrplHand
-import Examples.XrplCrew
+import Examples.Svm.Clock
+import Examples.Evm.EvmCtx
+import Examples.Xrpl.XrplCtx
+import Examples.Xrpl.XrplOwn
+import Examples.Svm.Hash
+import Examples.Xrpl.XrplHash
+import Examples.Xrpl.XrplRt2
+import Examples.Xrpl.XrplVec
+import Examples.Xrpl.XrplSmoke
+import Examples.Xrpl.XrplGate
+import Examples.Xrpl.XrplHold
+import Examples.Xrpl.XrplMark
+import Examples.Xrpl.XrplBal
+import Examples.Xrpl.XrplBalRt
+import Examples.Xrpl.XrplRoot
+import Examples.Xrpl.XrplTx
+import Examples.Xrpl.XrplSend
+import Examples.Xrpl.XrplNest
+import Examples.Xrpl.XrplStep
+import Examples.Xrpl.XrplRole
+import Examples.Xrpl.XrplPeer
+import Examples.Xrpl.XrplFlag
+import Examples.Xrpl.XrplTab
+import Examples.Xrpl.XrplHand
+import Examples.Xrpl.XrplCrew
 
 /-!
 # XRPL Bedrock target tests (WASM family)
@@ -149,57 +149,57 @@ elab "#pf_xrpl_reject " n:ident : command => do
       unless reason.contains "xrpl rejects" do
         throwError "unexpected xrpl rejection reason: {reason}"
 
-#pf_xrpl_reject Examples.Clock
+#pf_xrpl_reject Examples.Svm.Clock
 
-#pf_xrpl_reject Examples.EvmCtx
+#pf_xrpl_reject Examples.Evm.EvmCtx
 
-#pf_xrpl_reject Examples.Hash
+#pf_xrpl_reject Examples.Svm.Hash
 
 #pf_xrpl_build Examples.Counter
 
-#pf_xrpl_build Examples.XrplCtx
+#pf_xrpl_build Examples.Xrpl.XrplCtx
 
-#pf_xrpl_build Examples.XrplOwn
+#pf_xrpl_build Examples.Xrpl.XrplOwn
 
-#pf_xrpl_build Examples.XrplHash
+#pf_xrpl_build Examples.Xrpl.XrplHash
 
-#pf_xrpl_build Examples.XrplRt2
+#pf_xrpl_build Examples.Xrpl.XrplRt2
 
-#pf_xrpl_build Examples.XrplVec
+#pf_xrpl_build Examples.Xrpl.XrplVec
 
-#pf_xrpl_build Examples.XrplSmoke
+#pf_xrpl_build Examples.Xrpl.XrplSmoke
 
-#pf_xrpl_build Examples.XrplGate
+#pf_xrpl_build Examples.Xrpl.XrplGate
 
-#pf_xrpl_build Examples.XrplHold
+#pf_xrpl_build Examples.Xrpl.XrplHold
 
-#pf_xrpl_build Examples.XrplMark
+#pf_xrpl_build Examples.Xrpl.XrplMark
 
-#pf_xrpl_build Examples.XrplBal
+#pf_xrpl_build Examples.Xrpl.XrplBal
 
-#pf_xrpl_build Examples.XrplBalRt
+#pf_xrpl_build Examples.Xrpl.XrplBalRt
 
-#pf_xrpl_build Examples.XrplRoot
+#pf_xrpl_build Examples.Xrpl.XrplRoot
 
-#pf_xrpl_build Examples.XrplTx
+#pf_xrpl_build Examples.Xrpl.XrplTx
 
-#pf_xrpl_build Examples.XrplSend
+#pf_xrpl_build Examples.Xrpl.XrplSend
 
-#pf_xrpl_build Examples.XrplNest
+#pf_xrpl_build Examples.Xrpl.XrplNest
 
-#pf_xrpl_build Examples.XrplStep
+#pf_xrpl_build Examples.Xrpl.XrplStep
 
-#pf_xrpl_build Examples.XrplRole
+#pf_xrpl_build Examples.Xrpl.XrplRole
 
-#pf_xrpl_build Examples.XrplPeer
+#pf_xrpl_build Examples.Xrpl.XrplPeer
 
-#pf_xrpl_build Examples.XrplFlag
+#pf_xrpl_build Examples.Xrpl.XrplFlag
 
-#pf_xrpl_build Examples.XrplTab
+#pf_xrpl_build Examples.Xrpl.XrplTab
 
-#pf_xrpl_build Examples.XrplHand
+#pf_xrpl_build Examples.Xrpl.XrplHand
 
-#pf_xrpl_build Examples.XrplCrew
+#pf_xrpl_build Examples.Xrpl.XrplCrew
 
 open Lean Elab Command in
 elab "#pf_xrpl_emit_check " n:ident : command => do
@@ -281,7 +281,7 @@ elab "#pf_xrpl_own_emit_check " n:ident : command => do
           throwError "wasm emit must not add eq_account host"
         logInfo m!"proofforge-xrpl-own: {source.length} bytes of WAT passed own anchor check"
 
-#pf_xrpl_own_emit_check Examples.XrplOwn
+#pf_xrpl_own_emit_check Examples.Xrpl.XrplOwn
 
 open Lean Elab Command in
 elab "#pf_xrpl_gate_emit_check " n:ident : command => do
@@ -310,7 +310,7 @@ elab "#pf_xrpl_gate_emit_check " n:ident : command => do
           throwError "XrplGate must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-gate: {source.length} bytes of WAT passed gate anchor check"
 
-#pf_xrpl_gate_emit_check Examples.XrplGate
+#pf_xrpl_gate_emit_check Examples.Xrpl.XrplGate
 
 open Lean Elab Command in
 elab "#pf_xrpl_hold_emit_check " n:ident : command => do
@@ -341,7 +341,7 @@ elab "#pf_xrpl_hold_emit_check " n:ident : command => do
           throwError "XrplHold must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-hold: {source.length} bytes of WAT passed hold anchor check"
 
-#pf_xrpl_hold_emit_check Examples.XrplHold
+#pf_xrpl_hold_emit_check Examples.Xrpl.XrplHold
 
 open Lean Elab Command in
 elab "#pf_xrpl_mark_emit_check " n:ident : command => do
@@ -379,7 +379,7 @@ elab "#pf_xrpl_mark_emit_check " n:ident : command => do
           throwError "XrplMark must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-mark: {source.length} bytes of WAT passed mark anchor check"
 
-#pf_xrpl_mark_emit_check Examples.XrplMark
+#pf_xrpl_mark_emit_check Examples.Xrpl.XrplMark
 
 open Lean Elab Command in
 elab "#pf_xrpl_bal_emit_check " n:ident : command => do
@@ -404,7 +404,7 @@ elab "#pf_xrpl_bal_emit_check " n:ident : command => do
           throwError "XrplBal must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-bal: {source.length} bytes of WAT passed bal anchor check"
 
-#pf_xrpl_bal_emit_check Examples.XrplBal
+#pf_xrpl_bal_emit_check Examples.Xrpl.XrplBal
 
 open Lean Elab Command in
 elab "#pf_xrpl_balrt_alphanet_emit_check " n:ident : command => do
@@ -429,7 +429,7 @@ elab "#pf_xrpl_balrt_alphanet_emit_check " n:ident : command => do
             throwError s!"alphanet emit is missing balrt anchor: {anchor}\n{source}"
         logInfo m!"proofforge-xrpl-balrt: {source.length} bytes of WAT passed balrt anchor check"
 
-#pf_xrpl_balrt_alphanet_emit_check Examples.XrplBalRt
+#pf_xrpl_balrt_alphanet_emit_check Examples.Xrpl.XrplBalRt
 
 open Lean Elab Command in
 elab "#pf_xrpl_root_alphanet_emit_check " n:ident : command => do
@@ -455,7 +455,7 @@ elab "#pf_xrpl_root_alphanet_emit_check " n:ident : command => do
             throwError s!"alphanet emit is missing root anchor: {anchor}\n{source}"
         logInfo m!"proofforge-xrpl-root: {source.length} bytes of WAT passed root anchor check"
 
-#pf_xrpl_root_alphanet_emit_check Examples.XrplRoot
+#pf_xrpl_root_alphanet_emit_check Examples.Xrpl.XrplRoot
 
 open Lean Elab Command in
 elab "#pf_xrpl_tx_alphanet_emit_check " n:ident : command => do
@@ -479,7 +479,7 @@ elab "#pf_xrpl_tx_alphanet_emit_check " n:ident : command => do
             throwError s!"alphanet emit is missing tx anchor: {anchor}\n{source}"
         logInfo m!"proofforge-xrpl-tx: {source.length} bytes of WAT passed tx anchor check"
 
-#pf_xrpl_tx_alphanet_emit_check Examples.XrplTx
+#pf_xrpl_tx_alphanet_emit_check Examples.Xrpl.XrplTx
 
 open Lean Elab Command in
 elab "#pf_xrpl_send_alphanet_emit_check " n:ident : command => do
@@ -505,7 +505,7 @@ elab "#pf_xrpl_send_alphanet_emit_check " n:ident : command => do
           throwError "wasm emit must not mention setUserData"
         logInfo m!"proofforge-xrpl-send: {source.length} bytes of WAT passed send anchor check"
 
-#pf_xrpl_send_alphanet_emit_check Examples.XrplSend
+#pf_xrpl_send_alphanet_emit_check Examples.Xrpl.XrplSend
 
 open Lean Elab Command in
 elab "#pf_xrpl_nest_alphanet_emit_check " n:ident : command => do
@@ -530,7 +530,7 @@ elab "#pf_xrpl_nest_alphanet_emit_check " n:ident : command => do
           throwError "wasm emit must not mention Sdk.Map"
         logInfo m!"proofforge-xrpl-nest: {source.length} bytes of WAT passed nest anchor check"
 
-#pf_xrpl_nest_alphanet_emit_check Examples.XrplNest
+#pf_xrpl_nest_alphanet_emit_check Examples.Xrpl.XrplNest
 
 open Lean Elab Command in
 elab "#pf_xrpl_step_emit_check " n:ident : command => do
@@ -558,7 +558,7 @@ elab "#pf_xrpl_step_emit_check " n:ident : command => do
           throwError "XrplStep must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-step: {source.length} bytes of WAT passed step anchor check"
 
-#pf_xrpl_step_emit_check Examples.XrplStep
+#pf_xrpl_step_emit_check Examples.Xrpl.XrplStep
 
 open Lean Elab Command in
 elab "#pf_xrpl_role_emit_check " n:ident : command => do
@@ -585,7 +585,7 @@ elab "#pf_xrpl_role_emit_check " n:ident : command => do
           throwError "XrplRole must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-role: {source.length} bytes of WAT passed role anchor check"
 
-#pf_xrpl_role_emit_check Examples.XrplRole
+#pf_xrpl_role_emit_check Examples.Xrpl.XrplRole
 
 open Lean Elab Command in
 elab "#pf_xrpl_peer_alphanet_emit_check " n:ident : command => do
@@ -614,7 +614,7 @@ elab "#pf_xrpl_peer_alphanet_emit_check " n:ident : command => do
           throwError "wasm emit must not mention Sdk.Map"
         logInfo m!"proofforge-xrpl-peer: {source.length} bytes of WAT passed peer anchor check"
 
-#pf_xrpl_peer_alphanet_emit_check Examples.XrplPeer
+#pf_xrpl_peer_alphanet_emit_check Examples.Xrpl.XrplPeer
 
 open Lean Elab Command in
 elab "#pf_xrpl_flag_alphanet_emit_check " n:ident : command => do
@@ -636,7 +636,7 @@ elab "#pf_xrpl_flag_alphanet_emit_check " n:ident : command => do
             throwError s!"alphanet emit is missing flag anchor: {anchor}\n{source}"
         logInfo m!"proofforge-xrpl-flag: {source.length} bytes of WAT passed flag anchor check"
 
-#pf_xrpl_flag_alphanet_emit_check Examples.XrplFlag
+#pf_xrpl_flag_alphanet_emit_check Examples.Xrpl.XrplFlag
 
 open Lean Elab Command in
 elab "#pf_xrpl_tab_emit_check " n:ident : command => do
@@ -664,7 +664,7 @@ elab "#pf_xrpl_tab_emit_check " n:ident : command => do
           throwError "wasm emit must not mention loopIx"
         logInfo m!"proofforge-xrpl-tab: {source.length} bytes of WAT passed tab anchor check"
 
-#pf_xrpl_tab_emit_check Examples.XrplTab
+#pf_xrpl_tab_emit_check Examples.Xrpl.XrplTab
 
 open Lean Elab Command in
 elab "#pf_xrpl_hand_emit_check " n:ident : command => do
@@ -691,7 +691,7 @@ elab "#pf_xrpl_hand_emit_check " n:ident : command => do
           throwError "XrplHand must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-hand: {source.length} bytes of WAT passed hand anchor check"
 
-#pf_xrpl_hand_emit_check Examples.XrplHand
+#pf_xrpl_hand_emit_check Examples.Xrpl.XrplHand
 
 open Lean Elab Command in
 elab "#pf_xrpl_crew_emit_check " n:ident : command => do
@@ -718,7 +718,7 @@ elab "#pf_xrpl_crew_emit_check " n:ident : command => do
           throwError "XrplCrew must not take wasm i64 params"
         logInfo m!"proofforge-xrpl-crew: {source.length} bytes of WAT passed crew anchor check"
 
-#pf_xrpl_crew_emit_check Examples.XrplCrew
+#pf_xrpl_crew_emit_check Examples.Xrpl.XrplCrew
 
 open Lean Elab Command in
 elab "#pf_xrpl_hash_emit_check " n:ident : command => do
@@ -752,7 +752,7 @@ elab "#pf_xrpl_hash_emit_check " n:ident : command => do
           throwError "wasm emit must use compute_sha512_half, not sha512_half"
         logInfo m!"proofforge-xrpl-hash: {source.length} bytes of WAT passed hash anchor check"
 
-#pf_xrpl_hash_emit_check Examples.XrplHash
+#pf_xrpl_hash_emit_check Examples.Xrpl.XrplHash
 
 open Lean Elab Command in
 elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
@@ -781,7 +781,7 @@ elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
           "    (if (i32.lt_s (local.get $st) (i32.const 0))"
         unless source.contains feeGuard do
           throwError s!"wasm emit does not guard negative get_base_fee result:\n{source}"
-        match Extract.extractModuleIR env `Examples.XrplCtx none >>=
+        match Extract.extractModuleIR env `Examples.Xrpl.XrplCtx none >>=
             ProofForge.Wasm.Xrpl.IR.fromExtracted >>= ProofForge.Wasm.Xrpl.Emit.emit with
         | .error reason => throwError reason
         | .ok ctxSource =>
@@ -801,7 +801,7 @@ elab "#pf_xrpl_rt2_emit_check " n:ident : command => do
           throwError "wasm emit must not mention blockhash"
         logInfo m!"proofforge-xrpl-rt2: {source.length} bytes of WAT passed rt2 anchor check"
 
-#pf_xrpl_rt2_emit_check Examples.XrplRt2
+#pf_xrpl_rt2_emit_check Examples.Xrpl.XrplRt2
 
 open Lean Elab Command in
 elab "#pf_xrpl_vec_emit_check " n:ident : command => do
@@ -829,7 +829,7 @@ elab "#pf_xrpl_vec_emit_check " n:ident : command => do
           throwError "wasm emit must not mention indexGet"
         logInfo m!"proofforge-xrpl-vec: {source.length} bytes of WAT passed vec anchor check"
 
-#pf_xrpl_vec_emit_check Examples.XrplVec
+#pf_xrpl_vec_emit_check Examples.Xrpl.XrplVec
 
 open Lean Elab Command in
 elab "#pf_xrpl_alphanet_emit_check " n:ident : command => do

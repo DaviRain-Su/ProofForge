@@ -1,8 +1,8 @@
-import Examples.TokenApprove
+import Examples.Svm.TokenApprove
 
 namespace Tests.TokenApproveSpec
 
-open Examples.TokenApprove
+open Examples.Svm.TokenApprove
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

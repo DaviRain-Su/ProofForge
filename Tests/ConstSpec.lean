@@ -1,8 +1,8 @@
-import Examples.Const
+import Examples.Evm.Const
 
 namespace Tests.ConstSpec
 
-open Examples.Const
+open Examples.Evm.Const
 open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩

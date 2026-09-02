@@ -1,8 +1,8 @@
-import Examples.Info
+import Examples.Svm.Info
 
 namespace Tests.InfoSpec
 
-open Examples.Info
+open Examples.Svm.Info
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

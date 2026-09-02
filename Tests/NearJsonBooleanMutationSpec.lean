@@ -1,5 +1,5 @@
-import Examples.NearJsonBooleanMutation
-import Examples.NearPromise
+import Examples.Near.NearJsonBooleanMutation
+import Examples.Near.NearPromise
 import Lean
 import ProofForge
 
@@ -16,7 +16,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_boolean_mutation_check" : command => do
   let env ← getEnv
   let source ← match ProofForge.Extract.extractModuleIR env
-      `Examples.NearJsonBooleanMutation with
+      `Examples.Near.NearJsonBooleanMutation with
     | .ok program => pure program | .error reason => throwError reason
   let some extracted := source.methods.find? (·.ixName == "setChecked")
     | throwError "missing setChecked"
@@ -59,7 +59,7 @@ elab "#pf_near_json_boolean_mutation_check" : command => do
   let beforeReturn := (body.splitOn "(call $pf_value_return").head!
   unless (beforeReturn.splitOn "(call $pf_storage_write").length == 3 do
     throwError "JSON Boolean return precedes state persistence"
-  let promiseSource ← match ProofForge.Extract.extractModuleIR env `Examples.NearPromise with
+  let promiseSource ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearPromise with
     | .ok program => pure program | .error reason => throwError reason
   let promiseMethods := promiseSource.methods.map fun candidate =>
     if candidate.ixName == "transferCallerReturned" then

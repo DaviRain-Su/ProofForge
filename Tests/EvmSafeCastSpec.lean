@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.EvmSafeCastAccumulator
-import Examples.EvmSafeCastConfig
+import Examples.Evm.EvmSafeCastAccumulator
+import Examples.Evm.EvmSafeCastConfig
 
 /-!
 Focused safe-cast suite: host truth tables for every discarded limb, two independent application
@@ -147,17 +147,17 @@ def justOver32In256 : UInt256 := ⟨u32Limit, 0, 0, 0⟩
 
 /-! ## Permissionless checked-accumulation policy -/
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard match add (init 0) (⟨0, 0, 0, 0⟩ : UInt256) with
   | .ok (state, result) => state.total == 0 && result == 0
   | _ => false
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard match add (init 0) max256 with
   | .ok (state, result) => state.total == u64Max && result == u64Max
   | _ => false
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard (match add (init 5) justOver256 with
   | .error .amountTooWide => true
   | _ => false) &&
@@ -165,12 +165,12 @@ open Examples.EvmSafeCastAccumulator in
   | .error .amountTooWide => true
   | _ => false)
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard match add (init u64Max) (⟨1, 0, 0, 0⟩ : UInt256) with
   | .error .sumOverflow => true
   | _ => false
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard (init 9).checkpoint == 1 &&
   (match setCheckpoint (init 9) max32In256 with
   | .ok (state, result) => state.total == 9 && state.checkpoint.toUInt64 == u32Max &&
@@ -183,7 +183,7 @@ open Examples.EvmSafeCastAccumulator in
   | .error .checkpointTooWide => true
   | _ => false)
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard (init 9).batch == 2 &&
   (match setBatch (init 9) max16In256 with
   | .ok (state, result) => state.total == 9 && state.checkpoint == 1 &&
@@ -196,7 +196,7 @@ open Examples.EvmSafeCastAccumulator in
   | .error .batchTooWide => true
   | _ => false)
 
-open Examples.EvmSafeCastAccumulator in
+open Examples.Evm.EvmSafeCastAccumulator in
 #guard (init 9).mode == 3 &&
   (match setMode (init 9) max8In256 with
   | .ok (state, result) => state.total == 9 && state.checkpoint == 1 && state.batch == 2 &&
@@ -213,13 +213,13 @@ open Examples.EvmSafeCastAccumulator in
 
 def sampleAdmin : Address := ⟨1, 2, 3⟩
 
-open Examples.EvmSafeCastConfig in
+open Examples.Evm.EvmSafeCastConfig in
 #guard (init sampleAdmin).limit == 7 &&
   (match setLimit (init sampleAdmin) max128 with
   | .ok (state, result) => state.limit == u64Max && result == u64Max
   | _ => false)
 
-open Examples.EvmSafeCastConfig in
+open Examples.Evm.EvmSafeCastConfig in
 #guard (match setLimit (init sampleAdmin) (⟨0, 0⟩ : UInt128) with
   | .error .zero => true
   | _ => false) &&
@@ -230,7 +230,7 @@ open Examples.EvmSafeCastConfig in
   | .error .invalidLimit => true
   | _ => false)
 
-open Examples.EvmSafeCastConfig in
+open Examples.Evm.EvmSafeCastConfig in
 #guard (init sampleAdmin).window == 3 &&
   (match setWindow (init sampleAdmin) max32In128 with
   | .ok (state, result) => state.limit == 7 && state.window.toUInt64 == u32Max &&
@@ -243,7 +243,7 @@ open Examples.EvmSafeCastConfig in
   | .error .invalidWindow => true
   | _ => false)
 
-open Examples.EvmSafeCastConfig in
+open Examples.Evm.EvmSafeCastConfig in
 #guard (init sampleAdmin).threshold == 5 &&
   (match setThreshold (init sampleAdmin) max16In128 with
   | .ok (state, result) => state.limit == 7 && state.window == 3 &&
@@ -256,7 +256,7 @@ open Examples.EvmSafeCastConfig in
   | .error .invalidThreshold => true
   | _ => false)
 
-open Examples.EvmSafeCastConfig in
+open Examples.Evm.EvmSafeCastConfig in
 #guard (init sampleAdmin).level == 6 &&
   (match setLevel (init sampleAdmin) max8In128 with
   | .ok (state, result) => state.limit == 7 && state.window == 3 && state.threshold == 5 &&
@@ -380,51 +380,51 @@ private def expectSafeCastConsumer (module : Name) (expectedSlots : List (String
     throwError s!"{module}: safe-cast registry digest is stale: {actualDigest}"
 
 elab "#pf_guard_evm_safe_cast_accumulator" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastAccumulator
     [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "add" "uint256" "amountTooWide" ["w1", "w2", "w3"]
     ["amountTooWide", "sumOverflow"] true
 
 elab "#pf_guard_evm_safe_cast_config" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastConfig
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
       ("threshold", 2), ("level", 1)]
     "setLimit" "uint128" "invalidLimit" ["w1"] ["invalidLimit", "zero"] false
 
 elab "#pf_guard_evm_safe_cast_checkpoint" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastAccumulator
     [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "setCheckpoint" "uint256" "checkpointTooWide" ["w1", "w2", "w3"]
     ["checkpointTooWide", "checkpointZero"] true (some u32Limit)
 
 elab "#pf_guard_evm_safe_cast_window" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastConfig
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
       ("threshold", 2), ("level", 1)]
     "setWindow" "uint128" "invalidWindow" ["w1"] ["invalidWindow", "windowZero"] false
     (some u32Limit)
 
 elab "#pf_guard_evm_safe_cast_batch" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastAccumulator
     [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "setBatch" "uint256" "batchTooWide" ["w1", "w2", "w3"]
     ["batchTooWide", "batchZero"] true (some u16Limit)
 
 elab "#pf_guard_evm_safe_cast_threshold" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastConfig
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
       ("threshold", 2), ("level", 1)]
     "setThreshold" "uint128" "invalidThreshold" ["w1"]
     ["invalidThreshold", "thresholdZero"] false (some u16Limit)
 
 elab "#pf_guard_evm_safe_cast_mode" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastAccumulator
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastAccumulator
     [("total", 8), ("checkpoint", 4), ("batch", 2), ("mode", 1)]
     "setMode" "uint256" "modeTooWide" ["w1", "w2", "w3"]
     ["modeTooWide", "modeZero"] true (some u8Limit)
 
 elab "#pf_guard_evm_safe_cast_level" : command =>
-  expectSafeCastConsumer `Examples.EvmSafeCastConfig
+  expectSafeCastConsumer `Examples.Evm.EvmSafeCastConfig
     [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8), ("limit", 8), ("window", 4),
       ("threshold", 2), ("level", 1)]
     "setLevel" "uint128" "invalidLevel" ["w1"] ["invalidLevel", "levelZero"] false

@@ -1,4 +1,4 @@
-import Examples.NearJsonFtTransferInput
+import Examples.Near.NearJsonFtTransferInput
 import Lean
 import ProofForge
 
@@ -25,7 +25,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_ft_transfer_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonFtTransferInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonFtTransferInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName.startsWith "inspect" || method.ixName == "commitMemoLength" then

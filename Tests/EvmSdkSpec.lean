@@ -1,9 +1,9 @@
 import ProofForge
-import Examples.Token
-import Examples.Capped
-import Examples.TipJar
-import Examples.Vault
-import Examples.Ownable
+import Examples.Evm.Token
+import Examples.Evm.Capped
+import Examples.Evm.TipJar
+import Examples.Evm.Vault
+import Examples.Evm.Ownable
 
 namespace Tests.EvmSdkSpec
 

@@ -18,4 +18,4 @@ cd my-program
 pf build --target svm
 ```
 
-参考仓内好例子：`Examples/VersionedLedger.lean`（Attr + `Svm.Sdk.Versioned`）。
+参考仓内好例子：`Examples/Svm/VersionedLedger.lean`（Attr + `Svm.Sdk.Versioned`）。

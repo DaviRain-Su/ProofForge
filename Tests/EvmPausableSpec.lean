@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.TwoStepCounter
-import Examples.Credits
+import Examples.Evm.TwoStepCounter
+import Examples.Evm.Credits
 
 /-!
 R5-004 focused suite: canonical pause flags, fail-closed predicates, compatibility aliases, and
@@ -34,10 +34,10 @@ open ProofForge.Evm.Sdk
 #guard !Access.requireRunning Pausable.paused
 #guard Access.runningViolation == Pausable.violation
 
-open Examples.TwoStepCounter in
+open Examples.Evm.TwoStepCounter in
 #guard (init ⟨1, 2, 3⟩).paused == Pausable.running
 
-open Examples.Credits in
+open Examples.Evm.Credits in
 #guard (init ⟨1, 2, 3⟩).paused == Pausable.running
 
 #guard ProofForge.Evm.Registry.digestOf "TwoStepCounter" == some "3b08dde14972e728"

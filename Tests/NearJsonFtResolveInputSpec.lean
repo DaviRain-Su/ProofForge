@@ -1,4 +1,4 @@
-import Examples.NearJsonFtResolveInput
+import Examples.Near.NearJsonFtResolveInput
 import Lean
 import ProofForge
 
@@ -26,7 +26,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_ft_resolve_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonFtResolveInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonFtResolveInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName.startsWith "sender" || method.ixName.startsWith "receiver" ||

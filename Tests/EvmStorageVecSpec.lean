@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.EvmVecLog
-import Examples.EvmVecStack
+import Examples.Evm.EvmVecLog
+import Examples.Evm.EvmVecStack
 
 /-!
 R5-010 focused suite: persistent bounded EVM storage-vector (UInt64) policy truth tables,
@@ -91,18 +91,18 @@ def wrongCountPayload : StorageVec.Descriptor 2 :=
 
 /-! ## Consumer descriptor and layout pins -/
 
-#guard Examples.EvmVecLog.declared.handle.log.wellFormed
-#guard Examples.EvmVecLog.declared.handle.log.values.baseSlot == 3
-#guard Examples.EvmVecLog.declared.handle.log.count.slot? == some 7
-#guard Examples.EvmVecLog.declared.handle.admin.wideLeaves? == some 3
-#guard Examples.EvmVecLog.layout.nextSlot == 8
-#guard Examples.EvmVecLog.layout.wellFormed
+#guard Examples.Evm.EvmVecLog.declared.handle.log.wellFormed
+#guard Examples.Evm.EvmVecLog.declared.handle.log.values.baseSlot == 3
+#guard Examples.Evm.EvmVecLog.declared.handle.log.count.slot? == some 7
+#guard Examples.Evm.EvmVecLog.declared.handle.admin.wideLeaves? == some 3
+#guard Examples.Evm.EvmVecLog.layout.nextSlot == 8
+#guard Examples.Evm.EvmVecLog.layout.wellFormed
 
-#guard Examples.EvmVecStack.declared.handle.stack.wellFormed
-#guard Examples.EvmVecStack.declared.handle.stack.values.baseSlot == 0
-#guard Examples.EvmVecStack.declared.handle.stack.count.slot? == some 3
-#guard Examples.EvmVecStack.layout.nextSlot == 4
-#guard Examples.EvmVecStack.layout.wellFormed
+#guard Examples.Evm.EvmVecStack.declared.handle.stack.wellFormed
+#guard Examples.Evm.EvmVecStack.declared.handle.stack.values.baseSlot == 0
+#guard Examples.Evm.EvmVecStack.declared.handle.stack.count.slot? == some 3
+#guard Examples.Evm.EvmVecStack.layout.nextSlot == 4
+#guard Examples.Evm.EvmVecStack.layout.wellFormed
 
 def logSlots : List (String × Nat) :=
   [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8),
@@ -111,23 +111,23 @@ def logSlots : List (String × Nat) :=
 def stackSlots : List (String × Nat) :=
   [("items_0", 8), ("items_1", 8), ("items_2", 8), ("depth", 8)]
 
-#guard Examples.EvmVecLog.layout.matchesFlattened logSlots
-#guard Examples.EvmVecStack.layout.matchesFlattened stackSlots
+#guard Examples.Evm.EvmVecLog.layout.matchesFlattened logSlots
+#guard Examples.Evm.EvmVecStack.layout.matchesFlattened stackSlots
 
 /-! ## Consumer host behavior through ordinary typed state -/
 
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard (init ⟨1, 2, 3⟩).count == 0 && countOf (init ⟨1, 2, 3⟩) == 0 &&
   entryAt (init ⟨1, 2, 3⟩) 0 == 0
 
 -- append, then reads observe exactly the active prefix
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, r) => r == 1 && s.count == 1 && s.entries[0]! == 11 && entryAt s 0 == 11 &&
       entryAt s 1 == 0
   | _ => false
 
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record (init ⟨1, 2, 3⟩) 11 with
   | .ok (s1, _) =>
       (match record s1 22 with
@@ -138,7 +138,7 @@ open Examples.EvmVecLog in
   | _ => false
 
 -- amend touches only the selected slot; OOB amend is the typed error with state unchanged
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, _) =>
       (match amend s 0 99 with
@@ -151,7 +151,7 @@ open Examples.EvmVecLog in
   | _ => false
 
 -- wipe resets only the length; the stale backing slot is unreachable through entryAt
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record (init ⟨1, 2, 3⟩) 11 with
   | .ok (s, _) =>
       (match wipe s with
@@ -160,23 +160,23 @@ open Examples.EvmVecLog in
   | _ => false
 
 -- corrupted persistent length fails every mutation before changing state
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record ({ init ⟨1, 2, 3⟩ with count := 5 }) 11 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match amend ({ init ⟨1, 2, 3⟩ with count := 5 }) 0 11 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match wipe ({ init ⟨1, 2, 3⟩ with count := 5 }) with
   | .error .malformed => true
   | _ => false
 
 -- a full log rejects record with the CapExceeded revert value (host stub returns it as data)
-open Examples.EvmVecLog in
+open Examples.Evm.EvmVecLog in
 #guard match record (init ⟨1, 2, 3⟩) 1 with
   | .ok (s1, _) =>
       (match record s1 2 with
@@ -194,12 +194,12 @@ open Examples.EvmVecLog in
        | _ => false)
   | _ => false
 
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard (init 7).depth == 1 && (init 7).items[0]! == 7 && topOf (init 7) == 7 &&
   depthOf (init 7) == 1
 
 -- push to capacity, then the full decision closes; pop returns the active prefix in LIFO order
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match push (init 7) 8 with
   | .ok (s1, r1) =>
       r1 == 2 && s1.depth == 2 && topOf s1 == 8 &&
@@ -212,7 +212,7 @@ open Examples.EvmVecStack in
          | _ => false)
   | _ => false
 
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match push (init 7) 8 with
   | .ok (s, _) =>
       (match pop s with
@@ -229,7 +229,7 @@ open Examples.EvmVecStack in
   | _ => false
 
 -- popped/cleared slots stay stale in the backing field but unreachable
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match push (init 7) 8 with
   | .ok (s, _) =>
       (match clearAll s with
@@ -237,17 +237,17 @@ open Examples.EvmVecStack in
        | _ => false)
   | _ => false
 
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match push ({ init 7 with depth := 4 }) 8 with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match pop ({ init 7 with depth := 4 }) with
   | .error .malformed => true
   | _ => false
 
-open Examples.EvmVecStack in
+open Examples.Evm.EvmVecStack in
 #guard match clearAll ({ init 7 with depth := 4 }) with
   | .error .malformed => true
   | _ => false
@@ -299,11 +299,11 @@ private def expectVecLayout (module : Name) (expectedSlots : List (String × Nat
     throwError s!"{module}: expected the fixed-vector dynamic-index load path in emitted Yul"
 
 elab "#pf_guard_evm_vec_log" : command =>
-  expectVecLayout `Examples.EvmVecLog logSlots [("entries", 3, 4, 1)]
+  expectVecLayout `Examples.Evm.EvmVecLog logSlots [("entries", 3, 4, 1)]
     ["record", "amend", "wipe", "countOf", "entryAt", "adminOf"] ["malformed", "oob"]
 
 elab "#pf_guard_evm_vec_stack" : command =>
-  expectVecLayout `Examples.EvmVecStack stackSlots [("items", 0, 3, 1)]
+  expectVecLayout `Examples.Evm.EvmVecStack stackSlots [("items", 0, 3, 1)]
     ["push", "pop", "clearAll", "depthOf", "topOf"] ["malformed", "empty"]
 
 #pf_guard_evm_vec_log

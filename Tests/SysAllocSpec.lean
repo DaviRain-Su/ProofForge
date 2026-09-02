@@ -1,8 +1,8 @@
-import Examples.SysAlloc
+import Examples.Svm.SysAlloc
 
 namespace Tests.SysAllocSpec
 
-open Examples.SysAlloc
+open Examples.Svm.SysAlloc
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

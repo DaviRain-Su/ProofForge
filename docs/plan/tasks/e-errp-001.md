@@ -13,8 +13,8 @@ depends-on: [e-swap-001]
 
 - `evmRevertUnauthorized who` → ABI `Unauthorized(address)`，`revert(0,36)`
 - `evmRevertZeroAddress` → ABI `ZeroAddress()`，`revert(0,4)`
-- `Examples.Ownable.bump` 非 owner 改走 `Unauthorized(caller)`，不再 selector-only `unauthorized`
-- `Examples.Ownable.guardZero`：`who == 0` 则 `ZeroAddress()`
+- `Examples.Evm.Ownable.bump` 非 owner 改走 `Unauthorized(caller)`，不再 selector-only `unauthorized`
+- `Examples.Evm.Ownable.guardZero`：`who == 0` 则 `ZeroAddress()`
 - ABI JSON 带这两条 error
 - Anvil：非 owner bump 解码 `Unauthorized(address)`；`guardZero(0)` 解码 `ZeroAddress()`
 - SVM / Legacy adapter 拒新叶

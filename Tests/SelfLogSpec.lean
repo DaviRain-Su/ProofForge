@@ -1,20 +1,20 @@
-import Examples.SelfLog
+import Examples.Svm.SelfLog
 
 namespace Tests.SelfLogSpec
 
 open Lean Elab Command
 open ProofForge.Svm
 
-#guard Examples.SelfLog.init 7 == { value := 7 }
-#guard match Examples.SelfLog.record (Examples.SelfLog.init 0) 42 with
+#guard Examples.Svm.SelfLog.init 7 == { value := 7 }
+#guard match Examples.Svm.SelfLog.record (Examples.Svm.SelfLog.init 0) 42 with
   | .ok (state, value) => state == { value := 42 } && value == 42
   | .error _ => false
-#guard Examples.SelfLog.get (Examples.SelfLog.init 42) == 42
+#guard Examples.Svm.SelfLog.get (Examples.Svm.SelfLog.init 42) == 42
 
 elab "#pf_guard_self_log_ir" : command => do
   let env ← getEnv
   let extracted ←
-    match ProofForge.Extract.extractModuleIR env `Examples.SelfLog with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.SelfLog with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

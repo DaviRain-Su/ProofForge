@@ -46,7 +46,7 @@ structure Options where
   outDir : System.FilePath := "build/out"
   names : Array String := #[]
   evmBackend : Option ProofForge.Evm.Assemble.Backend := none
-  /-- Fully-qualified Lean modules (`MyProgram.Counter`). Overrides Examples.<Name> when set. -/
+  /-- Fully-qualified Lean modules (`MyProgram.Counter`). Overrides in-tree fixture mapping when set. -/
   modules : Array String := #[]
   /-- Project directory name for `pf init`. -/
   initName : String := ""
@@ -75,7 +75,7 @@ private def usage : String :=
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
     "near writes Name.wat / Name.wasm (NEAR raw-u64; locked wat2wasm)\n" ++
-    "--module takes a dotted Lean module (repeatable). Bare Program names still map to Examples.<Name>.\n" ++
+    "--module takes a dotted Lean module (repeatable). Bare Program names map to in-tree Examples fixtures.\n" ++
     "User projects should pass --module or list [[program]] entries in pf.toml.\n" ++
     "No program names on build means every registered source module for the selected target.\n"
 
@@ -143,8 +143,25 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
       | some _ => .ok n
       | none => .error s!"unknown svm program {n}"
 
+/-- Dual-target fixtures stay at `Examples.<Name>`; target-only fixtures live under
+`Examples.{Svm,Evm,Xrpl,Near}.<Name>`. Program registry names are the last component. -/
+private def sharedFixtureNames : Array String :=
+  #["Counter", "Flag", "Lang", "Maybe", "Pair", "Phase", "Window"]
+
+def fixtureModule (target : Target) (name : String) : Lean.Name :=
+  if sharedFixtureNames.contains name then
+    Lean.Name.str `Examples name
+  else
+    let family : Lean.Name :=
+      match target with
+      | .svm => `Examples.Svm
+      | .evm => `Examples.Evm
+      | .xrpl | .xrplAlphaNet => `Examples.Xrpl
+      | .near => `Examples.Near
+    Lean.Name.str family name
+
 def svmModuleName (name : String) : Lean.Name :=
-  Lean.Name.str `Examples name
+  fixtureModule .svm name
 
 structure BuildUnit where
   name : String
@@ -240,12 +257,12 @@ private def resolveUnits (opts : Options)
       { name := basenameOfModule m, module := dottedToName m }
   else if !opts.names.isEmpty then
     let names ← selectNames opts.names
-    pure <| names.map fun n => { name := n, module := Lean.Name.str `Examples n }
+    pure <| names.map fun n => { name := n, module := fixtureModule opts.target n }
   else if !tomlUnits.isEmpty then
     pure tomlUnits
   else
     let names ← selectNames #[]
-    pure <| names.map fun n => { name := n, module := Lean.Name.str `Examples n }
+    pure <| names.map fun n => { name := n, module := fixtureModule opts.target n }
 
 private def isExamplesModule : Lean.Name → Bool
   | .str .anonymous "Examples" => true
@@ -395,7 +412,7 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       return 1
     let name := names[0]!
     let outDir := defaultXrplOut opts
-    match ← extractXrplPrograms #[{ name := name, module := Lean.Name.str `Examples name }] with
+    match ← extractXrplPrograms #[{ name := name, module := fixtureModule opts.target name }] with
     | .error reason =>
       IO.eprintln s!"pf: {reason}"
       return 1

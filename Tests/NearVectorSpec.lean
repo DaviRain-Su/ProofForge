@@ -1,4 +1,4 @@
-import Examples.NearVector
+import Examples.Near.NearVector
 import Lean
 import ProofForge
 
@@ -70,7 +70,7 @@ private partial def hasSourceLocal : Array ProofForge.Extract.IR.Op → Bool
 elab "#pf_near_vector_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearVector with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearVector with
     | .ok program => pure program
     | .error reason => throwError reason
   let methodSteps (name : String) :=

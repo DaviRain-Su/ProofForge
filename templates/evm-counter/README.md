@@ -18,4 +18,4 @@ cd my-contract
 pf build --target evm
 ```
 
-参考仓内好例子：`Examples/TipJar.lean`（`import ProofForge.Evm.Sdk`）。
+参考仓内好例子：`Examples/Evm/TipJar.lean`（`import ProofForge.Evm.Sdk`）。

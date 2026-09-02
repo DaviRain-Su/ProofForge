@@ -1,9 +1,9 @@
-import Examples.Book
+import Examples.Svm.Book
 import ProofForge
 
 namespace Tests.BookSpec
 
-open Examples.Book
+open Examples.Svm.Book
 
 #guard (init 7).cells[0]! == 7
 #guard get (init 7) == 7

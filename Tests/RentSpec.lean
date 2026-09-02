@@ -1,8 +1,8 @@
-import Examples.Rent
+import Examples.Svm.Rent
 
 namespace Tests.RentSpec
 
-open Examples.Rent
+open Examples.Svm.Rent
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

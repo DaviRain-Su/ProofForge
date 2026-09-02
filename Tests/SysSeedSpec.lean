@@ -1,8 +1,8 @@
-import Examples.SysSeed
+import Examples.Svm.SysSeed
 
 namespace Tests.SysSeedSpec
 
-open Examples.SysSeed
+open Examples.Svm.SysSeed
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

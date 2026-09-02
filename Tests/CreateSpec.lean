@@ -1,8 +1,8 @@
-import Examples.Create
+import Examples.Svm.Create
 
 namespace Tests.CreateSpec
 
-open Examples.Create
+open Examples.Svm.Create
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

@@ -1,6 +1,6 @@
-import Examples.AccountView
-import Examples.MemoryOps
-import Examples.TransientPair
+import Examples.Svm.AccountView
+import Examples.Svm.MemoryOps
+import Examples.Svm.TransientPair
 import Lean
 import ProofForge
 
@@ -55,8 +55,8 @@ private def bytesSmall : TransientBytes.Config := { capacity := 3 }
   (TransientBytes.Query.pop bytes4).canonical (fun _ : UInt64 => "unused") #[] ==
     "tbyte.pop.4"
 
-#pf_build Examples.MemoryOps
-#pf_build Examples.TransientPair
+#pf_build Examples.Svm.MemoryOps
+#pf_build Examples.Svm.TransientPair
 
 private def bytesStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientBytes (.begin _)) => some "begin"
@@ -103,7 +103,7 @@ private def filtered (step : ProofForge.Svm.IR.Op → Option String)
 elab "#pf_guard_transient_bytes" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.MemoryOps with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.MemoryOps with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←
@@ -168,10 +168,10 @@ elab "#pf_guard_transient_bytes" : command => do
   unless filtered bytesStep afterFinish == #["begin", "finish", "length"] do
     throwError "bytesAfterFinish did not preserve stale-handle validation order"
   -- Same-kind multi-handle evidence: two compile-time Bytes slots in the dedicated
-  -- `Examples.TransientPair` consumer decode through the same component bridge with distinct
+  -- `Examples.Svm.TransientPair` consumer decode through the same component bridge with distinct
   -- erased words and per-slot isolation.
   let pairSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.TransientPair with
     | .ok program => pure program
     | .error reason => throwError reason
   let pairProgram ←
@@ -215,7 +215,7 @@ elab "#pf_guard_transient_bytes" : command => do
       #["v.begin", "b.begin", "b.push", "v.push", "b.get", "v.get", "v.finish", "b.finish"] do
     throwError "vectorWithBytes did not interleave both handles in source order"
   let accountSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.AccountView with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.AccountView with
     | .ok program => pure program
     | .error reason => throwError reason
   let accountProgram ←

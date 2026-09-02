@@ -1,9 +1,9 @@
-import Examples.Seat
+import Examples.Svm.Seat
 import ProofForge
 
 namespace Tests.SeatSpec
 
-open Examples.Seat
+open Examples.Svm.Seat
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

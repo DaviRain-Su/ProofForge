@@ -1,4 +1,4 @@
-import Examples.NearJsonStorageUnregisterInput
+import Examples.Near.NearJsonStorageUnregisterInput
 import Lean
 import ProofForge
 
@@ -21,7 +21,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_storage_unregister_input_check" : command => do
   let env ← getEnv
   let source ← match ProofForge.Extract.extractModuleIR env
-      `Examples.NearJsonStorageUnregisterInput with
+      `Examples.Near.NearJsonStorageUnregisterInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName == "inspectForce" || method.ixName == "commitForce" then

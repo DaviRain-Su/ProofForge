@@ -2,7 +2,7 @@ import ProofForge
 import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Commands
-import Examples.NearTokenArithmetic
+import Examples.Near.NearTokenArithmetic
 
 /-! Lossless little-endian u128 checked predicates and modular carry/borrow limbs. -/
 
@@ -42,7 +42,7 @@ private partial def nearTokenKinds : Array ProofForge.Extract.IR.Op → Array St
 elab "#pf_guard_near_token_arithmetic" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearTokenArithmetic none with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearTokenArithmetic none with
     | .ok source => pure source
     | .error reason => throwError reason
   let kinds := source.methods.foldl (init := #[]) fun acc method => acc ++ nearTokenKinds method.ops
@@ -71,7 +71,7 @@ elab "#pf_guard_near_token_arithmetic" : command => do
   logInfo m!"proofforge-near-token-arithmetic: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_token_arithmetic
-#pf_near_build Examples.NearTokenArithmetic
+#pf_near_build Examples.Near.NearTokenArithmetic
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenArithmetic" ==
   some "f85fa4f3182ec1eb"

@@ -32,7 +32,7 @@ and `StorageBitmap` binds `Core.Collections.BoundedBitSet`:
 
 The current EVM extraction lowers dynamic-index `Vector` reads/writes only when the vector is a
 `State` field and the index proof is an explicit `if h : … < capacity` hypothesis in the consumer
-(`Examples.EvmStaticRoster.setSeat`, `Examples.EvmVecLog.record`). A generic helper returning an
+(`Examples.Evm.EvmStaticRoster.setSeat`, `Examples.Evm.EvmVecLog.record`). A generic helper returning an
 updated queue value is not an extractable shape today, so — exactly like `StorageVec` and
 `Roles.Set2` — this module owns the reusable *decisions and slot arithmetic* while applications
 own the literal `State` field writes:

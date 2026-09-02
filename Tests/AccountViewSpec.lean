@@ -1,10 +1,10 @@
-import Examples.AccountView
+import Examples.Svm.AccountView
 import Lean
 import ProofForge
 
 /-!
 Focused checks for the SVM-RT-1 bounded remaining-account view via the non-Phoenix
-`Examples.AccountView` consumer. The `#pf_build` commands run the same extraction and sBPF
+`Examples.Svm.AccountView` consumer. The `#pf_build` commands run the same extraction and sBPF
 emission path as the CLI; the `#pf_guard_account_view` command pins the extraction plan, the
 runtime walk contract, and the fail-closed emission markers. Behavioral bounds (capacity OOB,
 available-count OOB, duplicate keys, short data, signer/writable/owner, atomic state hold) are
@@ -13,12 +13,12 @@ covered by the Mollusk matrix in `runtime-tests/solana/tests/account_view.rs`.
 namespace Tests.AccountViewSpec
 
 open Lean Elab Command
-open Examples.AccountView
+open Examples.Svm.AccountView
 open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 
-#pf_build Examples.AccountView
-#pf_build Examples.AccountView
+#pf_build Examples.Svm.AccountView
+#pf_build Examples.Svm.AccountView
 
 -- Host stubs are irreducible; extraction-time constants never fold into values.
 #guard window.peekData 0 0 == 0
@@ -51,7 +51,7 @@ open ProofForge.Svm.Runtime
 elab "#pf_guard_account_view" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.AccountView with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.AccountView with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

@@ -1,9 +1,9 @@
-import Examples.Keys
+import Examples.Svm.Keys
 import Lean
 
 namespace Tests.KeysSpec
 
-open Examples.Keys
+open Examples.Svm.Keys
 open ProofForge.Svm.Runtime
 open Lean Elab Command
 
@@ -26,7 +26,7 @@ not add a Pubkey-specific Runtime/IR/component/emitter operation. -/
 elab "#pf_guard_keys_pubkey_boundary" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Keys with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.Keys with
     | .ok source => pure source
     | .error reason => throwError reason
   let pubkeySchema := ProofForge.Core.Codec.Schema.record "ProofForge.Svm.Sdk.Pubkey" #[

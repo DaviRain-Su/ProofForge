@@ -1,8 +1,8 @@
-import Examples.Transfer
+import Examples.Svm.Transfer
 
 namespace Tests.TransferSpec
 
-open Examples.Transfer
+open Examples.Svm.Transfer
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

@@ -3,8 +3,8 @@ import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Commands
 import Examples.Counter
-import Examples.Clock
-import Examples.EvmCtx
+import Examples.Svm.Clock
+import Examples.Evm.EvmCtx
 
 /-!
 # NEAR target tests (WASM family)
@@ -77,9 +77,9 @@ elab "#pf_near_reject " n:ident : command => do
       unless reason.contains "near rejects" do
         throwError "unexpected near rejection reason: {reason}"
 
-#pf_near_reject Examples.Clock
+#pf_near_reject Examples.Svm.Clock
 
-#pf_near_reject Examples.EvmCtx
+#pf_near_reject Examples.Evm.EvmCtx
 
 #pf_near_build Examples.Counter
 

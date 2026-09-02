@@ -1,8 +1,8 @@
-import Examples.SysXfer
+import Examples.Svm.SysXfer
 
 namespace Tests.SysXferSpec
 
-open Examples.SysXfer
+open Examples.Svm.SysXfer
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

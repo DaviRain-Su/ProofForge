@@ -1,5 +1,5 @@
 import ProofForge
-import Examples.TokenStateView
+import Examples.Svm.TokenStateView
 
 namespace Tests.SvmSdkTokenStateSpec
 
@@ -26,8 +26,8 @@ open ProofForge.Svm.Sdk
   Pubkey.ofWords 441679977081162245 8951144367161615437
     9348226791408743804 10179266835579936740
 
-#guard Examples.TokenStateView.tokenAccount.wellFormed
-#guard Examples.TokenStateView.mintAccount.wellFormed
+#guard Examples.Svm.TokenStateView.tokenAccount.wellFormed
+#guard Examples.Svm.TokenStateView.mintAccount.wellFormed
 #guard !(Token.AccountState.classic (.at 64) (.at 1)).wellFormed
 #guard !(Token.MintState.token2022 (.at 3) (.at 64)).wellFormed
 
@@ -72,7 +72,7 @@ private partial def opsHave
 private def expectTokenStateViews : CommandElabM Unit := do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.TokenStateView with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.TokenStateView with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

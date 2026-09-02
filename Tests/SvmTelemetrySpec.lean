@@ -1,4 +1,4 @@
-import Examples.Info
+import Examples.Svm.Info
 import Lean
 import ProofForge
 
@@ -23,12 +23,12 @@ open ProofForge.Svm
   (Telemetry.Call.log64 1 2 3 4 5 : Telemetry.Call UInt64).canonical toString ==
     "telemetry.log64(1,2,3,4,5)"
 
-#pf_build Examples.Info
+#pf_build Examples.Svm.Info
 
 elab "#pf_guard_svm_telemetry" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.Info with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.Info with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

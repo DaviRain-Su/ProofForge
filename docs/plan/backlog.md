@@ -279,7 +279,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   的 active payload prefix。EVM IR 在 Core CFG 前完成 logical→physical rewrite；Emit 只用
   generic guard renderer 拒绝 noncanonical Bool/out-of-range tag/absent payload/inactive lane，
   ABI JSON 输出命名 tuple components。它不复用 branch-dependent Borsh，不新增 Ops、Component
-  或 type-specific Emit case。`Examples.EvmCtx` 覆盖 Option 与 0/1/2-payload enum 的所有
+  或 type-specific Emit case。`Examples.Evm.EvmCtx` 覆盖 Option 与 0/1/2-payload enum 的所有
   合法分支和 malformed calldata；tagged return、bounded dynamic 和 richer enum payload 仍
   fail closed。EvmCtx digest `da71408333a778a6`、deployment bytecode 1,062 B；详见
   `docs/plan/tasks/r1-008.md`。
@@ -714,7 +714,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   补足不等式，`sameKey` / `ownerIsKeyOf` 收口为投影上的值相等；`Pubkey.equals` 改写为
   `pf_inline` word projections（extraction 不 iota-reduce 多 discriminant matcher，该边界已
   写入定义注释）。新增 kernel 证明 `pubkey_notEquals_iff`。独立非 Phoenix consumer
-  `Examples.PubkeyGate` 在普通 Lean source 里传递/比较多个 Pubkey：fixed key、由四个 scalar
+  `Examples.Svm.PubkeyGate` 在普通 Lean source 里传递/比较多个 Pubkey：fixed key、由四个 scalar
   entry word 构造的 runtime-supplied key、从三个静态账户投影的 key/owner，共用同一 `grants`
   policy，应用侧无 word magic。digest `8374e353a1923c12`、assembly 57,874 B、ELF 19,416 B、
   ELF SHA-256 `51ff1e0b4ad6c4f07af47f31bacd93b084b865a9e570f3ca7f4d49631ec8577a`；focused
@@ -737,7 +737,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `pf_inline` Lean 中只组合已有 `lamports` snapshot、`resizeData 0` 与
   `transferLamports`，不新增 Runtime/Ops/IR/Component/Emit。source 必须是 writable、
   current-program-owned external fixed handle；destination 必须 writable/canonically distinct，
-  但可 foreign-owned。`Examples.LamportTransfer.closeVault` 的 extraction guard 钉死一次
+  但可 foreign-owned。`Examples.Svm.LamportTransfer.closeVault` 的 extraction guard 钉死一次
   pre-effect snapshot 和 balance → resize → transfer → return；Mollusk 15/15 覆盖 nonempty data
   成功清零/全额退款，以及 destination overflow、same-canonical alias 在 resize 后失败时的
   data/lamports 原子回滚。digest `795d11e30ee48fb5`、assembly 31,362 B、ELF 10,648 B、
@@ -1432,7 +1432,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   u8 tag dispatch、exact packed u8/u16/u32/u64 widening、bounded account-prefix walk、当前
   executable program authentication 与 raw/generated route。raw 方法不得把 physical program
   account 当 managed State，持久读写必须组合 `AccountStorage`；IDL 排除 protocol-owned raw
-  wire，Legacy downgrade 显式拒绝 metadata loss。`Examples.RawEntry` 的同一 ELF 验证 raw
+  wire，Legacy downgrade 显式拒绝 metadata loss。`Examples.Svm.RawEntry` 的同一 ELF 验证 raw
   与 generated ABI 共存；Mollusk 覆盖 exact/short/long/tag/signer/program/trailing-account
   matrix，Surfpool 1.5.0 用 4 个 Loader write transactions 部署 3,064-byte ELF 并核对 exact
   ProgramData；200-job Lean、51 个 SVM build、Mollusk 238/238、Anvil 12/12 全绿。下一步只用
@@ -1619,11 +1619,11 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   StackTooDeep 门单独保持红色，不归因于本切片。详见 `docs/plan/tasks/l5-049.md`。下一步
   固定该返回层不再改主 Emit。通用 `AccountStorage.Source` 进一步把 field/key4/FIFO 的
   静态 handles 与动态 key/value 分开；Phoenix 512/512/128 的具体 offsets/capacities 只在
-  `Examples/PhoenixV1Layout.lean` 实例化，`ProofForge/Svm` 与 Extract 均不认识 Phoenix
+  `Examples/Svm/PhoenixV1Layout.lean` 实例化，`ProofForge/Svm` 与 Extract 均不认识 Phoenix
   namespace。其余 official `OrderPacket` 再逐 variant 收敛成 bounded EntryAdapter schema，
   并按切片增加 component-owned matching；未实现语义继续 fail closed。
 - P5 第四十三段 Phoenix source ownership 已收口：完整 bounded host model 与 official-account
-  profile/handlers 从 `Projects` 迁到 `Examples.Phoenix` / `Examples.PhoenixV1Profile`，不是删除
+  profile/handlers 从 `Projects` 迁到 `Examples.Svm.Phoenix` / `Examples.Svm.PhoenixV1Profile`，不是删除
   已实现的 allocator/tree/order/cancel/reduce/recorder 行为。`Projects` Lake library、root import
   与 CLI program-name 特判均已删除，51 个 SVM program 统一按 `Examples.<Name>` 加载；测试、
   legacy fixture 与文档同步改 namespace。Phoenix / profile canonical digest 仍分别为
@@ -1635,7 +1635,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
 - P5 第四十四段 static storage component facade 已完成：通用
   `AccountStorage.Source.validate` 现在只接收编译期 `RbMap` handle，由 facade 内部拥有
   allocator header 的 root/size/cursor、packed cursor 拆分、stride/capacity、key shape 与 bid
-  ordering；Phoenix source 不再拼 validator geometry。`Examples.PhoenixV1.Layout` 集中
+  ordering；Phoenix source 不再拼 validator geometry。`Examples.Svm.PhoenixV1.Layout` 集中
   已迁移 512/512/128 路径的 offsets/capacities，并提供命名 header、book、order、trader
   balance 与 mutation API；bid/ask free-funds reducer 及 raw reduce/claim/withdraw adapter
   已改为组合这些 API，尚未迁移的 cancel/recorder positional geometry 留给下一切片。
@@ -1653,7 +1653,7 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   `ProofForge.Svm.FifoCancel.Source`，以编译期 `FifoCancel.Config` 统一提供 begin、整侧
   cancel、bounded cancel-up-to、aggregate query 与 finish；抽取时 descriptor 被擦除到既有
   component/runtime 调用，只有 trader/tick/search/cancel scalar 保持动态，claim policy 必须是
-  static Bool。`Examples.PhoenixV1.Layout` 现在集中组合 bid/ask book、trader locked/free、
+  static Bool。`Examples.Svm.PhoenixV1.Layout` 现在集中组合 bid/ask book、trader locked/free、
   collateral/header words 与静态 audit sink；四条 official cancel handler 不再传 positional
   book/trader/recorder geometry。Phoenix offsets 与协议选择仍只在 `Examples`，没有新增
   Core/SVM opcode、顶层 IR、Component variant、CFG 或主 Emit case；链上持久状态仍只有固定
@@ -1800,8 +1800,8 @@ SVM account-persistent 或 EVM storage-persistent 生命周期，不能再用同
   SVM account geometry 的合同侧 facade。`Address` / `UInt256` / `Bytes32`、`Context`、
   `Immutable`、Ether/Event/Revert、ERC-20/WETH/Uniswap/Permit 统一擦除到既有 target-owned
   runtime/component；`Storage.Layout` 用编译期 cursor 分配 typed U64/address/address-pair 及
-  256-bit hashed-map namespace，descriptor 不进入 EVM storage。`Examples.Token` 与
-  `Examples.Capped` 已迁移，源代码不再暴露 runtime 名称或 numeric map base；Token/Capped
+  256-bit hashed-map namespace，descriptor 不进入 EVM storage。`Examples.Evm.Token` 与
+  `Examples.Evm.Capped` 已迁移，源代码不再暴露 runtime 名称或 numeric map base；Token/Capped
   canonical digest 仍为 `4da7ac248a0fb556` / `cb058e662f968f65`，target IR 与迁移前逐字节
   相同。该 facade 不包装合同控制流，也未增加 Ops、IR 或 emitter case；SVM 仍使用固定
   account bytes/stride/index，两个 target 只共享 Lean/Profile/Extract/Core CFG。

@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.EvmStaticCounter
-import Examples.EvmStaticRoster
+import Examples.Evm.EvmStaticCounter
+import Examples.Evm.EvmStaticRoster
 
 /-!
 EVM-SDK-3 roles focused suite: fixed-capacity shape, compile-time `Storage.Static` declaration
@@ -26,28 +26,28 @@ open Lean Elab Command
 
 /-! ## Empty consumer state -/
 
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard (init 5 ⟨0, 0, 0⟩).operator0 == Address.zero &&
   (init 5 ⟨0, 0, 0⟩).operator1 == Address.zero
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard (init ⟨1, 2, 3⟩).writer0 == Address.zero && (init ⟨1, 2, 3⟩).writer1 == Address.zero
 
 /-! ## Storage.Static declaration pins for the explicit role fields -/
 
-#guard Examples.EvmStaticCounter.declared.handle.operator0.baseSlot == 7
-#guard Examples.EvmStaticCounter.declared.handle.operator0.wideLeaves? == some 3
-#guard Examples.EvmStaticCounter.declared.handle.operator1.baseSlot == 10
-#guard Examples.EvmStaticCounter.declared.handle.operator1.wideLeaves? == some 3
-#guard Examples.EvmStaticCounter.layout.nextSlot == 13
-#guard Examples.EvmStaticCounter.layout.wellFormed
+#guard Examples.Evm.EvmStaticCounter.declared.handle.operator0.baseSlot == 7
+#guard Examples.Evm.EvmStaticCounter.declared.handle.operator0.wideLeaves? == some 3
+#guard Examples.Evm.EvmStaticCounter.declared.handle.operator1.baseSlot == 10
+#guard Examples.Evm.EvmStaticCounter.declared.handle.operator1.wideLeaves? == some 3
+#guard Examples.Evm.EvmStaticCounter.layout.nextSlot == 13
+#guard Examples.Evm.EvmStaticCounter.layout.wellFormed
 
-#guard Examples.EvmStaticRoster.declared.handle.writer0.baseSlot == 10
-#guard Examples.EvmStaticRoster.declared.handle.writer0.wideLeaves? == some 3
-#guard Examples.EvmStaticRoster.declared.handle.writer1.baseSlot == 13
-#guard Examples.EvmStaticRoster.declared.handle.writer1.wideLeaves? == some 3
-#guard Examples.EvmStaticRoster.layout.nextSlot == 16
-#guard Examples.EvmStaticRoster.layout.wellFormed
+#guard Examples.Evm.EvmStaticRoster.declared.handle.writer0.baseSlot == 10
+#guard Examples.Evm.EvmStaticRoster.declared.handle.writer0.wideLeaves? == some 3
+#guard Examples.Evm.EvmStaticRoster.declared.handle.writer1.baseSlot == 13
+#guard Examples.Evm.EvmStaticRoster.declared.handle.writer1.wideLeaves? == some 3
+#guard Examples.Evm.EvmStaticRoster.layout.nextSlot == 16
+#guard Examples.Evm.EvmStaticRoster.layout.wellFormed
 
 def counterRoleSlots : List (String × Nat) :=
   [("paused", 1), ("total_w0", 8), ("total_w1", 8), ("total_w2", 8), ("total_w3", 8),
@@ -63,8 +63,8 @@ def rosterRoleSlots : List (String × Nat) :=
     ("writer0_w0", 8), ("writer0_w1", 8), ("writer0_w2", 8),
     ("writer1_w0", 8), ("writer1_w1", 8), ("writer1_w2", 8)]
 
-#guard Examples.EvmStaticCounter.layout.matchesFlattened counterRoleSlots
-#guard Examples.EvmStaticRoster.layout.matchesFlattened rosterRoleSlots
+#guard Examples.Evm.EvmStaticCounter.layout.matchesFlattened counterRoleSlots
+#guard Examples.Evm.EvmStaticRoster.layout.matchesFlattened rosterRoleSlots
 
 /-! ## Extraction proof: role entries exist and slots match the declaration, with no
 role-set vector entry -/
@@ -109,11 +109,11 @@ private def expectRolesLayout (module : Name) (expectedSlots : List (String × N
     throwError s!"{module}: expected ordinary static slot accesses in emitted Yul"
 
 elab "#pf_guard_evm_roles_counter" : command =>
-  expectRolesLayout `Examples.EvmStaticCounter counterRoleSlots []
+  expectRolesLayout `Examples.Evm.EvmStaticCounter counterRoleSlots []
     ["grantOperator", "revokeOperator", "isOperator"]
 
 elab "#pf_guard_evm_roles_roster" : command =>
-  expectRolesLayout `Examples.EvmStaticRoster rosterRoleSlots [("seats", 3, 3, 2)]
+  expectRolesLayout `Examples.Evm.EvmStaticRoster rosterRoleSlots [("seats", 3, 3, 2)]
     ["grantWriter", "revokeWriter", "isWriter"]
 
 #pf_guard_evm_roles_counter

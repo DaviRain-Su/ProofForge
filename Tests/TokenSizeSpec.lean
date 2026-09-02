@@ -1,8 +1,8 @@
-import Examples.TokenSize
+import Examples.Svm.TokenSize
 
 namespace Tests.TokenSizeSpec
 
-open Examples.TokenSize
+open Examples.Svm.TokenSize
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

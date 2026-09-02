@@ -1,8 +1,8 @@
-import Examples.Keccak
+import Examples.Svm.Keccak
 
 namespace Tests.KeccakSpec
 
-open Examples.Keccak
+open Examples.Svm.Keccak
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

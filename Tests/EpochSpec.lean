@@ -1,8 +1,8 @@
-import Examples.Epoch
+import Examples.Svm.Epoch
 
 namespace Tests.EpochSpec
 
-open Examples.Epoch
+open Examples.Svm.Epoch
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

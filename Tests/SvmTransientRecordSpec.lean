@@ -1,5 +1,5 @@
-import Examples.TransientLedger
-import Examples.TransientOrderTape
+import Examples.Svm.TransientLedger
+import Examples.Svm.TransientOrderTape
 import Lean
 import ProofForge
 
@@ -129,8 +129,8 @@ private partial def onlyTransientVecOps (ops : Array ProofForge.Svm.IR.Op) : Boo
 private def onlyTransientVecComponents (program : ProofForge.Svm.IR.Program) : Bool :=
   program.methods.all fun method => onlyTransientVecOps method.ops
 
-#pf_build Examples.TransientLedger
-#pf_build Examples.TransientOrderTape
+#pf_build Examples.Svm.TransientLedger
+#pf_build Examples.Svm.TransientOrderTape
 
 elab "#pf_guard_transient_record" : command => do
   let env ← getEnv
@@ -143,9 +143,9 @@ elab "#pf_guard_transient_record" : command => do
     | .error reason => throw reason
 
   ----------------------------------------------------------------
-  -- Consumer 1: Examples.TransientLedger (2-limb records)
+  -- Consumer 1: Examples.Svm.TransientLedger (2-limb records)
   let program ←
-    match decodeProgram `Examples.TransientLedger with
+    match decodeProgram `Examples.Svm.TransientLedger with
     | .ok program => pure program
     | .error reason => throwError reason
   unless onlyTransientVecComponents program do
@@ -179,9 +179,9 @@ elab "#pf_guard_transient_record" : command => do
     throwError "record lowering lost the existing component lifecycle, alignment, or failures"
 
   ----------------------------------------------------------------
-  -- Consumer 2: Examples.TransientOrderTape (3-limb records, two slots)
+  -- Consumer 2: Examples.Svm.TransientOrderTape (3-limb records, two slots)
   let tapeProgram ←
-    match decodeProgram `Examples.TransientOrderTape with
+    match decodeProgram `Examples.Svm.TransientOrderTape with
     | .ok program => pure program
     | .error reason => throwError reason
   unless onlyTransientVecComponents tapeProgram do

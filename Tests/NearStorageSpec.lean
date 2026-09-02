@@ -1,4 +1,4 @@
-import Examples.NearStorage
+import Examples.Near.NearStorage
 import Lean
 import ProofForge
 
@@ -40,7 +40,7 @@ private def storageStep : ProofForge.Wasm.Near.IR.Method → Array String
 elab "#pf_near_storage_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearStorage with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearStorage with
     | .ok program => pure program
     | .error reason => throwError reason
   let sourceSteps := source.methods.foldl (init := #[]) fun steps method =>

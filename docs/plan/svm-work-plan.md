@@ -46,7 +46,7 @@
 | A 形式化 | `StorageModel` / `TransientModel` / `Examples/Tree` 定理 | Emit/Ops 主路径 | 可与 B/C 并行（**不同文件**） |
 | B Runtime | `Svm` Runtime/Component/sysvar/CPI/Token-2022 TLV 语义 | Phoenix 业务名 | 改 Component 时锁 A 的同文件模型 |
 | C SDK | `Svm.Sdk` facade / 容器 / lifecycle | 协议策略 | 新容器落地后 **立刻** 挂 A 的 L1/L2 任务 |
-| D 应用 | `Examples.Phoenix*` 指令与 matching | Runtime leaf / recipe opcode | 只组合已有 SDK |
+| D 应用 | `Examples.Svm.Phoenix*` 指令与 matching | Runtime leaf / recipe opcode | 只组合已有 SDK |
 | E L3 语义 | Solanalib / `sbpfSemantics` fragment→program ladder | Agave 全主机/ELF 闭环宣称 | 与 A 互补；先吃稳定 emit 形状 |
 | F 工程 | CI lane、manifest、文档索引 | 产品语义 | 任意时刻可插 |
 

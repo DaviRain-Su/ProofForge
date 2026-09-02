@@ -2,7 +2,7 @@ import ProofForge
 import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Commands
-import Examples.NearBytes
+import Examples.Near.NearBytes
 
 /-!
 # NEAR canonical Borsh bounded bytes/string input
@@ -36,7 +36,7 @@ private def isExpectedEventOps (method : ProofForge.Wasm.Near.IR.Method) : Bool 
 elab "#pf_guard_near_borsh_inputs" : command => do
   let env ← getEnv
   let extracted ←
-    match Extract.extractModuleIR env `Examples.NearBytes none with
+    match Extract.extractModuleIR env `Examples.Near.NearBytes none with
     | .ok source => pure source
     | .error reason => throwError reason
   let some rawBytes := extracted.methods.find? (·.ixName == "inspectBytes")
@@ -116,7 +116,7 @@ elab "#pf_guard_near_borsh_inputs" : command => do
   logInfo m!"proofforge-near-bytes-test: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_borsh_inputs
-#pf_near_build Examples.NearBytes
+#pf_near_build Examples.Near.NearBytes
 
 #guard
   match ProofForge.Wasm.Near.Codec.inputPlan (.boundedBytes 0) with

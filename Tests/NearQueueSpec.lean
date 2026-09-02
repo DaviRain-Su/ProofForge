@@ -1,4 +1,4 @@
-import Examples.NearQueue
+import Examples.Near.NearQueue
 import Lean
 import ProofForge
 
@@ -61,7 +61,7 @@ private partial def storageSteps : Array ProofForge.Extract.IR.Op → Array Stri
 elab "#pf_near_queue_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearQueue with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearQueue with
     | .ok program => pure program
     | .error reason => throwError reason
   let methodSteps (name : String) :=

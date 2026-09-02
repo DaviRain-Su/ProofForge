@@ -1,6 +1,6 @@
-import Examples.Clock
-import Examples.Epoch
-import Examples.Rent
+import Examples.Svm.Clock
+import Examples.Svm.Epoch
+import Examples.Svm.Rent
 import Lean
 import ProofForge
 
@@ -61,13 +61,13 @@ private def expectSysvarCall (module : Name) (needles : Array String) : CommandE
       throwError s!"{module}: SDK sysvar facade lost target host call {needle}"
 
 elab "#pf_guard_sdk_sysvars" : command => do
-  expectSysvarCall `Examples.Clock #["call sol_get_clock_sysvar",
+  expectSysvarCall `Examples.Svm.Clock #["call sol_get_clock_sysvar",
     "load clock.leaderScheduleEpoch", "ldxdw r1, [r10 - 3048]"]
-  expectSysvarCall `Examples.Epoch #["call sol_get_epoch_schedule_sysvar",
+  expectSysvarCall `Examples.Svm.Epoch #["call sol_get_epoch_schedule_sysvar",
     "load leaderScheduleSlotOffset", "ldxdw r1, [r10 - 3064]", "load warmup",
     "ldxb r1, [r10 - 3056]", "load firstNormalEpoch", "ldxdw r1, [r10 - 3048]",
     "load firstNormalSlot", "ldxdw r1, [r10 - 3040]"]
-  expectSysvarCall `Examples.Rent #["call sol_get_rent_sysvar"]
+  expectSysvarCall `Examples.Svm.Rent #["call sol_get_rent_sysvar"]
 
 #pf_guard_sdk_sysvars
 

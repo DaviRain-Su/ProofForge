@@ -1,4 +1,4 @@
-import Examples.NearJsonStorageDepositInput
+import Examples.Near.NearJsonStorageDepositInput
 import Lean
 import ProofForge
 
@@ -21,7 +21,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_json_storage_deposit_input_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearJsonStorageDepositInput with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonStorageDepositInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName.startsWith "inspect" || method.ixName == "commitRegistrationOnly" then

@@ -1,9 +1,9 @@
-import Examples.EvmCtx
+import Examples.Evm.EvmCtx
 import ProofForge
 
 namespace Tests.EvmCtxSpec
 
-open Examples.EvmCtx
+open Examples.Evm.EvmCtx
 open ProofForge.Evm.Sdk
 open Lean Elab Command
 
@@ -39,7 +39,7 @@ open Lean Elab Command
 elab "#pf_guard_evm_aggregate_abi" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmCtx with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmCtx with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

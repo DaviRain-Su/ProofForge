@@ -1,8 +1,8 @@
-import Examples.Ata
+import Examples.Svm.Ata
 
 namespace Tests.AtaSpec
 
-open Examples.Ata
+open Examples.Svm.Ata
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

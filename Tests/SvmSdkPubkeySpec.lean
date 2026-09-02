@@ -1,9 +1,9 @@
-import Examples.PubkeyGate
+import Examples.Svm.PubkeyGate
 import Lean
 import ProofForge
 
 /-!
-Focused SVM SDK `Pubkey` gates. `Examples.PubkeyGate` independently consumes the first-class
+Focused SVM SDK `Pubkey` gates. `Examples.Svm.PubkeyGate` independently consumes the first-class
 Pubkey value: fixed keys, keys/owners projected from statically selected accounts, keys built
 once from runtime scalar words, and complete-key/owner equality, inequality, and canonical
 matching, all through named APIs with no word-level magic at application sites.
@@ -18,11 +18,11 @@ by the Mollusk matrix in `runtime-tests/solana/tests/pubkey_gate.rs`.
 namespace Tests.SvmSdkPubkeySpec
 
 open Lean Elab Command
-open Examples.PubkeyGate
+open Examples.Svm.PubkeyGate
 open ProofForge.Svm.Sdk
 
-#pf_build Examples.PubkeyGate
-#pf_build Examples.PubkeyGate
+#pf_build Examples.Svm.PubkeyGate
+#pf_build Examples.Svm.PubkeyGate
 
 -- Construction is literal and projections are exact, with no word magic at call sites.
 #guard Pubkey.ofWords 1 2 3 4 == { word0 := 1, word1 := 2, word2 := 3, word3 := 4 }
@@ -98,7 +98,7 @@ partial def noExtOps (ops : Array ProofForge.Extract.IR.Op) : Bool :=
 elab "#pf_guard_pubkey_gate" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.PubkeyGate with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.PubkeyGate with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

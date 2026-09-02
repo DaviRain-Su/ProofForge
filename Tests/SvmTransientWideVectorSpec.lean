@@ -1,5 +1,5 @@
-import Examples.TransientWide128
-import Examples.TransientWide256
+import Examples.Svm.TransientWide128
+import Examples.Svm.TransientWide256
 import Lean
 import ProofForge
 
@@ -126,8 +126,8 @@ private def topLevelGetLocals (method : IR.Method) : Array Nat :=
     | .letLocal localIndex value => if hasTransientGet value then some localIndex else none
     | _ => none
 
-#pf_build Examples.TransientWide128
-#pf_build Examples.TransientWide256
+#pf_build Examples.Svm.TransientWide128
+#pf_build Examples.Svm.TransientWide256
 
 elab "#pf_guard_transient_wide_vectors" : command => do
   let env ← getEnv
@@ -140,8 +140,8 @@ elab "#pf_guard_transient_wide_vectors" : command => do
     | .ok program => pure program
     | .error reason => throwError reason
 
-  let wide128 ← extract `Examples.TransientWide128
-  let wide256 ← extract `Examples.TransientWide256
+  let wide128 ← extract `Examples.Svm.TransientWide128
+  let wide256 ← extract `Examples.Svm.TransientWide256
   unless wide128.methods.all (onlyTransientVecOps ·.ops) &&
       wide256.methods.all (onlyTransientVecOps ·.ops) do
     throwError "typed wide vectors escaped the existing transientVec component bridge"

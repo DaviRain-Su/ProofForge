@@ -1,8 +1,8 @@
-import Examples.Hash
+import Examples.Svm.Hash
 
 namespace Tests.HashSpec
 
-open Examples.Hash
+open Examples.Svm.Hash
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

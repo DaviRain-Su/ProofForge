@@ -1,8 +1,8 @@
 import ProofForge.Svm.Sdk.System
-import Examples.SysAlloc
-import Examples.Nonce
-import Examples.SysSeed
-import Examples.SysXfer
+import Examples.Svm.SysAlloc
+import Examples.Svm.Nonce
+import Examples.Svm.SysSeed
+import Examples.Svm.SysXfer
 
 open Lean Elab Command
 
@@ -26,8 +26,8 @@ open ProofForge.Svm.Sdk
 namespace AlternateSeed
 
 @[pf_entry]
-def allocateLedger (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def allocateLedger (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.allocate "ledger" 16
     .ok ({ dummy := 0 }, 16)
@@ -35,8 +35,8 @@ def allocateLedger (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def createLedger (_s : Examples.SysSeed.State) (lamports : UInt64) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def createLedger (_s : Examples.Svm.SysSeed.State) (lamports : UInt64) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.createAccount "ledger" lamports 16
     .ok ({ dummy := 0 }, lamports)
@@ -44,8 +44,8 @@ def createLedger (_s : Examples.SysSeed.State) (lamports : UInt64) :
     .error .overflow
 
 @[pf_entry]
-def createRentExemptLedger (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def createRentExemptLedger (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.createRentExempt "ledger" 16
     .ok ({ dummy := 0 }, 0)
@@ -53,8 +53,8 @@ def createRentExemptLedger (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def assignLedger (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def assignLedger (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.assign "ledger"
     .ok ({ dummy := 0 }, 0)
@@ -62,8 +62,8 @@ def assignLedger (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def transferLedger (_s : Examples.SysSeed.State) (lamports : UInt64) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def transferLedger (_s : Examples.Svm.SysSeed.State) (lamports : UInt64) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.transfer "ledger" lamports
     .ok ({ dummy := 0 }, lamports)
@@ -71,8 +71,8 @@ def transferLedger (_s : Examples.SysSeed.State) (lamports : UInt64) :
     .error .overflow
 
 @[pf_entry]
-def allocateEmpty (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def allocateEmpty (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.allocate "" 16
     .ok ({ dummy := 0 }, 16)
@@ -80,8 +80,8 @@ def allocateEmpty (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def allocateLong (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def allocateLong (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.allocate "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" 16
     .ok ({ dummy := 0 }, 16)
@@ -89,8 +89,8 @@ def allocateLong (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def allocateNonAscii (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def allocateNonAscii (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := System.AsciiSeed.allocate "λ" 16
     .ok ({ dummy := 0 }, 16)
@@ -98,8 +98,8 @@ def allocateNonAscii (_s : Examples.SysSeed.State) :
     .error .overflow
 
 @[pf_entry]
-def allocateBadLength (_s : Examples.SysSeed.State) :
-    Except Examples.SysSeed.Error (Examples.SysSeed.State × UInt64) :=
+def allocateBadLength (_s : Examples.Svm.SysSeed.State) :
+    Except Examples.Svm.SysSeed.Error (Examples.Svm.SysSeed.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := ProofForge.Svm.Runtime.invoke 2
       #[{ acc := 1, signer := false, writable := true },
@@ -126,17 +126,17 @@ private def expectCanonical (module : Name) (expected : String) : CommandElabM U
     throwError s!"{module}: SDK facade changed canonical IR: {actual}"
 
 elab "#pf_guard_svm_system_facades" : command => do
-  expectCanonical `Examples.SysAlloc "dbb2269b9ac57a3"
-  expectCanonical `Examples.Nonce "5746ebbdd382bd56"
-  expectCanonical `Examples.SysSeed "490cec59af518f0c"
-  expectCanonical `Examples.SysXfer "906efee37227cb35"
+  expectCanonical `Examples.Svm.SysAlloc "dbb2269b9ac57a3"
+  expectCanonical `Examples.Svm.Nonce "5746ebbdd382bd56"
+  expectCanonical `Examples.Svm.SysSeed "490cec59af518f0c"
+  expectCanonical `Examples.Svm.SysXfer "906efee37227cb35"
 
 #pf_guard_svm_system_facades
 
 private def extractAlternate (env : Environment) (mutation : Name) :
     Except String ProofForge.Svm.IR.Program := do
-  let source ← ProofForge.Extract.extractProgramIR env ``Examples.SysSeed.init mutation
-    ``Examples.SysSeed.get
+  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Svm.SysSeed.init mutation
+    ``Examples.Svm.SysSeed.get
   ProofForge.Svm.IR.fromExtracted source
 
 private def hasInstructionData

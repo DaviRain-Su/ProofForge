@@ -1,6 +1,6 @@
 import ProofForge
 import ProofForge.Evm.Commands
-import Examples.TwoStepCounter
+import Examples.Evm.TwoStepCounter
 
 /-!
 EVM-SDK-1 consumer A spec. Host guards pin the reference semantics (stubs make the owner
@@ -14,7 +14,7 @@ Run focused:
 
 namespace Tests.TwoStepCounterSpec
 
-open Examples.TwoStepCounter
+open Examples.Evm.TwoStepCounter
 open ProofForge.Evm.Runtime
 open ProofForge.Evm.Sdk
 
@@ -83,7 +83,7 @@ def other : Addr20 := ⟨4, 5, 6⟩
   | .ok (_, ret) => ret == 0
   | .error _ => false
 
-#pf_evm_build Examples.TwoStepCounter
+#pf_evm_build Examples.Evm.TwoStepCounter
 
 open Lean Elab Command
 
@@ -91,7 +91,7 @@ open Lean Elab Command
 elab "#pf_guard_twostep_counter" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.TwoStepCounter with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.TwoStepCounter with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

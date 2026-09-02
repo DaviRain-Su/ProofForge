@@ -1,4 +1,4 @@
-import Examples.NearJsonAmountInput
+import Examples.Near.NearJsonAmountInput
 import Lean
 import ProofForge
 
@@ -22,7 +22,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_amount_input_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearJsonAmountInput with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonAmountInput with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceW0 := source.methods.find? (·.ixName == "amountW0")

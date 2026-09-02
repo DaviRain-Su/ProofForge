@@ -116,21 +116,21 @@ structure AccountId where
 | `xrplLedgerSqn` | `get_ledger_sqn` |
 | `xrplParentTime` | `get_parent_ledger_time` |
 
-`Examples.XrplCtx`：view 返回序号；mutate 把 caller 低 8 字节和序号写进 `State` 槽。本地节点：`ContractCall` 后 `ContractJson` 对上 genesis 账户 / 账本序号。SVM/EVM 拒全部新叶。digest 域仍 `xrpl-bedrock|`。
+`Examples.Xrpl.XrplCtx`：view 返回序号；mutate 把 caller 低 8 字节和序号写进 `State` 槽。本地节点：`ContractCall` 后 `ContractJson` 对上 genesis 账户 / 账本序号。SVM/EVM 拒全部新叶。digest 域仍 `xrpl-bedrock|`。
 
 不做：hash、event、Map、SDK、主网、NEAR 叶子。
 
 ### XRPL-CMP（[wsm-006](../tasks/wsm-006.md)）
 
 源码嵌套 `if caller.w0/w1/w2 = owner0/1/2`。不新增 host。`errorNamed "unauthorized"`
-钉死 wasm `i32` 状态码 **3**。`Examples.XrplOwn`：genesis `init`+`bump` 改 `value`；
+钉死 wasm `i32` 状态码 **3**。`Examples.Xrpl.XrplOwn`：genesis `init`+`bump` 改 `value`；
 第二账户 `bump` 返回 3 且槽不变。
 
 ### XRPL-HASH（[wsm-007](../tasks/wsm-007.md)）
 
 本镜像确认了 `host_lib.compute_sha512_half`（不是 stdlib 的 `sha512_half`）。
 `xrplSha512HalfLit "vault"` 对标 `sha256Lit`：ASCII 字面量 → SHA-512Half 首个小端
-UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.XrplHash` 把结果写入槽。
+UInt64。完整 32B / 动态输入 / keccak 仍 FC。`Examples.Xrpl.XrplHash` 把结果写入槽。
 
 ### XRPL-SDK（[wsm-008](../tasks/wsm-008.md)）
 

@@ -1,4 +1,4 @@
-import Examples.NearJsonStorageWithdrawInput
+import Examples.Near.NearJsonStorageWithdrawInput
 import Lean
 import ProofForge
 
@@ -26,7 +26,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_storage_withdraw_input_check" : command => do
   let env ← getEnv
   let source ← match ProofForge.Extract.extractModuleIR env
-      `Examples.NearJsonStorageWithdrawInput with
+      `Examples.Near.NearJsonStorageWithdrawInput with
     | .ok program => pure program | .error reason => throwError reason
   for method in source.methods do
     if method.ixName == "amountPresent" || method.ixName == "amountW0" ||

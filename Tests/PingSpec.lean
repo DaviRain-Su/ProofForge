@@ -1,8 +1,8 @@
-import Examples.Ping
+import Examples.Svm.Ping
 
 namespace Tests.PingSpec
 
-open Examples.Ping
+open Examples.Svm.Ping
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0
