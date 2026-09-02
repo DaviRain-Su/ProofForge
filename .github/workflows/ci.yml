@@ -7,14 +7,175 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Decide which lanes must run for this PR. Pushes to main always run every lane.
+  # Path sets are intentionally broad: shared compiler / toolchain / workflow changes
+  # force all lanes so a latent cross-target break still gets caught on main.
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    outputs:
+      lean: ${{ steps.gate.outputs.lean }}
+      svm: ${{ steps.gate.outputs.svm }}
+      evm: ${{ steps.gate.outputs.evm }}
+      near: ${{ steps.gate.outputs.near }}
+      surfpool_heavy: ${{ steps.gate.outputs.surfpool_heavy }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shared:
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
+              - 'ProofForge/Cli.lean'
+              - 'ProofForge/Attr.lean'
+              - 'ProofForge/Extract.lean'
+              - 'ProofForge/Extract/**'
+              - 'ProofForge/Core/**'
+              - 'ProofForge/Crypto/**'
+              - 'ProofForge/Profile.lean'
+            lean:
+              - 'ProofForge/**'
+              - 'Tests/**'
+              - 'Tests.lean'
+              - 'Examples/**'
+              - 'Examples.lean'
+              - 'scripts/check_*.py'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+            svm:
+              - 'ProofForge/Svm/**'
+              - 'Examples/Svm/**'
+              - 'runtime-tests/solana/**'
+              - 'runtime-tests/surfpool/**'
+              - 'scripts/check_ownership.py'
+              - 'scripts/check_no_sorry.py'
+              - 'scripts/check_artifact_manifest.py'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+              - 'ProofForge/Cli.lean'
+              - 'ProofForge/Extract.lean'
+              - 'ProofForge/Extract/**'
+              - 'ProofForge/Core/**'
+            evm:
+              - 'ProofForge/Evm/**'
+              - 'ProofForge/Wasm/**'
+              - 'Examples/Evm/**'
+              - 'Examples/Xrpl/**'
+              - 'runtime-tests/evm/**'
+              - 'runtime-tests/xrpl/**'
+              - 'scripts/check_artifact_manifest.py'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+              - 'ProofForge/Cli.lean'
+              - 'ProofForge/Extract.lean'
+              - 'ProofForge/Extract/**'
+              - 'ProofForge/Core/**'
+            near:
+              - 'ProofForge/Wasm/**'
+              - 'Examples/Near/**'
+              - 'runtime-tests/near/**'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+              - 'ProofForge/Cli.lean'
+              - 'ProofForge/Extract.lean'
+              - 'ProofForge/Extract/**'
+              - 'ProofForge/Core/**'
+            # ~10MB Phoenix ELF deploy is the slowest Surfpool step; keep it off
+            # ordinary SVM SDK / fixture PRs that do not touch Phoenix emit paths.
+            surfpool_heavy:
+              - 'Examples/Svm/Phoenix.lean'
+              - 'Examples/Svm/PhoenixV1Layout.lean'
+              - 'Examples/Svm/PhoenixV1Profile.lean'
+              - 'ProofForge/Svm/AccountStorage/**'
+              - 'ProofForge/Svm/FifoCancel/**'
+              - 'ProofForge/Svm/Emit.lean'
+              - 'runtime-tests/solana/tests/phoenix.rs'
+              - 'runtime-tests/solana/tests/phoenix_v1_profile.rs'
+              - 'runtime-tests/surfpool/**'
+              - '.github/workflows/ci.yml'
+              - '.agents/setup'
+
+      - name: Publish lane gates
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SHARED: ${{ steps.filter.outputs.shared }}
+          LEAN: ${{ steps.filter.outputs.lean }}
+          SVM: ${{ steps.filter.outputs.svm }}
+          EVM: ${{ steps.filter.outputs.evm }}
+          NEAR: ${{ steps.filter.outputs.near }}
+          SURFPOOL_HEAVY: ${{ steps.filter.outputs.surfpool_heavy }}
+        run: |
+          set -euo pipefail
+          # main pushes always exercise every lane.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "lean=true" >> "$GITHUB_OUTPUT"
+            echo "svm=true" >> "$GITHUB_OUTPUT"
+            echo "evm=true" >> "$GITHUB_OUTPUT"
+            echo "near=true" >> "$GITHUB_OUTPUT"
+            echo "surfpool_heavy=true" >> "$GITHUB_OUTPUT"
+            echo "changes: push event → all lanes"
+            exit 0
+          fi
+          or_shared() {
+            local lane="$1"
+            if [ "$SHARED" = "true" ] || [ "$lane" = "true" ]; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+          lean="$(or_shared "$LEAN")"
+          svm="$(or_shared "$SVM")"
+          evm="$(or_shared "$EVM")"
+          near="$(or_shared "$NEAR")"
+          # Heavy Surfpool deploy (~10MB ELF) only when Phoenix/stack emit paths move,
+          # or when the SVM lane itself is forced by shared infrastructure.
+          if [ "$SHARED" = "true" ] || [ "$SURFPOOL_HEAVY" = "true" ]; then
+            surfpool_heavy=true
+          else
+            surfpool_heavy=false
+          fi
+          {
+            echo "lean=$lean"
+            echo "svm=$svm"
+            echo "evm=$evm"
+            echo "near=$near"
+            echo "surfpool_heavy=$surfpool_heavy"
+          } >> "$GITHUB_OUTPUT"
+          echo "changes: lean=$lean svm=$svm evm=$evm near=$near surfpool_heavy=$surfpool_heavy"
+
   lean:
     name: Lean
+    needs: changes
+    if: needs.changes.outputs.lean == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -66,6 +227,8 @@ jobs:
 
   svm:
     name: SVM
+    needs: changes
+    if: needs.changes.outputs.svm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -120,8 +283,11 @@ jobs:
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh Phoenix
 
+      # ~10MB ELF: Loader-v3 writeback regularly exceeds 15m on GitHub runners.
+      # Skip when the PR did not touch Phoenix / account-storage emit paths.
       - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
-        timeout-minutes: 15
+        if: needs.changes.outputs.surfpool_heavy == 'true'
+        timeout-minutes: 30
         run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
       - name: Deploy packed entry adapter fixture through Surfpool Loader-v3
@@ -130,6 +296,8 @@ jobs:
 
   evm:
     name: EVM
+    needs: changes
+    if: needs.changes.outputs.evm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -194,6 +362,8 @@ jobs:
 
   near:
     name: NEAR
+    needs: changes
+    if: needs.changes.outputs.near == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -332,21 +502,37 @@ jobs:
       - name: Run NEAR sandbox detached Promise function-call gate
         run: runtime-tests/near/promise.sh
 
-  # Preserve the original required-check identity while making proof/guard and target failures
-  # independently observable. This job fails unless every lane completes, including after an error.
+  # Required-check identity. Intentionally-skipped lanes (path filter) count as success;
+  # failed or cancelled lanes still fail the merge gate.
   test:
     if: always()
-    needs: [lean, svm, evm, near]
+    needs: [changes, lean, svm, evm, near]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require Lean, SVM, EVM, and NEAR lanes
+      - name: Require enabled Lean, SVM, EVM, and NEAR lanes
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           LEAN_RESULT: ${{ needs.lean.result }}
           SVM_RESULT: ${{ needs.svm.result }}
           EVM_RESULT: ${{ needs.evm.result }}
           NEAR_RESULT: ${{ needs.near.result }}
+          LEAN_ENABLED: ${{ needs.changes.outputs.lean }}
+          SVM_ENABLED: ${{ needs.changes.outputs.svm }}
+          EVM_ENABLED: ${{ needs.changes.outputs.evm }}
+          NEAR_ENABLED: ${{ needs.changes.outputs.near }}
         run: |
-          test "$LEAN_RESULT" = success
-          test "$SVM_RESULT" = success
-          test "$EVM_RESULT" = success
-          test "$NEAR_RESULT" = success
+          set -euo pipefail
+          test "$CHANGES_RESULT" = success
+          require_lane() {
+            local name="$1" enabled="$2" result="$3"
+            if [ "$enabled" != "true" ]; then
+              echo "$name: skipped (paths unchanged)"
+              return 0
+            fi
+            echo "$name: $result"
+            test "$result" = success
+          }
+          require_lane Lean "$LEAN_ENABLED" "$LEAN_RESULT"
+          require_lane SVM "$SVM_ENABLED" "$SVM_RESULT"
+          require_lane EVM "$EVM_ENABLED" "$EVM_RESULT"
+          require_lane NEAR "$NEAR_ENABLED" "$NEAR_RESULT"
