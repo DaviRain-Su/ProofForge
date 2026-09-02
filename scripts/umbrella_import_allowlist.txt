@@ -127,6 +127,7 @@ Examples/Svm/TokenNative.lean
 Examples/Svm/TokenOwner.lean
 Examples/Svm/TokenSize.lean
 Examples/Svm/TokenXfer.lean
+Examples/TokenShape.lean
 Examples/Svm/Transfer.lean
 Examples/Svm/TransientLedger.lean
 Examples/Svm/TransientOrderTape.lean
