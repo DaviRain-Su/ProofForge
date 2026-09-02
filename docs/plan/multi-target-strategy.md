@@ -216,7 +216,7 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 |---|---|---|---|
 | **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | ✓ EVM/SVM/NEAR |
 | **erg-near-token-001** | `NearToken` 高层 API | Near.Sdk + `NearTokenErgonomics` | ✓ |
-| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.ensure` / Token-shaped sequential surface | Evm.Sdk + `Examples/EvmTokenErgonomics.lean` | ✓ first slice digest `8e7ec772def9558a`; Token port follow-up |
+| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.ensure` / Token-shaped sequential surface | Evm.Sdk + `Examples/EvmTokenErgonomics.lean` | ✓ approve/transfer/transferFrom digest `138c08a82e1ad205`; Token port follow-up |
 | **erg-svm-account-001** | `Account.Handle` 方法链 cookbook | Svm.Sdk | 已有 `LamportTransfer`；补文档切片 |
 
 ### 5.3 「像传统语言」的验收标准（可测）

@@ -59,4 +59,19 @@ def transfer (s : State) (destination : Address) (amount : UInt256) :
   else
     .error .overflow
 
+/-- Pause-gated transferFrom-shaped Bool method: sequential allowance/debit gates stubbed. -/
+@[pf_entry]
+def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
+    Except Error (State × Bool) :=
+  Effect.ensure (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensure (!Address.isZero destination) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensure (!Address.isZero owner) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensure (amount.w0 ≠ 0) (hold s)
+      (Revert.insufficient ⟨0, 0, 0, 0⟩ amount) fun _ =>
+  if (0 : UInt64) ≠ 1 then
+    .ok ({ paused := s.paused, flag := amount.w0 },
+      Effect.thenTrue (Event.transfer owner destination amount))
+  else
+    .error .overflow
+
 end Examples.EvmTokenErgonomics

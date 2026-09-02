@@ -18,7 +18,7 @@ instead of nested `if`/`match`.
 ## Landed (first slice)
 
 1. `ProofForge.Evm.Sdk.Effect.ensure` / `Effect.abort` — soft-abort keeps `.ok (state, Bool)`
-2. `Examples.EvmTokenErgonomics` — sequential `approve` / `transfer` (digest `8e7ec772def9558a`)
+2. `Examples.EvmTokenErgonomics` — sequential `approve` / `transfer` / `transferFrom` (digest `138c08a82e1ad205`)
 3. `Tests.EvmTokenErgonomicsSpec` + registry pin; EVM artifact count → 46
 4. Full `Examples.Token` migration deferred (kernel supply proofs are nested-`if`-shaped)
 

@@ -24,6 +24,8 @@ elab "#pf_guard_evm_token_ergonomics" : command => do
     throwError "EVM Token ergonomics missing approve entry"
   unless program.entries.any (·.ixName == "transfer") do
     throwError "EVM Token ergonomics missing transfer entry"
+  unless program.entries.any (·.ixName == "transferFrom") do
+    throwError "EVM Token ergonomics missing transferFrom entry"
   unless yul.contains "approve" || yul.contains "object \"" do
     throwError s!"EVM Token ergonomics Yul missing expected anchors\n{yul}"
   logInfo m!"proofforge-evm-token-ergonomics: digest = {ProofForge.Evm.IR.digestHex program}"
@@ -32,4 +34,4 @@ elab "#pf_guard_evm_token_ergonomics" : command => do
 #pf_evm_build Examples.EvmTokenErgonomics
 
 #guard ProofForge.Evm.Registry.digestOf "EvmTokenErgonomics" ==
-  some "8e7ec772def9558a"
+  some "138c08a82e1ad205"

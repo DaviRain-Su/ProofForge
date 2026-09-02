@@ -16,7 +16,7 @@ def entries : Array Entry := #[
   { name := "EvmCtx", digest := "b4a1d16740330566" },
   { name := "EvmBounded", digest := "f7726cd7fe544fde" },
   { name := "EvmExceptErgonomics", digest := "8def48aa72cd2c19" },
-  { name := "EvmTokenErgonomics", digest := "8e7ec772def9558a" },
+  { name := "EvmTokenErgonomics", digest := "138c08a82e1ad205" },
   { name := "EvmSearch", digest := "1b6e78b520b5030d" },
   { name := "EvmFindIndex", digest := "18f1ba6730bc0351" },
   { name := "EvmStaticCounter", digest := "ce10997e74a7972b" },
