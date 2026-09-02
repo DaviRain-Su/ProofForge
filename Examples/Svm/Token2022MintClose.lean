@@ -1,6 +1,6 @@
 import ProofForge
 
-namespace Examples.Token2022MintClose
+namespace Examples.Svm.Token2022MintClose
 
 open ProofForge.Svm.Runtime
 
@@ -32,4 +32,4 @@ def send (_state : State) (amount : UInt64) : Except Error (State × UInt64) :=
 def get (_state : State) : UInt64 :=
   0
 
-end Examples.Token2022MintClose
+end Examples.Svm.Token2022MintClose

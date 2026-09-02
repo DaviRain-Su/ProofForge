@@ -1,4 +1,4 @@
-import Examples.MemoUtf8
+import Examples.Svm.MemoUtf8
 import ProofForge
 
 /-!
@@ -15,6 +15,6 @@ open ProofForge.Svm.Sdk
 #guard !Memo.Utf8.bytesWellFormed (ByteArray.mk #[0xc0, 0x80])
 #guard Memo.Utf8.write "café" == 0
 
-#pf_build Examples.MemoUtf8
+#pf_build Examples.Svm.MemoUtf8
 
 end Tests.MemoUtf8Spec

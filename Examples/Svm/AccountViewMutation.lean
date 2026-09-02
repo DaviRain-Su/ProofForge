@@ -1,6 +1,6 @@
 import ProofForge
 
-namespace Examples.AccountViewMutation
+namespace Examples.Svm.AccountViewMutation
 
 open ProofForge.Svm.Sdk
 
@@ -57,4 +57,4 @@ def moveAndPeek (s : State) (amount : UInt64) (index : UInt64) : Except Error (S
   else
     .error .overflow
 
-end Examples.AccountViewMutation
+end Examples.Svm.AccountViewMutation

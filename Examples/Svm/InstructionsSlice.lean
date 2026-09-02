@@ -15,7 +15,7 @@ Short or wrong-key accounts fail closed (sentinel `0`). Length gates use `UInt64
 extraction sees the same shape as other account-length checks (e.g. Phoenix profile).
 -/
 
-namespace Examples.InstructionsSlice
+namespace Examples.Svm.InstructionsSlice
 
 open ProofForge.Svm.Sdk
 
@@ -95,4 +95,4 @@ def gatedNum (_s : State) : UInt64 :=
   else
     0
 
-end Examples.InstructionsSlice
+end Examples.Svm.InstructionsSlice

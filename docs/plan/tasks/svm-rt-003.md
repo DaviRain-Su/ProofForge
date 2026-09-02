@@ -23,7 +23,7 @@ priority: F1
 
 ## 验收证据
 
-- Lean：`lake build Examples.AccountViewMutation Tests.AccountViewMutationSpec`
+- Lean：`lake build Examples.Svm.AccountViewMutation Tests.AccountViewMutationSpec`
 - Digest：`fee09f06d0cc60d4`
 - Mollusk：`account_view_mutation` 6/6
 - View-only `AccountView` digest 保持不变（`useWalkedHeaders` 默认 false）

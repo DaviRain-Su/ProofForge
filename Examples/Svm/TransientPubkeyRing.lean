@@ -9,7 +9,7 @@ one complete typed replacement. Scalar limbs appear only where the generated ABI
 `Pubkey`.
 -/
 
-namespace Examples.TransientPubkeyRing
+namespace Examples.Svm.TransientPubkeyRing
 
 open ProofForge.Svm.Sdk
 
@@ -114,4 +114,4 @@ def staleAndCrossSlotOom (_state : State) : UInt64 :=
   let _ := edgeAlt.begin
   stale
 
-end Examples.TransientPubkeyRing
+end Examples.Svm.TransientPubkeyRing

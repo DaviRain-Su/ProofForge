@@ -1,4 +1,4 @@
-import Examples.VaultRentGrow
+import Examples.Svm.VaultRentGrow
 import Lean
 import ProofForge
 
@@ -8,10 +8,10 @@ Second `svm-sdk-001` consumer: vault grow with explicit funder top-up.
 namespace Tests.VaultRentGrowSpec
 
 open Lean Elab Command
-open Examples.VaultRentGrow
+open Examples.Svm.VaultRentGrow
 open ProofForge.Svm.Sdk
 
-#pf_build Examples.VaultRentGrow
+#pf_build Examples.Svm.VaultRentGrow
 
 #guard vault.resizeDataWithRentTopUp fund targetLen == 0
 #guard targetLen == 64
@@ -19,7 +19,7 @@ open ProofForge.Svm.Sdk
 elab "#pf_guard_vault_rent_grow" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.VaultRentGrow with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.VaultRentGrow with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

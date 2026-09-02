@@ -2611,7 +2611,7 @@ def cancelUpToOrders (_s : State) (side tickPresent : UInt8) (tick : UInt64)
 Cancel one resting order id for tags 10/11. Side/MSB mismatch, missing id, and foreign owner
 are skips that still emit a header-only Reduce (`recordIndex = 0`). Returns removed base lots.
 -/
-def cancelOneByIdFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+def cancelOneByIdFreeFunds512At (layout : Examples.Svm.PhoenixV1.Layout)
     (traderKey0 traderIndex side price sequence : UInt64) : Except Error UInt64 := do
   if side ≠ 0 && side ≠ 1 then
     .error .overflow
@@ -2639,7 +2639,7 @@ def cancelOneByIdFreeFunds512At (layout : Examples.PhoenixV1.Layout)
     .ok removed
 
 /-- Released lots for one successful cancel-by-id, after removal. -/
-def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
+def releasedLotsForCancel512At (layout : Examples.Svm.PhoenixV1.Layout)
     (side price removed : UInt64) : Except Error UInt64 :=
   if removed = 0 then .ok 0
   else if side = 0 then quoteLotsReleased512At layout price removed
@@ -2647,14 +2647,14 @@ def releasedLotsForCancel512At (layout : Examples.PhoenixV1.Layout)
 
 /-- Cancel one id and return released lots (side-aware). Inlined to shrink tag-10 scalar locals
 after main's Extract began retaining more sequenced join locals. -/
-def cancelOneReleased512At (layout : Examples.PhoenixV1.Layout)
+def cancelOneReleased512At (layout : Examples.Svm.PhoenixV1.Layout)
     (traderKey0 traderIndex side price sequence : UInt64) : Except Error UInt64 := do
   let removed ← cancelOneByIdFreeFunds512At layout traderKey0 traderIndex side price sequence
   releasedLotsForCancel512At layout side price removed
 
 /-- Claim aggregated quote/base lots and withdraw atoms for CancelMultiple tag 10.
 Keeping this finish helper `pf_inline` collapses duplicated scalar locals across nest arms. -/
-def finishCancelMultipleWithdraw512At (layout : Examples.PhoenixV1.Layout)
+def finishCancelMultipleWithdraw512At (layout : Examples.Svm.PhoenixV1.Layout)
     (traderIndex quoteReleased baseReleased : UInt64) : Except Error UInt64 := do
   let quoteLotSize := layout.quoteLotSize
   let baseLotSize := layout.baseLotSize
@@ -2734,7 +2734,7 @@ def cancelMultipleOrdersByIdWithFreeFunds (_s : State)
     if (side0 ≠ 0 && side0 ≠ 1) || !side1ok || !side2ok || !side3ok || !side4ok || !side5ok || !side6ok || !side7ok then
       .error .overflow
     else
-      let layout := Examples.PhoenixV1.small 2
+      let layout := Examples.Svm.PhoenixV1.small 2
       let traderKey0 := signerKey 3
       let traderIndex := layout.findTrader
         traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
@@ -2853,7 +2853,7 @@ def cancelMultipleOrdersById (_s : State)
         !side6ok || !side7ok then
       .error .overflow
     else
-      let layout := Examples.PhoenixV1.small 2
+      let layout := Examples.Svm.PhoenixV1.small 2
       let traderKey0 := signerKey 3
       let traderIndex := layout.findTrader
         traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
@@ -2958,7 +2958,7 @@ def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
   if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
-    let layout := Examples.PhoenixV1.small 2
+    let layout := Examples.Svm.PhoenixV1.small 2
     let traderKey0 := signerKey 3
     let traderIndex := layout.findTrader
       traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
@@ -2993,7 +2993,7 @@ def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
           .error .overflow
 
 /-- Credit free lots for DepositFunds. Overflow of free + lots fails closed. -/
-def creditFreeFunds512At (layout : Examples.PhoenixV1.Layout)
+def creditFreeFunds512At (layout : Examples.Svm.PhoenixV1.Layout)
     (traderIndex side lots : UInt64) : Except Error UInt64 :=
   if side = 0 then
     let free := layout.quoteFree traderIndex
@@ -3040,7 +3040,7 @@ def depositFunds (_s : State) (quoteLots baseLots : UInt64) :
   if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
   else
-    let layout := Examples.PhoenixV1.small 2
+    let layout := Examples.Svm.PhoenixV1.small 2
     let traderKey0 := signerKey 3
     let traderIndex := layout.findTrader
       traderKey0 (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)

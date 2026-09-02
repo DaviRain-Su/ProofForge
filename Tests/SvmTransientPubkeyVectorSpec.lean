@@ -1,5 +1,5 @@
-import Examples.TransientPubkeyBatch
-import Examples.TransientPubkeyRing
+import Examples.Svm.TransientPubkeyBatch
+import Examples.Svm.TransientPubkeyRing
 import Lean
 import ProofForge
 
@@ -27,8 +27,8 @@ private def ringEdgeAlt := VectorPubkey.boundedAlt 1023
 #guard batch3 == { elements := 3, alternate := false }
 #guard batch2Alt == { elements := 2, alternate := true }
 
-#pf_build Examples.TransientPubkeyBatch
-#pf_build Examples.TransientPubkeyRing
+#pf_build Examples.Svm.TransientPubkeyBatch
+#pf_build Examples.Svm.TransientPubkeyRing
 
 elab "#pf_guard_transient_pubkey_vectors" : command => do
   let env ← getEnv
@@ -40,8 +40,8 @@ elab "#pf_guard_transient_pubkey_vectors" : command => do
     match IR.fromExtracted source with
     | .ok program => pure program
     | .error reason => throwError reason
-  let batch ← extract `Examples.TransientPubkeyBatch
-  let ring ← extract `Examples.TransientPubkeyRing
+  let batch ← extract `Examples.Svm.TransientPubkeyBatch
+  let ring ← extract `Examples.Svm.TransientPubkeyRing
   let some pushExact := batch.methods.find? (·.ixName == "pushExact")
     | throwError "missing TransientPubkeyBatch.pushExact"
   unless pushExact.paramCount == 4 do

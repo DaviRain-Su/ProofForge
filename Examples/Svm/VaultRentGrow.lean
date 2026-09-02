@@ -1,6 +1,6 @@
 import ProofForge
 
-namespace Examples.VaultRentGrow
+namespace Examples.Svm.VaultRentGrow
 
 open ProofForge.Svm.Sdk
 
@@ -42,4 +42,4 @@ def grow (s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-end Examples.VaultRentGrow
+end Examples.Svm.VaultRentGrow

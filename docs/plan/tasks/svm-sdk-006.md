@@ -22,8 +22,8 @@ priority: F1/F2
 2. Payload migration edge — **done**
    - `ProofForge.Svm.Sdk.Versioned.PayloadTransition`：单边 copy-one-word + bump version；无多跳图
 3. 正反例 — **done**
-   - `Examples.MemoUtf8` digest `c13eb931ded2755a`（`"café"`）
-   - `Examples.VersionedPayloadMigrator` digest `39327e5abe0c9299`
+   - `Examples.Svm.MemoUtf8` digest `c13eb931ded2755a`（`"café"`）
+   - `Examples.Svm.VersionedPayloadMigrator` digest `39327e5abe0c9299`
 
 ## 验收证据
 

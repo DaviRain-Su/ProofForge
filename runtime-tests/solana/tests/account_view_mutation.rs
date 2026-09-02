@@ -1,4 +1,4 @@
-//! Focused Mollusk matrix for `svm-rt-003` (`Examples.AccountViewMutation`):
+//! Focused Mollusk matrix for `svm-rt-003` (`Examples.Svm.AccountViewMutation`):
 //! AccountView + checked lamport mutation on the same static account prefix.
 //!
 //! Covers: view read, transfer+view peek, readonly/same-canonical fail-closed,

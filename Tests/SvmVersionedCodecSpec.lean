@@ -1,6 +1,6 @@
 import Examples.Svm.VersionedLedger
 import Examples.Svm.VersionedMigrator
-import Examples.VersionedPayloadMigrator
+import Examples.Svm.VersionedPayloadMigrator
 import ProofForge
 
 /-!
@@ -15,23 +15,23 @@ open ProofForge.Svm.Sdk.Versioned
 
 #pf_build Examples.Svm.VersionedLedger
 #pf_build Examples.Svm.VersionedMigrator
-#pf_build Examples.VersionedPayloadMigrator
+#pf_build Examples.Svm.VersionedPayloadMigrator
 
 #guard (Examples.Svm.VersionedLedger.fixed 1).wellFormed
 #guard (Examples.Svm.VersionedLedger.fixed 2).wellFormed
 #guard (Examples.Svm.VersionedMigrator.fixed 1).wellFormed
 #guard (Examples.Svm.VersionedMigrator.fixed 2).wellFormed
-#guard (Examples.VersionedPayloadMigrator.fixed 1).wellFormed
-#guard (Examples.VersionedPayloadMigrator.fixed 2).wellFormed
+#guard (Examples.Svm.VersionedPayloadMigrator.fixed 1).wellFormed
+#guard (Examples.Svm.VersionedPayloadMigrator.fixed 2).wellFormed
 
 #guard (Examples.Svm.VersionedLedger.fixed 1).header.discriminatorField == Field.scalar 1 1
 #guard (Examples.Svm.VersionedLedger.fixed 1).header.versionField == Field.scalar 1 2
 #guard (Examples.Svm.VersionedMigrator.fixed 1).migrateV1.fromVersion == 1
 #guard (Examples.Svm.VersionedMigrator.fixed 1).header.supportedVersion == 2
-#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.fromVersion == 1
-#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.source ==
+#guard (Examples.Svm.VersionedPayloadMigrator.fixed 1).migrateV1.fromVersion == 1
+#guard (Examples.Svm.VersionedPayloadMigrator.fixed 1).migrateV1.source ==
   Field.scalar 1 4
-#guard (Examples.VersionedPayloadMigrator.fixed 1).migrateV1.destination ==
+#guard (Examples.Svm.VersionedPayloadMigrator.fixed 1).migrateV1.destination ==
   Field.scalar 1 5
 
 -- Every logical account state is distinct.

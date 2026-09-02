@@ -1,4 +1,4 @@
-import Examples.Token2022MintClose
+import Examples.Svm.Token2022MintClose
 import ProofForge
 
 namespace Tests.Token2022MintCloseSpec
@@ -50,7 +50,7 @@ private def feeMint : Array UInt8 :=
 #guard evaluatePolicy .token2022MintClose (Token2022.viewOf feeMint) != .accept
 #guard Token2022.parseMintCloseAuthority feeMint == none
 
-#guard (Examples.Token2022MintClose.init 0).dummy == 0
-#guard Examples.Token2022MintClose.get (Examples.Token2022MintClose.init 0) == 0
+#guard (Examples.Svm.Token2022MintClose.init 0).dummy == 0
+#guard Examples.Svm.Token2022MintClose.get (Examples.Svm.Token2022MintClose.init 0) == 0
 
 end Tests.Token2022MintCloseSpec

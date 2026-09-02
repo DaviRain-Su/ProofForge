@@ -1,4 +1,4 @@
-import Examples.InstructionsSlice
+import Examples.Svm.InstructionsSlice
 import ProofForge
 
 /-!
@@ -18,9 +18,9 @@ open ProofForge.Svm.Sdk
 #guard (Sysvar.Slice.accountData (Account.Handle.at 1) 8 8).wellFormed
 #guard !(Sysvar.Slice.accountData (Account.Handle.at 1) 1 8).wellFormed
 #guard !(Sysvar.Slice.accountData (Account.Handle.at 1) 0 0).wellFormed
-#guard Examples.InstructionsSlice.serializedBytesNat = 24
-#guard Examples.InstructionsSlice.serializedBytes = 24
+#guard Examples.Svm.InstructionsSlice.serializedBytesNat = 24
+#guard Examples.Svm.InstructionsSlice.serializedBytes = 24
 
-#pf_build Examples.InstructionsSlice
+#pf_build Examples.Svm.InstructionsSlice
 
 end Tests.InstructionsSliceSpec

@@ -8,7 +8,7 @@ only through the explicit `migrateV1` edge, which copies word 4 → word 5 befor
 version 2. Inspect/initialize never reshape payload.
 -/
 
-namespace Examples.VersionedPayloadMigrator
+namespace Examples.Svm.VersionedPayloadMigrator
 
 open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.AccountStorage.Source
@@ -79,4 +79,4 @@ inductive Error where
 @[pf_entry] def current (_s : State) : UInt64 :=
   if (fixed 1).header.isReady then read (fixed 1).value 0 else 0
 
-end Examples.VersionedPayloadMigrator
+end Examples.Svm.VersionedPayloadMigrator

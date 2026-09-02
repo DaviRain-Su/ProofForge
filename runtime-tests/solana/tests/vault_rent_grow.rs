@@ -1,4 +1,4 @@
-//! Mollusk matrix for `svm-sdk-001` second consumer (`Examples.VaultRentGrow`).
+//! Mollusk matrix for `svm-sdk-001` second consumer (`Examples.Svm.VaultRentGrow`).
 
 mod common;
 

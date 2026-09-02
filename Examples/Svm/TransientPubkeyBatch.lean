@@ -8,7 +8,7 @@ Treats a full typed Pubkey vector as a rejected candidate and keeps the existing
 appear only at the scalar ABI boundary; vector policy uses complete `Sdk.Pubkey` values.
 -/
 
-namespace Examples.TransientPubkeyBatch
+namespace Examples.Svm.TransientPubkeyBatch
 
 open ProofForge.Svm.Sdk
 
@@ -126,4 +126,4 @@ def staleAfterFinish (_state : State) : UInt64 :=
   let _ := keys3.finish
   keys3.length
 
-end Examples.TransientPubkeyBatch
+end Examples.Svm.TransientPubkeyBatch

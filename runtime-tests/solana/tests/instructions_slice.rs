@@ -1,5 +1,5 @@
 //! Mollusk ± coverage for svm-rt-004 bounded Instructions / fixed-offset sliced sysvar
-//! (`Examples.InstructionsSlice`).
+//! (`Examples.Svm.InstructionsSlice`).
 //!
 //! Fixture layout (24 bytes), matching the compile-time geometry in Lean:
 //! - `u16` `num_instructions` at offset 0

@@ -1,6 +1,6 @@
 import ProofForge
 
-namespace Examples.MemoUtf8
+namespace Examples.Svm.MemoUtf8
 
 structure State where
   dummy : UInt64
@@ -27,4 +27,4 @@ def write (_s : State) : Except Error (State × UInt64) :=
 def get (_s : State) : UInt64 :=
   0
 
-end Examples.MemoUtf8
+end Examples.Svm.MemoUtf8

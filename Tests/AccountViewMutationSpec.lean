@@ -1,4 +1,4 @@
-import Examples.AccountViewMutation
+import Examples.Svm.AccountViewMutation
 import Lean
 import ProofForge
 
@@ -11,11 +11,11 @@ by Mollusk in `runtime-tests/solana/tests/account_view_mutation.rs`.
 namespace Tests.AccountViewMutationSpec
 
 open Lean Elab Command
-open Examples.AccountViewMutation
+open Examples.Svm.AccountViewMutation
 open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 
-#pf_build Examples.AccountViewMutation
+#pf_build Examples.Svm.AccountViewMutation
 
 #guard window.peekLamports 0 == 0
 #guard vault.transferLamports recipient 7 == 0
@@ -24,7 +24,7 @@ open ProofForge.Svm.Runtime
 elab "#pf_guard_account_view_mutation" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.AccountViewMutation with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.AccountViewMutation with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

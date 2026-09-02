@@ -21,7 +21,7 @@ depends-on: []
    - `ProofForge.Svm.Cpi.TokenTlv`：`.token2022MintClose`、`mintCloseAccept?`、`evaluatePolicy`
    - Emit 直写 type 3 / len 32；未知 extension 仍原子拒绝
 2. 两个非 Phoenix consumer — **done**
-   - CPI：`Examples.Token2022MintClose.send` → `Runtime.token2022TransferCheckedMintClose`（digest `607b3786fb54eaee`）
+   - CPI：`Examples.Svm.Token2022MintClose.send` → `Runtime.token2022TransferCheckedMintClose`（digest `607b3786fb54eaee`）
    - Sdk host：`Sdk.Token2022.parseMintCloseAuthority` + `Tests.Token2022MintCloseSpec`
 3. 未建模 extension 继续 fail closed — **done**
    - base `Token2022` 对 MintClose/fee/hook 仍拒绝；mint-close 程序对 fee/hook 仍拒绝
@@ -29,7 +29,7 @@ depends-on: []
 
 ## 验收证据
 
-- Lean：`lake build Examples.Token2022MintClose Tests.Token2022MintCloseSpec`
+- Lean：`lake build Examples.Svm.Token2022MintClose Tests.Token2022MintCloseSpec`
 - Mollusk：`token_2022` 9/9（含 mint-close fail-closed on base）；`token_2022_mint_close` 4/4
 - Gates：`scripts/check_no_sorry.py` / `scripts/check_ownership.py` ok
 

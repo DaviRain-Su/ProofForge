@@ -1,17 +1,17 @@
-import Examples.RentTopUp
+import Examples.Svm.RentTopUp
 import Lean
 import ProofForge
 
 /-!
-Focused checks for `svm-sdk-001` rent top-up composition via `Examples.RentTopUp`.
+Focused checks for `svm-sdk-001` rent top-up composition via `Examples.Svm.RentTopUp`.
 -/
 namespace Tests.RentTopUpSpec
 
 open Lean Elab Command
-open Examples.RentTopUp
+open Examples.Svm.RentTopUp
 open ProofForge.Svm.Sdk
 
-#pf_build Examples.RentTopUp
+#pf_build Examples.Svm.RentTopUp
 
 #guard dataAccount.topUpRentExempt payer targetLen == 0
 #guard dataAccount.resizeDataWithRentTopUp payer targetLen == 0
@@ -20,7 +20,7 @@ open ProofForge.Svm.Sdk
 elab "#pf_guard_rent_top_up" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.RentTopUp with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.RentTopUp with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

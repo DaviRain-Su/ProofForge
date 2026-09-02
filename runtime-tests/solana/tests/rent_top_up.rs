@@ -1,4 +1,4 @@
-//! Mollusk matrix for `svm-sdk-001` rent top-up composition (`Examples.RentTopUp`).
+//! Mollusk matrix for `svm-sdk-001` rent top-up composition (`Examples.Svm.RentTopUp`).
 //!
 //! Covers: successful top-up+resize from an underfunded program-owned account, already-exempt
 //! zero-deficit path, insufficient payer fail-closed, and view-independent top-up-only entry.

@@ -1,6 +1,6 @@
 import ProofForge
 
-namespace Examples.RentTopUp
+namespace Examples.Svm.RentTopUp
 
 open ProofForge.Svm.Sdk
 
@@ -52,4 +52,4 @@ def grow (s : State) : Except Error (State × UInt64) :=
   else
     .error .overflow
 
-end Examples.RentTopUp
+end Examples.Svm.RentTopUp
