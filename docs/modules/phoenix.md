@@ -178,8 +178,7 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
   remainder、full-book eviction、同 maker 聚合、其他 TIF/self-trade 策略 fail closed。Lean Spec
   钉 fee/posting 纯算术；Mollusk 覆盖 one/two-match fee 与 remainder 成功路径及 unsupported 形状。
 - **未支持（P5 remaining instructions/公网）**：完整 placement/matching 策略矩阵、runtime remaining
-  accounts、Token-2022 extension 语义、CancelMultiple 超过本片 tag-11 容量 8 / tag-10 容量 5 的 Vec / 满官方容量（tag 10
-  六 id withdraw Mollusk 已在容量内覆盖）、全部 Phoenix-v1 指令兼容与公网部署。
+  accounts、Token-2022 extension 语义、CancelMultiple 超过本片 tag-10/11 容量 8 的 Vec、全部 Phoenix-v1 指令兼容与公网部署。
 
 依赖顺序是 P0 抽取稳定 → P1 bounded 语义门 → P2 Mollusk 认证矩阵 → P3 Tree/EVM/
 全仓回归 → P4 通用 CFG/产物资格；P5 动态模型另立 profile。任何 helper/state-loop
