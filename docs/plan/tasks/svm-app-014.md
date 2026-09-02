@@ -27,9 +27,6 @@ exact lots; both-`None` withdraws all free quote+base).
 - Lean extract/emit digest `f248b89dc0fb8def`
 - Mollusk: claims Some/Some, None/None drain-all, zero/zero header-only, insufficient reject
 
-- Lean extract/emit digest `f248b89dc0fb8def`
-- (pending) Mollusk Option matrix
-
 ## 仍未覆盖
 
 `Option` DepositFunds；tags 0–2 / 14–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。
