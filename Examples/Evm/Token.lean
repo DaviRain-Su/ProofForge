@@ -116,16 +116,13 @@ def approve (s : State) (spender : Address) (amount : UInt256) :
   else
     .error .overflow
 
+/-- Pause-gated increaseAllowance: sequential `Effect.ensureCode` soft-aborts. -/
 @[pf_entry]
 def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
-  else if Address.isZero spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
-  else if Fungible.Allowances.canIncrease storage.allowances Context.caller spender added then
+  Effect.ensureCode (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensureCode (!Address.isZero spender) (hold s) Revert.zeroAddress fun _ =>
+  if Fungible.Allowances.canIncrease storage.allowances Context.caller spender added then
     let next := Fungible.Allowances.nextIncrease storage.allowances Context.caller spender added
     .ok ({ dummy := Fungible.Allowances.increase storage.allowances Context.caller spender added,
            paused := s.paused, cap := s.cap, supply := s.supply },
@@ -133,23 +130,21 @@ def increaseAllowance (s : State) (spender : Address) (added : UInt256) :
   else
     .error .overflow
 
+/-- Pause-gated decreaseAllowance: sequential `Effect.ensureCode` soft-aborts. -/
 @[pf_entry]
 def decreaseAllowance (s : State) (spender : Address) (subtracted : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
-  else if Address.isZero spender then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
-  else if Fungible.Allowances.canDecrease storage.allowances Context.caller spender subtracted then
-    let next := Fungible.Allowances.nextDecrease storage.allowances Context.caller spender subtracted
-    .ok ({ dummy := Fungible.Allowances.decrease storage.allowances Context.caller spender subtracted,
-           paused := s.paused, cap := s.cap, supply := s.supply },
-      Event.approval Context.caller spender next)
-  else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Fungible.Allowances.insufficient storage.allowances Context.caller spender subtracted)
+  Effect.ensureCode (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensureCode (!Address.isZero spender) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensureCode
+      (Fungible.Allowances.canDecrease storage.allowances Context.caller spender subtracted)
+      (hold s)
+      (Fungible.Allowances.insufficient storage.allowances Context.caller spender subtracted)
+      fun _ =>
+  let next := Fungible.Allowances.nextDecrease storage.allowances Context.caller spender subtracted
+  .ok ({ dummy := Fungible.Allowances.decrease storage.allowances Context.caller spender subtracted,
+         paused := s.paused, cap := s.cap, supply := s.supply },
+    Event.approval Context.caller spender next)
 
 /-- Pause-gated burn: sequential `Effect.ensureCode` soft-aborts (UInt64 CallResult ABI). -/
 @[pf_entry]
@@ -162,29 +157,23 @@ def burn (s : State) (amount : UInt256) : Except Error (State × UInt64) :=
          supply := UInt256.sub s.supply amount },
     Event.transfer Context.caller Address.zero amount)
 
+/-- Pause-gated burnFrom: sequential `Effect.ensureCode` soft-aborts (UInt64 CallResult ABI). -/
 @[pf_entry]
 def burnFrom (s : State) (owner : Address) (amount : UInt256) :
     Except Error (State × UInt64) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Access.runningViolation)
-  else if Address.isZero owner then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.zeroAddress)
-  else if Fungible.Allowances.canSpend storage.allowances owner Context.caller amount then
-    if Fungible.Balances.canDebit storage.balances owner amount then
-      let debit :=
-        (Fungible.Balances.debit storage.balances owner amount) |||
-        (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
-      .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
-             supply := UInt256.sub s.supply amount },
-        Event.transfer owner Address.zero amount)
-    else
-      .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        Fungible.Balances.insufficient storage.balances owner amount)
-  else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
+  Effect.ensureCode (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensureCode (!Address.isZero owner) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensureCode (Fungible.Allowances.canSpend storage.allowances owner Context.caller amount)
+      (hold s) (Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
+      fun _ =>
+  Effect.ensureCode (Fungible.Balances.canDebit storage.balances owner amount) (hold s)
+      (Fungible.Balances.insufficient storage.balances owner amount) fun _ =>
+  let debit :=
+    (Fungible.Balances.debit storage.balances owner amount) |||
+    (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
+  .ok ({ dummy := debit, paused := s.paused, cap := s.cap,
+         supply := UInt256.sub s.supply amount },
+    Event.transfer owner Address.zero amount)
 
 /-- Pause-gated transfer: sequential `Effect.ensure` soft-aborts (R5-012 Bool ABI). -/
 @[pf_entry]
@@ -397,6 +386,75 @@ theorem approve_preserves_supply (s : State) (sp : Address) (a : UInt256)
         obtain ⟨rfl, rfl⟩ := h
         rfl
       · simp at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- **burnFrom 效应**：supply 要么不动，要么恰好减去 `amount`。 -/
+theorem burnFrom_supply_effect (s : State) (o : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : burnFrom s o a = .ok (t, r)) :
+    t.supply = s.supply ∨ t.supply = UInt256.sub s.supply a := by
+  unfold burnFrom at h
+  simp only [Effect.ensureCode, Effect.abortCode, hold] at h
+  split at h
+  · split at h
+    · split at h
+      · split at h
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact Or.inr rfl
+        · simp at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact Or.inl rfl
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact Or.inl rfl
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Or.inl rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact Or.inl rfl
+
+/-- **increaseAllowance 不动 supply**。 -/
+theorem increaseAllowance_preserves_supply (s : State) (sp : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : increaseAllowance s sp a = .ok (t, r)) : t.supply = s.supply := by
+  unfold increaseAllowance at h
+  simp only [Effect.ensureCode, Effect.abortCode, hold] at h
+  split at h
+  · split at h
+    · split at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+      · simp at h
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- **decreaseAllowance 不动 supply**。 -/
+theorem decreaseAllowance_preserves_supply (s : State) (sp : Address) (a : UInt256)
+    {t : State} {r : UInt64}
+    (h : decreaseAllowance s sp a = .ok (t, r)) : t.supply = s.supply := by
+  unfold decreaseAllowance at h
+  simp only [Effect.ensureCode, Effect.abortCode, hold] at h
+  split at h
+  · split at h
+    · split at h
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
+      · simp at h
+        obtain ⟨rfl, rfl⟩ := h
+        rfl
     · simp at h
       obtain ⟨rfl, rfl⟩ := h
       rfl
