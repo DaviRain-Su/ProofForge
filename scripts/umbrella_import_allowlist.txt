@@ -22,6 +22,7 @@ Examples/EvmCheckpointBook.lean
 Examples/EvmCheckpointTrace.lean
 Examples/EvmClaimBitmap.lean
 Examples/EvmConfigMap.lean
+Examples/EvmExceptErgonomics.lean
 Examples/EvmFeatureFlags.lean
 Examples/EvmFindIndex.lean
 Examples/EvmIdRegistry.lean
@@ -74,6 +75,7 @@ Examples/NearMemory.lean
 Examples/NearMigration.lean
 Examples/NearOutput.lean
 Examples/NearPromise.lean
+Examples/NearPromiseHandle.lean
 Examples/NearPromiseOrValue.lean
 Examples/NearPromiseResult.lean
 Examples/NearQueue.lean
@@ -83,6 +85,7 @@ Examples/NearStorageEconomics.lean
 Examples/NearStorage.lean
 Examples/NearStorageRegistration.lean
 Examples/NearTokenArithmetic.lean
+Examples/NearTokenErgonomics.lean
 Examples/NearTokenStorage.lean
 Examples/NearVector.lean
 Examples/Nested.lean
@@ -100,6 +103,7 @@ Examples/Rent.lean
 Examples/Seat.lean
 Examples/SelfLog.lean
 Examples/Signed.lean
+Examples/SvmExceptErgonomics.lean
 Examples/SysAlloc.lean
 Examples/SysSeed.lean
 Examples/SysXfer.lean
