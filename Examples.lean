@@ -3,8 +3,9 @@
 -- `Examples.Svm`, `Examples.Evm`, `Examples.Xrpl`, and `Examples.Near`. Lake also builds
 -- every file under `Examples/` via `globs`.
 
--- Shared (SVM + EVM, Counter also XRPL/NEAR)
+-- Shared (SVM + EVM, Counter also XRPL/NEAR; TokenShape is transfer-shaped N15 stub)
 import Examples.Counter
+import Examples.TokenShape
 import Examples.Pair
 import Examples.Flag
 import Examples.Maybe

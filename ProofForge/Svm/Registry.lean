@@ -8,6 +8,7 @@ structure Entry where
 
 def entries : Array Entry := #[
   { name := "Counter", digest := "3382e308fa0843e9" },
+  { name := "TokenShape", digest := "d9f1c090ffa3b9d" },
   { name := "Pair", digest := "8863966157cc5a53" },
   { name := "Nested", digest := "b23a792b58934586" },
   { name := "Tree", digest := "5f7101960e6b8c15" },

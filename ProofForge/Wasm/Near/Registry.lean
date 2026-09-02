@@ -8,6 +8,7 @@ structure Entry where
 
 def entries : Array Entry := #[
   { name := "Counter", digest := "121a0c8f7e697642" },
+  { name := "TokenShape", digest := "f824063d978669c6" },
   { name := "NearCtx", digest := "8233f27ab39f6133" },
   { name := "NearBytes", digest := "3b15034031dcf0a2" },
   { name := "NearFungibleTokenEvent", digest := "768db0d9cec95f94" },
