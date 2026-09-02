@@ -207,17 +207,17 @@ prod-001…004 **必做项已勾选**；`.github/workflows/release.yml` 已能�
 - 一上来拆 `proof-forge-sdk` 独立仓（发版不需要）。  
 - 用「只跑 SVM」取代多 target 合入门——`main`/nightly 仍应全绿。
 
-## 7. P0 落地状态（2026-09-02）
 
-已在同仓实现（见 `scripts/ci_local.sh`、`.github/workflows/ci.yml`、`.github/workflows/ci-phoenix.yml`）：
+## 7. P0 / P1 落地状态（2026-09-02，合并 #15）
 
 | 项 | 状态 |
 |---|---|
-| Path filter 分流四轨 | 已有（main）；本切片保持并文档化 |
-| NEAR 去掉重复 `lake build Tests` | **已改**：只 `lake build Examples` |
-| 默认 PR 不跑 Phoenix Surfpool | **已改**：`surfpool_heavy` 门控 Phoenix + PhoenixV1Profile |
-| 默认 PR 不编/跑 Phoenix Mollusk | **已改**：`phoenix-gates` cargo feature；轻量 lane `--no-default-features` |
-| 独立 Phoenix 重闸 | **新增** `ci-phoenix.yml`（nightly / path / dispatch） |
-| 本地先跑 CI | **新增** `scripts/ci_local.sh`（按 path 选 lane，对齐 workflow） |
-
-仍属后续：Lean `Tests` 拆出 PhoenixSpec、增量 `pf build`、首次 `v*` Release、Phoenix 独立仓。
+| Path filter 四轨分流 | ✅ main 已有；保持 |
+| NEAR 去掉重复 `lake build Tests` | ✅ |
+| Phoenix Lean specs 退出默认 Tests | ✅（#15：`PhoenixTests`） |
+| Phoenix Mollusk 独立 crate + lane | ✅（#15：`runtime-tests/phoenix`） |
+| Phoenix Surfpool 退出默认 SVM | ✅（专属 `phoenix` job） |
+| 聚合 `test` needs phoenix | ✅（修 #15 空 result 竞态） |
+| PhoenixV1 Surfpool timeout | ✅ 45m |
+| 本地 `scripts/ci_local.sh` | ✅ |
+| 首次 `v*` Release / Phoenix 独立仓 | 后续 |

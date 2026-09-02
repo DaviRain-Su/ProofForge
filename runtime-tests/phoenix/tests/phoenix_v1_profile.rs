@@ -1,5 +1,4 @@
-#![cfg(feature = "phoenix-gates")]
-
+#[path = "../../solana/tests/common/mod.rs"]
 mod common;
 
 use {

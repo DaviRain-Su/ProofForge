@@ -11,9 +11,6 @@ import Examples.Svm.TokenNative
 import Examples.Svm.TokenSize
 import Examples.Svm.TokenMs
 import Examples.Svm.Seat
-import Examples.Svm.Phoenix
-import Examples.Svm.PhoenixV1Profile
-
 open Lean Elab Command
 
 namespace Tests.SvmSdkTokenSpec
@@ -48,13 +45,6 @@ private def uncheckedAccounts : Token.UncheckedTransferAccounts := .at 7 5 3 5
 #guard Token.transferCheckedWith checkedAccounts 7 6 == 0
 #guard Token.transferCheckedSignedWith checkedAccounts 7 6 #[] 0 == 0
 #guard Token.transferSignedWith uncheckedAccounts 7 #[] 0 == 0
-
-#guard Examples.Svm.Phoenix.baseDepositTokenAccounts.wellFormed
-#guard Examples.Svm.Phoenix.quoteDepositTokenAccounts.wellFormed
-#guard Examples.Svm.Phoenix.baseWithdrawTokenAccounts.wellFormed
-#guard Examples.Svm.Phoenix.quoteWithdrawTokenAccounts.wellFormed
-#guard Examples.Svm.PhoenixV1Profile.baseWithdrawTokenAccounts.wellFormed
-#guard Examples.Svm.PhoenixV1Profile.quoteWithdrawTokenAccounts.wellFormed
 
 private def expectCanonical (module : Name) (expected : String) : CommandElabM Unit := do
   let env ← getEnv

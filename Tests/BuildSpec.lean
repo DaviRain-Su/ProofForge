@@ -55,9 +55,6 @@ import Examples.Svm.TokenMs
 import Examples.Svm.TokenStateView
 import Examples.Svm.SelfLog
 import Examples.Svm.RawEntry
-import Examples.Svm.Phoenix
-import Examples.Svm.PhoenixV1Profile
-
 
 #pf_build Examples.Counter
 
@@ -156,10 +153,6 @@ import Examples.Svm.PhoenixV1Profile
 #pf_build Examples.Svm.SelfLog
 
 #pf_build Examples.Svm.RawEntry
-
-#pf_build Examples.Svm.Phoenix
-
-#pf_build Examples.Svm.PhoenixV1Profile
 
 /--
 error: extract/unsupported: svm rejects evm leaf
