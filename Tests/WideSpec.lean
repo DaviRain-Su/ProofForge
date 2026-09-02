@@ -1,8 +1,8 @@
-import Examples.Wide
+import Examples.Evm.Wide
 
 namespace Tests.WideSpec
 
-open Examples.Wide
+open Examples.Evm.Wide
 open ProofForge.Evm.Runtime
 open ProofForge.Core.Value
 

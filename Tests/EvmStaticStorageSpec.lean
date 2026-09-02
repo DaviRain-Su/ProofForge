@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.EvmStaticCounter
-import Examples.EvmStaticRoster
+import Examples.Evm.EvmStaticCounter
+import Examples.Evm.EvmStaticRoster
 
 /-!
 EVM-SDK-2 focused suite: static storage descriptor units, cursor/allocation checks, and
@@ -116,9 +116,9 @@ def invalidLayouts :=
 #guard sampleAllocated.2.2.1.fieldSlot? "x" == none
 
 def recordHandles :=
-  let tally := Layout.root.record (α := Examples.EvmStaticCounter.Tally)
+  let tally := Layout.root.record (α := Examples.Evm.EvmStaticCounter.Tally)
     "tally" [("count", .u64), ("window", .u16)]
-  let seats := tally.next.recordArray (α := Vector Examples.EvmStaticRoster.Seat 3)
+  let seats := tally.next.recordArray (α := Vector Examples.Evm.EvmStaticRoster.Seat 3)
     "seats" [("points", .u64), ("tier", .u8)] 3
   (tally.handle, seats.handle)
 
@@ -139,19 +139,19 @@ def recordHandles :=
 
 /-! ## Consumer host behavior through ordinary typed state access -/
 
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard (init 5 ⟨0, 0, 0⟩).paused == 0 &&
   (init 5 ⟨0, 0, 0⟩).total == ⟨5, 0, 0, 0⟩ &&
   (init 5 ⟨0, 0, 0⟩).tally.count == 0
 
 /- Host stubs keep checked wide arithmetic identity-left (`evmAdd256` returns `a`), so the
 host-visible change of a bump is the `tally.count` scalar; extraction owns the real 256-bit add. -/
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard match bump (init 5 ⟨0, 0, 0⟩) 7 with
   | .ok (s, r) => s.tally.count == 7 && r == 7 && s.total == ⟨5, 0, 0, 0⟩
   | _ => false
 
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard match bump (init 5 ⟨0, 0, 0⟩) 7 with
   | .ok (s, _) =>
       (match bump s u64Max with
@@ -159,7 +159,7 @@ open Examples.EvmStaticCounter in
        | _ => false)
   | _ => false
 
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard match pause (init 5 ⟨0, 0, 0⟩) with
   | .ok (s, _) =>
       -- host stubs treat the caller as the immutable owner, so pause commits;
@@ -169,27 +169,27 @@ open Examples.EvmStaticCounter in
        | _ => false)
   | _ => false
 
-open Examples.EvmStaticCounter in
+open Examples.Evm.EvmStaticCounter in
 #guard match setWindow (init 5 ⟨0, 0, 0⟩) 9 with
   | .ok (s, r) => s.tally.window == 9 && r == 9
   | _ => false
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard (init ⟨1, 2, 3⟩).admin == ⟨1, 2, 3⟩ && !(init ⟨1, 2, 3⟩).closed &&
   seatPoints (init ⟨1, 2, 3⟩) 0 == 0 && seatPoints (init ⟨1, 2, 3⟩) 5 == 0
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard match setSeat (init ⟨1, 2, 3⟩) 1 9 2 with
   | .ok (s, r) => s.seats[1]!.points == 9 && s.seats[1]!.tier == 2 && r == 9 &&
       seatPoints s 1 == 9 && seatTier s 1 == 2
   | _ => false
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard match setSeat (init ⟨1, 2, 3⟩) 4 9 2 with
   | .error .overflow => true
   | _ => false
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard match close (init ⟨0, 0, 0⟩) with
   | .ok (s, _) =>
       match setSeat s 0 9 2 with
@@ -197,7 +197,7 @@ open Examples.EvmStaticRoster in
       | _ => false
   | _ => false
 
-open Examples.EvmStaticRoster in
+open Examples.Evm.EvmStaticRoster in
 #guard match close (init ⟨1, 2, 3⟩) with
   | .ok (s, r) => s.closed && r == 1 && closedOf s
   | _ => false
@@ -208,29 +208,29 @@ def layoutSlots (layout : Layout) : List (String × Nat) :=
   layout.leaves.toList.map fun leaf => (leaf.name, leaf.width)
 
 def counterSlots : List (String × Nat) :=
-  layoutSlots Examples.EvmStaticCounter.layout
+  layoutSlots Examples.Evm.EvmStaticCounter.layout
 
 def rosterSlots : List (String × Nat) :=
-  layoutSlots Examples.EvmStaticRoster.layout
+  layoutSlots Examples.Evm.EvmStaticRoster.layout
 
 def rosterVectors : List (String × Nat × Nat × Nat) :=
-  let seats := Examples.EvmStaticRoster.declared.handle.seats
+  let seats := Examples.Evm.EvmStaticRoster.declared.handle.seats
   [(seats.name, seats.baseSlot, seats.length?.getD 0, seats.elementSlots?.getD 0)]
 
-#guard Examples.EvmStaticCounter.layout.wellFormed
-#guard Examples.EvmStaticCounter.layout.matchesFlattened counterSlots
-#guard Examples.EvmStaticCounter.declared.handle.paused.slot? == some 0
-#guard Examples.EvmStaticCounter.declared.handle.total.wideLeaves? == some 4
-#guard Examples.EvmStaticCounter.declared.handle.tally.fieldSlot? "window" == some 6
+#guard Examples.Evm.EvmStaticCounter.layout.wellFormed
+#guard Examples.Evm.EvmStaticCounter.layout.matchesFlattened counterSlots
+#guard Examples.Evm.EvmStaticCounter.declared.handle.paused.slot? == some 0
+#guard Examples.Evm.EvmStaticCounter.declared.handle.total.wideLeaves? == some 4
+#guard Examples.Evm.EvmStaticCounter.declared.handle.tally.fieldSlot? "window" == some 6
 
-#guard Examples.EvmStaticRoster.layout.wellFormed
-#guard Examples.EvmStaticRoster.layout.matchesFlattened rosterSlots
-#guard Examples.EvmStaticRoster.declared.handle.admin.wideLeaves? == some 3
-#guard Examples.EvmStaticRoster.declared.handle.seats.length? == some 3
-#guard Examples.EvmStaticRoster.declared.handle.seats.elementSlots? == some 2
-#guard Examples.EvmStaticRoster.declared.handle.seats.slotOf? 2 == some 7
-#guard Examples.EvmStaticRoster.declared.handle.closed.slot? == some 9
-#guard Examples.EvmStaticRoster.declared.handle.closed.width? == some 1
+#guard Examples.Evm.EvmStaticRoster.layout.wellFormed
+#guard Examples.Evm.EvmStaticRoster.layout.matchesFlattened rosterSlots
+#guard Examples.Evm.EvmStaticRoster.declared.handle.admin.wideLeaves? == some 3
+#guard Examples.Evm.EvmStaticRoster.declared.handle.seats.length? == some 3
+#guard Examples.Evm.EvmStaticRoster.declared.handle.seats.elementSlots? == some 2
+#guard Examples.Evm.EvmStaticRoster.declared.handle.seats.slotOf? 2 == some 7
+#guard Examples.Evm.EvmStaticRoster.declared.handle.closed.slot? == some 9
+#guard Examples.Evm.EvmStaticRoster.declared.handle.closed.width? == some 1
 
 /-! ## Extraction proof: declared layout == real EVM state flattening -/
 
@@ -266,10 +266,10 @@ private def expectStaticLayout (module : Name) (expectedSlots : List (String × 
     throwError s!"{module}: expected ordinary static slot accesses in emitted Yul"
 
 elab "#pf_guard_evm_static_counter" : command =>
-  expectStaticLayout `Examples.EvmStaticCounter counterSlots []
+  expectStaticLayout `Examples.Evm.EvmStaticCounter counterSlots []
 
 elab "#pf_guard_evm_static_roster" : command =>
-  expectStaticLayout `Examples.EvmStaticRoster rosterSlots rosterVectors
+  expectStaticLayout `Examples.Evm.EvmStaticRoster rosterSlots rosterVectors
 
 #pf_guard_evm_static_counter
 #pf_guard_evm_static_roster

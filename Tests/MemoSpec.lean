@@ -1,8 +1,8 @@
-import Examples.Memo
+import Examples.Svm.Memo
 
 namespace Tests.MemoSpec
 
-open Examples.Memo
+open Examples.Svm.Memo
 open ProofForge.Svm.Sdk
 
 #guard (init 0).dummy == 0

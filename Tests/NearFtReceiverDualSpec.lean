@@ -1,4 +1,4 @@
-import Examples.NearFtReceiverDual
+import Examples.Near.NearFtReceiverDual
 import Lean
 import ProofForge
 
@@ -9,7 +9,7 @@ open ProofForge.Wasm.Near
 
 elab "#pf_near_ft_receiver_dual_check" : command => do
   let env ← getEnv
-  let source ← match ProofForge.Extract.extractModuleIR env `Examples.NearFtReceiverDual with
+  let source ← match ProofForge.Extract.extractModuleIR env `Examples.Near.NearFtReceiverDual with
     | .ok program => pure program | .error reason => throwError reason
   let some sourceReceiver := source.methods.find? (·.ixName == "ft_on_transfer")
     | throwError "missing source ft_on_transfer"

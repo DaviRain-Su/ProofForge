@@ -1,7 +1,7 @@
 import ProofForge.Svm.Sdk.AssociatedToken
 import ProofForge.Svm.Sdk.Memo
-import Examples.Ata
-import Examples.Memo
+import Examples.Svm.Ata
+import Examples.Svm.Memo
 
 open Lean Elab Command
 
@@ -33,8 +33,8 @@ open ProofForge.Svm.Sdk
 namespace AlternateMemo
 
 @[pf_entry]
-def writeProofForge (_s : Examples.Memo.State) :
-    Except Examples.Memo.Error (Examples.Memo.State × UInt64) :=
+def writeProofForge (_s : Examples.Svm.Memo.State) :
+    Except Examples.Svm.Memo.Error (Examples.Svm.Memo.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := Memo.Ascii.write "proof-forge"
     .ok ({ dummy := 0 }, 0)
@@ -43,8 +43,8 @@ def writeProofForge (_s : Examples.Memo.State) :
 
 /-- Oversized UTF-8 payload must fail closed at extract (byte budget, not scalar count). -/
 @[pf_entry]
-def writeOversized (_s : Examples.Memo.State) :
-    Except Examples.Memo.Error (Examples.Memo.State × UInt64) :=
+def writeOversized (_s : Examples.Svm.Memo.State) :
+    Except Examples.Svm.Memo.Error (Examples.Svm.Memo.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := Memo.Utf8.write (String.ofList (List.replicate 513 'a'))
     .ok ({ dummy := 0 }, 0)
@@ -53,8 +53,8 @@ def writeOversized (_s : Examples.Memo.State) :
 
 /-- Multi-byte UTF-8 Memo payload accepted under the Utf8 facade. -/
 @[pf_entry]
-def writeCafe (_s : Examples.Memo.State) :
-    Except Examples.Memo.Error (Examples.Memo.State × UInt64) :=
+def writeCafe (_s : Examples.Svm.Memo.State) :
+    Except Examples.Svm.Memo.Error (Examples.Svm.Memo.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := Memo.Utf8.write "café"
     .ok ({ dummy := 0 }, 0)
@@ -85,8 +85,8 @@ namespace GeneralAta
     tokenProgram := .at 8 }
 
 @[pf_entry]
-def create (_s : Examples.Ata.State) :
-    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+def create (_s : Examples.Svm.Ata.State) :
+    Except Examples.Svm.Ata.Error (Examples.Svm.Ata.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := AssociatedToken.create
     .ok ({ dummy := 0 }, 0)
@@ -94,8 +94,8 @@ def create (_s : Examples.Ata.State) :
     .error .overflow
 
 @[pf_entry]
-def recoverNested (_s : Examples.Ata.State) :
-    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+def recoverNested (_s : Examples.Svm.Ata.State) :
+    Except Examples.Svm.Ata.Error (Examples.Svm.Ata.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := AssociatedToken.recoverNested
     .ok ({ dummy := 0 }, 0)
@@ -103,8 +103,8 @@ def recoverNested (_s : Examples.Ata.State) :
     .error .overflow
 
 @[pf_entry]
-def createWithRoles (_s : Examples.Ata.State) :
-    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+def createWithRoles (_s : Examples.Svm.Ata.State) :
+    Except Examples.Svm.Ata.Error (Examples.Svm.Ata.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := AssociatedToken.createIdempotentWith roleCreateAccounts
     .ok ({ dummy := 0 }, 0)
@@ -112,8 +112,8 @@ def createWithRoles (_s : Examples.Ata.State) :
     .error .overflow
 
 @[pf_entry]
-def recoverWithRoles (_s : Examples.Ata.State) :
-    Except Examples.Ata.Error (Examples.Ata.State × UInt64) :=
+def recoverWithRoles (_s : Examples.Svm.Ata.State) :
+    Except Examples.Svm.Ata.Error (Examples.Svm.Ata.State × UInt64) :=
   if (0 : UInt64) ≠ 1 then
     let _ := AssociatedToken.recoverNestedWith roleRecoverAccounts
     .ok ({ dummy := 0 }, 0)
@@ -153,15 +153,15 @@ private def expectCanonical (module : Name) (expected : String) : CommandElabM U
     throwError s!"{module}: SDK facade changed canonical IR: {actual}"
 
 elab "#pf_guard_svm_program_facades" : command => do
-  expectCanonical `Examples.Ata "574dc90c21ca9723"
-  expectCanonical `Examples.Memo "26a3540da902ccb5"
+  expectCanonical `Examples.Svm.Ata "574dc90c21ca9723"
+  expectCanonical `Examples.Svm.Memo "26a3540da902ccb5"
 
 #pf_guard_svm_program_facades
 
 private def extractAlternateMemo (env : Environment) (mutation : Name) :
     Except String ProofForge.Svm.IR.Program := do
-  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Memo.init mutation
-    ``Examples.Memo.get
+  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Svm.Memo.init mutation
+    ``Examples.Svm.Memo.get
   ProofForge.Svm.IR.fromExtracted source
 
 elab "#pf_guard_svm_bounded_memo" : command => do
@@ -204,8 +204,8 @@ elab "#pf_guard_svm_bounded_memo" : command => do
 
 private def extractAtaMethod (env : Environment) (mutation : Name) :
     Except String ProofForge.Svm.IR.Program := do
-  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Ata.init mutation
-    ``Examples.Ata.get
+  let source ← ProofForge.Extract.extractProgramIR env ``Examples.Svm.Ata.init mutation
+    ``Examples.Svm.Ata.get
   ProofForge.Svm.IR.fromExtracted source
 
 elab "#pf_guard_svm_general_ata" : command => do

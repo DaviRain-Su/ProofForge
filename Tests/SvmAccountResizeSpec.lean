@@ -1,4 +1,4 @@
-import Examples.MemoryOps
+import Examples.Svm.MemoryOps
 import Lean
 import ProofForge
 
@@ -41,12 +41,12 @@ partial def countResizeCalls (ops : Array ProofForge.Extract.IR.Op) : Nat :=
       | .forBody _ body => countResizeCalls body
       | _ => 0
 
-#pf_build Examples.MemoryOps
+#pf_build Examples.Svm.MemoryOps
 
 elab "#pf_guard_svm_account_resize" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.MemoryOps with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.MemoryOps with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

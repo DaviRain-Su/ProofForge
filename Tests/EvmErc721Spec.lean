@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.Collectible
-import Examples.Badge
+import Examples.Evm.Collectible
+import Examples.Evm.Badge
 
 /-!
 EVM-SDK-7a focused suite: ERC-721 core predicates, token-id encoding limits, and two independent
@@ -25,14 +25,14 @@ open Lean Elab Command
 #guard Erc721.unpackAddress ⟨1, 2, 3, 9⟩ == (⟨1, 2, 3⟩ : Address)
 #guard Erc721.one == (⟨1, 0, 0, 0⟩ : UInt256)
 
-#guard Examples.Collectible.owners.base == 0
-#guard Examples.Collectible.approvals.base == 1
-#guard Examples.Collectible.operators.base == 2
-#guard Examples.Collectible.balances.base == 3
-#guard Examples.Badge.owners.base == 0
-#guard Examples.Badge.approvals.base == 1
-#guard Examples.Badge.operators.base == 2
-#guard Examples.Badge.balances.base == 3
+#guard Examples.Evm.Collectible.owners.base == 0
+#guard Examples.Evm.Collectible.approvals.base == 1
+#guard Examples.Evm.Collectible.operators.base == 2
+#guard Examples.Evm.Collectible.balances.base == 3
+#guard Examples.Evm.Badge.owners.base == 0
+#guard Examples.Evm.Badge.approvals.base == 1
+#guard Examples.Evm.Badge.operators.base == 2
+#guard Examples.Evm.Badge.balances.base == 3
 
 private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Unit := do
   let env ← getEnv
@@ -48,8 +48,8 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
     throwError s!"{moduleName} digest drifted: {IR.digestHex program}"
 
 private def expectErc721 : CommandElabM Unit := do
-  expectDigest `Examples.Collectible "d520f4e720c2fb7b"
-  expectDigest `Examples.Badge "c15c71dbbc936fc7"
+  expectDigest `Examples.Evm.Collectible "d520f4e720c2fb7b"
+  expectDigest `Examples.Evm.Badge "c15c71dbbc936fc7"
 
 elab "#pf_guard_evm_erc721" : command => expectErc721
 

@@ -1,9 +1,9 @@
 import ProofForge
-import Examples.Ownable
+import Examples.Evm.Ownable
 
 namespace Tests.OwnableSpec
 
-open Examples.Ownable
+open Examples.Evm.Ownable
 open ProofForge.Evm.Sdk
 
 def sample : Address := ⟨1, 2, 3⟩

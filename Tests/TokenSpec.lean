@@ -1,8 +1,8 @@
-import Examples.Token
+import Examples.Evm.Token
 
 namespace Tests.TokenSpec
 
-open Examples.Token
+open Examples.Evm.Token
 open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩

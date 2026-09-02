@@ -1,4 +1,4 @@
-import Examples.NearIterable
+import Examples.Near.NearIterable
 import Lean
 import ProofForge
 
@@ -89,7 +89,7 @@ private partial def localCount : Array ProofForge.Extract.IR.Op → Nat
 elab "#pf_near_iterable_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearIterable with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearIterable with
     | .ok program => pure program
     | .error reason => throwError reason
   let methodSteps (name : String) :=

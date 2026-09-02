@@ -1,10 +1,10 @@
-import Examples.LamportTransfer
+import Examples.Svm.LamportTransfer
 import Lean
 import ProofForge
 
 /-!
 Focused checks for the checked SVM lamport-transfer effect via the non-Phoenix
-`Examples.LamportTransfer` consumer. The `#pf_build` commands run the same extraction and sBPF
+`Examples.Svm.LamportTransfer` consumer. The `#pf_build` commands run the same extraction and sBPF
 emission path as the CLI; the `#pf_guard_lamport_transfer` command pins the extraction plan, the
 alias-aware Loader-v3 walk contract, and the fail-closed preflight emission. Behavioral bounds
 (success, zero amount, writable/owner/balance/overflow failures, duplicate aliases, atomic state
@@ -13,12 +13,12 @@ hold) are covered by the Mollusk matrix in `runtime-tests/solana/tests/lamport_t
 namespace Tests.LamportTransferSpec
 
 open Lean Elab Command
-open Examples.LamportTransfer
+open Examples.Svm.LamportTransfer
 open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 
-#pf_build Examples.LamportTransfer
-#pf_build Examples.LamportTransfer
+#pf_build Examples.Svm.LamportTransfer
+#pf_build Examples.Svm.LamportTransfer
 
 -- Host stubs are irreducible; extraction-time constants never fold into values.
 #guard vault.transferLamports recipient 7 == 0
@@ -79,7 +79,7 @@ private def closeSteps (ops : Array ProofForge.Extract.IR.Op) : Array CloseStep 
 elab "#pf_guard_lamport_transfer" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.LamportTransfer with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.LamportTransfer with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

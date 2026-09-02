@@ -23,7 +23,7 @@ the shared `Core.Value.BoundedVec` active-prefix semantics to the existing physi
 
 The current EVM extraction lowers dynamic-index `Vector` reads/writes only when the vector is a
 `State` field and the index proof is an explicit `if h : … < capacity` hypothesis in the consumer
-(`Examples.EvmStaticRoster.setSeat`, `Examples.Lang.setAt`). A generic helper returning an updated
+(`Examples.Evm.EvmStaticRoster.setSeat`, `Examples.Lang.setAt`). A generic helper returning an updated
 `Vector UInt64 capacity` value is not an extractable shape today, so — exactly like
 `Roles.Set2` — this module owns the reusable *decisions* while applications own the literal
 `State` field writes:

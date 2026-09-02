@@ -1,4 +1,4 @@
-import Examples.NearJsonAccountInput
+import Examples.Near.NearJsonAccountInput
 import Lean
 import ProofForge
 
@@ -26,7 +26,7 @@ open ProofForge.Wasm.Near
 elab "#pf_near_json_account_input_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearJsonAccountInput with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearJsonAccountInput with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceLength := source.methods.find? (·.ixName == "accountLength")

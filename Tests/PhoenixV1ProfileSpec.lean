@@ -1,29 +1,29 @@
-import Examples.PhoenixV1Profile
+import Examples.Svm.PhoenixV1Profile
 import ProofForge
 
 namespace Tests.PhoenixV1ProfileSpec
 
-open Examples.PhoenixV1Profile
+open Examples.Svm.PhoenixV1Profile
 open Lean Elab Command
 
 set_option maxRecDepth 2048
 
-#guard (Examples.PhoenixV1.small 2).wellFormed
-#guard (Examples.PhoenixV1.small 2).accountBytes == 84944
-#guard (Examples.PhoenixV1.small 2).bids.map ==
+#guard (Examples.Svm.PhoenixV1.small 2).wellFormed
+#guard (Examples.Svm.PhoenixV1.small 2).accountBytes == 84944
+#guard (Examples.Svm.PhoenixV1.small 2).bids.map ==
   ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 2 110 114 115 116 117 8 512 true
-#guard (Examples.PhoenixV1.small 2).asks.map ==
+#guard (Examples.Svm.PhoenixV1.small 2).asks.map ==
   ProofForge.Svm.AccountStorage.RbMap.fifoOneBased 2 4210 4214 4215 4216 4217 8 512 false
-#guard (Examples.PhoenixV1.small 2).traders.map ==
+#guard (Examples.Svm.PhoenixV1.small 2).traders.map ==
   ProofForge.Svm.AccountStorage.RbMap.key4OneBased 2 8310 8314 8315 8316 18 128
-#guard (Examples.PhoenixV1.small 2).bids.wellFormed
-#guard (Examples.PhoenixV1.small 2).asks.wellFormed
-#guard (Examples.PhoenixV1.small 2).bids.map.allocator.wellFormed
-#guard (Examples.PhoenixV1.small 2).bids.map.allocator.liveCount.firstWord == 112
-#guard (Examples.PhoenixV1.small 2).bids.map.allocator.cursor.firstWord == 113
+#guard (Examples.Svm.PhoenixV1.small 2).bids.wellFormed
+#guard (Examples.Svm.PhoenixV1.small 2).asks.wellFormed
+#guard (Examples.Svm.PhoenixV1.small 2).bids.map.allocator.wellFormed
+#guard (Examples.Svm.PhoenixV1.small 2).bids.map.allocator.liveCount.firstWord == 112
+#guard (Examples.Svm.PhoenixV1.small 2).bids.map.allocator.cursor.firstWord == 113
 
-private def malformedPhoenixBook : Examples.PhoenixV1.Book :=
-  let book := (Examples.PhoenixV1.small 2).bids
+private def malformedPhoenixBook : Examples.Svm.PhoenixV1.Book :=
+  let book := (Examples.Svm.PhoenixV1.small 2).bids
   { book with owner := ProofForge.Svm.AccountStorage.Field.scalar 2 118 }
 
 #guard !malformedPhoenixBook.wellFormed
@@ -879,7 +879,7 @@ private def traceBefore (first second : Nat) : List Nat → Bool
 elab "#pf_guard_phoenix_v1_profile" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.PhoenixV1Profile none with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.PhoenixV1Profile none with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

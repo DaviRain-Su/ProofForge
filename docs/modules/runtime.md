@@ -143,41 +143,41 @@ fail closed。常量 `acc < 64` 的账户 header 和四个 key / owner word 已�
 
 ## Tests
 
-`Examples/Clock.lean` + `runtime-tests/solana/tests/clock.rs`：两次 `warp_to_slot` 读 slot / epoch、`stamp` 写回、`key0` 缺 signer → `Custom(1)`。
-`Examples/Info.lean` + `runtime-tests/solana/tests/info.rs`：余额 / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗；只读不改账户数据。
-`Examples/Peer.lean` + `runtime-tests/solana/tests/peer.rs`：账户 1 的 lamports / owner 首 u64 / data_len / 三旗；缺第二账户 → `Custom(1)`。
-`Examples/Hash.lean` + `runtime-tests/solana/tests/hash.rs`：`sha256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha2` 一致。
-`Examples/Keccak.lean` + `runtime-tests/solana/tests/keccak.rs`：`keccak256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha3::Keccak256` 一致。
-`Examples/Keys.lean` + `runtime-tests/solana/tests/keys.rs`：账户 0/1 的 key / owner 按字读与宿主 `Pubkey` 一致；读 key 字不强制 signer；缺第二账户 → `Custom(1)`。
-`Examples/Trio.lean` + `runtime-tests/solana/tests/trio.rs`：账户 2 header / key 字；`signerKey 1` 缺签名 Custom(1)；`ownerIsSelf 0` = 0、异 owner = 1。
-`Examples/Gate.lean` + `runtime-tests/solana/tests/gate.rs`：Bool 字段 1 字节；`unixTime` 跟 `clock.unix_timestamp`。
-`Examples/Nonce.lean` + `runtime-tests/solana/tests/nonce.rs`：AdvanceNonceAccount 缺 signer → `Custom(1)`。
-`Examples/TokenOwner.lean` + `runtime-tests/solana/tests/token_owner.rs`：SetAuthority AccountOwner 改 owner；Approve 写 delegate。
-`Examples/TokenMs.lean` + `runtime-tests/solana/tests/token_ms.rs`：InitializeMultisig2 m=2 n=2；未使用的 payer 不要求 signer。
-`Examples/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致；`checkPda` 对 canonical bump 返回 0，对 bump 0 返回 1。
-`Examples/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
-`Examples/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
-`Examples/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint 且不要求 owner signer；CloseAccount 把 0 余额账户 lamports 退回 dest，并要求 owner signer。
-`Examples/Memo.lean` + `runtime-tests/solana/tests/memo.rs`：经 bounded static Memo SDK CPI 进官方 Memo v3，应用选择字面量 `"ok"`；缺 signer → `Custom(1)`。
-`Examples/CreatePda.lean` + `runtime-tests/solana/tests/create_pda.rs`：给 `"vault"` PDA 开 16 字节；bump 0 失败。
-`Examples/TokenApprove.lean` + `runtime-tests/solana/tests/token_approve.rs`：ApproveChecked 写 delegate + delegated_amount；缺 signer → `Custom(1)`。
-`Examples/TokenFreeze.lean` + `runtime-tests/solana/tests/token_freeze.rs`：Freeze 把 state 写成 Frozen；Thaw 写回 Initialized；缺 signer → `Custom(1)`。
-`Examples/TokenAuth.lean` + `runtime-tests/solana/tests/token_auth.rs`：SetAuthority 把 mint_authority 改成 acc2；Revoke 清掉 delegate；缺 signer → `Custom(1)`。
-`Examples/Epoch.lean` + `runtime-tests/solana/tests/epoch.rs`：默认 `slots_per_epoch` 432000；改 schedule 后再读一次。
-`Examples/TokenSize.lean` + `runtime-tests/solana/tests/token_size.rs`：GetAccountDataSize 返回 165；未使用的 dummy 不要求 signer。
-`Examples/SysSeed.lean` + `runtime-tests/solana/tests/sys_seed.rs`：AllocateWithSeed 开 16 字节；CreateAccountWithSeed 转 lamports；AssignWithSeed 改 owner；缺 signer → `Custom(1)`。
-`Examples/SysXfer.lean` + `runtime-tests/solana/tests/sys_xfer.rs`：TransferWithSeed 从 `create_with_seed(acc0, "vault", program)` 转 lamports；缺 signer → `Custom(1)`。
-`Examples/TokenMint2.lean` + `runtime-tests/solana/tests/token_mint2.rs`：InitializeMint2 写 decimals=6、authority=acc0；authority 不要求 signer。
-`Examples/TokenNative.lean` + `runtime-tests/solana/tests/token_native.rs`：SyncNative 把 native 账户 amount 同步成多余 lamports；owner 不要求 signer。
-`Examples/Token2022.lean` + `runtime-tests/solana/tests/token_2022.rs`：Token-2022 base-layout TransferChecked 精确转账；缺 signer、transfer-fee mint、enabled transfer-hook mint 均原子失败。
-`Examples/Nested.lean` + `runtime-tests/solana/tests/nested.rs`：嵌套 projection 更新只写目标叶。
-`Examples/Book.lean` + `runtime-tests/solana/tests/book.rs`：有界循环与运行时 Vector 下标写在链上执行。
+`Examples/Svm/Clock.lean` + `runtime-tests/solana/tests/clock.rs`：两次 `warp_to_slot` 读 slot / epoch、`stamp` 写回、`key0` 缺 signer → `Custom(1)`。
+`Examples/Svm/Info.lean` + `runtime-tests/solana/tests/info.rs`：余额 / owner 首 u64 / data_len / NUM_ACCOUNTS / 三旗；只读不改账户数据。
+`Examples/Svm/Peer.lean` + `runtime-tests/solana/tests/peer.rs`：账户 1 的 lamports / owner 首 u64 / data_len / 三旗；缺第二账户 → `Custom(1)`。
+`Examples/Svm/Hash.lean` + `runtime-tests/solana/tests/hash.rs`：`sha256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha2` 一致。
+`Examples/Svm/Keccak.lean` + `runtime-tests/solana/tests/keccak.rs`：`keccak256Lit "vault"` / `"ok"` / `""` 的首 u64 与宿主 `sha3::Keccak256` 一致。
+`Examples/Svm/Keys.lean` + `runtime-tests/solana/tests/keys.rs`：账户 0/1 的 key / owner 按字读与宿主 `Pubkey` 一致；读 key 字不强制 signer；缺第二账户 → `Custom(1)`。
+`Examples/Svm/Trio.lean` + `runtime-tests/solana/tests/trio.rs`：账户 2 header / key 字；`signerKey 1` 缺签名 Custom(1)；`ownerIsSelf 0` = 0、异 owner = 1。
+`Examples/Svm/Gate.lean` + `runtime-tests/solana/tests/gate.rs`：Bool 字段 1 字节；`unixTime` 跟 `clock.unix_timestamp`。
+`Examples/Svm/Nonce.lean` + `runtime-tests/solana/tests/nonce.rs`：AdvanceNonceAccount 缺 signer → `Custom(1)`。
+`Examples/Svm/TokenOwner.lean` + `runtime-tests/solana/tests/token_owner.rs`：SetAuthority AccountOwner 改 owner；Approve 写 delegate。
+`Examples/Svm/TokenMs.lean` + `runtime-tests/solana/tests/token_ms.rs`：InitializeMultisig2 m=2 n=2；未使用的 payer 不要求 signer。
+`Examples/Svm/Pda.lean` + `runtime-tests/solana/tests/pda.rs`：`findPda "vault"` 的 bump 与宿主 `find_program_address` 一致；`checkPda` 对 canonical bump 返回 0，对 bump 0 返回 1。
+`Examples/Svm/Signed.lean` + `runtime-tests/solana/tests/signed.rs`：canonical bump 签字成功；bump 0 失败。
+`Examples/Svm/SysAlloc.lean` + `runtime-tests/solana/tests/sys_alloc.rs`：allocate 把空 System 账户扩到 16 字节；assign 把 owner 改成当前 program；缺 signer → `Custom(1)`。
+`Examples/Svm/TokenAcc.lean` + `runtime-tests/solana/tests/token_acc.rs`：InitializeAccount3 写 owner/mint 且不要求 owner signer；CloseAccount 把 0 余额账户 lamports 退回 dest，并要求 owner signer。
+`Examples/Svm/Memo.lean` + `runtime-tests/solana/tests/memo.rs`：经 bounded static Memo SDK CPI 进官方 Memo v3，应用选择字面量 `"ok"`；缺 signer → `Custom(1)`。
+`Examples/Svm/CreatePda.lean` + `runtime-tests/solana/tests/create_pda.rs`：给 `"vault"` PDA 开 16 字节；bump 0 失败。
+`Examples/Svm/TokenApprove.lean` + `runtime-tests/solana/tests/token_approve.rs`：ApproveChecked 写 delegate + delegated_amount；缺 signer → `Custom(1)`。
+`Examples/Svm/TokenFreeze.lean` + `runtime-tests/solana/tests/token_freeze.rs`：Freeze 把 state 写成 Frozen；Thaw 写回 Initialized；缺 signer → `Custom(1)`。
+`Examples/Svm/TokenAuth.lean` + `runtime-tests/solana/tests/token_auth.rs`：SetAuthority 把 mint_authority 改成 acc2；Revoke 清掉 delegate；缺 signer → `Custom(1)`。
+`Examples/Svm/Epoch.lean` + `runtime-tests/solana/tests/epoch.rs`：默认 `slots_per_epoch` 432000；改 schedule 后再读一次。
+`Examples/Svm/TokenSize.lean` + `runtime-tests/solana/tests/token_size.rs`：GetAccountDataSize 返回 165；未使用的 dummy 不要求 signer。
+`Examples/Svm/SysSeed.lean` + `runtime-tests/solana/tests/sys_seed.rs`：AllocateWithSeed 开 16 字节；CreateAccountWithSeed 转 lamports；AssignWithSeed 改 owner；缺 signer → `Custom(1)`。
+`Examples/Svm/SysXfer.lean` + `runtime-tests/solana/tests/sys_xfer.rs`：TransferWithSeed 从 `create_with_seed(acc0, "vault", program)` 转 lamports；缺 signer → `Custom(1)`。
+`Examples/Svm/TokenMint2.lean` + `runtime-tests/solana/tests/token_mint2.rs`：InitializeMint2 写 decimals=6、authority=acc0；authority 不要求 signer。
+`Examples/Svm/TokenNative.lean` + `runtime-tests/solana/tests/token_native.rs`：SyncNative 把 native 账户 amount 同步成多余 lamports；owner 不要求 signer。
+`Examples/Svm/Token2022.lean` + `runtime-tests/solana/tests/token_2022.rs`：Token-2022 base-layout TransferChecked 精确转账；缺 signer、transfer-fee mint、enabled transfer-hook mint 均原子失败。
+`Examples/Svm/Nested.lean` + `runtime-tests/solana/tests/nested.rs`：嵌套 projection 更新只写目标叶。
+`Examples/Svm/Book.lean` + `runtime-tests/solana/tests/book.rs`：有界循环与运行时 Vector 下标写在链上执行。
 `Examples/Lang.lean` + `runtime-tests/solana/tests/lang.rs`：位运算、mod-64 移位及 state-carrying fold 的链上语义。
-`Examples/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：红黑树插入布局，以及 black-leaf 删除 fixup、free-list 回收和精确地址复用。
-`Examples/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
-`Examples/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
-`Examples/RawEntry.lean` + `runtime-tests/solana/tests/raw_entry.rs`：同一 ELF 的 generated/raw
+`Examples/Svm/Tree.lean` + `runtime-tests/solana/tests/tree.rs`：红黑树插入布局，以及 black-leaf 删除 fixup、free-list 回收和精确地址复用。
+`Examples/Svm/Seat.lean` + `runtime-tests/solana/tests/seat.rs`：PDA bump view、canonical seat PDA 创建、base/quote Token vault 初始化，以及 signer/writable 原子失败。
+`Examples/Svm/SelfLog.lean` + `runtime-tests/solana/tests/self_log.rs`：当前 program id 的 signed self-CPI，canonical `"log"` PDA raw 入口、packed Borsh integer words、续段状态写回，以及 signer/writable/tag/key 失败矩阵。
+`Examples/Svm/RawEntry.lean` + `runtime-tests/solana/tests/raw_entry.rs`：同一 ELF 的 generated/raw
 dispatch；`07 || u8 || u64` exact decode、bounded trailing account、program account authentication，
 以及 wrong tag/length、missing signer、wrong/non-executable program fail-closed matrix。
-`Examples/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
-`Examples/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，以及只保留 scalar key、删除后从 root 重查 strict upper-bound 的 ordered FIFO cursor，持久状态不使用 heap Map/Vec 或账户外 pointer。官方 raw tags 4–9 再组合 `EntryAdapter + Component`：tag 4/5 共享 exact 26-byte reduce wire；tag 6/7 是 exact one-byte no-payload CancelAll wire，在 complete validator 后由 `FifoCancel` 按 bids→asks、各侧 FIFO、owner-filter 顺序原位取消；tag 8/9 是 5..21-byte `side + Option<tick/search/cancel>` CancelUpTo wire，search-before-filter、side-inclusive tick、cancel cap 与 equal-price FIFO 都在同一 bounded component 中。tag 5/7/9 保留 free funds且无 Token CPI；tag 4/6 验证 9-account classic Token context，tag 6 只 claim 本次 aggregate release 并按 quote→base 提款；tag 8 逐单 claim 后只提款 selected side aggregate，保留 pre-existing free。audit header 使用 pre-increment sequence，global u16 event index 跨 32-record flush 不重置；missing trader/empty/no-match/zero-limit 发 exact 93-byte header-only batch。malformed tree/Borsh/token context 在 sequence/store/CPI 前原子失败。最小 profile 84,944 B；短 header `Custom(1)`。
+`Examples/Svm/Phoenix.lean` + `runtime-tests/solana/tests/phoenix.rs`：认证状态账户上的 ask/bid 生命周期、双向撮合、费用/seat 结算、classic SPL Token 双 vault deposit/withdraw、未注册 take-only 双 Token 腿、严格 slot/time TIF、三种 self-trade、官方形状的 authenticated AuditLogHeader/event self-CPI，以及 vault/mint/Token program/self program/log PDA/writable/signer/owner 原子失败；跨四档逐样本 refinement 仍由 host/IR 门覆盖。
+`Examples/Svm/PhoenixV1Profile.lean` + `runtime-tests/solana/tests/phoenix_v1_profile.rs`：Phoenix canonical owner/discriminant、12 个 capacity tuple/exact length、固定 scalar/allocator header，以及编译期固定 geometry 的完整 bid/ask/trader tree/free-list partition；通用 `AccountStorage` 提供 bounded Key4/FIFO find、one-based field read/write、Sokoban insertion/removal/deposit，以及只保留 scalar key、删除后从 root 重查 strict upper-bound 的 ordered FIFO cursor，持久状态不使用 heap Map/Vec 或账户外 pointer。官方 raw tags 4–9 再组合 `EntryAdapter + Component`：tag 4/5 共享 exact 26-byte reduce wire；tag 6/7 是 exact one-byte no-payload CancelAll wire，在 complete validator 后由 `FifoCancel` 按 bids→asks、各侧 FIFO、owner-filter 顺序原位取消；tag 8/9 是 5..21-byte `side + Option<tick/search/cancel>` CancelUpTo wire，search-before-filter、side-inclusive tick、cancel cap 与 equal-price FIFO 都在同一 bounded component 中。tag 5/7/9 保留 free funds且无 Token CPI；tag 4/6 验证 9-account classic Token context，tag 6 只 claim 本次 aggregate release 并按 quote→base 提款；tag 8 逐单 claim 后只提款 selected side aggregate，保留 pre-existing free。audit header 使用 pre-increment sequence，global u16 event index 跨 32-record flush 不重置；missing trader/empty/no-match/zero-limit 发 exact 93-byte header-only batch。malformed tree/Borsh/token context 在 sequence/store/CPI 前原子失败。最小 profile 84,944 B；短 header `Custom(1)`。

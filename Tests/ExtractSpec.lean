@@ -5,44 +5,44 @@ import Examples.Flag
 import Examples.Maybe
 import Examples.Window
 import Examples.Phase
-import Examples.Choice
-import Examples.Clock
-import Examples.Transfer
-import Examples.EvmCtx
-import Examples.TipJar
-import Examples.Ping
-import Examples.Call
-import Examples.Info
-import Examples.Peer
-import Examples.Pda
-import Examples.Signed
-import Examples.Create
-import Examples.TokenXfer
-import Examples.Token2022
-import Examples.Ata
-import Examples.Rent
-import Examples.TokenMint
-import Examples.SysAlloc
-import Examples.TokenAcc
-import Examples.Memo
-import Examples.CreatePda
-import Examples.TokenApprove
-import Examples.TokenFreeze
-import Examples.TokenAuth
-import Examples.Epoch
-import Examples.TokenSize
-import Examples.SysSeed
-import Examples.SysXfer
-import Examples.TokenMint2
-import Examples.TokenNative
-import Examples.Hash
-import Examples.Keys
-import Examples.Keccak
-import Examples.Trio
-import Examples.Gate
-import Examples.Nonce
-import Examples.TokenOwner
-import Examples.TokenMs
+import Examples.Svm.Choice
+import Examples.Svm.Clock
+import Examples.Svm.Transfer
+import Examples.Evm.EvmCtx
+import Examples.Evm.TipJar
+import Examples.Svm.Ping
+import Examples.Svm.Call
+import Examples.Svm.Info
+import Examples.Svm.Peer
+import Examples.Svm.Pda
+import Examples.Svm.Signed
+import Examples.Svm.Create
+import Examples.Svm.TokenXfer
+import Examples.Svm.Token2022
+import Examples.Svm.Ata
+import Examples.Svm.Rent
+import Examples.Svm.TokenMint
+import Examples.Svm.SysAlloc
+import Examples.Svm.TokenAcc
+import Examples.Svm.Memo
+import Examples.Svm.CreatePda
+import Examples.Svm.TokenApprove
+import Examples.Svm.TokenFreeze
+import Examples.Svm.TokenAuth
+import Examples.Svm.Epoch
+import Examples.Svm.TokenSize
+import Examples.Svm.SysSeed
+import Examples.Svm.SysXfer
+import Examples.Svm.TokenMint2
+import Examples.Svm.TokenNative
+import Examples.Svm.Hash
+import Examples.Svm.Keys
+import Examples.Svm.Keccak
+import Examples.Svm.Trio
+import Examples.Svm.Gate
+import Examples.Svm.Nonce
+import Examples.Svm.TokenOwner
+import Examples.Svm.TokenMs
 import Tests.Fixtures
 
 open Lean Elab Command
@@ -1297,117 +1297,117 @@ elab "#pf_guard_account_effect_lexical_reads" : command => do
 
 #pf_extract Examples.Phase.init Examples.Phase.setLive Examples.Phase.isLive
 
-#pf_extract Examples.Choice.init Examples.Choice.setHold Examples.Choice.getHeld
+#pf_extract Examples.Svm.Choice.init Examples.Svm.Choice.setHold Examples.Svm.Choice.getHeld
 
-#pf_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.height
+#pf_extract Examples.Svm.Clock.init Examples.Svm.Clock.stamp Examples.Svm.Clock.height
 
-#pf_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.era
+#pf_extract Examples.Svm.Clock.init Examples.Svm.Clock.stamp Examples.Svm.Clock.era
 
-#pf_extract Examples.Clock.init Examples.Clock.stamp Examples.Clock.key0
+#pf_extract Examples.Svm.Clock.init Examples.Svm.Clock.stamp Examples.Svm.Clock.key0
 
-#pf_extract Examples.Transfer.init Examples.Transfer.transfer Examples.Transfer.get
+#pf_extract Examples.Svm.Transfer.init Examples.Svm.Transfer.transfer Examples.Svm.Transfer.get
 
-#pf_extract Examples.Ping.init Examples.Ping.ping Examples.Ping.get
+#pf_extract Examples.Svm.Ping.init Examples.Svm.Ping.ping Examples.Svm.Ping.get
 
-#pf_extract Examples.Call.init Examples.Call.call Examples.Call.get
+#pf_extract Examples.Svm.Call.init Examples.Svm.Call.call Examples.Svm.Call.get
 
-#pf_extract Examples.Info.init Examples.Info.touch Examples.Info.lamports
+#pf_extract Examples.Svm.Info.init Examples.Svm.Info.touch Examples.Svm.Info.lamports
 
-#pf_extract Examples.Peer.init Examples.Peer.touch Examples.Peer.lamports1
+#pf_extract Examples.Svm.Peer.init Examples.Svm.Peer.touch Examples.Svm.Peer.lamports1
 
-#pf_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.bump
+#pf_extract Examples.Svm.Pda.init Examples.Svm.Pda.touch Examples.Svm.Pda.bump
 
-#pf_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.check
+#pf_extract Examples.Svm.Pda.init Examples.Svm.Pda.touch Examples.Svm.Pda.check
 
-#pf_extract Examples.Pda.init Examples.Pda.touch Examples.Pda.checkBad
+#pf_extract Examples.Svm.Pda.init Examples.Svm.Pda.touch Examples.Svm.Pda.checkBad
 
-#pf_extract Examples.Signed.init Examples.Signed.signed Examples.Signed.get
+#pf_extract Examples.Svm.Signed.init Examples.Svm.Signed.signed Examples.Svm.Signed.get
 
-#pf_extract Examples.Create.init Examples.Create.create Examples.Create.get
+#pf_extract Examples.Svm.Create.init Examples.Svm.Create.create Examples.Svm.Create.get
 
-#pf_extract Examples.TokenXfer.init Examples.TokenXfer.send Examples.TokenXfer.get
+#pf_extract Examples.Svm.TokenXfer.init Examples.Svm.TokenXfer.send Examples.Svm.TokenXfer.get
 
-#pf_extract Examples.Token2022.init Examples.Token2022.send Examples.Token2022.get
+#pf_extract Examples.Svm.Token2022.init Examples.Svm.Token2022.send Examples.Svm.Token2022.get
 
-#pf_extract Examples.Ata.init Examples.Ata.openAta Examples.Ata.get
+#pf_extract Examples.Svm.Ata.init Examples.Svm.Ata.openAta Examples.Svm.Ata.get
 
-#pf_extract Examples.Rent.init Examples.Rent.stamp Examples.Rent.exempt
+#pf_extract Examples.Svm.Rent.init Examples.Svm.Rent.stamp Examples.Svm.Rent.exempt
 
-#pf_extract Examples.TokenMint.init Examples.TokenMint.mintTo Examples.TokenMint.get
+#pf_extract Examples.Svm.TokenMint.init Examples.Svm.TokenMint.mintTo Examples.Svm.TokenMint.get
 
-#pf_extract Examples.SysAlloc.init Examples.SysAlloc.alloc Examples.SysAlloc.get
+#pf_extract Examples.Svm.SysAlloc.init Examples.Svm.SysAlloc.alloc Examples.Svm.SysAlloc.get
 
-#pf_extract Examples.SysAlloc.init Examples.SysAlloc.assign Examples.SysAlloc.get
+#pf_extract Examples.Svm.SysAlloc.init Examples.Svm.SysAlloc.assign Examples.Svm.SysAlloc.get
 
-#pf_extract Examples.TokenAcc.init Examples.TokenAcc.openAcc Examples.TokenAcc.get
+#pf_extract Examples.Svm.TokenAcc.init Examples.Svm.TokenAcc.openAcc Examples.Svm.TokenAcc.get
 
-#pf_extract Examples.TokenAcc.init Examples.TokenAcc.closeAcc Examples.TokenAcc.get
+#pf_extract Examples.Svm.TokenAcc.init Examples.Svm.TokenAcc.closeAcc Examples.Svm.TokenAcc.get
 
-#pf_extract Examples.Memo.init Examples.Memo.write Examples.Memo.get
+#pf_extract Examples.Svm.Memo.init Examples.Svm.Memo.write Examples.Svm.Memo.get
 
-#pf_extract Examples.CreatePda.init Examples.CreatePda.openPda Examples.CreatePda.get
+#pf_extract Examples.Svm.CreatePda.init Examples.Svm.CreatePda.openPda Examples.Svm.CreatePda.get
 
-#pf_extract Examples.CreatePda.init Examples.CreatePda.openBad Examples.CreatePda.get
+#pf_extract Examples.Svm.CreatePda.init Examples.Svm.CreatePda.openBad Examples.Svm.CreatePda.get
 
-#pf_extract Examples.TokenApprove.init Examples.TokenApprove.approve Examples.TokenApprove.get
+#pf_extract Examples.Svm.TokenApprove.init Examples.Svm.TokenApprove.approve Examples.Svm.TokenApprove.get
 
-#pf_extract Examples.TokenFreeze.init Examples.TokenFreeze.freeze Examples.TokenFreeze.get
+#pf_extract Examples.Svm.TokenFreeze.init Examples.Svm.TokenFreeze.freeze Examples.Svm.TokenFreeze.get
 
-#pf_extract Examples.TokenFreeze.init Examples.TokenFreeze.thaw Examples.TokenFreeze.get
+#pf_extract Examples.Svm.TokenFreeze.init Examples.Svm.TokenFreeze.thaw Examples.Svm.TokenFreeze.get
 
-#pf_extract Examples.TokenAuth.init Examples.TokenAuth.setAuth Examples.TokenAuth.get
+#pf_extract Examples.Svm.TokenAuth.init Examples.Svm.TokenAuth.setAuth Examples.Svm.TokenAuth.get
 
-#pf_extract Examples.TokenAuth.init Examples.TokenAuth.revoke Examples.TokenAuth.get
+#pf_extract Examples.Svm.TokenAuth.init Examples.Svm.TokenAuth.revoke Examples.Svm.TokenAuth.get
 
-#pf_extract Examples.Epoch.init Examples.Epoch.stamp Examples.Epoch.span
+#pf_extract Examples.Svm.Epoch.init Examples.Svm.Epoch.stamp Examples.Svm.Epoch.span
 
-#pf_extract Examples.TokenSize.init Examples.TokenSize.size Examples.TokenSize.get
+#pf_extract Examples.Svm.TokenSize.init Examples.Svm.TokenSize.size Examples.Svm.TokenSize.get
 
-#pf_extract Examples.SysSeed.init Examples.SysSeed.openSeed Examples.SysSeed.get
+#pf_extract Examples.Svm.SysSeed.init Examples.Svm.SysSeed.openSeed Examples.Svm.SysSeed.get
 
-#pf_extract Examples.SysSeed.init Examples.SysSeed.createSeed Examples.SysSeed.get
+#pf_extract Examples.Svm.SysSeed.init Examples.Svm.SysSeed.createSeed Examples.Svm.SysSeed.get
 
-#pf_extract Examples.SysSeed.init Examples.SysSeed.assignSeed Examples.SysSeed.get
+#pf_extract Examples.Svm.SysSeed.init Examples.Svm.SysSeed.assignSeed Examples.Svm.SysSeed.get
 
-#pf_extract Examples.SysXfer.init Examples.SysXfer.sendSeed Examples.SysXfer.get
+#pf_extract Examples.Svm.SysXfer.init Examples.Svm.SysXfer.sendSeed Examples.Svm.SysXfer.get
 
-#pf_extract Examples.TokenMint2.init Examples.TokenMint2.openMint Examples.TokenMint2.get
+#pf_extract Examples.Svm.TokenMint2.init Examples.Svm.TokenMint2.openMint Examples.Svm.TokenMint2.get
 
-#pf_extract Examples.TokenNative.init Examples.TokenNative.syncNative Examples.TokenNative.get
+#pf_extract Examples.Svm.TokenNative.init Examples.Svm.TokenNative.syncNative Examples.Svm.TokenNative.get
 
-#pf_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.vault
+#pf_extract Examples.Svm.Hash.init Examples.Svm.Hash.touch Examples.Svm.Hash.vault
 
-#pf_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.ok
+#pf_extract Examples.Svm.Hash.init Examples.Svm.Hash.touch Examples.Svm.Hash.ok
 
-#pf_extract Examples.Hash.init Examples.Hash.touch Examples.Hash.empty
+#pf_extract Examples.Svm.Hash.init Examples.Svm.Hash.touch Examples.Svm.Hash.empty
 
-#pf_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key00
+#pf_extract Examples.Svm.Keys.init Examples.Svm.Keys.touch Examples.Svm.Keys.key00
 
-#pf_extract Examples.Keys.init Examples.Keys.touch Examples.Keys.key10
+#pf_extract Examples.Svm.Keys.init Examples.Svm.Keys.touch Examples.Svm.Keys.key10
 
-#pf_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.vault
+#pf_extract Examples.Svm.Keccak.init Examples.Svm.Keccak.touch Examples.Svm.Keccak.vault
 
-#pf_extract Examples.Keccak.init Examples.Keccak.touch Examples.Keccak.empty
+#pf_extract Examples.Svm.Keccak.init Examples.Svm.Keccak.touch Examples.Svm.Keccak.empty
 
-#pf_extract Examples.Trio.init Examples.Trio.touch Examples.Trio.lamports2
+#pf_extract Examples.Svm.Trio.init Examples.Svm.Trio.touch Examples.Svm.Trio.lamports2
 
-#pf_extract Examples.Trio.init Examples.Trio.touch Examples.Trio.needSig1
+#pf_extract Examples.Svm.Trio.init Examples.Svm.Trio.touch Examples.Svm.Trio.needSig1
 
-#pf_extract Examples.Trio.init Examples.Trio.touch Examples.Trio.self2
+#pf_extract Examples.Svm.Trio.init Examples.Svm.Trio.touch Examples.Svm.Trio.self2
 
-#pf_extract Examples.Gate.init Examples.Gate.openGate Examples.Gate.now
+#pf_extract Examples.Svm.Gate.init Examples.Svm.Gate.openGate Examples.Svm.Gate.now
 
-#pf_extract Examples.Nonce.init Examples.Nonce.advance Examples.Nonce.get
+#pf_extract Examples.Svm.Nonce.init Examples.Svm.Nonce.advance Examples.Svm.Nonce.get
 
-#pf_extract Examples.TokenOwner.init Examples.TokenOwner.setOwner Examples.TokenOwner.get
+#pf_extract Examples.Svm.TokenOwner.init Examples.Svm.TokenOwner.setOwner Examples.Svm.TokenOwner.get
 
-#pf_extract Examples.TokenMs.init Examples.TokenMs.openMs Examples.TokenMs.get
+#pf_extract Examples.Svm.TokenMs.init Examples.Svm.TokenMs.openMs Examples.Svm.TokenMs.get
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_extract Examples.TipJar.init Examples.TipJar.deposit Examples.TipJar.get
+#pf_extract Examples.Evm.TipJar.init Examples.Evm.TipJar.deposit Examples.Evm.TipJar.get
 
 #pf_extract Tests.Fixtures.initTagged Tests.Fixtures.setTagged Tests.Fixtures.getTagged
 

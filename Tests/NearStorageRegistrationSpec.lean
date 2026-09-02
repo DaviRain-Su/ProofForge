@@ -1,4 +1,4 @@
-import Examples.NearStorageRegistration
+import Examples.Near.NearStorageRegistration
 import Lean
 import ProofForge
 
@@ -25,7 +25,7 @@ private partial def registrationSteps : Array ProofForge.Extract.IR.Op → Array
 elab "#pf_near_storage_registration_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearStorageRegistration with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearStorageRegistration with
     | .ok program => pure program
     | .error reason => throwError reason
   let register ← match source.methods.find? (·.ixName == "registerCaller") with

@@ -1,9 +1,9 @@
-import Examples.Nested
+import Examples.Svm.Nested
 import ProofForge
 
 namespace Tests.NestedSpec
 
-open Examples.Nested
+open Examples.Svm.Nested
 
 #guard (init 100).book.price == 100
 #guard (init 100).book.size == 0

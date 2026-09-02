@@ -16,7 +16,7 @@ E-OWN 整包，见 [05-evm-coverage-slices.md](../../research/05-evm-coverage-sl
 - pair-key hashed Map：`keccak256(o0||o1||o2||s0||s1||s2||base)` → occ + payload
 - `approve` / `allowance` = pair set/get；`spend` = 封闭额度扣减（不足 revert，状态保持）
 - SVM 拒全部新叶/效应
-- `Examples.Ownable` + Anvil
+- `Examples.Evm.Ownable` + Anvil
 
 ## 不做
 

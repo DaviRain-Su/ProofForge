@@ -14,7 +14,7 @@ depends-on: [e-swap-001]
 - 新增 `evmSwapExact3 router tokenA tokenB tokenC amtIn minOut`
 - Yul：selector `0x38ed1739`，path 长度 3，`to = address()`，`deadline = uint256.max`
 - CALL 失败则 revert。返回动态 `uint256[]` 不解析。
-- `Examples.Vault.swap3`
+- `Examples.Evm.Vault.swap3`
 - Anvil：同一 Router mock 接受 path 2 或 3；swap3 从 tokenA 扣、给 tokenC mint
 - SVM / Legacy adapter 拒新叶
 

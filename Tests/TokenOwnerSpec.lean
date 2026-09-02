@@ -1,8 +1,8 @@
-import Examples.TokenOwner
+import Examples.Svm.TokenOwner
 
 namespace Tests.TokenOwnerSpec
 
-open Examples.TokenOwner
+open Examples.Svm.TokenOwner
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

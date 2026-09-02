@@ -1,4 +1,4 @@
-import Examples.NearMemory
+import Examples.Near.NearMemory
 import Lean
 import ProofForge
 
@@ -55,7 +55,7 @@ private def extractArenaStep : ProofForge.Extract.IR.Op → Option String
 elab "#pf_near_memory_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearMemory with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearMemory with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←

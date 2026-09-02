@@ -1,8 +1,8 @@
-import Examples.Signed
+import Examples.Svm.Signed
 
 namespace Tests.SignedSpec
 
-open Examples.Signed
+open Examples.Svm.Signed
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

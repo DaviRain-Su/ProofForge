@@ -1,8 +1,8 @@
-import Examples.Clock
+import Examples.Svm.Clock
 
 namespace Tests.ClockSpec
 
-open Examples.Clock
+open Examples.Svm.Clock
 open ProofForge.Svm.Sdk
 
 #guard (init 0).stamped == 0

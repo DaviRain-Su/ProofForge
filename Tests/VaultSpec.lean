@@ -1,9 +1,9 @@
 import ProofForge
-import Examples.Vault
+import Examples.Evm.Vault
 
 namespace Tests.VaultSpec
 
-open Examples.Vault
+open Examples.Evm.Vault
 open ProofForge.Evm.Sdk
 
 def sample : Address := ⟨1, 2, 3⟩

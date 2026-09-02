@@ -1,0 +1,323 @@
+import ProofForge
+
+namespace Examples.Svm.MemoryOps
+open ProofForge.Svm.Sdk
+
+/-- Minimal managed state. Program-memory operations target physical account 1, whose byte
+geometry is described once below and remains independent of the application state layout. -/
+structure State where
+  dummy : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | overflow
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+private def u64Max : UInt64 := ~~~(0 : UInt64)
+
+@[pf_inline] private def first : Memory.Span := Memory.Span.accountData 1 0 8
+@[pf_inline] private def second : Memory.Span := Memory.Span.accountData 1 8 8
+@[pf_inline] private def overlappingDestination : Memory.Span := Memory.Span.accountData 1 4 8
+@[pf_inline] private def dataAccount : Account.Handle := Account.Handle.at 1
+@[pf_inline] private def vector2 : Transient.Vector64 := Transient.Vector64.bounded 2
+@[pf_inline] private def vector1 : Transient.Vector64 := Transient.Vector64.bounded 1
+@[pf_inline] private def vectorMax : Transient.Vector64 := Transient.Vector64.bounded 4095
+@[pf_inline] private def bytes4 : Transient.Bytes := Transient.Bytes.bounded 4
+@[pf_inline] private def bytes1 : Transient.Bytes := Transient.Bytes.bounded 1
+@[pf_inline] private def bytes3 : Transient.Bytes := Transient.Bytes.bounded 3
+@[pf_inline] private def bytes12 : Transient.Bytes := Transient.Bytes.bounded 12
+@[pf_inline] private def bytesFull : Transient.Bytes := Transient.Bytes.bounded 32760
+
+@[pf_entry]
+def init (initial : UInt64) : State :=
+  { dummy := initial }
+
+@[pf_entry]
+def get (state : State) : UInt64 :=
+  state.dummy
+
+/-- Ordinary managed-state transition keeps this example inside the standard module profile;
+memory effects below remain independent external-account operations. -/
+@[pf_entry]
+def touch (state : State) : Except Error (State × UInt64) :=
+  if state.dummy < u64Max then
+    let next := state.dummy + 1
+    .ok ({ dummy := next }, next)
+  else
+    .error .overflow
+
+/-- Fill the first fixed span with the low byte of `byte`. -/
+@[pf_entry]
+def fillBytes (_state : State) (byte : UInt64) : UInt64 :=
+  Memory.set first byte
+
+/-- Copy between statically disjoint equal-length spans. -/
+@[pf_entry]
+def copyBytes (_state : State) : UInt64 :=
+  Memory.copyNonoverlapping second first
+
+/-- Exercise the overlap-safe host contract: `[0,8)` moves to `[4,12)`. -/
+@[pf_entry]
+def moveBytes (_state : State) : UInt64 :=
+  Memory.move overlappingDestination first
+
+/-- Return the official signed-i32 comparison result as a zero-extended 32-bit bit pattern. -/
+@[pf_entry]
+def compareBytes (_state : State) : UInt64 :=
+  Memory.compareI32Bits first second
+
+/-! ## Official-shaped fixed account-data resizing
+
+These entries use the same physical account 1 as the checked memory spans above. `resizeData`
+exposes a single dynamic requested length through the typed SDK handle; `shrinkThenGrow` proves
+that one invocation cannot observe stale truncated bytes after regrowth; `resizeThenFill` proves
+that a following checked span effect observes the new current length. No entry receives an account
+index, serialized offset, pointer, or capacity override.
+-/
+
+@[pf_entry]
+def resizeData (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData newLength
+  dataAccount.dataLen
+
+@[pf_entry]
+def shrinkThenGrow (_state : State) (shortLength restoredLength : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData shortLength
+  let _ := dataAccount.resizeData restoredLength
+  dataAccount.dataLen
+
+@[pf_entry]
+def resizeThenFill (_state : State) (newLength byte : UInt64) : UInt64 :=
+  let _ := dataAccount.resizeData newLength
+  Memory.set second byte
+
+/-- Allocate one bounded invocation vector, mutate an existing element, read through a runtime
+index, and close the source handle. `finish` deliberately does not reclaim the bump heap. -/
+@[pf_entry]
+def vectorSetGet (_state : State) (firstValue secondValue replacement index : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push firstValue
+  let _ := vector2.push secondValue
+  let _ := vector2.set 1 replacement
+  let selected := vector2.get index
+  let _ := vector2.finish
+  selected
+
+/-- `clear` resets logical length without reallocating or exposing the underlying pointer. -/
+@[pf_entry]
+def vectorLengthAfterClear (_state : State) (value : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push value
+  let _ := vector2.clear
+  let length := vector2.length
+  let _ := vector2.finish
+  length
+
+/-- `truncate` shortens the live prefix but is a no-op for a requested length at or above the
+current length, matching Rust `Vec::truncate` without clearing or reallocating payload bytes. -/
+@[pf_entry]
+def vectorLengthAfterTruncate (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push 11
+  let _ := vector2.push 22
+  let _ := vector2.truncate newLength
+  let length := vector2.length
+  let _ := vector2.finish
+  length
+
+/-- `pop` returns the former last element and shortens the invocation-local active prefix. -/
+@[pf_entry]
+def vectorPop (_state : State) (firstValue secondValue : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push firstValue
+  let _ := vector2.push secondValue
+  let popped := vector2.pop
+  let _ := vector2.finish
+  popped
+
+/-- Empty `pop` must terminate with the vector's explicit bounds error. -/
+@[pf_entry]
+def vectorPopEmpty (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  vector2.pop
+
+/-- Third push must terminate with the vector's explicit capacity error. -/
+@[pf_entry]
+def vectorOverflow (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push 1
+  let _ := vector2.push 2
+  let _ := vector2.push 3
+  0
+
+/-- Runtime get uses current length rather than static capacity. -/
+@[pf_entry]
+def vectorOutOfBounds (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.push 1
+  vector2.get 1
+
+/-- A different compile-time handle cannot consume the active vector allocation. -/
+@[pf_entry]
+def vectorWrongCapacity (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector1.push 1
+  0
+
+/-- `finish` invalidates the invocation handle even though the bump allocation is not reclaimed. -/
+@[pf_entry]
+def vectorAfterFinish (_state : State) : UInt64 :=
+  let _ := vector2.begin
+  let _ := vector2.finish
+  vector2.length
+
+/-- Fill the complete default heap payload, then prove that the next allocation propagates the
+dedicated OOM program error. The first allocation itself remains constant-size assembly. -/
+@[pf_entry]
+def vectorOom (_state : State) : UInt64 :=
+  let _ := vectorMax.begin
+  let _ := vector1.begin
+  0
+
+/-- Open one bounded byte buffer, mutate an existing byte, read through a runtime index, and close
+the source handle. `finish` deliberately does not reclaim the bump heap. -/
+@[pf_entry]
+def bytesSetGet (_state : State) (firstByte secondByte replacement index : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push firstByte
+  let _ := bytes4.push secondByte
+  let _ := bytes4.set 1 replacement
+  let selected := bytes4.get index
+  let _ := bytes4.finish
+  selected
+
+/-- `clear` resets logical byte length without reallocating or exposing the underlying pointer. -/
+@[pf_entry]
+def bytesLengthAfterClear (_state : State) (byte : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push byte
+  let _ := bytes4.clear
+  let length := bytes4.length
+  let _ := bytes4.finish
+  length
+
+/-- Byte-buffer truncation shares the vector lifecycle rule: shrink the active prefix only, with
+no payload clearing, allocation, or reclaim. -/
+@[pf_entry]
+def bytesLengthAfterTruncate (_state : State) (newLength : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push 0x11
+  let _ := bytes4.push 0x22
+  let _ := bytes4.truncate newLength
+  let length := bytes4.length
+  let _ := bytes4.finish
+  length
+
+/-- `pop` returns the former trailing byte and shortens the active byte prefix. -/
+@[pf_entry]
+def bytesPop (_state : State) (firstByte secondByte : UInt64) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push firstByte
+  let _ := bytes4.push secondByte
+  let popped := bytes4.pop
+  let _ := bytes4.finish
+  popped
+
+/-- Empty byte-buffer `pop` must terminate with the explicit byte bounds error. -/
+@[pf_entry]
+def bytesPopEmpty (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  bytes4.pop
+
+/-- One fixed-width little-endian append, then read byte `index` back. `index = 0` must be the
+lowest byte and `index = 7` the highest, pinning the canonical little-endian record. -/
+@[pf_entry]
+def bytesAppendLe64 (_state : State) (value index : UInt64) : UInt64 :=
+  let _ := bytes12.begin
+  let _ := bytes12.appendLe64 value
+  let selected := bytes12.get index
+  let _ := bytes12.finish
+  selected
+
+/-- Build one bounded binary event field in invocation memory, publish exactly its live bytes with
+the official `sol_log_data` syscall, and keep the ordinary scalar return path independent. -/
+@[pf_entry]
+def bytesLogData (_state : State) (value trailingByte : UInt64) : UInt64 :=
+  let _ := bytes12.begin
+  let _ := bytes12.appendLe64 value
+  let _ := bytes12.push trailingByte
+  let length := bytes12.length
+  let _ := bytes12.logData
+  let _ := bytes12.finish
+  length
+
+/-- One `Vector64` handle and one byte-buffer handle may be active at the same time. The vector
+and the bytes buffer compose through the same bump allocator with disjoint invocation metadata. -/
+@[pf_entry]
+def vectorWithBytes (_state : State) (word byte : UInt64) : UInt64 :=
+  let _ := vector2.begin
+  let _ := bytes4.begin
+  let _ := bytes4.push byte
+  let _ := vector2.push word
+  let stagedByte := bytes4.get 0
+  let stagedWord := vector2.get 0
+  let _ := vector2.finish
+  let _ := bytes4.finish
+  stagedByte + stagedWord
+
+/-- Fifth push must terminate with the byte buffer's explicit capacity error. -/
+@[pf_entry]
+def bytesOverflow (_state : State) : UInt64 :=
+  let _ := bytes3.begin
+  let _ := bytes3.push 1
+  let _ := bytes3.push 2
+  let _ := bytes3.push 3
+  let _ := bytes3.push 4
+  0
+
+/-- Runtime byte read uses current length rather than static capacity. -/
+@[pf_entry]
+def bytesOutOfBounds (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push 1
+  bytes4.get 1
+
+/-- A different compile-time handle cannot consume the active byte-buffer allocation. -/
+@[pf_entry]
+def bytesWrongCapacity (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes1.push 1
+  0
+
+/-- `finish` invalidates the invocation handle even though the bump allocation is not reclaimed. -/
+@[pf_entry]
+def bytesAfterFinish (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.finish
+  bytes4.length
+
+/-- Byte pushes must carry canonical `≤ 255` values; `256` terminates with the dedicated
+byte-range error instead of silently truncating. -/
+@[pf_entry]
+def bytesPushOverRange (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push 256
+  0
+
+/-- Byte stores validate the canonical range exactly like pushes. -/
+@[pf_entry]
+def bytesSetOverRange (_state : State) : UInt64 :=
+  let _ := bytes4.begin
+  let _ := bytes4.push 1
+  let _ := bytes4.set 0 256
+  0
+
+/-- Fill the complete usable default heap payload with one byte buffer, then prove that the next
+buffer allocation propagates the dedicated OOM program error. -/
+@[pf_entry]
+def bytesOom (_state : State) : UInt64 :=
+  let _ := bytesFull.begin
+  let _ := bytesFull.begin
+  0
+
+end Examples.Svm.MemoryOps

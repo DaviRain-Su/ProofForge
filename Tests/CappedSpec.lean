@@ -1,8 +1,8 @@
-import Examples.Capped
+import Examples.Evm.Capped
 
 namespace Tests.CappedSpec
 
-open Examples.Capped
+open Examples.Evm.Capped
 open ProofForge.Evm.Runtime
 
 def sample : Addr20 := ⟨1, 2, 3⟩

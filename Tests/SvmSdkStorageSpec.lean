@@ -1,21 +1,21 @@
-import Examples.JobQueue
+import Examples.Svm.JobQueue
 import ProofForge
 
 /-!
 Focused checks for the `Svm.Sdk.Storage` persistent facade via the non-Phoenix
-`Examples.JobQueue` consumer. The `#pf_build` commands run the same extraction and sBPF
+`Examples.Svm.JobQueue` consumer. The `#pf_build` commands run the same extraction and sBPF
 emission path as the CLI without touching the shared registry; `#guard`s pin the static
 descriptor geometry and the fail-closed well-formedness boundaries.
 -/
 namespace Tests.SvmSdkStorageSpec
 
-open Examples.JobQueue
+open Examples.Svm.JobQueue
 open ProofForge.Svm.AccountStorage
 open ProofForge.Svm.Sdk.Storage
 
 -- Focused extract + emit through the generic target path.
-#pf_build Examples.JobQueue
-#pf_build Examples.JobQueue
+#pf_build Examples.Svm.JobQueue
+#pf_build Examples.Svm.JobQueue
 
 -- Layout descriptors are fully static and well formed.
 #guard (small 1).wellFormed

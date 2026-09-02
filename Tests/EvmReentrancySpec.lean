@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.EvmOrderedStorage
-import Examples.GuardedPayout
+import Examples.Evm.EvmOrderedStorage
+import Examples.Evm.GuardedPayout
 
 /-!
 R5-009 focused suite: OpenZeppelin-compatible sentinels, fail-closed policy, two independent SDK
@@ -28,9 +28,9 @@ private def guardHandle : Storage.Static.Handle UInt64 :=
 
 #guard Reentrancy.enter guardHandle == Reentrancy.entered
 #guard Reentrancy.leave guardHandle == Reentrancy.notEntered
-#guard Examples.GuardedPayout.layout.wellFormed
-#guard Examples.GuardedPayout.layout.matchesFlattened [("guard", 8)]
-#guard Examples.EvmOrderedStorage.layout.wellFormed
+#guard Examples.Evm.GuardedPayout.layout.wellFormed
+#guard Examples.Evm.GuardedPayout.layout.matchesFlattened [("guard", 8)]
+#guard Examples.Evm.EvmOrderedStorage.layout.wellFormed
 
 private partial def calls (ops : Array IR.Op) : Array (Component.Call Ops.Val) :=
   ops.foldl (init := #[]) fun acc op =>
@@ -81,8 +81,8 @@ private def expectConsumer
     throwError s!"{moduleName}: guard was incorrectly lowered as final State writeback"
 
 private def expectReentrancy : CommandElabM Unit := do
-  expectConsumer `Examples.GuardedPayout "payout" "guard" "reentrantCall" "359f6025f96aa432"
-  expectConsumer `Examples.EvmOrderedStorage "writeAroundSend" "status" "locked" "c37f9c0a33352f4"
+  expectConsumer `Examples.Evm.GuardedPayout "payout" "guard" "reentrantCall" "359f6025f96aa432"
+  expectConsumer `Examples.Evm.EvmOrderedStorage "writeAroundSend" "status" "locked" "c37f9c0a33352f4"
 
 elab "#pf_guard_evm_reentrancy" : command => expectReentrancy
 

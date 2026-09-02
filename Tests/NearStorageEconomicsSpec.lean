@@ -1,4 +1,4 @@
-import Examples.NearStorageEconomics
+import Examples.Near.NearStorageEconomics
 import Lean
 import ProofForge
 
@@ -37,7 +37,7 @@ private partial def economicsSteps : Array ProofForge.Extract.IR.Op → Array St
 elab "#pf_near_storage_economics_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearStorageEconomics with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearStorageEconomics with
     | .ok program => pure program
     | .error reason => throwError reason
   let methodSteps (name : String) :=

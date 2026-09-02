@@ -43,7 +43,7 @@
 | 账户字模型 | `ProofForge/Svm/Sdk/StorageModel.lean` | 字段代数、BoundedVec push、Queue：**empty/nowrap/wrap push 链接+读回**、**pop clear/advance/wrap + 读回**、**peek / initialize / 空往返**（2026-09-01 Phase 1） |
 | L1 几何包 | `ProofForge/Svm/Sdk/Storage.lean` | scalarHeader / BoundedVec / RbTree 等一批 wf 定理 |
 | Facade L1 切片 | Pubkey / Program / Pda / System / Memo / Token / ATA / Account / Memory | **SF-9 done** |
-| RB 结构 | `Examples/Tree.lean`（p-003/p-004 + sf-011） | **几何全树 wf done**；可达/父子互逆操作保持可选 |
+| RB 结构 | `Examples/Svm/Tree.lean`（p-003/p-004 + sf-011） | **几何全树 wf done**；可达/父子互逆操作保持可选 |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
 **Queue 收口（Phase 1，2026-09-01）**：已完成（见 §6 SF-1）。

@@ -1,71 +1,71 @@
 import ProofForge
 import Examples.Counter
 import Examples.Pair
-import Examples.Nested
-import Examples.Tree
+import Examples.Svm.Nested
+import Examples.Svm.Tree
 import Examples.Flag
 import Examples.Maybe
 import Examples.Window
-import Examples.Book
-import Examples.Seat
+import Examples.Svm.Book
+import Examples.Svm.Seat
 import Examples.Phase
-import Examples.Choice
-import Examples.Clock
-import Examples.Transfer
-import Examples.EvmCtx
-import Examples.TipJar
+import Examples.Svm.Choice
+import Examples.Svm.Clock
+import Examples.Svm.Transfer
+import Examples.Evm.EvmCtx
+import Examples.Evm.TipJar
 import Examples.Lang
-import Examples.Vault
-import Examples.Ownable
-import Examples.Token
-import Examples.Capped
-import Examples.Ping
-import Examples.Call
-import Examples.Info
-import Examples.Peer
-import Examples.Pda
-import Examples.Signed
-import Examples.Create
-import Examples.TokenXfer
-import Examples.Token2022
-import Examples.Ata
-import Examples.Rent
-import Examples.TokenMint
-import Examples.SysAlloc
-import Examples.TokenAcc
-import Examples.Memo
-import Examples.CreatePda
-import Examples.TokenApprove
-import Examples.TokenFreeze
-import Examples.TokenAuth
-import Examples.Epoch
-import Examples.TokenSize
-import Examples.SysSeed
-import Examples.SysXfer
-import Examples.TokenMint2
-import Examples.TokenNative
-import Examples.Hash
-import Examples.Keys
-import Examples.Keccak
-import Examples.Trio
-import Examples.Gate
-import Examples.Nonce
-import Examples.TokenOwner
-import Examples.TokenMs
-import Examples.TokenStateView
-import Examples.SelfLog
-import Examples.RawEntry
-import Examples.Phoenix
-import Examples.PhoenixV1Profile
+import Examples.Evm.Vault
+import Examples.Evm.Ownable
+import Examples.Evm.Token
+import Examples.Evm.Capped
+import Examples.Svm.Ping
+import Examples.Svm.Call
+import Examples.Svm.Info
+import Examples.Svm.Peer
+import Examples.Svm.Pda
+import Examples.Svm.Signed
+import Examples.Svm.Create
+import Examples.Svm.TokenXfer
+import Examples.Svm.Token2022
+import Examples.Svm.Ata
+import Examples.Svm.Rent
+import Examples.Svm.TokenMint
+import Examples.Svm.SysAlloc
+import Examples.Svm.TokenAcc
+import Examples.Svm.Memo
+import Examples.Svm.CreatePda
+import Examples.Svm.TokenApprove
+import Examples.Svm.TokenFreeze
+import Examples.Svm.TokenAuth
+import Examples.Svm.Epoch
+import Examples.Svm.TokenSize
+import Examples.Svm.SysSeed
+import Examples.Svm.SysXfer
+import Examples.Svm.TokenMint2
+import Examples.Svm.TokenNative
+import Examples.Svm.Hash
+import Examples.Svm.Keys
+import Examples.Svm.Keccak
+import Examples.Svm.Trio
+import Examples.Svm.Gate
+import Examples.Svm.Nonce
+import Examples.Svm.TokenOwner
+import Examples.Svm.TokenMs
+import Examples.Svm.TokenStateView
+import Examples.Svm.SelfLog
+import Examples.Svm.RawEntry
+import Examples.Svm.Phoenix
+import Examples.Svm.PhoenixV1Profile
 
 
 #pf_build Examples.Counter
 
 #pf_build Examples.Pair
 
-#pf_build Examples.Nested
+#pf_build Examples.Svm.Nested
 
-#pf_build Examples.Tree
+#pf_build Examples.Svm.Tree
 
 #pf_build Examples.Flag
 
@@ -73,105 +73,105 @@ import Examples.PhoenixV1Profile
 
 #pf_build Examples.Window
 
-#pf_build Examples.Book
+#pf_build Examples.Svm.Book
 
-#pf_build Examples.Seat
+#pf_build Examples.Svm.Seat
 
 #pf_build Examples.Phase
 
-#pf_build Examples.Choice
+#pf_build Examples.Svm.Choice
 
-#pf_build Examples.Clock
+#pf_build Examples.Svm.Clock
 
-#pf_build Examples.Transfer
+#pf_build Examples.Svm.Transfer
 
-#pf_build Examples.Ping
+#pf_build Examples.Svm.Ping
 
-#pf_build Examples.Call
+#pf_build Examples.Svm.Call
 
-#pf_build Examples.Info
+#pf_build Examples.Svm.Info
 
-#pf_build Examples.Peer
+#pf_build Examples.Svm.Peer
 
-#pf_build Examples.Pda
+#pf_build Examples.Svm.Pda
 
-#pf_build Examples.Signed
+#pf_build Examples.Svm.Signed
 
-#pf_build Examples.Create
+#pf_build Examples.Svm.Create
 
-#pf_build Examples.TokenXfer
+#pf_build Examples.Svm.TokenXfer
 
-#pf_build Examples.Token2022
+#pf_build Examples.Svm.Token2022
 
-#pf_build Examples.Ata
+#pf_build Examples.Svm.Ata
 
-#pf_build Examples.Rent
+#pf_build Examples.Svm.Rent
 
-#pf_build Examples.TokenMint
+#pf_build Examples.Svm.TokenMint
 
-#pf_build Examples.SysAlloc
+#pf_build Examples.Svm.SysAlloc
 
-#pf_build Examples.TokenAcc
+#pf_build Examples.Svm.TokenAcc
 
-#pf_build Examples.Memo
+#pf_build Examples.Svm.Memo
 
-#pf_build Examples.CreatePda
+#pf_build Examples.Svm.CreatePda
 
-#pf_build Examples.TokenApprove
+#pf_build Examples.Svm.TokenApprove
 
-#pf_build Examples.TokenFreeze
+#pf_build Examples.Svm.TokenFreeze
 
-#pf_build Examples.TokenAuth
+#pf_build Examples.Svm.TokenAuth
 
-#pf_build Examples.Epoch
+#pf_build Examples.Svm.Epoch
 
-#pf_build Examples.TokenSize
+#pf_build Examples.Svm.TokenSize
 
-#pf_build Examples.SysSeed
+#pf_build Examples.Svm.SysSeed
 
-#pf_build Examples.SysXfer
+#pf_build Examples.Svm.SysXfer
 
-#pf_build Examples.TokenMint2
+#pf_build Examples.Svm.TokenMint2
 
-#pf_build Examples.TokenNative
+#pf_build Examples.Svm.TokenNative
 
-#pf_build Examples.Hash
+#pf_build Examples.Svm.Hash
 
-#pf_build Examples.Keys
+#pf_build Examples.Svm.Keys
 
-#pf_build Examples.Keccak
+#pf_build Examples.Svm.Keccak
 
-#pf_build Examples.Trio
+#pf_build Examples.Svm.Trio
 
-#pf_build Examples.Gate
+#pf_build Examples.Svm.Gate
 
-#pf_build Examples.Nonce
+#pf_build Examples.Svm.Nonce
 
-#pf_build Examples.TokenOwner
+#pf_build Examples.Svm.TokenOwner
 
-#pf_build Examples.TokenMs
+#pf_build Examples.Svm.TokenMs
 
-#pf_build Examples.TokenStateView
+#pf_build Examples.Svm.TokenStateView
 
-#pf_build Examples.SelfLog
+#pf_build Examples.Svm.SelfLog
 
-#pf_build Examples.RawEntry
+#pf_build Examples.Svm.RawEntry
 
-#pf_build Examples.Phoenix
+#pf_build Examples.Svm.Phoenix
 
-#pf_build Examples.PhoenixV1Profile
-
-/--
-error: extract/unsupported: svm rejects evm leaf
--/
-#guard_msgs (error) in
-#pf_build Examples.EvmCtx
+#pf_build Examples.Svm.PhoenixV1Profile
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_build Examples.TipJar
+#pf_build Examples.Evm.EvmCtx
+
+/--
+error: extract/unsupported: svm rejects evm leaf
+-/
+#guard_msgs (error) in
+#pf_build Examples.Evm.TipJar
 
 #pf_build Examples.Lang
 
@@ -179,25 +179,25 @@ error: extract/unsupported: svm rejects evm leaf
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_build Examples.Vault
+#pf_build Examples.Evm.Vault
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_build Examples.Ownable
+#pf_build Examples.Evm.Ownable
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_build Examples.Token
+#pf_build Examples.Evm.Token
 
 /--
 error: extract/unsupported: svm rejects evm leaf
 -/
 #guard_msgs (error) in
-#pf_build Examples.Capped
+#pf_build Examples.Evm.Capped
 
 /--
 error: extract/unsupported: no pf_entry

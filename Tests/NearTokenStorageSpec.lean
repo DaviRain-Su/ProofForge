@@ -1,4 +1,4 @@
-import Examples.NearTokenStorage
+import Examples.Near.NearTokenStorage
 import Lean
 import ProofForge
 
@@ -33,7 +33,7 @@ private partial def storageSteps : Array ProofForge.Extract.IR.Op → Array Stri
 elab "#pf_near_token_storage_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearTokenStorage with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearTokenStorage with
     | .ok program => pure program
     | .error reason => throwError reason
   let methodSteps (name : String) :=
@@ -70,7 +70,7 @@ elab "#pf_near_token_storage_check" : command => do
   logInfo m!"proofforge-near-token-storage: digest = {IR.digestHex program}"
 
 #pf_near_token_storage_check
-#pf_near_build Examples.NearTokenStorage
+#pf_near_build Examples.Near.NearTokenStorage
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearTokenStorage" == some "92e4c2bf2a7f74a0"
 

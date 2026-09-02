@@ -1,8 +1,8 @@
-import Examples.TokenXfer
+import Examples.Svm.TokenXfer
 
 namespace Tests.TokenXferSpec
 
-open Examples.TokenXfer
+open Examples.Svm.TokenXfer
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

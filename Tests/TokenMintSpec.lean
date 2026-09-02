@@ -1,8 +1,8 @@
-import Examples.TokenMint
+import Examples.Svm.TokenMint
 
 namespace Tests.TokenMintSpec
 
-open Examples.TokenMint
+open Examples.Svm.TokenMint
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

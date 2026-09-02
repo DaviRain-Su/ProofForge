@@ -1,8 +1,8 @@
-import Examples.Call
+import Examples.Svm.Call
 
 namespace Tests.CallSpec
 
-open Examples.Call
+open Examples.Svm.Call
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

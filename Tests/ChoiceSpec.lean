@@ -1,8 +1,8 @@
-import Examples.Choice
+import Examples.Svm.Choice
 
 namespace Tests.ChoiceSpec
 
-open Examples.Choice
+open Examples.Svm.Choice
 
 #guard (init 0).pick == .empty
 #guard getHeld (init 0) == 0

@@ -1,8 +1,8 @@
-import Examples.Nonce
+import Examples.Svm.Nonce
 
 namespace Tests.NonceSpec
 
-open Examples.Nonce
+open Examples.Svm.Nonce
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

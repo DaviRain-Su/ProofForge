@@ -1,5 +1,5 @@
 import ProofForge
-import Examples.EvmOrderedStorage
+import Examples.Evm.EvmOrderedStorage
 
 namespace Tests.EvmOrderedStorageSpec
 
@@ -48,8 +48,8 @@ private def statusHandle : Storage.Static.Handle UInt64 :=
   (Storage.Static.Layout.root.uint64 "status").handle
 
 #guard statusHandle.storeNow 9 == 9
-#guard Examples.EvmOrderedStorage.layout.wellFormed
-#guard Examples.EvmOrderedStorage.layout.matchesFlattened [("status", 8)]
+#guard Examples.Evm.EvmOrderedStorage.layout.wellFormed
+#guard Examples.Evm.EvmOrderedStorage.layout.matchesFlattened [("status", 8)]
 
 private partial def calls (ops : Array IR.Op) : Array (Component.Call Ops.Val) :=
   ops.foldl (init := #[]) fun acc op =>
@@ -62,7 +62,7 @@ private partial def calls (ops : Array IR.Op) : Array (Component.Call Ops.Val) :
 private def expectOrderedStorage : CommandElabM Unit := do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.EvmOrderedStorage with
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmOrderedStorage with
     | .ok source => pure source
     | .error reason => throwError reason
   let program ←

@@ -256,11 +256,11 @@ private def guardCap (stateArg amt : Nat) (ok : Array IR.Op) : Array IR.Op :=
       ok
       #[nativeFx .revertCapExceeded, .returnU64 (.lit 0)]]
 
-/-- Live extract of `Examples.Wide`; Legacy IR has no `arith256` leaf. -/
+/-- Live extract of `Examples.Evm.Wide`; Legacy IR has no `arith256` leaf. -/
 def extractedWide : IR.Program :=
   let ctor : IR.Method := {
     kind := .init
-    name := "Examples.Wide.init"
+    name := "Examples.Evm.Wide.init"
     ixName := "initialize"
     paramCount := 1
     paramWidths := #[8]
@@ -268,7 +268,7 @@ def extractedWide : IR.Program :=
   }
   let touch : IR.Method := {
     kind := .increment
-    name := "Examples.Wide.touch"
+    name := "Examples.Evm.Wide.touch"
     ixName := "touch"
     selector := Keccak.selectorOfWidths "touch" #[]
     ops := #[
@@ -279,7 +279,7 @@ def extractedWide : IR.Program :=
   }
   let get : IR.Method := {
     kind := .get
-    name := "Examples.Wide.get"
+    name := "Examples.Evm.Wide.get"
     ixName := "get"
     selector := Keccak.selectorOfWidths "get" #[]
     ops := #[.returnU64 (.lit 0)]
@@ -300,7 +300,7 @@ def extractedWide : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.Vault`; Legacy IR has no 256-bit map/token leaves. -/
+/-- Live extract of `Examples.Evm.Vault`; Legacy IR has no 256-bit map/token leaves. -/
 def extractedVault : IR.Program :=
   {
     name := "Vault"
@@ -413,7 +413,7 @@ def extractedVault : IR.Program :=
       dummyGet "Vault",
       {
         kind := .get
-        name := "Examples.Vault.getU64"
+        name := "Examples.Evm.Vault.getU64"
         ixName := "getU64"
         selector := Keccak.selectorOfWidths "getU64" #[8]
         paramCount := 1
@@ -427,7 +427,7 @@ def extractedVault : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.Token`; Legacy IR has no 256-bit map/arith leaves. -/
+/-- Live extract of `Examples.Evm.Token`; Legacy IR has no 256-bit map/arith leaves. -/
 def extractedToken : IR.Program :=
   let callerBal (limb : Nat) := getCaller256 limb 0
   let destBal (limb : Nat) := getAddr256 limb 0 0
@@ -451,7 +451,7 @@ def extractedToken : IR.Program :=
     ]
     constructor := {
       kind := .init
-      name := "Examples.Token.init"
+      name := "Examples.Evm.Token.init"
       ixName := "initialize"
       paramCount := 1
       paramWidths := #[20]
@@ -635,7 +635,7 @@ def extractedToken : IR.Program :=
       ]),
       {
         kind := .get
-        name := "Examples.Token.DOMAIN_SEPARATOR"
+        name := "Examples.Evm.Token.DOMAIN_SEPARATOR"
         ixName := "DOMAIN_SEPARATOR"
         selector := Keccak.selectorOfWidths "DOMAIN_SEPARATOR" #[]
         retWidths := #[33]
@@ -649,7 +649,7 @@ def extractedToken : IR.Program :=
         .field (.arg 0) s!"cap_{limbName limb}"),
       {
         kind := .get
-        name := "Examples.Token.decimals"
+        name := "Examples.Evm.Token.decimals"
         ixName := "decimals"
         selector := Keccak.selectorOfWidths "decimals" #[]
         retWidths := #[1]
@@ -659,7 +659,7 @@ def extractedToken : IR.Program :=
       dummyGet "Token",
       {
         kind := .get
-        name := "Examples.Token.name"
+        name := "Examples.Evm.Token.name"
         ixName := "name"
         selector := Keccak.selectorOfWidths "name" #[]
         retWidths := #[33]
@@ -675,7 +675,7 @@ def extractedToken : IR.Program :=
       view256 "Token" "nonceOf" 1 #[20] (return256 fun limb => getAddr256 limb 2 0),
       {
         kind := .get
-        name := "Examples.Token.ownerOf"
+        name := "Examples.Evm.Token.ownerOf"
         ixName := "ownerOf"
         selector := Keccak.selectorOfWidths "ownerOf" #[]
         retWidths := #[20]
@@ -689,7 +689,7 @@ def extractedToken : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Token.pausedOf"
+        name := "Examples.Evm.Token.pausedOf"
         ixName := "pausedOf"
         selector := Keccak.selectorOfWidths "pausedOf" #[]
         retWidths := #[1]
@@ -698,7 +698,7 @@ def extractedToken : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Token.symbol"
+        name := "Examples.Evm.Token.symbol"
         ixName := "symbol"
         selector := Keccak.selectorOfWidths "symbol" #[]
         retWidths := #[33]
@@ -716,7 +716,7 @@ def extractedToken : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.TipJar`; Legacy IR cannot represent `receive()`. -/
+/-- Live extract of `Examples.Evm.TipJar`; Legacy IR cannot represent `receive()`. -/
 def extractedTipJar : IR.Program :=
   {
     name := "TipJar"
@@ -765,14 +765,14 @@ def extractedTipJar : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.Ownable`; Legacy IR has no `eq20` leaf. -/
+/-- Live extract of `Examples.Evm.Ownable`; Legacy IR has no `eq20` leaf. -/
 def extractedOwnable : IR.Program :=
   {
     name := "Ownable"
     slots := #[{ name := "value", index := 0, width := 8 }]
     constructor := {
       kind := .init
-      name := "Examples.Ownable.init"
+      name := "Examples.Evm.Ownable.init"
       ixName := "initialize"
       paramCount := 1
       paramWidths := #[20]
@@ -790,7 +790,7 @@ def extractedOwnable : IR.Program :=
       ],
       {
         kind := .increment
-        name := "Examples.Ownable.bump"
+        name := "Examples.Evm.Ownable.bump"
         ixName := "bump"
         selector := Keccak.selectorOfWidths "bump" #[8]
         paramCount := 1
@@ -833,7 +833,7 @@ def extractedOwnable : IR.Program :=
       ],
       {
         kind := .get
-        name := "Examples.Ownable.allowance"
+        name := "Examples.Evm.Ownable.allowance"
         ixName := "allowance"
         selector := Keccak.selectorOfWidths "allowance" #[20, 20]
         paramCount := 2
@@ -848,7 +848,7 @@ def extractedOwnable : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Ownable.get"
+        name := "Examples.Evm.Ownable.get"
         ixName := "get"
         selector := Keccak.selectorOfWidths "get" #[]
         ops := #[.returnU64 (.field (.arg 0) "value")]
@@ -856,7 +856,7 @@ def extractedOwnable : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Ownable.ownerOf"
+        name := "Examples.Evm.Ownable.ownerOf"
         ixName := "ownerOf"
         selector := Keccak.selectorOfWidths "ownerOf" #[]
         retWidths := #[20]
@@ -871,14 +871,14 @@ def extractedOwnable : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.Const`; Legacy IR has no immutable leaves. -/
+/-- Live extract of `Examples.Evm.Const`; Legacy IR has no immutable leaves. -/
 def extractedConst : IR.Program :=
   {
     name := "Const"
     slots := dummySlot
     constructor := {
       kind := .init
-      name := "Examples.Const.init"
+      name := "Examples.Evm.Const.init"
       ixName := "initialize"
       paramCount := 4
       paramWidths := #[8, 8, 20, 20]
@@ -892,7 +892,7 @@ def extractedConst : IR.Program :=
       ],
       {
         kind := .get
-        name := "Examples.Const.get"
+        name := "Examples.Evm.Const.get"
         ixName := "get"
         selector := Keccak.selectorOfWidths "get" #[]
         ops := #[.returnU64 (.field (.arg 0) "dummy")]
@@ -901,7 +901,7 @@ def extractedConst : IR.Program :=
       viewAddr20 "Const" "peerOf" (.ext .immX0 #[]) (.ext .immX1 #[]) (.ext .immX2 #[]),
       {
         kind := .get
-        name := "Examples.Const.saltOf"
+        name := "Examples.Evm.Const.saltOf"
         ixName := "saltOf"
         selector := Keccak.selectorOfWidths "saltOf" #[]
         ops := #[.returnU64 (.ext .immU64b #[])]
@@ -909,7 +909,7 @@ def extractedConst : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Const.seedOf"
+        name := "Examples.Evm.Const.seedOf"
         ixName := "seedOf"
         selector := Keccak.selectorOfWidths "seedOf" #[]
         ops := #[.returnU64 (.ext .immU64 #[])]
@@ -919,7 +919,7 @@ def extractedConst : IR.Program :=
     ]
   }
 
-/-- Live extract of `Examples.Capped`; reuses owner + pause + cap, no hashed map. -/
+/-- Live extract of `Examples.Evm.Capped`; reuses owner + pause + cap, no hashed map. -/
 def extractedCapped : IR.Program :=
   let nextSupply (limb : Nat) : Ops.Val :=
     Ops.arith256 0 limb
@@ -941,7 +941,7 @@ def extractedCapped : IR.Program :=
     ]
     constructor := {
       kind := .init
-      name := "Examples.Capped.init"
+      name := "Examples.Evm.Capped.init"
       ixName := "initialize"
       paramCount := 1
       paramWidths := #[20]
@@ -984,7 +984,7 @@ def extractedCapped : IR.Program :=
         .field (.arg 0) s!"cap_{limbName limb}"),
       {
         kind := .get
-        name := "Examples.Capped.ownerOf"
+        name := "Examples.Evm.Capped.ownerOf"
         ixName := "ownerOf"
         selector := Keccak.selectorOfWidths "ownerOf" #[]
         retWidths := #[20]
@@ -998,7 +998,7 @@ def extractedCapped : IR.Program :=
       },
       {
         kind := .get
-        name := "Examples.Capped.pausedOf"
+        name := "Examples.Evm.Capped.pausedOf"
         ixName := "pausedOf"
         selector := Keccak.selectorOfWidths "pausedOf" #[]
         retWidths := #[1]

@@ -9,7 +9,7 @@ depends-on: [e-ownimm-001]
 
 ## objective
 
-`Examples.Token.DOMAIN_SEPARATOR()` 返回和 `permit` 同一份编译期固定 EIP-712 domain hash。
+`Examples.Evm.Token.DOMAIN_SEPARATOR()` 返回和 `permit` 同一份编译期固定 EIP-712 domain hash。
 
 - 新增 `evmDomainSeparator : Bytes32`
 - Yul：`keccak256(EIP712Domain || keccak("Token") || keccak("1") || chainid || address)`

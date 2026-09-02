@@ -1,5 +1,5 @@
-import Examples.EvmCtx
-import Examples.TipJar
+import Examples.Evm.EvmCtx
+import Examples.Evm.TipJar
 import ProofForge
 
 /-!
@@ -90,8 +90,8 @@ private def extractEvm (module : Name) : CommandElabM IR.Program := do
   | .error reason => throwError reason
 
 elab "#pf_guard_evm_environment_component" : command => do
-  let ctx ← extractEvm `Examples.EvmCtx
-  let tipJar ← extractEvm `Examples.TipJar
+  let ctx ← extractEvm `Examples.Evm.EvmCtx
+  let tipJar ← extractEvm `Examples.Evm.TipJar
   requireQuery ctx "gasLeft" .gasLeft256
   requireQuery tipJar "baseFee" .baseFee256
   requireQuery tipJar "prevRandao" .prevRandao256

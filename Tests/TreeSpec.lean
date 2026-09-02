@@ -1,23 +1,23 @@
-import Examples.Tree
+import Examples.Svm.Tree
 import ProofForge
 
 namespace Tests.TreeSpec
 
-open Examples.Tree
+open Examples.Svm.Tree
 open Lean Elab Command
 
-private def nodeAt (s : Examples.Tree.State) (address : UInt64) : Node :=
+private def nodeAt (s : Examples.Svm.Tree.State) (address : UInt64) : Node :=
   s.nodes[(address.toNat - 1) % 4]!
 
-private def insertMany (s : Examples.Tree.State) :
-    List (UInt64 × UInt64) → Except Error Examples.Tree.State
+private def insertMany (s : Examples.Svm.Tree.State) :
+    List (UInt64 × UInt64) → Except Error Examples.Svm.Tree.State
   | [] => .ok s
   | (k, v) :: rest =>
       match insertNode s k v with
       | .ok (s', _) => insertMany s' rest
       | .error e => .error e
 
-private def checkSubtree (s : Examples.Tree.State) (address parent : UInt64)
+private def checkSubtree (s : Examples.Svm.Tree.State) (address parent : UInt64)
     (lower upper : Option UInt64) : Nat → Option (Nat × Nat)
   | 0 => if address = 0 then some (1, 0) else none
   | fuel + 1 =>
@@ -48,7 +48,7 @@ private def checkSubtree (s : Examples.Tree.State) (address parent : UInt64)
                 none
           | _, _ => none
 
-private def validRedBlackTree (s : Examples.Tree.State) : Bool :=
+private def validRedBlackTree (s : Examples.Svm.Tree.State) : Bool :=
   if s.root = 0 then
     s.size == 0
   else
@@ -57,7 +57,7 @@ private def validRedBlackTree (s : Examples.Tree.State) : Bool :=
       | some (_, count) => s.size == UInt64.ofNat count
       | none => false
 
-private def linkedContainsKey (s : Examples.Tree.State) (address key : UInt64) : Nat → Bool
+private def linkedContainsKey (s : Examples.Svm.Tree.State) (address key : UInt64) : Nat → Bool
   | 0 => false
   | fuel + 1 =>
       if address = 0 then false
@@ -124,7 +124,7 @@ private partial def localValues (want : Nat)
 elab "#pf_guard_tree_allocator" : command => do
   let env ← getEnv
   let program ←
-    match ProofForge.Extract.extractModule env `Examples.Tree none with
+    match ProofForge.Extract.extractModule env `Examples.Svm.Tree none with
     | .ok program => pure program
     | .error reason => throwError reason
   let asm ←

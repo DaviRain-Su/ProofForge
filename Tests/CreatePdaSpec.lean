@@ -1,8 +1,8 @@
-import Examples.CreatePda
+import Examples.Svm.CreatePda
 
 namespace Tests.CreatePdaSpec
 
-open Examples.CreatePda
+open Examples.Svm.CreatePda
 open ProofForge.Svm.Runtime
 
 #guard (init 0).dummy == 0

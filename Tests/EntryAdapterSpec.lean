@@ -1,16 +1,16 @@
-import Examples.RawEntry
+import Examples.Svm.RawEntry
 
 namespace Tests.EntryAdapterSpec
 
 open Lean Elab Command
 open ProofForge.Svm
 
-#guard Examples.RawEntry.packed (Examples.RawEntry.init 0) 3 40 == 43
+#guard Examples.Svm.RawEntry.packed (Examples.Svm.RawEntry.init 0) 3 40 == 43
 
 elab "#pf_guard_entry_adapter" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.RawEntry with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.RawEntry with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourcePacked := source.methods.find? (·.ixName == "packed")
@@ -90,7 +90,7 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceTagged.paramCount == 1 && sourceTagged.paramWidths.isEmpty &&
       (match sourceTagged.paramSchemas[0]? with
         | some (ProofForge.Core.Codec.Schema.enumeration
-            "Examples.RawEntry.TaggedRequest" 8 variants) =>
+            "Examples.Svm.RawEntry.TaggedRequest" 8 variants) =>
             variants.size == 3
         | _ => false) &&
       sourceBounded.annotations == #["svm.raw.v1:17:2:0"] &&

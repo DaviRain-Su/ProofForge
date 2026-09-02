@@ -3,9 +3,9 @@ import ProofForge.Wasm.Near.IR
 import ProofForge.Wasm.Near.Emit
 import ProofForge.Wasm.Near.Commands
 import ProofForge.Wasm.Xrpl.IR
-import Examples.NearCtx
-import Examples.Clock
-import Examples.EvmCtx
+import Examples.Near.NearCtx
+import Examples.Svm.Clock
+import Examples.Evm.EvmCtx
 
 open ProofForge
 open Lean Elab Command
@@ -29,9 +29,9 @@ elab "#pf_near_ctx_reject " n:ident : command => do
       unless reason.contains "near rejects" do
         throwError "unexpected near rejection reason: {reason}"
 
-#pf_near_ctx_reject Examples.Clock
+#pf_near_ctx_reject Examples.Svm.Clock
 
-#pf_near_ctx_reject Examples.EvmCtx
+#pf_near_ctx_reject Examples.Evm.EvmCtx
 
 open Lean Elab Command in
 elab "#pf_xrpl_reject_near " n:ident : command => do
@@ -42,9 +42,9 @@ elab "#pf_xrpl_reject_near " n:ident : command => do
       unless reason.contains "xrpl rejects near" || reason.contains "xrpl rejects" do
         throwError "unexpected xrpl rejection reason: {reason}"
 
-#pf_xrpl_reject_near Examples.NearCtx
+#pf_xrpl_reject_near Examples.Near.NearCtx
 
-#pf_near_build Examples.NearCtx
+#pf_near_build Examples.Near.NearCtx
 
 open Lean Elab Command in
 elab "#pf_near_ctx_emit_check " n:ident : command => do
@@ -102,7 +102,7 @@ elab "#pf_near_ctx_emit_check " n:ident : command => do
         logInfo m!"proofforge-near-ctx-test: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
         logInfo m!"proofforge-near-ctx-test: {source.length} bytes of WAT passed anchor check"
 
-#pf_near_ctx_emit_check Examples.NearCtx
+#pf_near_ctx_emit_check Examples.Near.NearCtx
 
 namespace Tests.NearViewCaller
 

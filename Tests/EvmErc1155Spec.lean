@@ -1,6 +1,6 @@
 import ProofForge
-import Examples.MultiToken
-import Examples.CraftToken
+import Examples.Evm.MultiToken
+import Examples.Evm.CraftToken
 
 /-!
 EVM-SDK-8 focused suite: bounded ERC-1155 key envelope, predicate surface, and two independent
@@ -55,20 +55,20 @@ def specAliasId : UInt256 := ⟨7, 0, 0, 1⟩
 def specAmount : UInt256 := ⟨9, 0, 0, 0⟩
 
 -- Disjoint compile-time namespaces for both consumers.
-#guard Examples.MultiToken.balances.base == 0
-#guard Examples.MultiToken.operators.base == 1
-#guard Examples.CraftToken.balances.base == 0
-#guard Examples.CraftToken.operators.base == 1
-#guard Examples.CraftToken.supply.base == 2
-#guard Examples.CraftToken.maxPerId == (⟨1000, 0, 0, 0⟩ : UInt256)
+#guard Examples.Evm.MultiToken.balances.base == 0
+#guard Examples.Evm.MultiToken.operators.base == 1
+#guard Examples.Evm.CraftToken.balances.base == 0
+#guard Examples.Evm.CraftToken.operators.base == 1
+#guard Examples.Evm.CraftToken.supply.base == 2
+#guard Examples.Evm.CraftToken.maxPerId == (⟨1000, 0, 0, 0⟩ : UInt256)
 
 -- The SDK-owned checked view rejects an unencodable alias before its hashed-map read.
 -- `canEncode` is honest Bool arithmetic, so these guards are kernel-checkable on host; the
 -- hashed-map load itself host-evaluates to zero (empty map).
-#guard Examples.MultiToken.balanceOf ⟨0⟩ specOwner specId == UInt256.zero
-#guard Examples.MultiToken.balanceOf ⟨0⟩ specOwner specAliasId == UInt256.zero
-#guard Examples.CraftToken.balanceOf ⟨0⟩ specOwner specAliasId == UInt256.zero
-#guard Examples.CraftToken.supplyOf ⟨0⟩ specAliasId == UInt256.zero
+#guard Examples.Evm.MultiToken.balanceOf ⟨0⟩ specOwner specId == UInt256.zero
+#guard Examples.Evm.MultiToken.balanceOf ⟨0⟩ specOwner specAliasId == UInt256.zero
+#guard Examples.Evm.CraftToken.balanceOf ⟨0⟩ specOwner specAliasId == UInt256.zero
+#guard Examples.Evm.CraftToken.supplyOf ⟨0⟩ specAliasId == UInt256.zero
 
 -- Pre-write/pre-auth envelope gates: unencodable ids fail every mutation and authorization
 -- predicate. These guards are honest on host because `canEncode` is the first `&&` conjunct and
@@ -184,15 +184,15 @@ private def expectDigest (moduleName : Name) (digest : String) : CommandElabM Un
     throwError s!"{moduleName} digest drifted: {IR.digestHex program}"
 
 private def expectErc1155 : CommandElabM Unit := do
-  expectDigest `Examples.MultiToken "c688769941bd4cfe"
-  expectDigest `Examples.CraftToken "2e6738a3705bc7dd"
+  expectDigest `Examples.Evm.MultiToken "c688769941bd4cfe"
+  expectDigest `Examples.Evm.CraftToken "2e6738a3705bc7dd"
   let env ← getEnv
-  let multi := (ProofForge.Extract.extractModuleIR env `Examples.MultiToken).toOption.get!
+  let multi := (ProofForge.Extract.extractModuleIR env `Examples.Evm.MultiToken).toOption.get!
   let balanceOps := (multi.methods.find? (·.ixName == "balanceOf")).get!.ops
   unless hasControlFlow balanceOps && opsContainBalanceRead balanceOps &&
       balanceReadsAreGuarded balanceOps do
     throwError "MultiToken.balanceOf: checked SDK view lost its pre-read key-envelope gate"
-  let craft := (ProofForge.Extract.extractModuleIR env `Examples.CraftToken).toOption.get!
+  let craft := (ProofForge.Extract.extractModuleIR env `Examples.Evm.CraftToken).toOption.get!
   let mintOps := (craft.methods.find? (·.ixName == "mint")).get!.ops
   unless hasNamedCapGate mintOps do
     throwError "CraftToken.mint: named UInt256 maxPerId did not remain a packed comparison gate"

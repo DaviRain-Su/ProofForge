@@ -1,8 +1,8 @@
-import Examples.Trio
+import Examples.Svm.Trio
 
 namespace Tests.TrioSpec
 
-open Examples.Trio
+open Examples.Svm.Trio
 open ProofForge.Svm.Sdk
 open ProofForge.Svm.Runtime
 

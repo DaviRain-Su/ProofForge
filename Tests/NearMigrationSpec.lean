@@ -1,4 +1,4 @@
-import Examples.NearMigration
+import Examples.Near.NearMigration
 import Lean
 import ProofForge
 
@@ -17,7 +17,7 @@ private def methodBody (wat method : String) : Except String String :=
 elab "#pf_near_migration_check" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.NearMigration with
+    match ProofForge.Extract.extractModuleIR env `Examples.Near.NearMigration with
     | .ok program => pure program
     | .error reason => throwError reason
   let some sourceMigration := source.methods.find? (·.ixName == "migrate")

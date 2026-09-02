@@ -113,8 +113,8 @@ import ProofForge.Attr
 import ProofForge.Evm.Sdk
 ```
 
-已有好例子：`Examples/Vault.lean` → `import ProofForge.Evm.Sdk`；
-`Examples/VersionedLedger.lean` → Attr + `Svm.Sdk.Versioned`。
+已有好例子：`Examples/Evm/Vault.lean` → `import ProofForge.Evm.Sdk`；
+`Examples/Svm/VersionedLedger.lean` → Attr + `Svm.Sdk.Versioned`。
 坏例子：`Examples/Counter.lean` → `import ProofForge`（应迁走）。
 
 ### 3.3 CLI 去 `Examples` 硬编码

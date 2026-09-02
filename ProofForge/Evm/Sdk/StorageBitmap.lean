@@ -32,8 +32,8 @@ packed-word semantics to the existing physical state model — exactly the way `
 
 The current EVM extraction lowers dynamic-index `Vector` reads/writes only when the vector is a
 `State` field and the index proof is an explicit `if h : … < wordCount` hypothesis in the
-consumer (`Examples.EvmStaticRoster.setSeat`, `Examples.Lang.setAt`,
-`Examples.EvmVecLog.record`). A generic helper returning an updated `Vector UInt64 n` value is
+consumer (`Examples.Evm.EvmStaticRoster.setSeat`, `Examples.Lang.setAt`,
+`Examples.Evm.EvmVecLog.record`). A generic helper returning an updated `Vector UInt64 n` value is
 not an extractable shape today, so — exactly like `StorageVec` and `Roles.Set2` — this module
 owns the reusable *decisions and word arithmetic* while applications own the literal `State`
 field writes:

@@ -1,5 +1,5 @@
-import Examples.BatchSizer
-import Examples.EvmPriceBand
+import Examples.Svm.BatchSizer
+import Examples.Evm.EvmPriceBand
 import ProofForge
 
 /-!
@@ -227,7 +227,7 @@ private def validCeilRoot (value : UInt64) : Bool :=
 #guard validCeilRoot 0x8000000000000000
 #guard validCeilRoot u64Max
 
-open Examples.BatchSizer in
+open Examples.Svm.BatchSizer in
 #guard (smaller (init 8) 11 4 == 4) && (larger (init 8) 11 4 == 11) &&
   (midpoint (init 8) 4 7 == 5) &&
   (match plan (init 8) u64Max 2 with
@@ -278,7 +278,7 @@ open Examples.BatchSizer in
   | .error .zeroRate => true
   | _ => false)
 
-open Examples.EvmPriceBand in
+open Examples.Evm.EvmPriceBand in
 #guard (lower (init 9) 13 5 == 5) && (upper (init 9) 13 5 == 13) &&
   (midpoint (init 9) 0 u64Max == 9223372036854775807) &&
   (match roundUp (init 9) u64Max 1 with
@@ -383,7 +383,7 @@ private def methodValue? (program : ProofForge.Extract.IR.Program) (name : Strin
 
 elab "#pf_guard_core_math_no_effects" : command => do
   let env ← getEnv
-  for module in [`Examples.BatchSizer, `Examples.EvmPriceBand] do
+  for module in [`Examples.Svm.BatchSizer, `Examples.Evm.EvmPriceBand] do
     let source ←
       match ProofForge.Extract.extractModuleIR env module with
       | .ok program => pure program
@@ -392,7 +392,7 @@ elab "#pf_guard_core_math_no_effects" : command => do
       unless noTargetEffects method.ops do
         throwError s!"{module}.{method.ixName}: shared math unexpectedly emitted a target effect"
     let checks : Array (String × (ProofForge.Extract.IR.Val → Bool)) :=
-      if module == `Examples.BatchSizer then
+      if module == `Examples.Svm.BatchSizer then
         #[⟨"reserve", isSaturatingAdd⟩, ⟨"consume", isSaturatingSub⟩,
           ⟨"amplify", isSaturatingMul⟩]
       else
@@ -402,7 +402,7 @@ elab "#pf_guard_core_math_no_effects" : command => do
       unless (methodValue? source name).any valid do
         throwError s!"{module}.{name}: saturating preflight no longer dominates its arithmetic"
     let logNames : Array (String × Nat) :=
-      if module == `Examples.BatchSizer then
+      if module == `Examples.Svm.BatchSizer then
         #[⟨"binaryOrder", 6⟩, ⟨"decimalOrder", 5⟩, ⟨"byteOrder", 7⟩,
           ⟨"binaryOrderUp", 6⟩, ⟨"decimalOrderUp", 5⟩, ⟨"byteOrderUp", 7⟩]
       else
@@ -414,7 +414,7 @@ elab "#pf_guard_core_math_no_effects" : command => do
       unless loopBounds method.ops == #[expectedBound] do
         throwError s!"{module}.{name}: expected exactly one {expectedBound}-step bounded ladder"
     let rootNames : Array String :=
-      if module == `Examples.BatchSizer then #["capacityRoot", "capacityRootUp"]
+      if module == `Examples.Svm.BatchSizer then #["capacityRoot", "capacityRootUp"]
       else #["quoteRoot", "quoteRootUp"]
     for rootName in rootNames do
       let some root := source.methods.find? (·.ixName == rootName)
@@ -424,7 +424,7 @@ elab "#pf_guard_core_math_no_effects" : command => do
       unless noAccumLoop root.ops do
         throwError s!"{module}.{rootName}: Newton state was incorrectly lowered as additive accumulation"
     let mulDivNames : Array String :=
-      if module == `Examples.BatchSizer then
+      if module == `Examples.Svm.BatchSizer then
         #["prorate", "prorateUp", "fixedMulDown", "fixedMulUp", "fixedDivDown", "fixedDivUp"]
       else
         #["weighted", "weightedUp", "fixedMulDown", "fixedMulUp", "fixedDivDown", "fixedDivUp"]
@@ -437,7 +437,7 @@ elab "#pf_guard_core_math_no_effects" : command => do
         throwError s!"{module}.{mulDivName}: restoring division was incorrectly lowered as accumulation"
 
 #pf_guard_core_math_no_effects
-#pf_build Examples.BatchSizer
-#pf_evm_build Examples.EvmPriceBand
+#pf_build Examples.Svm.BatchSizer
+#pf_evm_build Examples.Evm.EvmPriceBand
 
 end Tests.CoreMathSpec

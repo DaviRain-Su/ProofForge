@@ -1,6 +1,6 @@
-import Examples.AccountView
-import Examples.MemoryOps
-import Examples.TransientPair
+import Examples.Svm.AccountView
+import Examples.Svm.MemoryOps
+import Examples.Svm.TransientPair
 import Lean
 import ProofForge
 
@@ -38,8 +38,8 @@ private def vector2 : TransientVec.Config := { capacity := 2 }
   (TransientVec.Query.pop vector2).canonical (fun _ : UInt64 => "unused") #[] ==
     "tv64.pop.2"
 
-#pf_build Examples.MemoryOps
-#pf_build Examples.TransientPair
+#pf_build Examples.Svm.MemoryOps
+#pf_build Examples.Svm.TransientPair
 
 private def vectorStep : ProofForge.Svm.IR.Op → Option String
   | .component (.transientVec (.begin _)) => some "begin"
@@ -62,7 +62,7 @@ private def vectorSteps (method : ProofForge.Svm.IR.Method) : Array String :=
 elab "#pf_guard_transient_vector" : command => do
   let env ← getEnv
   let source ←
-    match ProofForge.Extract.extractModuleIR env `Examples.MemoryOps with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.MemoryOps with
     | .ok program => pure program
     | .error reason => throwError reason
   let program ←
@@ -121,9 +121,9 @@ elab "#pf_guard_transient_vector" : command => do
     throwError "vectorAfterFinish did not preserve stale-handle validation order"
   -- Same-kind multi-handle evidence: two compile-time Vector64 slots decode through the same
   -- component bridge with distinct erased words and the shared lifecycle order. The evidence
-  -- lives in the dedicated `Examples.TransientPair` consumer.
+  -- lives in the dedicated `Examples.Svm.TransientPair` consumer.
   let pairSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.TransientPair with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.TransientPair with
     | .ok program => pure program
     | .error reason => throwError reason
   let pairProgram ←
@@ -186,7 +186,7 @@ elab "#pf_guard_transient_vector" : command => do
   unless vectorSteps unbegun == #["begin", "push"] do
     throwError "vectorPairUnbegunSlot did not open exactly one slot"
   let accountSource ←
-    match ProofForge.Extract.extractModuleIR env `Examples.AccountView with
+    match ProofForge.Extract.extractModuleIR env `Examples.Svm.AccountView with
     | .ok program => pure program
     | .error reason => throwError reason
   let accountProgram ←

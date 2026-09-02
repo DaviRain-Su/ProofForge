@@ -1,9 +1,9 @@
 import ProofForge
-import Examples.TipJar
+import Examples.Evm.TipJar
 
 namespace Tests.TipJarSpec
 
-open Examples.TipJar
+open Examples.Evm.TipJar
 open ProofForge.Evm.Sdk
 
 #guard (init 0).dummy == 0

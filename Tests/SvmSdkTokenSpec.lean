@@ -1,18 +1,18 @@
 import ProofForge.Svm.Sdk.Token
-import Examples.TokenXfer
-import Examples.TokenMint
-import Examples.TokenMint2
-import Examples.TokenAcc
-import Examples.TokenApprove
-import Examples.TokenFreeze
-import Examples.TokenAuth
-import Examples.TokenOwner
-import Examples.TokenNative
-import Examples.TokenSize
-import Examples.TokenMs
-import Examples.Seat
-import Examples.Phoenix
-import Examples.PhoenixV1Profile
+import Examples.Svm.TokenXfer
+import Examples.Svm.TokenMint
+import Examples.Svm.TokenMint2
+import Examples.Svm.TokenAcc
+import Examples.Svm.TokenApprove
+import Examples.Svm.TokenFreeze
+import Examples.Svm.TokenAuth
+import Examples.Svm.TokenOwner
+import Examples.Svm.TokenNative
+import Examples.Svm.TokenSize
+import Examples.Svm.TokenMs
+import Examples.Svm.Seat
+import Examples.Svm.Phoenix
+import Examples.Svm.PhoenixV1Profile
 
 open Lean Elab Command
 
@@ -49,12 +49,12 @@ private def uncheckedAccounts : Token.UncheckedTransferAccounts := .at 7 5 3 5
 #guard Token.transferCheckedSignedWith checkedAccounts 7 6 #[] 0 == 0
 #guard Token.transferSignedWith uncheckedAccounts 7 #[] 0 == 0
 
-#guard Examples.Phoenix.baseDepositTokenAccounts.wellFormed
-#guard Examples.Phoenix.quoteDepositTokenAccounts.wellFormed
-#guard Examples.Phoenix.baseWithdrawTokenAccounts.wellFormed
-#guard Examples.Phoenix.quoteWithdrawTokenAccounts.wellFormed
-#guard Examples.PhoenixV1Profile.baseWithdrawTokenAccounts.wellFormed
-#guard Examples.PhoenixV1Profile.quoteWithdrawTokenAccounts.wellFormed
+#guard Examples.Svm.Phoenix.baseDepositTokenAccounts.wellFormed
+#guard Examples.Svm.Phoenix.quoteDepositTokenAccounts.wellFormed
+#guard Examples.Svm.Phoenix.baseWithdrawTokenAccounts.wellFormed
+#guard Examples.Svm.Phoenix.quoteWithdrawTokenAccounts.wellFormed
+#guard Examples.Svm.PhoenixV1Profile.baseWithdrawTokenAccounts.wellFormed
+#guard Examples.Svm.PhoenixV1Profile.quoteWithdrawTokenAccounts.wellFormed
 
 private def expectCanonical (module : Name) (expected : String) : CommandElabM Unit := do
   let env ← getEnv
@@ -71,18 +71,18 @@ private def expectCanonical (module : Name) (expected : String) : CommandElabM U
     throwError s!"{module}: SDK facade changed canonical IR: {actual}"
 
 elab "#pf_guard_svm_token_facades" : command => do
-  expectCanonical `Examples.TokenXfer "c9edc88528b425dd"
-  expectCanonical `Examples.TokenMint "f7535d90750f9692"
-  expectCanonical `Examples.TokenMint2 "89ae474933102cb4"
-  expectCanonical `Examples.TokenAcc "53013fc1bc2e0753"
-  expectCanonical `Examples.TokenApprove "e99f2008d320e15c"
-  expectCanonical `Examples.TokenFreeze "6d4fceb52be9cf0a"
-  expectCanonical `Examples.TokenAuth "bf3d403346f51b82"
-  expectCanonical `Examples.TokenOwner "d29884f00e7311b7"
-  expectCanonical `Examples.TokenNative "5bc920f79c3711f0"
-  expectCanonical `Examples.TokenSize "fa48e892121ea415"
-  expectCanonical `Examples.TokenMs "672b83a54f057f79"
-  expectCanonical `Examples.Seat "831f313077f89947"
+  expectCanonical `Examples.Svm.TokenXfer "c9edc88528b425dd"
+  expectCanonical `Examples.Svm.TokenMint "f7535d90750f9692"
+  expectCanonical `Examples.Svm.TokenMint2 "89ae474933102cb4"
+  expectCanonical `Examples.Svm.TokenAcc "53013fc1bc2e0753"
+  expectCanonical `Examples.Svm.TokenApprove "e99f2008d320e15c"
+  expectCanonical `Examples.Svm.TokenFreeze "6d4fceb52be9cf0a"
+  expectCanonical `Examples.Svm.TokenAuth "bf3d403346f51b82"
+  expectCanonical `Examples.Svm.TokenOwner "d29884f00e7311b7"
+  expectCanonical `Examples.Svm.TokenNative "5bc920f79c3711f0"
+  expectCanonical `Examples.Svm.TokenSize "fa48e892121ea415"
+  expectCanonical `Examples.Svm.TokenMs "672b83a54f057f79"
+  expectCanonical `Examples.Svm.Seat "831f313077f89947"
 
 #pf_guard_svm_token_facades
 

@@ -9,7 +9,7 @@ depends-on: [e-swap3-001]
 
 ## objective
 
-给 `Examples.Token` 一条编译期固定的 `permit(owner,spender,value,deadline,v,r,s)`。
+给 `Examples.Evm.Token` 一条编译期固定的 `permit(owner,spender,value,deadline,v,r,s)`。
 不是泛化 `ecrecover` API，也不是外部 token CALL。
 
 - 新增 `Bytes32`（ABI `bytes32`，width 33）和 `evmPermit`
