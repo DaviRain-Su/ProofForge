@@ -283,8 +283,20 @@ private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
         limbs := limbs.push
           (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity part))
       pure limbs
-  | .tuple _ | .record _ _ =>
-      throw "extract/unsupported: bounded result product elements are not yet projected through shared Extract"
+  | .tuple _ | .record _ _ => do
+      -- One-level static products: flatten to one-limb scalar leaves (same frame as
+      -- constructed bounded results). Nested dynamics / wide multi-limb leaves stay closed.
+      let leaves ← Core.Codec.staticLeaves element
+      unless !leaves.isEmpty do
+        throw "extract/unsupported: constructed bounded result element must contain a scalar"
+      for leaf in leaves do
+        unless (← staticReturnLimbCount (.scalar leaf.type)) == 1 do
+          throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
+      let mut limbs : Array Ops.Op := #[]
+      for leafIdx in [0:leaves.size] do
+        limbs := limbs.push
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity leafIdx))
+      pure limbs
   | _ => throw "extract/unsupported: bounded result requires static scalar elements"
 
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an

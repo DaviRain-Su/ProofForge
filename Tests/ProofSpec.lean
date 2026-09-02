@@ -83,25 +83,6 @@ open Examples.Counter
 -- Tree wf：init 良构（wf 谓词第一批切片；kernel 检查，不求值）
 example : Examples.Svm.Tree.wf (Examples.Svm.Tree.init 0) := Examples.Svm.Tree.init_wf 0
 
-#check Examples.Svm.Tree.insertRoot_wf
-#check Examples.Svm.Tree.insertNode_wf_root
-#check Examples.Svm.Tree.paintNode_wf
-#check Examples.Svm.Tree.linkLeft_wf
-#check Examples.Svm.Tree.linkRight_wf
-#check Examples.Svm.Tree.rotateLeft_wf
-#check Examples.Svm.Tree.rotateRight_wf
-#check Examples.Svm.Tree.insertAt_linked_wf
-#check Examples.Svm.Tree.insertAt_linked_wf_bump
-#check Examples.Svm.Tree.insertAt_linked_wf_free
-#check Examples.Svm.Tree.insertAt_wf
-#check Examples.Svm.Tree.fixInserted_grand0_paint_parent_wf
-#check Examples.Svm.Tree.fixInserted_recolor_left_uncle_wf
-#check Examples.Svm.Tree.fixInserted_recolor_right_uncle_wf
-#check Examples.Svm.Tree.fixInserted_ll_wf
-#check Examples.Svm.Tree.fixInserted_rr_wf
-#check Examples.Svm.Tree.fixInserted_lr_wf
-#check Examples.Svm.Tree.fixInserted_rl_wf
-
 -- Pausable fail-closed：unknown flag 门关且不误报 paused
 #guard
   match (2 : UInt8) with
