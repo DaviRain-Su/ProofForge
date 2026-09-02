@@ -2328,6 +2328,24 @@ private def asConstructedOptionResult (env : Environment) : Nat → Expr →
       else
         asOptionStorage env e
 
+/-- Flatten one `#v[…]` / `List.cons` element into ABI leaves. Static `Prod.mk` trees become
+ordered scalar limbs so a constructed `BoundedVec (α × β) n` publishes the same
+`length ‖ leaf₀ ‖ …` frame codecs already pack for `(α,β)[]`. -/
+private partial def flattenListElementVals (env : Environment) (fuel : Nat) (e : Expr) :
+    Array Ops.Val :=
+  match fuel with
+  | 0 => #[]
+  | fuel' + 1 =>
+    let e := strip e
+    if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
+      let args := e.getAppArgs
+      flattenListElementVals env fuel' args[args.size - 2]! ++
+        flattenListElementVals env fuel' args[args.size - 1]!
+    else
+      match val env e with
+      | some v => #[v]
+      | none => #[]
+
 /-- `#v[a, b, …]` = `Vector.mk (List.toArray (a :: b :: []))`。 -/
 private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array Ops.Val :=
   match fuel with
@@ -2341,17 +2359,15 @@ private def collectListVals (env : Environment) (fuel : Nat) (e : Expr) : Array 
       if args.size ≥ 2 then
         let head := args[args.size - 2]!
         let tail := args[args.size - 1]!
-        match val env head with
-        | some v => #[v] ++ collectListVals env fuel' tail
-        | none => collectListVals env fuel' tail
+        let headVals := flattenListElementVals env 8 head
+        if headVals.isEmpty then collectListVals env fuel' tail
+        else headVals ++ collectListVals env fuel' tail
       else #[]
     else if isConstNamed e ``List.toArray || endsWith e ".toArray" then
       let args := e.getAppArgs
       if args.size ≥ 1 then collectListVals env fuel' args[args.size - 1]! else #[]
     else
-      match val env e with
-      | some v => #[v]
-      | none => #[]
+      flattenListElementVals env 8 e
 
 private def findListVals (env : Environment) (fuel : Nat) (e : Expr) : Option (Array Ops.Val) :=
   match fuel with
