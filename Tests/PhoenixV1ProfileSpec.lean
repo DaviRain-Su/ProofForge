@@ -980,6 +980,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
     | throwError "missing raw WithdrawFunds"
   let some depositFundsRaw := program.methods.find? (·.ixName == "depositFunds")
     | throwError "missing raw DepositFunds"
+  let some requestSeatRaw := program.methods.find? (·.ixName == "requestSeat")
+    | throwError "missing raw RequestSeat"
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
@@ -1075,10 +1077,16 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   match depositFundsRaw.entry with
   | .raw entry =>
       unless depositFundsRaw.kind == .get && entry.tag == 13 && entry.accountCount == 9 &&
-          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
-          entry.dataLen == 17 do
+          entry.programAccount == 0 && entry.optionWidths == #[8, 8] &&
+          entry.fixedParamCount == 0 && entry.minDataLen == 3 && entry.maxDataLen == 19 do
         throwError s!"wrong raw DepositFunds adapter: {repr entry}"
   | .generated => throwError "DepositFunds lost its raw adapter"
+  match requestSeatRaw.entry with
+  | .raw entry =>
+      unless requestSeatRaw.kind == .get && entry.tag == 14 && entry.accountCount == 6 &&
+          entry.programAccount == 0 && entry.paramWidths.isEmpty && entry.dataLen == 1 do
+        throwError s!"wrong raw RequestSeat adapter: {repr entry}"
+  | .generated => throwError "RequestSeat lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
@@ -1323,6 +1331,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 13 depositFundsRaw.ops &&
       opsHaveRawReduceFinish depositFundsRaw.ops do
     throwError "raw DepositFunds composition is incomplete"
+  unless opsHaveIntrinsic (· == .isWritableN 2) requestSeatRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 3) requestSeatRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 4) requestSeatRaw.ops &&
+      opsHaveIntrinsic (· == .isSignerN 3) requestSeatRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) requestSeatRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) requestSeatRaw.ops &&
+      opsHaveIntrinsic
+        (· == .checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2]) requestSeatRaw.ops &&
+      opsHaveInvoke requestSeatRaw.ops &&
+      opsHaveDataWordSetAt 4 0 1 1 requestSeatRaw.ops &&
+      opsHaveDataWordSetAt 4 9 1 1 requestSeatRaw.ops &&
+      opsHaveRbTreeKey4Insert 2 8310 8314 8315 8316 18 128 requestSeatRaw.ops do
+    throwError "raw RequestSeat composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
@@ -1617,9 +1638,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jgt r2, 141, raw_route_next_" &&
       asm.contains "jeq r1, 10, raw_route_match_" &&
       asm.contains "jeq r1, 11, raw_route_match_" &&
-      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jlt r2, 3, raw_route_next_" &&
+      asm.contains "jgt r2, 19, raw_route_next_" &&
       asm.contains "jeq r1, 12, raw_route_match_" &&
-      asm.contains "jne r2, 17, raw_route_next_" &&
       asm.contains "jeq r1, 13, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&

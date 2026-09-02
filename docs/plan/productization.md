@@ -253,6 +253,7 @@ my-program/
 - [x] `pf --version` 打印 CLI / Lean / sbpf / solc / wat2wasm 等 pin
 - [x] Release notes 附 fail-closed capability 摘要（`docs/plan/release-capability-summary.md`）
 - [x] 验收：干净目录用独立 `pf` 二进制 + `require … from git @ <commit>`（等同 tag 机制）构建模板并产出 `.so`（首次公开 `v*` Release 仍建议人工复核）
+- [ ] 首次公开 tag：按 [release-001](tasks/release-001.md) 切 `v0.0.1`（**不要**在未过烟测前 push tag）
 
 ### 明确不在本 PR
 

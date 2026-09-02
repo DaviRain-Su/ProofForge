@@ -12,7 +12,7 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-Official instruction coverage includes tags 4–12 plus a strict PostOnly/no-TIF/deposited-funds-only
+Official instruction coverage includes tags 4–14 plus a strict PostOnly/no-TIF/deposited-funds-only
 slice of tag 3, not the complete Phoenix instruction set.
 -/
 namespace Examples.Svm.PhoenixV1Profile
@@ -3034,14 +3034,32 @@ def depositAtomsAt (side atoms : UInt64) : UInt64 :=
   else
     ProofForge.Svm.Sdk.Token.transferWith baseDepositTokenAccounts atoms
 
+/-- Whole-lot floor of trader token-account atoms for DepositFunds `None` (deposit-all). -/
+def depositLotsFromTokenAt (side lotSize : UInt64) : UInt64 :=
+  if lotSize = 0 then
+    0
+  else
+    -- Account.Handle indexes include the executable program prefix (absolute metas);
+    -- quote trader token is 5, base trader token is 4, Token program is 8. CPI transfer
+    -- descriptors stay on the post-program relative region (sources 4/3, program 7).
+    let atoms :=
+      if side = 0 then
+        (ProofForge.Svm.Sdk.Token.AccountState.classic (.at 5) (.at 8)).amount
+      else
+        (ProofForge.Svm.Sdk.Token.AccountState.classic (.at 4) (.at 8)).amount
+    atoms / lotSize
+
 /--
-Official Phoenix `DepositFunds` tag 13 wire (exact-lots slice):
-`0d || quote_lots:u64 || base_lots:u64`. Zero lots skip that side. Reuses the shared nine-account
-classic Token context; trader signer transfers into vaults then free balances are credited.
-Missing trader or free-balance overflow fails closed. Zero/zero is a header-only sequence bump.
+Official Phoenix `DepositFunds` tag 13 wire (`Option<u64>` slice):
+`0d || Option<u64> || Option<u64>`. `None` deposits that side's entire trader token balance
+floored to whole lots; `Some(n)` keeps exact lots (`Some(0)` skips). Reuses the shared
+nine-account classic Token context; trader signer transfers into vaults then free balances are
+credited. Missing trader or free-balance overflow fails closed. Both-`None` with empty token
+balances (or both-`Some(0)`) is a header-only sequence bump.
 -/
-@[pf_entry, pf_svm_raw 13 9 0]
-def depositFunds (_s : State) (quoteLots baseLots : UInt64) :
+@[pf_entry, pf_svm_raw_borsh_options 13 9 0 0 [8, 8]]
+def depositFunds (_s : State) (quotePresent : UInt8) (quoteLots : UInt64)
+    (basePresent : UInt8) (baseLots : UInt64) :
     Except Error (State × UInt64) := do
   if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
@@ -3056,30 +3074,97 @@ def depositFunds (_s : State) (quoteLots baseLots : UInt64) :
       let marketSequence := layout.marketSequence
       let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 13 2 2 marketSequence
-      if quoteLots = 0 && baseLots = 0 then
+      let quoteLotSize := layout.quoteLotSize
+      let baseLotSize := layout.baseLotSize
+      let quoteLotsEff :=
+        if quotePresent = 0 then depositLotsFromTokenAt 0 quoteLotSize else quoteLots
+      let baseLotsEff :=
+        if basePresent = 0 then depositLotsFromTokenAt 1 baseLotSize else baseLots
+      if quoteLotsEff = 0 && baseLotsEff = 0 then
         let _ := finishMarketBatch
         .ok (_s, 0)
       else
-        let quoteLotSize := layout.quoteLotSize
-        let baseLotSize := layout.baseLotSize
-        let quoteDivisor := if quoteLots = 0 then 1 else quoteLots
-        let baseDivisor := if baseLots = 0 then 1 else baseLots
+        let quoteDivisor := if quoteLotsEff = 0 then 1 else quoteLotsEff
+        let baseDivisor := if baseLotsEff = 0 then 1 else baseLotsEff
         if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
-          let quoteAtoms := quoteLots * quoteLotSize
-          let baseAtoms := baseLots * baseLotSize
+          let quoteAtoms := quoteLotsEff * quoteLotSize
+          let baseAtoms := baseLotsEff * baseLotSize
           let _ := depositAtomsAt 0 quoteAtoms
           let _ := depositAtomsAt 1 baseAtoms
           let _ ←
-            if quoteLots = 0 then .ok 0
-            else creditFreeFunds512At layout traderIndex 0 quoteLots
+            if quoteLotsEff = 0 then .ok 0
+            else creditFreeFunds512At layout traderIndex 0 quoteLotsEff
           let _ ←
-            if baseLots = 0 then .ok 0
-            else creditFreeFunds512At layout traderIndex 1 baseLots
+            if baseLotsEff = 0 then .ok 0
+            else creditFreeFunds512At layout traderIndex 1 baseLotsEff
           let _ := finishMarketBatch
           .ok (_s, 0)
         else
           .error .overflow
 
+
+/--
+Authenticate the six-account official `RequestSeat` frame. Absolute indexes include the
+executable program prefix: log=1, market=2, payer=3, seat=4, System=5. PDA seed indexes are
+relative to the post-program region (log=0 … seat=3). Seat must still be empty so the System CPI
+owns allocation; market storage must already be the small 512-profile envelope.
+-/
+def requestSeatContextValid : UInt64 :=
+  if isWritable 0 ≠ 0 || isWritable 1 ≠ 0 || isWritable 2 = 0 ||
+      isWritable 3 = 0 || isWritable 4 = 0 || isWritable 5 ≠ 0 ||
+      isSigner 3 = 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 ||
+      checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2] ≠ 0 then
+    0
+  else if accDataLen 4 ≠ 0 || cancelAllStorageValid512At 2 = 0 then
+    0
+  else
+    1
+
+/-- Write the 128-byte Phoenix seat record after System create: discriminant, market key,
+trader key, and Approved status (word 9 = 1). Absolute seat account is 4. -/
+def initSeatRecordAt4 : UInt64 :=
+  let _ := accDataWordSetAt 4 0 1 1 0 seatDiscriminant
+  let _ := accDataWordSetAt 4 1 1 1 0 (accKeyWord 2 0)
+  let _ := accDataWordSetAt 4 2 1 1 0 (accKeyWord 2 1)
+  let _ := accDataWordSetAt 4 3 1 1 0 (accKeyWord 2 2)
+  let _ := accDataWordSetAt 4 4 1 1 0 (accKeyWord 2 3)
+  let _ := accDataWordSetAt 4 5 1 1 0 (accKeyWord 3 0)
+  let _ := accDataWordSetAt 4 6 1 1 0 (accKeyWord 3 1)
+  let _ := accDataWordSetAt 4 7 1 1 0 (accKeyWord 3 2)
+  let _ := accDataWordSetAt 4 8 1 1 0 (accKeyWord 3 3)
+  accDataWordSetAt 4 9 1 1 0 1
+
+/--
+Official Phoenix `RequestSeat` tag 14 wire: single discriminant byte `0e`. Creates the
+`["seat", market, trader]` PDA via System CPI, initializes the 128-byte Approved seat record, and
+registers the payer key into the market-resident 128-seat trader tree. Duplicate trader keys and
+pre-allocated seat accounts fail closed. No sequence bump / audit batch on this slice.
+-/
+@[pf_entry, pf_svm_raw 14 6 0]
+def requestSeat (_s : State) : Except Error (State × UInt64) := do
+  if requestSeatContextValid = 0 then
+    .error .overflow
+  else
+    let layout := Examples.Svm.PhoenixV1.small 2
+    let existing := layout.findTrader
+      (signerKey 3) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+    if existing ≠ 0 then
+      .error .overflow
+    else
+      let seeds := #[.ascii "seat", .accKey 1, .accKey 2]
+      let bump := findPdaSeeds seeds
+      let lamports := Sysvar.Rent.minimumBalance 128
+      let _ := invokeSignedSeeds 4
+        #[{ acc := 2, signer := true, writable := true },
+          { acc := 3, signer := true, writable := true }]
+        #[.u32le 0, .u64le lamports, .u64le 128, .programId]
+        seeds bump
+      let _ := initSeatRecordAt4
+      let _ := accDataRbTreeKey4Insert 2 8310 8314 8315 8316 18 128
+        (signerKey 3) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+      let size := accDataWord 2 8312
+      .ok (_s, size)
 
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
@@ -3107,6 +3192,7 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   cancelOneReleased512At
   finishCancelMultipleWithdraw512At
   addReleasedAcc512At
-  creditFreeFunds512At depositAtomsAt
+  creditFreeFunds512At depositAtomsAt depositLotsFromTokenAt
+  requestSeatContextValid initSeatRecordAt4
 
 end Examples.Svm.PhoenixV1Profile

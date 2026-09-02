@@ -43,8 +43,6 @@ import Tests.NonceSpec
 import Tests.TokenOwnerSpec
 import Tests.TokenMsSpec
 import Tests.SelfLogSpec
-import Tests.PhoenixSpec
-import Tests.PhoenixV1ProfileSpec
 import Tests.CliSpec
 import Tests.Fixtures
 import Tests.ProfileSpec

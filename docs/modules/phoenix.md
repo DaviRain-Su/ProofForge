@@ -140,8 +140,8 @@ IR/CFG 做 local CSE 或共享 block，而不是在 Phoenix 或 target emitter �
 - **已有（P4 产物资格）**：通用全图 shared-block、Loader-v3 exact size gate、本地 Surfpool
   真实 Loader-v3 transaction deployment；更深 value-tree CSE 是后续优化，不是部署资格缺口。
 - **部分支持（P0/P2/P3）**：Extract 资源/完整 commit 门和主要 Mollusk lifecycle/CPI/audit
-  矩阵已有；当前产物已通过全 51 SVM build、Phoenix-v1 profile 51/51、全 Mollusk
-  255/255 与 Anvil 12/12。跨四档逐样本只作 host reference↔source fold，不宣称完整
+  矩阵已有；当前产物已通过全 79 个 SVM Registry build、全 Mollusk
+  500/500 与 Anvil 44/44。跨四档逐样本只作 host reference↔source fold，不宣称完整
   chain refinement。
 - **部分支持（P5 fixed account profile + official tags 4–11）**：独立 profile 按 canonical
   owner、576-byte header、12 个 capacity tuple 与 exact length 选择静态 geometry；完整

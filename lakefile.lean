@@ -243,6 +243,24 @@ lean_lib Examples where
 
 lean_lib Tests
 
+/-- Phoenix application examples, split from the default build set so non-Phoenix
+work does not pay for the 3k-line official profile. Built by the phoenix CI lane. -/
+lean_lib PhoenixExamples where
+  roots := #[
+    `Examples.Svm.Phoenix,
+    `Examples.Svm.PhoenixV1Layout,
+    `Examples.Svm.PhoenixV1Profile
+  ]
+
+/-- Phoenix spec gates (PhoenixSpec / PhoenixV1ProfileSpec / PhoenixBuildSpec), split
+from `Tests` so the lean lane skips the ~15-minute profile-spec elaboration. -/
+lean_lib PhoenixTests where
+  roots := #[
+    `Tests.PhoenixBuildSpec,
+    `Tests.PhoenixSpec,
+    `Tests.PhoenixV1ProfileSpec
+  ]
+
 lean_exe pfAssemble where
   root := `ProofForge.Svm.AssembleMain
 

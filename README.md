@@ -205,11 +205,11 @@ Compiler boundary:
 | --- | --- |
 | Storage | 128-seat trader tree and two 512-node order books live in account bytes. Slots are one-based (`0` is sentinel). No heap `Map`, detached node, copied tree, or out-of-account pointer. |
 | Matching | Fixed-capacity Sokoban insert/remove, trader get-or-register deposit, bid/ask `ReduceOrderWithFreeFunds` (partial and full), collateral unlock, checked preflight. |
-| Official tags 4–7 | Tag 6/7 `FifoCancel` cancels in place (bids→asks, per-side FIFO) with owner filter, unlock, event index, and released-lot accumulator. Tag 6 then claim/withdraw quote→base. Tag 7 never enters Token CPI. |
+| Official tags 3–14 | Tag 3 `PlaceLimit` (strict subset: PostOnly, no TIF, deposited funds only). Tags 4/5 `ReduceOrder(WithFreeFunds)` partial and full. Tags 6/7 `FifoCancel` cancel in place (bids→asks, per-side FIFO) with owner filter, unlock, event index, and released-lot accumulator; tag 6 then claims/withdraws quote→base, tag 7 never enters Token CPI. Tags 8/9 `CancelUpTo` add side + optional tick/search/cancel caps over a bounded FIFO filter. Tags 10/11 `CancelMultipleOrdersById` (bounded id vectors). Tag 12 `WithdrawFunds`, tag 13 `DepositFunds` (`Option<u64>` all-variant), tag 14 `RequestSeat` (System CPI seat PDA + trader register). |
 | Audit | `BatchRecorder.begin/append/finish` uses the official SDK `0x300000000` / 32 KiB downward bump. 32 × 35-byte Reduce records flush before the 33rd. Empty finish still emits a 93-byte header-only batch. Heap addresses do not enter source or accounts. |
 | Cursors | PDA mint seeds read an authenticated `MarketHeader` byte slice. FIFO cursors keep a `(price, sequence)` scalar key and walk a bounded strict upper-bound from the account root. Deletes do not store node addresses or collect a heap `Vec`. |
 
-Next on the same component boundary: official tags 8/9 `CancelUpTo`. Details: [docs/modules/phoenix.md](docs/modules/phoenix.md).
+The official wire surface currently lands tags 3–14 on the same component boundary. Details: [docs/modules/phoenix.md](docs/modules/phoenix.md).
 
 ### EVM (Yul / ABI)
 

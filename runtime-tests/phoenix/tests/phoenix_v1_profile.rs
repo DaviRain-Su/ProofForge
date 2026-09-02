@@ -1,3 +1,4 @@
+#[path = "../../solana/tests/common/mod.rs"]
 mod common;
 
 use {
@@ -667,11 +668,23 @@ fn raw_withdraw_funds_data(quote_lots: Option<u64>, base_lots: Option<u64>) -> V
     data
 }
 
-fn raw_deposit_funds_data(quote_lots: u64, base_lots: u64) -> Vec<u8> {
+fn raw_deposit_funds_data(quote_lots: Option<u64>, base_lots: Option<u64>) -> Vec<u8> {
     let mut data = vec![13];
-    data.extend_from_slice(&quote_lots.to_le_bytes());
-    data.extend_from_slice(&base_lots.to_le_bytes());
-    assert_eq!(data.len(), 17);
+    match quote_lots {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    match base_lots {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    assert!((3..=19).contains(&data.len()));
     data
 }
 
@@ -720,6 +733,33 @@ fn raw_reduce_instruction(
             trader_meta,
         ],
     )
+}
+
+
+fn raw_request_seat_instruction(
+    program_account: Pubkey,
+    log_key: Pubkey,
+    market_key: Pubkey,
+    trader_key: Pubkey,
+    seat_key: Pubkey,
+    system_key: Pubkey,
+) -> Instruction {
+    Instruction::new_with_bytes(
+        PHOENIX_PROGRAM,
+        &[14u8],
+        vec![
+            AccountMeta::new_readonly(program_account, false),
+            AccountMeta::new_readonly(log_key, false),
+            AccountMeta::new(market_key, false),
+            AccountMeta::new(trader_key, true),
+            AccountMeta::new(seat_key, false),
+            AccountMeta::new_readonly(system_key, false),
+        ],
+    )
+}
+
+fn empty_seat_account() -> Account {
+    Account::new(0, 0, &Pubkey::default())
 }
 
 fn seat_account(market_key: Pubkey, trader_key: Pubkey) -> Account {
@@ -4784,8 +4824,6 @@ fn official_raw_withdraw_funds_zero_zero_is_header_only() {
 }
 
 #[test]
-
-#[test]
 fn official_raw_withdraw_funds_none_none_drains_all_free() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
     let market_key = Pubkey::new_unique();
@@ -4856,8 +4894,8 @@ fn official_raw_deposit_funds_credits_quote_and_base_free() {
     write_word(&mut market, 8323, 2);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     let (mollusk, _) = raw_reduce_harness();
-    let data = raw_deposit_funds_data(5, 3);
-    assert_eq!(data.len(), 17);
+    let data = raw_deposit_funds_data(Some(5), Some(3));
+    assert_eq!(data.len(), 19);
     let result = mollusk.process_and_validate_instruction(
         &fixture.instruction(&data),
         &fixture.accounts(),
@@ -4902,7 +4940,7 @@ fn official_raw_deposit_funds_zero_zero_is_header_only() {
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     let (mollusk, _) = raw_reduce_harness();
     let result = mollusk.process_and_validate_instruction(
-        &fixture.instruction(&raw_deposit_funds_data(0, 0)),
+        &fixture.instruction(&raw_deposit_funds_data(Some(0), Some(0))),
         &fixture.accounts(),
         &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
     );
@@ -4924,6 +4962,54 @@ fn official_raw_deposit_funds_zero_zero_is_header_only() {
 }
 
 #[test]
+
+
+
+fn official_raw_deposit_funds_none_none_deposits_all_token_lots() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 515);
+    write_word(&mut market, 8321, 4);
+    write_word(&mut market, 8323, 2);
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let data = raw_deposit_funds_data(None, None);
+    assert_eq!(data.len(), 3);
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&data),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 516);
+    // quote: floor(20/3)=6 lots; base: floor(10/2)=5 lots.
+    assert_eq!(read_word(&market, 8321), 10);
+    assert_eq!(read_word(&market, 8323), 7);
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        1_018
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_quote_key)),
+        2
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        1_010
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_base_key)),
+        0
+    );
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_reduce_header(&payloads[0], 13, 515, market_key, trader_key);
+}
+
+#[test]
 fn official_raw_deposit_funds_rejects_token_underflow_atomically() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
     let market_key = Pubkey::new_unique();
@@ -4935,7 +5021,7 @@ fn official_raw_deposit_funds_rejects_token_underflow_atomically() {
     write_word(&mut market, 8323, 0);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     // Trader quote starts at 20 atoms → 20/3 = 6 lots max; request 7 lots.
-    assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_deposit_funds_data(7, 0)));
+    assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_deposit_funds_data(Some(7), Some(0))));
 }
 
 #[test]
@@ -7872,3 +7958,95 @@ fn generic_trader_removal_rejects_missing_and_noncanonical_inputs_atomically() {
     );
     assert_eq!(after_malformed.data, malformed.data);
 }
+
+#[test]
+fn official_raw_request_seat_creates_approved_seat_and_registers_trader() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let (system_key, system_acc) = mollusk_svm::program::keyed_account_for_system_program();
+    let market = empty_small_market();
+    let trader = Account::new(10 * LAMPORTS_PER_SOL, 0, &Pubkey::default());
+    let instruction = raw_request_seat_instruction(
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        trader_key,
+        seat_key,
+        system_key,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (
+                PHOENIX_PROGRAM,
+                mollusk_svm::program::create_program_account_loader_v3(&PHOENIX_PROGRAM),
+            ),
+            (log_key, common::plain_account()),
+            (market_key, market),
+            (trader_key, trader),
+            (seat_key, empty_seat_account()),
+            (system_key, system_acc),
+        ],
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let seat = resulting_account(&result, &seat_key);
+    assert_eq!(seat.data.len(), 128);
+    assert_eq!(seat.owner, PHOENIX_PROGRAM);
+    assert_eq!(read_word(&seat, 0), SEAT_DISCRIMINANT);
+    assert_eq!(read_word(&seat, 9), 1);
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, 8312), 1);
+}
+
+#[test]
+fn official_raw_request_seat_rejects_duplicate_trader_and_preallocated_seat() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let (system_key, system_acc) = mollusk_svm::program::keyed_account_for_system_program();
+    let market = market_with_signer_trader();
+    let trader = Account::new(10 * LAMPORTS_PER_SOL, 0, &Pubkey::default());
+    let instruction = raw_request_seat_instruction(
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        trader_key,
+        seat_key,
+        system_key,
+    );
+    let program_acc = mollusk_svm::program::create_program_account_loader_v3(&PHOENIX_PROGRAM);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (PHOENIX_PROGRAM, program_acc.clone()),
+            (log_key, common::plain_account()),
+            (market_key, market),
+            (trader_key, trader.clone()),
+            (seat_key, empty_seat_account()),
+            (system_key, system_acc.clone()),
+        ],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (PHOENIX_PROGRAM, program_acc),
+            (log_key, common::plain_account()),
+            (market_key, empty_small_market()),
+            (trader_key, trader),
+            (seat_key, seat_account(market_key, trader_key)),
+            (system_key, system_acc),
+        ],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+}
+

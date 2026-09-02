@@ -1,0 +1,71 @@
+name: CI Phoenix (nightly)
+
+# Nightly / manual safety net for the dedicated Phoenix lane. Day-to-day PR coverage
+# lives in ci.yml's `phoenix` job (path-filtered): Lean + Mollusk + Phoenix Surfpool.
+# PhoenixV1Profile Surfpool (~10MB ELF / Loader-v3 writeback) is nightly-only — it
+# timed out at 45m on PR runners (#14).
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-phoenix-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phoenix:
+    name: Phoenix nightly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Cache Rust build products
+        uses: actions/cache@v4
+        with:
+          path: runtime-tests/phoenix/target
+          key: mollusk-phoenix-${{ runner.os }}-${{ hashFiles('runtime-tests/phoenix/Cargo.lock', 'runtime-tests/phoenix/Cargo.toml') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build Phoenix sources and spec gates
+        run: lake build PhoenixExamples PhoenixTests
+
+      - name: Build Phoenix programs
+        run: lake exe pf -- build --target svm --module Examples.Svm.Phoenix --module Examples.Svm.PhoenixV1Profile --out build/sbpf
+
+      - name: Run Phoenix Mollusk suite
+        run: cargo test --locked --manifest-path runtime-tests/phoenix/Cargo.toml
+
+      - name: Deploy Phoenix through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh Phoenix
+
+      # ~10MB ELF: Loader-v3 writeback regularly exceeds 45m on GitHub runners.
+      # Kept on nightly/manual only (not PR ci.yml).
+      - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
+        timeout-minutes: 90
+        run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
