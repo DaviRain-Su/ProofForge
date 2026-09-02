@@ -1,7 +1,7 @@
 ---
 id: svm-sem-105
 track: E-l3
-status: todo
+status: done
 plan: ../svm-work-plan.md
 rung: E∞-knife
 depends-on: [svm-sem-104]
