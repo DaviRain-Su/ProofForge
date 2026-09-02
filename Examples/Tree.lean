@@ -1297,6 +1297,9 @@ theorem rotateRight_root (s : State) (x : UInt64) {t : State} {y : UInt64}
 旋转/链接只改 `nodes`（与 `root`），不改 `size`/`bumpIndex`/`freeHead`。
 BST 有序性仍是后续切片；此处先把 p-004 的几何不变量闭包补全。 -/
 
+private theorem u64_le_of_lt {a b : UInt64} (h : a < b) : a ≤ b :=
+  (UInt64.le_iff_toNat_le).2 (Nat.le_of_lt ((UInt64.lt_iff_toNat_lt).1 h))
+
 /-- 单槽 `nodes.set` 保持几何 `wf`，新节点指针不超过原 `bumpIndex`。 -/
 private theorem wf_nodes_set (s : State) (idx : Nat) (n : Node) (hi : idx < 4) (hwf : wf s)
     (hl : n.left ≤ s.bumpIndex) (hr : n.right ≤ s.bumpIndex) (hp : n.parent ≤ s.bumpIndex)
@@ -1345,6 +1348,74 @@ theorem paintNode_wf (s : State) (address color : UInt64) (hwf : wf s)
   · exact hnode.2.1
   · exact hnode.2.2.1
   · exact hc
+
+private theorem wf_nodes_set2 (s : State) (idx₁ idx₂ : Nat) (n₁ n₂ : Node) (hi₁ : idx₁ < 4)
+    (hi₂ : idx₂ < 4) (hwf : wf s)
+    (h₁ : n₁.left ≤ s.bumpIndex ∧ n₁.right ≤ s.bumpIndex ∧ n₁.parent ≤ s.bumpIndex ∧ n₁.color ≤ 1)
+    (h₂ : n₂.left ≤ s.bumpIndex ∧ n₂.right ≤ s.bumpIndex ∧ n₂.parent ≤ s.bumpIndex ∧ n₂.color ≤ 1) :
+    wf { s with nodes := (s.nodes.set idx₁ n₁ hi₁).set idx₂ n₂ hi₂ } := by
+  rcases h₁ with ⟨hl₁, hr₁, hp₁, hc₁⟩
+  rcases h₂ with ⟨hl₂, hr₂, hp₂, hc₂⟩
+  exact wf_nodes_set ({ s with nodes := s.nodes.set idx₁ n₁ hi₁ }) idx₂ n₂ hi₂
+    (wf_nodes_set s idx₁ n₁ hi₁ hwf hl₁ hr₁ hp₁ hc₁) hl₂ hr₂ hp₂ hc₂
+
+/-- `linkLeft` 保持几何 `wf`（`child = 0` 时只清左子边）。 -/
+theorem linkLeft_wf (s : State) (parent child : UInt64) (hwf : wf s)
+    (hparent : 1 ≤ parent ∧ parent < s.bumpIndex)
+    (hchild : child = 0 ∨ (1 ≤ child ∧ child < s.bumpIndex)) :
+    wf (linkLeft s parent child) := by
+  unfold linkLeft
+  rcases hparent with ⟨hp0, hp1⟩
+  have hpn := hwf.2.2.2.2.2 parent hp0 hp1
+  rcases hchild with rfl | ⟨hc0, hc1⟩
+  · simp only [↓reduceIte]
+    apply wf_nodes_set s ((parent.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with left := 0 } (by omega) hwf
+    · exact by exact Nat.zero_le _
+    · exact hpn.2.1
+    · exact hpn.2.2.1
+    · exact hpn.2.2.2
+  · have hneq : child ≠ 0 := by
+      intro heq
+      subst heq
+      have hfalse : ¬ (1 : UInt64) ≤ 0 := by decide
+      exact hfalse hc0
+    simp only [if_neg hneq, ↓reduceIte]
+    apply wf_nodes_set2 s ((parent.toNat - 1) % 4) ((child.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with left := child }
+      { s.nodes[(child.toNat - 1) % 4]! with parent := parent } (by omega) (by omega) hwf
+    · exact ⟨u64_le_of_lt hc1, hpn.2.1, hpn.2.2.1, hpn.2.2.2⟩
+    · have hcn := hwf.2.2.2.2.2 child hc0 hc1
+      exact ⟨hcn.1, hcn.2.1, u64_le_of_lt hp1, hcn.2.2.2⟩
+
+/-- `linkRight` 保持几何 `wf`（`child = 0` 时只清右子边）。 -/
+theorem linkRight_wf (s : State) (parent child : UInt64) (hwf : wf s)
+    (hparent : 1 ≤ parent ∧ parent < s.bumpIndex)
+    (hchild : child = 0 ∨ (1 ≤ child ∧ child < s.bumpIndex)) :
+    wf (linkRight s parent child) := by
+  unfold linkRight
+  rcases hparent with ⟨hp0, hp1⟩
+  have hpn := hwf.2.2.2.2.2 parent hp0 hp1
+  rcases hchild with rfl | ⟨hc0, hc1⟩
+  · simp only [↓reduceIte]
+    apply wf_nodes_set s ((parent.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with right := 0 } (by omega) hwf
+    · exact hpn.1
+    · exact by exact Nat.zero_le _
+    · exact hpn.2.2.1
+    · exact hpn.2.2.2
+  · have hneq : child ≠ 0 := by
+      intro heq
+      subst heq
+      have hfalse : ¬ (1 : UInt64) ≤ 0 := by decide
+      exact hfalse hc0
+    simp only [if_neg hneq, ↓reduceIte]
+    apply wf_nodes_set2 s ((parent.toNat - 1) % 4) ((child.toNat - 1) % 4)
+      { s.nodes[(parent.toNat - 1) % 4]! with right := child }
+      { s.nodes[(child.toNat - 1) % 4]! with parent := parent } (by omega) (by omega) hwf
+    · exact ⟨hpn.1, u64_le_of_lt hc1, hpn.2.2.1, hpn.2.2.2⟩
+    · have hcn := hwf.2.2.2.2.2 child hc0 hc1
+      exact ⟨hcn.1, hcn.2.1, u64_le_of_lt hp1, hcn.2.2.2⟩
 
 end Proofs
 
