@@ -46,10 +46,26 @@ def callbackSuccess (state : State) (callbackValue : UInt64) : Except Error (Sta
 @[pf_inline] private def promiseRoot : Promises.PromiseHandle :=
   { id := 0, depth := 0, fanIn := 0 }
 
+/-- Fan-in 5 root for `and5Returned` entry bodies (`defaultMaxFanIn` is 4). -/
+@[pf_inline] private def promiseRoot5 : Promises.PromiseHandle 5 :=
+  { id := 0, depth := 0, fanIn := 0 }
+
 /-- Pure child used by join fixtures to observe echoed UInt64 results. -/
 @[pf_entry]
 def echo (_state : State) (value : UInt64) : UInt64 :=
   value
+
+/-- Same DAG as `NearPromise.sendAnd5Success`; uses `promiseRoot5` for fan-in 5. -/
+@[pf_entry]
+def sendHandleAnd5 (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot5.and5Returned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 87) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value, depth := 1 }, value)
 
 /-- Same DAG as `NearPromise.sendAnd4Success`; persisted depth models N13 handle metadata. -/
 @[pf_entry]
@@ -127,5 +143,17 @@ def handleAnd3Smoke : Bool :=
   joined.fanInOk && joined.fanIn.toNat == 3
 
 #guard handleAnd3Smoke
+
+def handleAnd5Smoke : Bool :=
+  let joined := promiseRoot5.and5Returned
+    receiver "echo" (borshUInt64 1) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 2) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 3) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 4) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 5) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 0) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  joined.fanInOk && joined.fanIn.toNat == 5
+
+#guard handleAnd5Smoke
 
 end Examples.NearPromiseHandle

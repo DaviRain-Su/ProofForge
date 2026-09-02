@@ -20,6 +20,8 @@ elab "#pf_guard_near_promise_handle" : command => do
     throwError "NEAR PromiseHandle fixture missing sendHandleAnd3 entry"
   unless program.entries.any (·.ixName == "sendHandleAnd4") do
     throwError "NEAR PromiseHandle fixture missing sendHandleAnd4 entry"
+  unless program.entries.any (·.ixName == "sendHandleAnd5") do
+    throwError "NEAR PromiseHandle fixture missing sendHandleAnd5 entry"
   let sendHandleThen ← match program.entries.find? (·.ixName == "sendHandleThen") with
     | some method => pure method
     | none => throwError "missing sendHandleThen entry"
@@ -46,6 +48,15 @@ elab "#pf_guard_near_promise_handle" : command => do
   unless and4Wat.contains "(call $pf_promise_and (local.get " &&
       and4Wat.contains "(i64.const 4)))" do
     throwError "PromiseHandle 4-way join lost promise_and count=4"
+  let sendHandleAnd5 ← match program.entries.find? (·.ixName == "sendHandleAnd5") with
+    | some method => pure method
+    | none => throwError "missing sendHandleAnd5 entry"
+  let and5Wat ← match ProofForge.Wasm.Near.Emit.emit { program with entries := #[sendHandleAnd5] } with
+    | .ok wat => pure wat
+    | .error reason => throwError reason
+  unless and5Wat.contains "(call $pf_promise_and (local.get " &&
+      and5Wat.contains "(i64.const 5)))" do
+    throwError "PromiseHandle 5-way join lost promise_and count=5"
   logInfo m!"proofforge-near-promise-handle: digest = {ProofForge.Wasm.Near.IR.digestHex program}"
 
 #pf_guard_near_promise_handle
@@ -53,3 +64,4 @@ elab "#pf_guard_near_promise_handle" : command => do
 #guard ProofForge.Wasm.Near.Sdk.Promises.defaultMaxFanIn == 4
 #guard ProofForge.Wasm.Near.Sdk.Promises.maxPromiseDepth == 8
 #guard Examples.NearPromiseHandle.handleDepthSmoke
+#guard Examples.NearPromiseHandle.handleAnd5Smoke

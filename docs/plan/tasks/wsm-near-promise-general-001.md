@@ -72,8 +72,8 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
 
 - Generic compile-time `andN` beyond the fixed opcode ladder (N>8 needs new ops)
 - ~~Extract of handle-typed entry bodies~~ — **landed** (`PromiseHandle.thenReturned` /
-  `and3Returned`..`and8Returned` + Extract capacity-offset decode; `sendHandleAnd4` gate in
-  `Tests/NearPromiseHandleSpec`)
+  `and3Returned`..`and8Returned` + Extract capacity-offset decode; `sendHandleThen` /
+  `sendHandleAnd3` / `sendHandleAnd4` / `sendHandleAnd5` gates in `Tests/NearPromiseHandleSpec`)
 
 ## Deliverables
 
