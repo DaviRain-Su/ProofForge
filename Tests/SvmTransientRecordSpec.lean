@@ -228,7 +228,7 @@ elab "#pf_guard_transient_record" : command => do
     match ProofForge.Svm.Emit.emitAsm tapeProgram with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless tapeAsm.contains "ldxdw r9, [r10 - 2344]" && tapeAsm.contains "ldxdw r2, [r10 - 2352]" &&
+  unless tapeAsm.contains "ldxdw r9, [r10 - 2536]" && tapeAsm.contains "ldxdw r2, [r10 - 2544]" &&
       tapeAsm.contains "lddw r0, 0x1201" && tapeAsm.contains "lddw r0, 0x1202" &&
       tapeAsm.contains "lddw r0, 0x1203" do
     throwError "alternate-slot record metadata cells or failure vocabulary are missing"

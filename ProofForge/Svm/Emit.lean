@@ -10,7 +10,7 @@ def overflowCode : String := "0x1001"
 
 /-- Heterogeneous PDA discovery may need 480 seed bytes, 15 descriptors, and a 32-byte result.
 It reuses the bottom of the frame with sysvar scratch, whose contents are never live across the
-PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2048`. -/
+PDA syscall, and stays disjoint from the CPI scratch rooted at `r10-2240`. -/
 private def pdaSeedsScratch : Nat := 4096
 /-- Loop control must not overlap expression temporaries, scalar locals, or walked-account
 headers. Bounded components publish one shared fixed-scratch boundary. -/
@@ -101,9 +101,9 @@ private def originalDataLenStack (accountCount account : Nat) : Nat :=
   headerStack (accountCount + 1 + account)
 
 /-- Scalar locals start after both the static account-header prefix and component scratch.
-The entire bank stays below offset 1024; CPI owns offsets 1024..2048 and deep PDA/sysvar/component
-scratch owns 2048..4096. This single frame contract prevents composed target effects from
-clobbering source locals without giving individual intrinsics ad-hoc spill rules. -/
+The entire bank stays below offset 1216; CPI owns offsets 1216..2240 and deep PDA/sysvar/component
+scratch owns 2240..4096. The seam was moved from 1152→1216 so nested CancelMultiple withdraw
+folds through capacity 8 retain join locals under Solana's 9-account frame without overlapping CPI. -/
 private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
   let walkEnd :=
     if IR.requiresOriginalAccountDataLengths p then
@@ -113,7 +113,7 @@ private def scalarLocalStackOff (p : IR.Program) (i : Nat) : Option Nat :=
   let base := max (IR.componentStackScratchEnd p + 8)
     walkEnd
   let offset := base + i * 8
-  if offset < 1024 then some offset else none
+  if offset < Scratch.scalarBank.baseStackOffset then some offset else none
 
 private def emitWalkAccounts (n : Nat) (captureOriginal : Bool) (tag err : String) : String :=
   Id.run do
@@ -244,12 +244,74 @@ walk_full_{i}_{tag}:
 "
     out ++ s!"  stxdw [r10 - {headerStack n}], r8\n"
 
+/--
+Combined account-view + direct-mutation walk (`svm-rt-003`). The static prefix `0..n-1` uses the
+same Loader-v3 alias resolution as `emitWalkAccountsAliasing`. The variable remaining accounts keep
+the runtime-count traversal of `emitWalkAccountsVariable`, but a non-`0xff` entry may resolve to a
+canonical header already stored in the static prefix (`prior_index < n`). Aliases that point into
+the unresolved variable region, or any malformed duplicate marker, exit `Custom(1)`. View-only
+programs keep the strict variable walk; mutation-only programs keep the static aliasing walk.
+-/
+private def emitWalkAccountsVariableAliasing (n : Nat) (captureOriginal : Bool)
+    (tag err : String) : String :=
+  let static := emitWalkAccountsAliasing n captureOriginal tag err
+  let loop := s!"view_alias_walk_{tag}"
+  let align := s!"view_alias_al_{tag}"
+  let full := s!"view_alias_full_{tag}"
+  let aliasOk := s!"view_alias_ok_{tag}"
+  let finished := s!"view_alias_done_{tag}"
+  static ++ s!"\
+  ldxdw r9, [r6 + NUM_ACCOUNTS]
+  lddw r1, {Ops.maxTxAccountLocks}
+  jgt r9, r1, {err}
+  jlt r9, {n}, {err}
+  sub64 r9, {n}
+{loop}:
+  jeq r9, 0, {finished}
+  ldxb r1, [r8 + 0]
+  jeq r1, 0xff, {full}
+  lddw r2, {n}
+  jlt r1, r2, {aliasOk}
+  ja {err}
+{aliasOk}:
+  ldxdw r2, [r8 + 0]
+  jne r2, r1, {err}
+  add64 r8, 8
+  sub64 r9, 1
+  ja {loop}
+{full}:
+  ldxdw r4, [r8 + 80]
+  mov64 r5, r8
+  add64 r5, 88
+  add64 r5, r4
+  add64 r5, MAX_PERMITTED_DATA_INCREASE
+  mov64 r1, r4
+  and64 r1, 7
+  jeq r1, 0, {align}
+  lddw r3, 8
+  sub64 r3, r1
+  add64 r5, r3
+{align}:
+  ldxdw r1, [r5 + 0]
+  add64 r5, 8
+  mov64 r8, r5
+  sub64 r9, 1
+  ja {loop}
+{finished}:
+  stxdw [r10 - {headerStack n}], r8
+"
+
 /-- Walk selection: account-view programs traverse the runtime account count; components declaring
-the canonical-alias capability resolve duplicates in the static prefix; every other existing
-program keeps the byte-stable unrolled strict walk. -/
+the canonical-alias capability resolve duplicates in the static prefix; when both are present the
+combined variable+aliasing walk applies; every other existing program keeps the byte-stable
+unrolled strict walk. -/
 private def emitWalkAccountsFor (p : IR.Program) (n : Nat) (tag err : String) : String :=
   let captureOriginal := IR.requiresOriginalAccountDataLengths p
-  if IR.usesAccountView p then emitWalkAccountsVariable n captureOriginal tag err
+  if IR.usesAccountView p then
+    if IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p then
+      emitWalkAccountsVariableAliasing n captureOriginal tag err
+    else
+      emitWalkAccountsVariable n captureOriginal tag err
   else if IR.requiresCanonicalAccountAliases p then
     emitWalkAccountsAliasing n captureOriginal tag err
   else emitWalkAccounts n captureOriginal tag err
@@ -649,7 +711,7 @@ ois_done_{scope}_{acc}_{stackOff}:
 
 /--
 `sol_try_find_program_address`：一条 ASCII 种子 + 当前 program id。
-scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2048` 和 sysvar 的 `r10-3072`。
+scratch 用 `r8` 基址 `r10-2800`，避开 invoke 的 `r9=r10-2240` 和 sysvar 的 `r10-3072`。
 CPI 程序的 program id 在 walk 出的 ix 长度字之后。
 -/
 private def emitLoadFindPda (p : IR.Program) (seed : String) (stackOff : Nat)
@@ -722,14 +784,15 @@ private def emitLoadFindPdaSeeds (p : IR.Program) (seeds : Array Ops.PdaSeed)
     match seeds[i]! with
     | .ascii value =>
         let start := byteOff
-        for c in value.toList do
-          bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r8 + {byteOff}], r1\n"
+        let utf8 := value.toUTF8
+        for j in [0:utf8.size] do
+          bytes := bytes ++ s!"  lddw r1, {(utf8.get! j).toNat}\n  stxb [r8 + {byteOff}], r1\n"
           byteOff := byteOff + 1
         descriptors := descriptors ++ s!"\
   mov64 r1, r8
   add64 r1, {start}
   stxdw [r8 + {descriptor}], r1
-  lddw r1, {value.length}
+  lddw r1, {utf8.size}
   stxdw [r8 + {descriptor + 8}], r1
 "
     | .stateKey =>
@@ -1035,7 +1098,9 @@ private partial def loadVal (p : IR.Program) (v : Ops.Val) (stackOff : Nat) (non
         loadOwnerIsSelf := emitLoadOwnerIsSelf p
         headerStack
         originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
-        accountCount := IR.cpiAccountCount p }
+        accountCount := IR.cpiAccountCount p
+        useWalkedHeaders :=
+          IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p }
       query operands stackOff nonce scope
   | .ext (.accLamportsN acc) #[] =>
     .ok (emitLoadAccN "lamports" acc stackOff)
@@ -1300,12 +1365,14 @@ private def emitCpiData (p : IR.Program) (scope : String) (base : Nat)
       body := body ++ s!"  lddw r1, {tag.toNat}\n  stxb [r9 + {base + off}], r1\n"
       off := off + 1
     | .ascii s =>
-      -- 逐字节；本切片字面量很短。
+      -- Emit UTF-8 bytes so multi-byte Memo payloads match the Utf8 facade contract.
+      -- ASCII-only strings are unchanged (one byte per scalar).
+      let utf8 := s.toUTF8
       let mut i : Nat := 0
-      for c in s.toList do
-        body := body ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {base + off + i}], r1\n"
+      for _ in [0:utf8.size] do
+        body := body ++ s!"  lddw r1, {(utf8.get! i).toNat}\n  stxb [r9 + {base + off + i}], r1\n"
         i := i + 1
-      off := off + s.length
+      off := off + utf8.size
     | .programId =>
       let copy :=
         if IR.usesWalk p then
@@ -1386,10 +1453,7 @@ private def emitCpiAccountDataChecks (label : String) (metas : Array Ops.CpiMeta
   jne r1, {expected}, {err}
 "
       | none, some policy =>
-        match ProofForge.Svm.Cpi.TokenTlv.planFor policy with
-        | .error reason => throw reason
-        | .ok plan =>
-          ProofForge.Svm.Cpi.TokenTlv.Emit.emitPreflight { headerStack } label physical plan
+        ProofForge.Svm.Cpi.TokenTlv.Emit.emitPreflight { headerStack } label physical policy
       | _, _ =>
         throw "extract/unsupported: CPI meta has conflicting account-data policies"
     return "  ; validate typed CPI account-data policies\n" ++ String.join parts ++ s!"
@@ -1409,7 +1473,7 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (plan : Scratch.Pl
       throw "extract/unsupported: invoke signer seeds cannot be empty"
     let byteCount := seeds.foldl (init := 0) fun total seed =>
       match seed with
-      | .ascii value => total + value.length
+      | .ascii value => total + value.toUTF8.size
       | _ => total
     -- The typed tail establishes copied-byte span, bump alignment, entry count, group offset,
     -- and bank capacity fail-closed; the emitter only writes the planned regions.
@@ -1427,14 +1491,15 @@ private def emitSignerSeeds (p : IR.Program) (scope : String) (plan : Scratch.Pl
       match seeds[i]! with
       | .ascii value =>
           let start := byteOff
-          for c in value.toList do
-            bytes := bytes ++ s!"  lddw r1, {c.toNat}\n  stxb [r9 + {byteOff}], r1\n"
+          let utf8 := value.toUTF8
+          for j in [0:utf8.size] do
+            bytes := bytes ++ s!"  lddw r1, {(utf8.get! j).toNat}\n  stxb [r9 + {byteOff}], r1\n"
             byteOff := byteOff + 1
           entries := entries ++ s!"\
   mov64 r1, r9
   add64 r1, {start}
   stxdw [r9 + {seedsArr + 16 * i}], r1
-  lddw r1, {value.length}
+  lddw r1, {utf8.size}
   stxdw [r9 + {seedsArr + 16 * i + 8}], r1
 "
       | .stateKey =>
@@ -4250,7 +4315,9 @@ private partial def emitOps (p : IR.Program) (label errorLabel : String)
           loadOwnerIsSelf := emitLoadOwnerIsSelf p
           headerStack
           originalDataLenStack := originalDataLenStack (IR.cpiAccountCount p)
-          accountCount := IR.cpiAccountCount p }
+          accountCount := IR.cpiAccountCount p
+          useWalkedHeaders :=
+            IR.requiresCanonicalAccountAliases p || IR.requiresOriginalAccountDataLengths p }
         { accountStorage := accountStorageMutationBackend p }
         storageLabel call)
     | .errorNamed name =>

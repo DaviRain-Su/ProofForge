@@ -647,9 +647,9 @@ private def fifoEventCountAssembly :=
   match fifoCancelBeginAssembly with
   | .ok assembly =>
       assembly.contains "open bounded FIFO cancellation accumulator" &&
-        assembly.contains "stxdw [r10 - 2056], r1" &&
-        assembly.contains "stxdw [r10 - 2072], r1" &&
-        assembly.contains "stxdw [r10 - 2184], r1"
+        assembly.contains "stxdw [r10 - 2248], r1" &&
+        assembly.contains "stxdw [r10 - 2264], r1" &&
+        assembly.contains "stxdw [r10 - 2376], r1"
   | .error _ => false
 #guard
   match fifoCancelSideAssembly with
@@ -658,18 +658,18 @@ private def fifoEventCountAssembly :=
           "bounded key-based acc1 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
         assembly.contains "; validated-remove-hook" &&
         !assembly.contains "; ordinary-remove-hook" && !assembly.contains "_preflight" &&
-        assembly.contains "ldxdw r1, [r10 - 2056]" &&
+        assembly.contains "ldxdw r1, [r10 - 2248]" &&
         assembly.contains "jge r1, 65535, fifo_cancel_failure_fifo_cancel_side_test" &&
         assembly.contains "dynamic signed self CPI account=1 data<=1246"
   | .error _ => false
 #guard
   match fifoCancelUpToAssembly with
   | .ok assembly =>
-      assembly.contains "stxdw [r10 - 2264], r1" &&
-        assembly.contains "stxdw [r10 - 2272], r1" &&
-        assembly.contains "stxdw [r10 - 2280], r1" &&
-        assembly.contains "ldxdw r1, [r10 - 2288]" &&
-        assembly.contains "ldxdw r1, [r10 - 2296]" &&
+      assembly.contains "stxdw [r10 - 2456], r1" &&
+        assembly.contains "stxdw [r10 - 2464], r1" &&
+        assembly.contains "stxdw [r10 - 2472], r1" &&
+        assembly.contains "ldxdw r1, [r10 - 2304]" &&
+        assembly.contains "ldxdw r2, [r10 - 2456]" &&
         assembly.contains "jle r1, r2, fifo_cancel_price_matched_fifo_cancel_up_to_test" &&
         assembly.contains "; claim exactly this order's released collateral" &&
         assembly.contains "; validated-remove-hook" &&
@@ -679,7 +679,7 @@ private def fifoEventCountAssembly :=
   match fifoEventCountAssembly with
   | .ok assembly =>
       assembly.contains "fifo_cancel_active_fifo_event_count_test" &&
-        assembly.contains "ldxdw r1, [r10 - 2056]" &&
+        assembly.contains "ldxdw r1, [r10 - 2248]" &&
         assembly.contains "stxdw [r10 - 160], r1"
   | .error _ => false
 

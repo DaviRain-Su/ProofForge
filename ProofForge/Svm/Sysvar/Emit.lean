@@ -56,6 +56,8 @@ def emitQuery (query : Query) (operands : Array Ops.Val) (stackOff : Nat)
     (scope : String) : Except String String :=
   match query, operands with
   | .clock .slot, #[] => .ok (emitClockField "slot" 0 stackOff scope)
+  | .clock .epochStartTimestamp, #[] =>
+      .ok (emitClockField "epochStartTimestamp" 8 stackOff scope)
   | .clock .epoch, #[] => .ok (emitClockField "epoch" 16 stackOff scope)
   | .clock .leaderScheduleEpoch, #[] =>
       .ok (emitClockField "leaderScheduleEpoch" 24 stackOff scope)

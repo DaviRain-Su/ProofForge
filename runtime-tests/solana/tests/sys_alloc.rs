@@ -171,3 +171,30 @@ fn assign_missing_signer_fails() {
         ],
     );
 }
+
+/// `svm-sdk-002`: System.assign must not silently re-point a foreign-owned account. Owner
+/// reassignment of live program-owned accounts stays permanently unavailable; inbound assign is
+/// system-owned → current program only.
+#[test]
+fn assign_foreign_owned_fails_closed() {
+    let (program_id, mollusk) = harness();
+    let acc0 = Pubkey::new_unique();
+    let foreign = Pubkey::new_unique();
+    let (system, system_acc) = system_program_keyed();
+    let ix = build_ix(program_id, "assign", acc0, system, true);
+    let foreign_owned = Account::new(BASE_LAMPORTS, 0, &foreign);
+    mollusk.process_and_validate_instruction(
+        &ix,
+        &[
+            (common::dummy_state_key(&program_id), common::dummy_state_account(&program_id)),
+            (acc0, foreign_owned),
+            (system, system_acc),
+        ],
+        &[
+            Check::instruction_err(
+                solana_instruction::error::InstructionError::ModifiedProgramId,
+            ),
+            Check::account(&acc0).owner(&foreign).lamports(BASE_LAMPORTS).build(),
+        ],
+    );
+}

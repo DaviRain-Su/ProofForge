@@ -211,7 +211,9 @@ private def resolveBorshProjection (plan : EntryAdapter.BorshPlan) (name : Strin
     Except String (Nat × Nat) := do
   let mut found : Array (Nat × Nat) := #[]
   for projection in plan.projections do
-    if name == projection.sourceName && projection.partCount == 1 then
+    -- Exact name matches the projection base, including wide multi-limb scalars
+    -- (`partCount > 1`). Callers add the limb offset themselves.
+    if name == projection.sourceName then
       found := found.push (projection.localStart, 0)
     else if !projection.sourceName.isEmpty &&
         name.startsWith (projection.sourceName ++ "_") then
@@ -253,16 +255,23 @@ private partial def rewriteRawArg (schemas : Array Core.Codec.Schema)
         | _ => none
       let some capacity := capacity?
         | throw "extract/unsupported: dynamic Borsh reads require scalar bounded values"
+      let limbCount :=
+        match schema with
+        | .boundedArray _ (.scalar type) =>
+            ((Core.Codec.Scalar.byteWidth type) + 7) / 8
+        | _ => 1
       unless entry.usesSchemaBorsh && name == "values" &&
-          (length == 0 || length == capacity) && elementOffset == 0 do
+          (length == 0 || length == capacity) && elementOffset < limbCount do
         throw "extract/unsupported: bounded index projection does not match its Borsh plan"
       let index ← rewriteRawArg schemas entry base index
       let mut selected : Ops.Val := .lit 0
       for i in [0:capacity] do
         let (localStart, part) ← rawAggregateProjection schemas entry param s!"values_{i}"
         unless part == 0 do
-          throw "extract/unsupported: dynamic Borsh reads currently require one-limb elements"
-        selected := .select .eq index (.lit (UInt64.ofNat i)) (.local (base + localStart)) selected
+          throw "extract/unsupported: bounded index base projection must start at limb 0"
+        selected :=
+          .select .eq index (.lit (UInt64.ofNat i))
+            (.local (base + localStart + elementOffset)) selected
       return selected
   | .arg index => do
       unless index < entry.logicalParamCount do
@@ -966,6 +975,7 @@ private partial def opsCanon (ops : Array Op) : String :=
             match entry.accountData with
             | some (.token2022Base .mint) => "~t22mint"
             | some (.token2022Base .account) => "~t22acct"
+            | some .token2022MintClose => "~t22mintclose"
             | none => ""
           s!"{entry.acc}{if entry.signer then "s" else ""}{if entry.writable then "w" else ""}{dataLen}{policy}"
         let wordCanon (word : Ops.CpiWord Ops.Val) : String :=

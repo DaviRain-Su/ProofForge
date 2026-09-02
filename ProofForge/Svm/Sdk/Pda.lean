@@ -70,6 +70,13 @@ theorem wf_bounded (seed : String) (h : wellFormed seed = true) :
   simp at h
   exact h.1.2
 
+/-- wf → every seed character is seven-bit ASCII. -/
+theorem wf_ascii (seed : String) (h : wellFormed seed = true) :
+    seed.toList.all (·.toNat < 128) = true := by
+  unfold wellFormed ProofForge.Svm.Seed.Ascii.wellFormed at h
+  simp at h
+  simpa using h.2
+
 end Proofs
 
 end ProofForge.Svm.Sdk.Pda.Ascii

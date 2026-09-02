@@ -12,6 +12,7 @@ namespace ProofForge.Svm.Sysvar
 
 inductive ClockField where
   | slot
+  | epochStartTimestamp
   | epoch
   | leaderScheduleEpoch
   | unixTimestamp
@@ -44,6 +45,7 @@ def Query.minAccounts (measure : V → Nat) (operands : Array V) (_query : Query
 
 private def Query.name : Query → String
   | .clock .slot => "clk"
+  | .clock .epochStartTimestamp => "clock.epochStartTimestamp"
   | .clock .epoch => "epo"
   | .clock .leaderScheduleEpoch => "clock.leaderScheduleEpoch"
   | .clock .unixTimestamp => "unix"

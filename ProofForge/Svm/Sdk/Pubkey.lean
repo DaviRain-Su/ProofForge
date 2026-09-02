@@ -90,11 +90,49 @@ theorem pubkey_equals_symm (lhs rhs : Pubkey) (h : Pubkey.equals lhs rhs = true)
       obtain ⟨⟨⟨h0, h1⟩, h2⟩, h3⟩ := h
       exact ⟨⟨⟨h0.symm, h1.symm⟩, h2.symm⟩, h3.symm⟩
 
+/-- **Pubkey.equals 的传递性**。 -/
+theorem pubkey_equals_trans (lhs mid rhs : Pubkey)
+    (hlm : Pubkey.equals lhs mid = true) (hmr : Pubkey.equals mid rhs = true) :
+    Pubkey.equals lhs rhs = true := by
+  cases lhs with
+  | mk l0 l1 l2 l3 =>
+    cases mid with
+    | mk m0 m1 m2 m3 =>
+      cases rhs with
+      | mk r0 r1 r2 r3 =>
+        simp only [Pubkey.equals, Bool.and_eq_true, decide_eq_true_iff] at hlm hmr ⊢
+        obtain ⟨⟨⟨hlm0, hlm1⟩, hlm2⟩, hlm3⟩ := hlm
+        obtain ⟨⟨⟨hmr0, hmr1⟩, hmr2⟩, hmr3⟩ := hmr
+        exact
+          ⟨⟨⟨hlm0.trans hmr0, hlm1.trans hmr1⟩, hlm2.trans hmr2⟩,
+            hlm3.trans hmr3⟩
+
 /-- **Pubkey.notEquals 与 equals 互补**：不等恰为相等的否定。 -/
 theorem pubkey_notEquals_iff (lhs rhs : Pubkey) :
     Pubkey.notEquals lhs rhs = true ↔ Pubkey.equals lhs rhs = false := by
   unfold Pubkey.notEquals
   cases Pubkey.equals lhs rhs <;> simp
+
+/-- `matchesKey` delegates to equality with the account's projected key. -/
+theorem pubkey_matchesKey_eq (key : Pubkey) (account : Account.Handle) :
+    key.matchesKey account = account.key.equals key := rfl
+
+/-- `matchesOwner` delegates to equality with the account's projected owner. -/
+theorem pubkey_matchesOwner_eq (key : Pubkey) (account : Account.Handle) :
+    key.matchesOwner account = account.owner.equals key := rfl
+
+/-- `sameKey` is exactly equality of the two projected account keys. -/
+theorem account_sameKey_eq (lhs rhs : Account.Handle) :
+    lhs.sameKey rhs = lhs.key.equals rhs.key := rfl
+
+/-- Account-key equality inherits symmetry from complete `Pubkey` equality. -/
+theorem account_sameKey_symm (lhs rhs : Account.Handle) (h : lhs.sameKey rhs = true) :
+    rhs.sameKey lhs = true := by
+  exact pubkey_equals_symm lhs.key rhs.key h
+
+/-- `ownerIsKeyOf` delegates to complete owner/key equality. -/
+theorem account_ownerIsKeyOf_eq (account program : Account.Handle) :
+    account.ownerIsKeyOf program = account.owner.equals program.key := rfl
 
 end Proofs
 

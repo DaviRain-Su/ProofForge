@@ -1,7 +1,7 @@
 ---
 id: svm-sem-002
 track: E-l3
-status: todo
+status: done
 plan: ../svm-work-plan.md
 rung: E2
 depends-on: [svm-sem-001]
@@ -22,9 +22,17 @@ depends-on: [svm-sem-001]
 
 ## 交付
 
-- golden / 脚本 / CI 接线说明  
-- 与 `SemanticsBridge.lean` 的入口文档  
+1. `Tests/SemanticsSpec.lean` — Counter + Window step goldens；named Golden parse sweep
+2. `docs/modules/semantics-bridge.md` — SemanticsBridge 入口
+3. `scripts/svm_semantics_golden.sh` — CI/local one-liner（`lake build Tests.SemanticsSpec`）
+
+## Evidence
+
+- Counter: parse band + `initialize→increment→get` + unknown-disc fail-closed
+- Window: parse band + `initialize→setTail→getHead` (head unchanged)
+- `firstGoldenParseFailure` carries the program name on emit→parse failures
+- Lean lane already builds `Tests.SemanticsSpec` (`svm-eng-001`)
 
 ## 非目标
 
-证明每个 golden 的 kernel correspondence（那是 E3+）；本片先稳住工程差分门。
+证明每个 golden 的 kernel correspondence（E3+）；本片只稳住工程差分门。

@@ -244,6 +244,105 @@ fn fifo_wraps_at_fixed_capacity_and_serves_without_header_overlap() {
 }
 
 #[test]
+fn line_get_at_scans_offsets_and_clear_resets_headers() {
+    let (program_id, mollusk, state_key, storage_key, mut accounts) = initialized();
+
+    for (ticket, slot) in [(10u64, 1u64), (20, 2), (30, 3)] {
+        accounts = call(
+            &mollusk,
+            program_id,
+            state_key,
+            storage_key,
+            accounts,
+            "lineEnqueue",
+            &[ticket],
+            slot,
+        );
+    }
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineGetAt",
+        &[0],
+        10,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineGetAt",
+        &[2],
+        30,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineGetAt",
+        &[3],
+        0,
+    );
+    // Drain one so head advances, then wrap-aware offsets stay valid.
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineDequeue",
+        &[],
+        10,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineGetAt",
+        &[0],
+        20,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineClear",
+        &[],
+        1,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "lineSize",
+        &[],
+        0,
+    );
+    accounts = call(
+        &mollusk,
+        program_id,
+        state_key,
+        storage_key,
+        accounts,
+        "linePeek",
+        &[],
+        0,
+    );
+}
+
+#[test]
 fn pod_status_and_ordered_owner_map_compose_on_chain() {
     let (program_id, mollusk, state_key, storage_key, mut accounts) = initialized();
 

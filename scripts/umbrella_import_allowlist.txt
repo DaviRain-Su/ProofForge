@@ -2,6 +2,7 @@
 # Remove an entry when that file migrates to ProofForge.Svm.Sdk / Evm.Sdk (+ Attr).
 # CI fails if a new file uses the umbrella import, or if an entry is stale.
 
+Examples/Svm/AccountViewMutation.lean
 Examples/Svm/AccountView.lean
 Examples/Svm/Ata.lean
 Examples/Svm/BatchSizer.lean
@@ -41,12 +42,14 @@ Examples/Flag.lean
 Examples/Svm/Gate.lean
 Examples/Svm/Hash.lean
 Examples/Svm/Info.lean
+Examples/Svm/InstructionsSlice.lean
 Examples/Svm/Keccak.lean
 Examples/Svm/Keys.lean
 Examples/Svm/LamportTransfer.lean
 Examples/Lang.lean
 Examples/Maybe.lean
 Examples/Svm/Memo.lean
+Examples/Svm/MemoUtf8.lean
 Examples/Svm/MemoryOps.lean
 Examples/Near/NearBytes.lean
 Examples/Near/NearCtx.lean
@@ -97,6 +100,7 @@ Examples/Svm/Ping.lean
 Examples/Svm/PubkeyGate.lean
 Examples/Svm/RawEntry.lean
 Examples/Svm/Rent.lean
+Examples/Svm/RentTopUp.lean
 Examples/Svm/Seat.lean
 Examples/Svm/SelfLog.lean
 Examples/Svm/Signed.lean
@@ -104,6 +108,7 @@ Examples/Svm/SysAlloc.lean
 Examples/Svm/SysSeed.lean
 Examples/Svm/SysXfer.lean
 Examples/Svm/Token2022.lean
+Examples/Svm/Token2022MintClose.lean
 Examples/Svm/TokenAcc.lean
 Examples/Svm/TokenApprove.lean
 Examples/Svm/TokenAuth.lean
@@ -120,11 +125,14 @@ Examples/Svm/Transfer.lean
 Examples/Svm/TransientLedger.lean
 Examples/Svm/TransientOrderTape.lean
 Examples/Svm/TransientPair.lean
+Examples/Svm/TransientPubkeyBatch.lean
+Examples/Svm/TransientPubkeyRing.lean
 Examples/Svm/TransientWide128.lean
 Examples/Svm/TransientWide256.lean
 Examples/Svm/Tree.lean
 Examples/Svm/Trio.lean
 Examples/Evm/TwoStepCounter.lean
+Examples/Svm/VaultRentGrow.lean
 Examples/Evm/Wide.lean
 Examples/Window.lean
 Examples/Xrpl/XrplBal.lean

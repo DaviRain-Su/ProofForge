@@ -43,6 +43,10 @@ Lean 4.31.0。上游无 encoder / textual assembler，因此这里直接生成
   拒绝尚未 lowering 的 argumented edge，并生成 emitter 对应的
   `j<cmp> r1,r2,then; ja else` decoded pair。`evalCFGBranch_corresponds` 直接通过上游 `step`
   证明 eq/ne/lt/le/gt/ge 六种 unsigned 比较选择同一 Core edge 且内存不变。
+- E1 `materializeOperand?` / `checkedStraightlineFragment?` / `evalCounterStraightline`：
+  Counter 形 `field|arg|lit` 装入 `[r10-8]/[r10-16]`，再 `ldxdw` 进 `r1`/`r2`，然后复用 E0
+  guard/body。`evalCounterStraightline_add_7_5` / `_add_overflow_max` 给出具体 success/overflow
+  边；`#print axioms` 仅 `propext` / `Quot.sound` / `native_decide`。
 
 旧的通用 guard/body API 仍刻意分层：Solanalib 的 `BitVec 64` 正确暴露 wrap
 （`u64Max + 1 = 0`），`evalCheckedWrite?` 只在 source guard 成功后执行 typed body 和 store；
@@ -67,14 +71,35 @@ Solanalib 当前没有为本仓提供：
 - high-level `Account` / `Instruction` 到 SBPF memory 的 refinement；
 - 完整 Agave verifier（上游 verifier 只覆盖 instruction-level version/divisor 条件）。
 
-这仍不是完整 emitter refinement；目前只覆盖 checked arithmetic/static write 和普通
-CFG branch，不覆盖 operand materialization、任意 block body 或 whole-program execution。
+这仍不是完整 emitter refinement；目前覆盖：
+
+- E0：checked arithmetic / static write / 普通 CFG branch（假定 `r1`/`r2` 已持有操作数）
+- E1（`svm-sem-001`）：Counter 形 operand materialization + straightline
+  （`field|arg|lit → [r10-8]/[r10-16] → ldxdw r1/r2 →` 既有 guard/body/store）
+- E3（`svm-sem-003`）：Counter `increment` 三块有界 CFG
+  （entry materialize+guard+ALU+scratch → success store/`r0=0` | overflow `r0=0x1001`）；
+  ≤3 blocks / ≤64 instr；concrete 7+5 / max+1 `native_decide`
+
+已覆盖 E4（`svm-sem-004`）：Counter `value` 字 ↔ typed `storev`/`loadv` /
+`AccountWords` field write 投影；静态位移 OOB / 未映射 load fail-closed。
+
+已覆盖 E5（`svm-sem-005`）：BoundedQueue empty-push 三写 ↔ typed `storev`/`loadv` 投影。
+
+E∞ 第一刀（`svm-sem-006`）：walked `r7` Counter arg0 cursor ↔ E1 绝对 `.arg` staged word。
+E∞ 第二刀（`svm-sem-007`）：同一 `r7` 连续 walk 两个 u64 ↔ 两个绝对 `.arg` staged word。
+E∞ 第三刀（`svm-sem-008`）：Loader account-0 header/key walk（non-dup `0xff` + key limb）↔ 绝对 `r6` 输入区加载。
+E∞ 第四刀（`svm-sem-009`）：account-0 signer/writable 标志字节 walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_HEADER+1/+2` 门控）。
+E∞ 第五刀（`svm-sem-010`）：account-0 lamports/data_len walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_LAMPORTS`/`ACC0_DATA_LEN`）。
+E∞ 第六刀（`svm-sem-011`）：account-0 owner 前两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER`/`+8`）。
+E∞ 第七刀（`svm-sem-012`）：account-0 owner 后两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER+16`/`+24`）。
+仍不覆盖：完整 account 向量、executable/rent_epoch、Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests
 
-- `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization，以及
+- `Tests/SolanalibSpec.lean`：上游 executable semantics 的 bounded characterization；
   五种 checked arithmetic 的 success/overflow edge、multiply zero path、scratch handoff 与
-  state-store 行为；六种普通比较各覆盖 then/else decoded edge。
+  state-store；六种普通比较 then/else；E1 Counter field/arg/lit materialization 与
+  straightline success/overflow；以及 E3 multi-block CFG bounds/success/overflow `#guard`；E∞ walked-`r7` `#guard`。
 - `Tests/NormalizationSpec.lean`：真实抽出的 Counter increment/decrement/scale/divide/modulo
   都从 Core Place、SVM slot 和各自 target-owned CFG checked terminator 生成对应 typed
   fragment；Counter.nonzero 生成真实普通 branch fragment；任一 Core/CFG operand 不一致或

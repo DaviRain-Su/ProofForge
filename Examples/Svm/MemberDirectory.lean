@@ -32,6 +32,19 @@ inductive Error where
 @[pf_entry] def contains (_s : State) (member : UInt64) : Bool := (members 1).contains member
 @[pf_entry] def valueAt (_s : State) (index : UInt64) : UInt64 := (members 1).valueAt index
 
+/-- Strict remove-by-index. OOB is `missing`. Uses the existing valueAt+remove path so the
+index scan and swap-remove stay independently fail-closed. -/
+@[pf_entry] def removeAt (_s : State) (index : UInt64) : Except Error (State × UInt64) :=
+  let set := members 1
+  if set.size ≤ index then .error .missing
+  else
+    let removed := set.remove (set.valueAt index)
+    if removed = 0 then .error .missing else .ok ({ dummy := 1 }, 1)
+
+/-- Reset headers; stale value words stay unreachable. -/
+@[pf_entry] def clearStorage (_s : State) : UInt64 :=
+  (members 1).clear
+
 @[pf_entry] def add (_s : State) (member : UInt64) : Except Error (State × UInt64) :=
   let result := (members 1).insert member
   if result = 1 then .ok ({ dummy := 1 }, 1)

@@ -210,15 +210,15 @@ elab "#pf_guard_transient_vector" : command => do
       asm.contains "lddw r0, 0x1201" && asm.contains "lddw r0, 0x1202" &&
       asm.contains "lddw r0, 0x1203" do
     throwError "bounded vector allocator, mutation, or explicit failure gates are missing"
-  -- The dedicated multi-handle program: same-kind second-slot metadata cells (pointer 2344,
-  -- length 2352, active 2368) back the shared lifecycle interpreter, and the same program's OOM
+  -- The dedicated multi-handle program: same-kind second-slot metadata cells (pointer 2536,
+  -- length 2544, active 2560) back the shared lifecycle interpreter, and the same program's OOM
   -- and unbegun-slot methods pin the explicit failures.
   let pairAsm ←
     match ProofForge.Svm.Emit.emitAsm pairProgram with
     | .ok asm => pure asm
     | .error reason => throwError reason
-  unless pairAsm.contains "ldxdw r9, [r10 - 2344]" && pairAsm.contains "ldxdw r2, [r10 - 2352]" &&
-      pairAsm.contains "stxdw [r10 - 2352], r2" && pairAsm.contains "stxdw [r10 - 2368], r1" &&
+  unless pairAsm.contains "ldxdw r9, [r10 - 2536]" && pairAsm.contains "ldxdw r2, [r10 - 2544]" &&
+      pairAsm.contains "stxdw [r10 - 2544], r2" && pairAsm.contains "stxdw [r10 - 2560], r1" &&
       pairAsm.contains "lddw r0, 0x1203" do
     throwError "same-kind second-slot metadata cells are missing"
 

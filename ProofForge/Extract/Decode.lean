@@ -1453,6 +1453,9 @@ private partial def asValNamed (env : Environment) (fuel : Nat) (n : Name) (e : 
     some (.ext (.svm (.component (.sysvar (.clock .slot)))) #[])
   else if endsWith e ".clockEpoch" || isConstNamed e ``ProofForge.Svm.Runtime.clockEpoch then
     some (.ext (.svm (.component (.sysvar (.clock .epoch)))) #[])
+  else if endsWith e ".clockEpochStartTimestamp" ||
+      isConstNamed e ``ProofForge.Svm.Runtime.clockEpochStartTimestamp then
+    some (.ext (.svm (.component (.sysvar (.clock .epochStartTimestamp)))) #[])
   else if endsWith e ".clockLeaderScheduleEpoch" ||
       isConstNamed e ``ProofForge.Svm.Runtime.clockLeaderScheduleEpoch then
     some (.ext (.svm (.component (.sysvar (.clock .leaderScheduleEpoch)))) #[])
@@ -3385,6 +3388,9 @@ private def asAccountDataPolicy (e : Expr) :
           endsWith k ".account" then
         some (some (.token2022Base .account))
       else none
+    else if isConstNamed p ``ProofForge.Svm.Cpi.TokenTlv.Policy.token2022MintClose ||
+        endsWith p ".token2022MintClose" then
+      some (some .token2022MintClose)
     else none
   else none
 
@@ -4702,8 +4708,11 @@ private def invokeRet
   | (3, _, #[.u8le (.lit 5)], #[], none) => .ok (.lit 0)
   | (2, _, #[.u8le (.lit 21)], #[], none) => .ok .cpiReturn
   | (1, _, #[.ascii memo], #[], none) =>
-      if ProofForge.Svm.Memo.Ascii.wellFormed memo then .ok (.lit 0)
-      else .error "extract/unsupported: Memo payload must be at most 512 ASCII bytes"
+      if ProofForge.Svm.Memo.Ascii.wellFormed memo ||
+          ProofForge.Svm.Memo.Utf8.wellFormed memo then
+        .ok (.lit 0)
+      else
+        .error "extract/unsupported: Memo payload must be at most 512 UTF-8 bytes"
   | (6, _, #[.u8le (.lit 1)], #[], none) => .ok (.lit 0)
   | (programIx, _, data, _, _) =>
       match data[0]? with

@@ -70,7 +70,7 @@ private def vector2B : TransientVec.Config :=
 #guard !({ capacity := 4096 } : TransientVec.Config).wellFormed
 
 -- The reusable handle identity: slot 0 keeps the plain-payload word; slot 1 packs itself above
--- bit 32. A third slot and a zero payload are malformed in the same reusable contract.
+-- bit 32. A third slot and a zero payload are malformed under the default ResourceManifest.
 #guard vector2.slot == 0 && vector2.payload == 2
 #guard vector2B.wellFormed
 #guard vector2B.slot == 1 && vector2B.payload == 2
@@ -93,7 +93,7 @@ private def vector2B : TransientVec.Config :=
 -- account-storage scratch.
 #guard TransientBytes.pointerStack + ProofForge.Svm.Transient.Emit.slotStride + 24 ≤
   TransientBytes.descriptorStack - 16
-#guard TransientBytes.descriptorStack ≤ 2488
+#guard TransientBytes.descriptorStack ≤ 2664
 #guard TransientVec.oomErrorCode != TransientVec.boundsErrorCode
 #guard TransientVec.boundsErrorCode != TransientVec.stateErrorCode
 

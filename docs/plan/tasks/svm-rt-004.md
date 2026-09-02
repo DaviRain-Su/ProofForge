@@ -1,7 +1,7 @@
 ---
 id: svm-rt-004
 track: B-runtime
-status: todo
+status: done
 plan: ../svm-work-plan.md
 priority: F2
 ---
@@ -21,3 +21,10 @@ priority: F2
 ## 非目标
 
 `get_sysvar` 任意 blob；feature-gated 高级 sysvar 全家桶。
+
+## 验收证据
+
+- SDK：`ProofForge/Svm/Sdk/SysvarSlice.lean` — compile-time `Slice` / `Instructions` + `numInstructionsAt` / `sliceWord` / key gate
+- Example：`Examples.Svm.InstructionsSlice` digest `fa750f0ebf227df3`
+- Lean：`Tests.InstructionsSliceSpec`
+- Mollusk：`instructions_slice` 3/3（full window + short + wrong key fail closed）

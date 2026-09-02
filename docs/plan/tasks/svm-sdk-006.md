@@ -1,7 +1,7 @@
 ---
 id: svm-sdk-006
 track: C-sdk
-status: todo
+status: done
 plan: ../svm-work-plan.md
 priority: F1/F2
 ---
@@ -15,4 +15,21 @@ priority: F1/F2
 
 ## 交付
 
-正反例；短/非法 UTF-8 fail closed；migration 不隐式多边图。
+1. UTF-8 Memo facade — **done**
+   - `ProofForge.Svm.Memo.Utf8`：`maxBytes := 512`、strict UTF-8 `bytesWellFormed` / `wellFormed`
+   - `ProofForge.Svm.Sdk.Memo.Utf8.write`：同 Ascii CPI geometry；emit 走 UTF-8 bytes
+   - Ops / Extract Memo 几何同时接受 Ascii 与 Utf8
+2. Payload migration edge — **done**
+   - `ProofForge.Svm.Sdk.Versioned.PayloadTransition`：单边 copy-one-word + bump version；无多跳图
+3. 正反例 — **done**
+   - `Examples.Svm.MemoUtf8` digest `c13eb931ded2755a`（`"café"`）
+   - `Examples.Svm.VersionedPayloadMigrator` digest `39327e5abe0c9299`
+
+## 验收证据
+
+- Lean：`Tests.MemoUtf8Spec`、`Tests.SvmVersionedCodecSpec`、`Tests.SvmSdkProgramSpec`（λ OK；513-byte fail-closed）
+- Mollusk：`memo_utf8` 2/2；`versioned_codec` 5/5（含 payload migration）
+
+## 非目标
+
+隐式多边 migration 图；runtime-selected Memo account geometry（仍 F1/F2 后续）。

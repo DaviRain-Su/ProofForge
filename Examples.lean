@@ -77,6 +77,15 @@ import Examples.Svm.TransientWide128
 import Examples.Svm.TransientWide256
 import Examples.Svm.LamportTransfer
 import Examples.Svm.PubkeyGate
+import Examples.Svm.AccountViewMutation
+import Examples.Svm.InstructionsSlice
+import Examples.Svm.MemoUtf8
+import Examples.Svm.RentTopUp
+import Examples.Svm.Token2022MintClose
+import Examples.Svm.TransientPubkeyBatch
+import Examples.Svm.TransientPubkeyRing
+import Examples.Svm.VaultRentGrow
+import Examples.Svm.VersionedPayloadMigrator
 
 -- EVM
 import Examples.Evm.EvmCtx

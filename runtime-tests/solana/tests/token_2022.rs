@@ -4,8 +4,8 @@ use {
     mollusk_svm::{result::Check, Mollusk},
     mollusk_svm_programs_token::token2022,
     mollusk_svm_programs_token_2022::{
-        create_account_for_mint_with_extensions, Mint as Token2022Mint, MintExtension,
-        TransferFeeConfig, TransferHook,
+        create_account_for_mint_with_extensions, Mint as Token2022Mint, MintCloseAuthority,
+        MintExtension, TransferFeeConfig, TransferHook,
     },
     sha2::{Digest, Sha256},
     solana_account::Account,
@@ -208,6 +208,15 @@ fn transfer_hook_mint(authority: Pubkey) -> Account {
     )
 }
 
+fn mint_close_authority_mint(authority: Pubkey) -> Account {
+    create_account_for_mint_with_extensions(
+        extension_mint_data(authority),
+        &[MintExtension::MintCloseAuthority(MintCloseAuthority {
+            close_authority: Some(authority).try_into().unwrap(),
+        })],
+    )
+}
+
 fn assert_extension_mint_rejected(mint_account: Account) {
     assert!(mint_account.data.len() > 82);
     let (program_id, mollusk) = harness();
@@ -254,6 +263,14 @@ fn token_2022_transfer_fee_mint_fails_closed() {
 fn token_2022_transfer_hook_mint_fails_closed() {
     let authority = Pubkey::new_unique();
     assert_extension_mint_rejected(transfer_hook_mint(authority));
+}
+
+/// Base Token2022 consumer stays closed to `MintCloseAuthority`; the typed-open consumer is
+/// `Token2022MintClose` (`token_2022_mint_close.rs`).
+#[test]
+fn token_2022_mint_close_authority_mint_fails_closed() {
+    let authority = Pubkey::new_unique();
+    assert_extension_mint_rejected(mint_close_authority_mint(authority));
 }
 
 /// Hand-built extension-form mint: official 82-byte base, 83 zero padding bytes, the

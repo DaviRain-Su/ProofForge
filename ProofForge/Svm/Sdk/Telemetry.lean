@@ -28,4 +28,15 @@ namespace ProofForge.Svm.Sdk.Telemetry
     (first second third fourth fifth : UInt64) : UInt64 :=
   ProofForge.Svm.Runtime.log64 first second third fourth fifth
 
+/-!
+### sf-014：Telemetry L1 形状
+
+仅 Runtime 叶包装；无持久模型。矩阵标 **n/a-L2**。
+-/
+
+theorem remainingComputeUnits_def :
+    remainingComputeUnits = ProofForge.Svm.Runtime.remainingComputeUnits := rfl
+theorem stackHeight_def :
+    stackHeight = ProofForge.Svm.Runtime.stackHeight := rfl
+
 end ProofForge.Svm.Sdk.Telemetry

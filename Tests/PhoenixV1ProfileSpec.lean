@@ -689,6 +689,28 @@ private partial def opsHaveUncheckedTransfer
       | .forBody _ body => opsHaveUncheckedTransfer source destination authority seeds body
       | _ => false
 
+/-- Unsigned classic Token Transfer (tag 3) with an ordinary signer authority. -/
+private partial def opsHaveUnsignedUncheckedTransfer
+    (source destination authority : Nat) (ops : Array ProofForge.Svm.IR.Op) : Bool :=
+  ops.any fun op =>
+    (match op with
+     | .invoke programIx metas data actualSeeds bump =>
+         programIx == 7 && bump.isNone && actualSeeds.isEmpty &&
+           metas == #[{ acc := source, signer := false, writable := true },
+             { acc := destination, signer := false, writable := true },
+             { acc := authority, signer := true, writable := false }] &&
+           data.size == 2 && data[0]? == some (.u8le (.lit 3)) &&
+           (match data[1]? with
+            | some (ProofForge.Svm.Ops.CpiWord.u64le _) => true
+            | _ => false)
+     | _ => false) ||
+      match op with
+      | .ite _ _ _ thenOps elseOps =>
+          opsHaveUnsignedUncheckedTransfer source destination authority thenOps ||
+            opsHaveUnsignedUncheckedTransfer source destination authority elseOps
+      | .forBody _ body => opsHaveUnsignedUncheckedTransfer source destination authority body
+      | _ => false
+
 private partial def opsHaveFifoCancelCall
     (predicate : ProofForge.Svm.FifoCancel.Call ProofForge.Svm.Ops.Val → Bool)
     (ops : Array ProofForge.Svm.IR.Op) : Bool :=
@@ -949,6 +971,15 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   let some cancelUpToFreeRaw :=
       program.methods.find? (·.ixName == "cancelUpToOrdersWithFreeFunds")
     | throwError "missing raw CancelUpToWithFreeFunds"
+  let some cancelByIdRaw := program.methods.find? (·.ixName == "cancelMultipleOrdersById")
+    | throwError "missing raw CancelMultipleOrdersById"
+  let some cancelByIdFreeRaw :=
+      program.methods.find? (·.ixName == "cancelMultipleOrdersByIdWithFreeFunds")
+    | throwError "missing raw CancelMultipleOrdersByIdWithFreeFunds"
+  let some withdrawFundsRaw := program.methods.find? (·.ixName == "withdrawFunds")
+    | throwError "missing raw WithdrawFunds"
+  let some depositFundsRaw := program.methods.find? (·.ixName == "depositFunds")
+    | throwError "missing raw DepositFunds"
   match placeRaw.entry with
   | .raw entry =>
       unless placeRaw.kind == .get && placeRaw.retCount == 3 &&
@@ -1020,6 +1051,34 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
           entry.minDataLen == 5 && entry.maxDataLen == 21 do
         throwError s!"wrong raw CancelUpToWithFreeFunds adapter: {repr entry}"
   | .generated => throwError "CancelUpToWithFreeFunds lost its raw adapter"
+  match cancelByIdRaw.entry with
+  | .raw entry =>
+      unless cancelByIdRaw.kind == .get && entry.tag == 10 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramCount == 1 &&
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 141 do
+        throwError s!"wrong raw CancelMultipleOrdersById adapter: {repr entry}"
+  | .generated => throwError "CancelMultipleOrdersById lost its raw adapter"
+  match cancelByIdFreeRaw.entry with
+  | .raw entry =>
+      unless cancelByIdFreeRaw.kind == .get && entry.tag == 11 && entry.accountCount == 4 &&
+          entry.programAccount == 0 && entry.paramCount == 1 &&
+          entry.usesSchemaBorsh && entry.minDataLen == 5 && entry.maxDataLen == 141 do
+        throwError s!"wrong raw CancelMultipleOrdersByIdWithFreeFunds adapter: {repr entry}"
+  | .generated => throwError "CancelMultipleOrdersByIdWithFreeFunds lost its raw adapter"
+  match withdrawFundsRaw.entry with
+  | .raw entry =>
+      unless withdrawFundsRaw.kind == .get && entry.tag == 12 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.optionWidths == #[8, 8] &&
+          entry.fixedParamCount == 0 && entry.minDataLen == 3 && entry.maxDataLen == 19 do
+        throwError s!"wrong raw WithdrawFunds adapter: {repr entry}"
+  | .generated => throwError "WithdrawFunds lost its raw adapter"
+  match depositFundsRaw.entry with
+  | .raw entry =>
+      unless depositFundsRaw.kind == .get && entry.tag == 13 && entry.accountCount == 9 &&
+          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
+          entry.dataLen == 17 do
+        throwError s!"wrong raw DepositFunds adapter: {repr entry}"
+  | .generated => throwError "DepositFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 1) placeRaw.ops &&
       opsHaveIntrinsic (· == .isWritableN 3) placeRaw.ops &&
@@ -1234,6 +1293,36 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       opsHaveRawReduceHeader 8 cancelUpToRaw.ops &&
       opsHaveRawReduceFinish cancelUpToRaw.ops do
     throwError "raw CancelUpTo bounded component/query/withdraw composition is incomplete"
+  unless opsHaveIntrinsic (· == .isWritableN 1) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .isWritableN 2) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .signerKeyN 3) cancelByIdFreeRaw.ops &&
+      opsHaveIntrinsic (· == .checkPdaSeeds 0 #[.ascii "log"]) cancelByIdFreeRaw.ops &&
+      opsHaveDataWordSetAt 2 34 1 1 cancelByIdFreeRaw.ops &&
+      opsHaveRawReduceHeader 11 cancelByIdFreeRaw.ops &&
+      opsHaveRawReduceFinish cancelByIdFreeRaw.ops &&
+      !opsHaveInvoke cancelByIdFreeRaw.ops do
+    throwError "raw CancelMultipleOrdersByIdWithFreeFunds composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) cancelByIdRaw.ops &&
+      opsHaveDataWord 2 1 cancelByIdRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds cancelByIdRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds cancelByIdRaw.ops &&
+      opsHaveRawReduceHeader 10 cancelByIdRaw.ops &&
+      opsHaveRawReduceFinish cancelByIdRaw.ops do
+    throwError "raw CancelMultipleOrdersById composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) withdrawFundsRaw.ops &&
+      opsHaveDataWord 2 1 withdrawFundsRaw.ops &&
+      opsHaveUncheckedTransfer 6 4 6 quoteSeeds withdrawFundsRaw.ops &&
+      opsHaveUncheckedTransfer 5 3 5 baseSeeds withdrawFundsRaw.ops &&
+      opsHaveRawReduceHeader 12 withdrawFundsRaw.ops &&
+      opsHaveRawReduceFinish withdrawFundsRaw.ops do
+    throwError "raw WithdrawFunds composition is incomplete"
+  unless opsHaveIntrinsic (· == .signerKeyN 3) depositFundsRaw.ops &&
+      opsHaveDataWord 2 1 depositFundsRaw.ops &&
+      opsHaveUnsignedUncheckedTransfer 4 6 2 depositFundsRaw.ops &&
+      opsHaveUnsignedUncheckedTransfer 3 5 2 depositFundsRaw.ops &&
+      opsHaveRawReduceHeader 13 depositFundsRaw.ops &&
+      opsHaveRawReduceFinish depositFundsRaw.ops do
+    throwError "raw DepositFunds composition is incomplete"
   let freeTrace := cancelTraceOps cancelAllFreeRaw.ops
   unless traceBefore 1 2 freeTrace && traceBefore 2 3 freeTrace &&
       traceBefore 3 4 freeTrace && traceBefore 4 5 freeTrace &&
@@ -1520,6 +1609,18 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jne r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 6, raw_route_match_" &&
       asm.contains "jeq r1, 7, raw_route_match_" &&
+      asm.contains "jlt r2, 5, raw_route_next_" &&
+      asm.contains "jgt r2, 21, raw_route_next_" &&
+      asm.contains "jeq r1, 8, raw_route_match_" &&
+      asm.contains "jeq r1, 9, raw_route_match_" &&
+      asm.contains "jgt r2, 141, raw_route_next_" &&
+      asm.contains "jgt r2, 141, raw_route_next_" &&
+      asm.contains "jeq r1, 10, raw_route_match_" &&
+      asm.contains "jeq r1, 11, raw_route_match_" &&
+      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jeq r1, 12, raw_route_match_" &&
+      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jeq r1, 13, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&
       asm.contains "; checkPdaSeeds account=0 count=1" &&
@@ -1533,7 +1634,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
         "bounded key-based acc2 FIFO cursor root=110 links=114 stride=8 capacity=512" &&
       asm.contains
         "bounded key-based acc2 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
-      asm.contains "stxdw [r10 - 2056], r1" &&
+      asm.contains "stxdw [r10 - 2248], r1" &&
       asm.contains "jge r1, 65535, fifo_cancel_failure_" &&
       asm.contains "official Solana downward bump allocation bytes=1246 align=8" &&
       asm.contains "jge r1, 32, recorder_append_flush_" &&
@@ -1557,7 +1658,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "key4=65660 stride=18 capacity=8321" && asm.contains "be64 r1" &&
       asm.contains "r7 remains the walked instruction-data base outside this intrinsic" &&
       asm.contains "rb4_free_loop_" && asm.contains "add64 r9, -4096" &&
-      asm.contains "add64 r9, -3000" &&
+      asm.contains "add64 r9, -3048" &&
       asm.contains "fixed-stride external account word write acc=1 base=8314 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8315 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8331 stride=18 capacity=128" &&
@@ -1593,6 +1694,19 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "bounded key-based acc1 FIFO cursor root=4210 links=4214 stride=8 capacity=512" &&
       asm.contains "rb_find_found_" && asm.contains "rb_find_missing_" do
     throwError "Phoenix-v1 account data bounds gate is missing"
+
+
+-- svm-app-002: matching / fee / remainder policy pins (pure arithmetic + entry surface)
+#guard takerFeeQuoteLotsOf 0 5 1 == 0
+#guard takerFeeQuoteLotsOf 10000 0 1 == 0
+#guard takerFeeQuoteLotsOf 10000 5 1 == 5
+#guard takerFeeQuoteLotsOf 1 1 1 == 1
+#guard takerFeeQuoteLotsOf 9999 1 1 == 1
+#guard takerFeeQuoteLotsOf 10000 1 1 == 1
+#guard postingQuoteLotsOrZero512At 0 1 10 1 == 0
+#guard postingQuoteLotsOrZero512At 100 1 10 1 == 1000
+#guard postingQuoteLotsOrZero512At 100 1 10 0 == 0
+#guard postingQuoteLotsOrZero512At 100 1 1 3 == 33
 
 #pf_guard_phoenix_v1_profile
 

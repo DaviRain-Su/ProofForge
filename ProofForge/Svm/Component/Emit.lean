@@ -22,6 +22,8 @@ structure Context where
   headerStack : Nat → Nat
   originalDataLenStack : Nat → Nat
   accountCount : Nat
+  /-- Forwarded to AccountView so combined view+mutation programs resolve Loader-v3 aliases. -/
+  useWalkedHeaders : Bool := false
 
 private def Context.accountStorage (context : Context) : AccountStorage.Emit.Context :=
   { loadValue := context.loadValue
@@ -37,7 +39,8 @@ private def Context.accountData (context : Context) : AccountData.Emit.Context :
 private def Context.accountView (context : Context) : AccountView.Emit.Context :=
   { loadValue := context.loadValue
     headerStack := context.headerStack
-    accountCount := context.accountCount }
+    accountCount := context.accountCount
+    useWalkedHeaders := context.useWalkedHeaders }
 
 private def Context.batchRecorder (context : Context) : BatchRecorder.Emit.Context :=
   { loadValue := context.loadValue

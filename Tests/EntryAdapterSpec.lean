@@ -139,6 +139,10 @@ elab "#pf_guard_entry_adapter" : command => do
     | throwError "missing bounded-bytes first-position source method"
   let some sourceStringsFind := source.methods.find? (·.ixName == "stringsFindIndex")
     | throwError "missing bounded-string first-position source method"
+  let some sourceEchoBoundedU128 := source.methods.find? (·.ixName == "echoBoundedU128")
+    | throwError "missing wide bounded-vector return source method"
+  let some sourceEchoOptionU128 := source.methods.find? (·.ixName == "echoOptionU128")
+    | throwError "missing wide Option return source method"
   let pubkeySchema := .record "ProofForge.Svm.Sdk.Pubkey" #[
     ("word0", .scalar .uint64), ("word1", .scalar .uint64),
     ("word2", .scalar .uint64), ("word3", .scalar .uint64)]
@@ -199,7 +203,13 @@ elab "#pf_guard_entry_adapter" : command => do
       sourceStringsFind.annotations == #["svm.raw.v1:38:2:0"] &&
       sourceStringsFind.paramSchemas == #[.boundedString 8, .boundedString 8] &&
       sourceStringsFind.retSchema == .option (.scalar .uint64) &&
-      sourceStringsFind.retCount == 2 do
+      sourceStringsFind.retCount == 2 &&
+      sourceEchoBoundedU128.annotations == #["svm.raw.v1:39:2:0"] &&
+      sourceEchoBoundedU128.retSchema == .boundedArray 2 (.scalar .uint128) &&
+      sourceEchoBoundedU128.retCount == 5 &&
+      sourceEchoOptionU128.annotations == #["svm.raw.v1:40:2:0"] &&
+      sourceEchoOptionU128.retSchema == .option (.scalar .uint128) &&
+      sourceEchoOptionU128.retCount == 3 do
     throwError "bounded/tagged return values were not expanded to fixed source frames"
   let rec loopBounds (fuel : Nat) (ops : Array ProofForge.Extract.Ops.Op) : Array Nat :=
     match fuel with
@@ -532,10 +542,26 @@ elab "#pf_guard_entry_adapter" : command => do
         | .exit (.returnU64 _) | .exit (.returnState _) | .exit (.okState _) => false
         | _ => true do
       throwError s!"{method.ixName} lost its complete Option return frame"
+  let some echoBoundedU128 := program.methods.find? (·.ixName == "echoBoundedU128")
+    | throwError "missing projected wide bounded-vector return method"
+  let some echoOptionU128 := program.methods.find? (·.ixName == "echoOptionU128")
+    | throwError "missing projected wide Option return method"
+  match echoBoundedU128.entry, echoOptionU128.entry with
+  | .raw wideArray, .raw wideOption =>
+      unless wideArray.tag == 39 &&
+          wideArray.returnBorshPlan == some (.boundedArray 2 #[8, 8]) &&
+          wideArray.returnDataLen == 36 && wideArray.returnScratchBytes == 44 &&
+          wideArray.canonical.contains "borsh-return-schema.array.2.[8,8]" &&
+          wideOption.tag == 40 && wideOption.returnBorshPlan == some (.option #[8, 8]) &&
+          wideOption.returnDataLen == 17 && wideOption.returnScratchBytes == 25 &&
+          wideOption.canonical.contains "borsh-return-schema.option.[8,8]" do
+        throwError s!"wrong wide Borsh return plans: {repr wideArray}, {repr wideOption}"
+  | _, _ => throwError "wide return method lost its raw adapter"
   for (method, count) in [
       (echoBoundedValues, 5), (echoBoundedBytes, 9),
       (echoBoundedString, 9), (makeBoundedString, 9),
-      (echoOptionValue, 2), (echoTaggedValue, 3), (echoPubkey, 4)
+      (echoOptionValue, 2), (echoTaggedValue, 3), (echoPubkey, 4),
+      (echoBoundedU128, 5), (echoOptionU128, 3)
     ] do
     let graph ←
       match method.toCFG with
@@ -570,7 +596,8 @@ elab "#pf_guard_entry_adapter" : command => do
       "call stringsEqual", "call bytesLess", "call stringsLess", "call bytesContains",
       "call stringsContains", "call bytesStartsWith", "call stringsStartsWith",
       "call bytesEndsWith", "call stringsEndsWith", "call bytesFindIndex",
-      "call stringsFindIndex", "borsh_schema_utf8_loop_stringsEqual_0",
+      "call stringsFindIndex", "call echoBoundedU128", "call echoOptionU128",
+      "borsh_schema_utf8_loop_stringsEqual_0",
       "borsh_schema_utf8_loop_stringsEqual_9", "borsh_schema_utf8_loop_stringsLess_0",
       "borsh_schema_utf8_loop_stringsLess_9", "borsh_schema_utf8_loop_stringsContains_0",
       "borsh_schema_utf8_loop_stringsContains_9",
@@ -584,6 +611,8 @@ elab "#pf_guard_entry_adapter" : command => do
       "borsh_return_option_present_stringsFindIndex_",
       "borsh_return_invalid_echoBoundedValues_",
       "borsh_return_invalid_echoBoundedBytes_", "borsh_return_invalid_echoBoundedString_",
+      "borsh_return_invalid_echoBoundedU128_",
+      "borsh_return_option_present_echoOptionU128_",
       "borsh_schema_utf8_loop_echoBoundedString_b0_return_",
       "borsh_return_invalid_makeBoundedString_",
       "borsh_schema_utf8_loop_makeBoundedString_b0_return_",
@@ -689,9 +718,26 @@ private def hasTaggedBounds (result : Except String EntryAdapter.MethodEntry)
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 4
   (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
   (retSchema := .boundedArray 4 (.scalar .uint16)))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:27:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 2 (.scalar .uint128)])
+  (retSchema := .boundedArray 2 (.scalar .uint128)))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:28:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 2 (.tuple #[.scalar .uint32, .scalar .uint32])])
+  (retSchema := .boundedArray 2 (.tuple #[.scalar .uint32, .scalar .uint32])))
+#guard accepts (EntryAdapter.decode #["svm.raw.v1:29:2:0"] 1 #[] 3
+  (paramSchemas := #[.option (.scalar .uint128)])
+  (retSchema := .option (.scalar .uint128)))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:20:2:0"] 1 #[] 5
   (paramSchemas := #[.boundedArray 4 (.scalar .uint16)])
   (retSchema := .boundedArray 4 (.tuple #[.scalar .uint16, .scalar .uint16])))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:28:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 2 (.tuple #[.scalar .uint32, .scalar .uint32])])
+  (retSchema := .record "Wrap" #[
+    ("items", .boundedArray 2 (.tuple #[.scalar .uint32, .scalar .uint32]))
+  ]))
+#guard !accepts (EntryAdapter.decode #["svm.raw.v1:27:2:0"] 1 #[] 5
+  (paramSchemas := #[.boundedArray 2 (.scalar .uint128)])
+  (retSchema := .boundedArray 2 (.option (.scalar .uint64))))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:17:2:0"] 1 #[] 1
   (paramSchemas := #[.boundedArray 128 (.scalar .uint64)]))
 #guard !accepts (EntryAdapter.decode #["svm.raw.v1:24:2:0"] 0 #[] 1

@@ -82,7 +82,8 @@ def gateU16 (v : Nat) : Array UInt8 :=
 private def assertVerdict (plan : Plan) (accept? : UInt64 → Bool)
     (bytes : Array UInt8) (expected : Verdict) : Bool :=
   let view := gateView bytes
-  evaluate plan accept? view == expected && straightline plan view == expected
+  -- Named `view` so it does not bind the optional `requiredBodyLen?` parameter.
+  evaluate plan accept? (view := view) == expected && straightline plan view == expected
 
 private def baseAccountBytes : Array UInt8 :=
   Array.range 165 |>.map (fun _ => (0 : UInt8))
@@ -156,26 +157,26 @@ private def extensionAccount (tlv : Array UInt8) : Array UInt8 :=
    let entry (t : UInt64) (len : Nat) : Array UInt8 :=
      gateU16 t.toNat ++ gateU16 len ++ (Array.range len |>.map (fun _ => (1 : UInt8)))
    -- one then several valid bounded headers advance and accept
-   evaluate accountPlan synthetic (gateView (extensionAccount (entry 1 2))) == .accept &&
+   evaluate accountPlan synthetic (view := gateView (extensionAccount (entry 1 2))) == .accept &&
    evaluate accountPlan synthetic
-     (gateView (extensionAccount
+     (view := gateView (extensionAccount
        (entry 1 2 ++ entry 2 4 ++ entry 3 8))) == .accept &&
    -- body out of bounds
    evaluate accountPlan synthetic
-     (gateView (extensionAccount (gateU16 1 ++ gateU16 9 ++ #[1, 2]))) ==
+     (view := gateView (extensionAccount (gateU16 1 ++ gateU16 9 ++ #[1, 2]))) ==
        .reject .bodyOutOfBounds &&
    -- distinct accepted entries advance; a repeated one is a duplicate
    evaluate accountPlan synthetic
-     (gateView (extensionAccount (entry 1 2 ++ entry 2 0))) == .accept &&
+     (view := gateView (extensionAccount (entry 1 2 ++ entry 2 0))) == .accept &&
    evaluate accountPlan synthetic
-     (gateView (extensionAccount (entry 1 2 ++ entry 1 2))) == .reject (.duplicate 1) &&
+     (view := gateView (extensionAccount (entry 1 2 ++ entry 1 2))) == .reject (.duplicate 1) &&
    -- a smaller compile-time plan bound rejects the third distinct entry
    evaluate { accountPlan with maxHeaders := 2 } synthetic
-     (gateView (extensionAccount (entry 1 0 ++ entry 2 0 ++ entry 3 0))) ==
+     (view := gateView (extensionAccount (entry 1 0 ++ entry 2 0 ++ entry 3 0))) ==
        .reject .headerCount &&
    -- all 28 distinct official ordinals fit the fixed bitmap and default bound
    evaluate accountPlan synthetic
-     (gateView (extensionAccount
+     (view := gateView (extensionAccount
        (Array.range defaultMaxHeaders |>.flatMap
          (fun i => entry (UInt64.ofNat (i + 1)) 0)))) == .accept) = true
 
@@ -188,7 +189,7 @@ private def extensionAccount (tlv : Array UInt8) : Array UInt8 :=
    let huge : UInt64 := 18446744073709551615
    addBounded 18446744073709551615 1 == none &&
      addBounded far 4 == some 18446744073709551615 &&
-     run accountPlan synthetic
+     run accountPlan synthetic (fun _ => none)
        { dataLen := huge, readByte := fun _ => some 0 } (defaultMaxHeaders + 1)
        { cursor := far, count := 0, seenMask := 0 } == .accept) = true
 

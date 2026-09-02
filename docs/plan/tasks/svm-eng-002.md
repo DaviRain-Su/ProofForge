@@ -1,7 +1,7 @@
 ---
 id: svm-eng-002
 track: F-eng
-status: todo
+status: done
 plan: ../svm-work-plan.md
 depends-on: [svm-eng-001]
 ---
@@ -14,4 +14,10 @@ depends-on: [svm-eng-001]
 
 ## 交付
 
-文档页 + 可选自动生成摘要；与 svm-work-plan §6 同步。
+1. [`docs/plan/svm-status-matrix.md`](../svm-status-matrix.md) — capability + formalization + L3 + eng board
+2. [`scripts/svm_status_summary.py`](../../../scripts/svm_status_summary.py) — task front-matter status board
+3. Synced with [`svm-work-plan.md`](../svm-work-plan.md) §6 / [`README.md`](../README.md)
+
+## 非目标
+
+自动把 capability-matrix 行改写成证明状态；WASM PR 状态。

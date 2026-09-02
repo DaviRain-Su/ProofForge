@@ -1,7 +1,7 @@
 ---
 id: svm-sdk-005
 track: C-sdk
-status: todo
+status: done
 plan: ../svm-work-plan.md
 priority: F2
 depends-on: [svm-rt-002]
@@ -15,9 +15,15 @@ depends-on: [svm-rt-002]
 
 ## 交付
 
-1. typed view + effect wrappers
-2. classic Token 路径不受影响
-3. 未知 extension 仍拒绝
+1. typed view + effect wrappers — **done**
+   - `ProofForge.Svm.Sdk.Token2022`：`transferCheckedMintClose`、`MintCloseAuthority`、`parseMintCloseAuthority`、`viewOf`
+2. classic Token 路径不受影响 — **done**（`Sdk.Token` / base `Examples.Token2022` 不变）
+3. 未知 extension 仍拒绝 — **done**（host parse 走 `evaluatePolicy mintClosePolicy`）
+
+## 验收证据
+
+- Lean `#guard`s in `Tests.Token2022MintCloseSpec`（classic accept/none、mint-close parse、fee reject）
+- Mollusk dual consumers covered under svm-rt-002
 
 ## 非目标
 
