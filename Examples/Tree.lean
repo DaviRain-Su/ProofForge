@@ -1580,15 +1580,54 @@ theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {y : UInt64}
     have hInnerPos := hInner.resolve_left hInnerNe
     have hinnernode := hptr s.nodes[yAddress.toNat - 1]!.left hInnerPos.1 hInnerPos.2
     have hinnerIdx4 : (s.nodes[yAddress.toNat - 1]!.left.toNat - 1) % 4 < 4 := by omega
+    have hb1 : s.nodes[xAddress.toNat - 1]!.left ≤ s.bumpIndex ∧
+        s.nodes[yAddress.toNat - 1]!.left ≤ s.bumpIndex ∧ yAddress ≤ s.bumpIndex ∧
+        s.nodes[xAddress.toNat - 1]!.color ≤ 1 :=
+      ⟨hxnode.1, u64_le_of_lt hInnerPos.2, u64_le_of_lt hy1, hxnode.2.2.2⟩
+    let n1 : Node := { s.nodes[xAddress.toNat - 1]! with
+      right := s.nodes[yAddress.toNat - 1]!.left, parent := yAddress }
+    let nodes1 : Vector Node 4 := s.nodes.set (xAddress.toNat - 1) n1 hxi4
+    let innerIndex : Nat := (s.nodes[yAddress.toNat - 1]!.left.toNat - 1) % 4
+    let n2 : Node := { nodes1[innerIndex]! with parent := xAddress }
+    have hbInner1 := node_bound_set s (xAddress.toNat - 1) n1 hxi4 hb1 innerIndex hinnerIdx4
+      hinnernode
+    have hbN2 : n2.left ≤ s.bumpIndex ∧ n2.right ≤ s.bumpIndex ∧ n2.parent ≤ s.bumpIndex ∧
+        n2.color ≤ 1 :=
+      ⟨hbInner1.1, hbInner1.2.1, u64_le_of_lt hx1, hbInner1.2.2.2⟩
+    have hbY1 := node_bound_set s (xAddress.toNat - 1) n1 hxi4 hb1 (yAddress.toNat - 1) hyi4 hynode
+    have hbY2 := node_bound_set ({ s with nodes := nodes1 }) innerIndex n2 hinnerIdx4 hbN2
+      (yAddress.toNat - 1) hyi4 hbY1
     split at h
     · rename_i hParent0
-      done
+      simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      apply wf_nodes_set3 s (xAddress.toNat - 1) innerIndex (yAddress.toNat - 1) n1 n2 _
+        hxi4 hinnerIdx4 hyi4 hwf hb1 hbN2
+      exact ⟨u64_le_of_lt hx1, hbY2.2.1, Nat.zero_le _, hbY2.2.2.2⟩
     · rename_i hParentNe
+      have hParentPos := hParentBound.resolve_left hParentNe
+      have hparentnode := hptr s.nodes[xAddress.toNat - 1]!.parent hParentPos.1 hParentPos.2
+      have hparentIdx4 : (s.nodes[xAddress.toNat - 1]!.parent.toNat - 1) % 4 < 4 := by omega
+      let parentIndex : Nat := (s.nodes[xAddress.toNat - 1]!.parent.toNat - 1) % 4
+      have hparentnode1 := node_bound_set s (xAddress.toNat - 1) n1 hxi4 hb1 parentIndex
+        hparentIdx4 hparentnode
+      have hparentnode2 := node_bound_set ({ s with nodes := nodes1 }) innerIndex n2 hinnerIdx4
+        hbN2 parentIndex hparentIdx4 hparentnode1
       split at h
       · rename_i hLeftChild
-        sorry
+        simp only [Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        apply wf_nodes_set4 s (xAddress.toNat - 1) innerIndex parentIndex (yAddress.toNat - 1)
+          n1 n2 _ _ hxi4 hinnerIdx4 hparentIdx4 hyi4 hwf hb1 hbN2
+        · exact ⟨u64_le_of_lt hy1, hparentnode2.2.1, hparentnode2.2.2.1, hparentnode2.2.2.2⟩
+        · exact ⟨u64_le_of_lt hx1, hbY2.2.1, u64_le_of_lt hParentPos.2, hbY2.2.2.2⟩
       · rename_i hRightChild
-        sorry
+        simp only [Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        apply wf_nodes_set4 s (xAddress.toNat - 1) innerIndex parentIndex (yAddress.toNat - 1)
+          n1 n2 _ _ hxi4 hinnerIdx4 hparentIdx4 hyi4 hwf hb1 hbN2
+        · exact ⟨hparentnode2.1, u64_le_of_lt hy1, hparentnode2.2.2.1, hparentnode2.2.2.2⟩
+        · exact ⟨u64_le_of_lt hx1, hbY2.2.1, u64_le_of_lt hParentPos.2, hbY2.2.2.2⟩
 
 end Proofs
 
