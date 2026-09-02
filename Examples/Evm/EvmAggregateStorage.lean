@@ -7,6 +7,8 @@ Feature A aggregate-storage consumer: nested State (depth 2).
 `bundle_amount` / `bundle_details_side` / `bundle_details_enabled` spelling. Methods return both
 the nested static aggregate and a flat product projection — the nested return × aggregate
 storage combination called out by `evm-rt-nested-001`.
+`runtime-tests/evm/anvil_aggregate_storage.sh` covers admin-gated nested writes, sibling-leaf
+preservation, leaf views, and `bundleSignal`.
 -/
 
 namespace Examples.Evm.EvmAggregateStorage

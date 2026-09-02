@@ -40,8 +40,10 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
   `Examples.Evm.EvmAggregateStorage` (digest `b752af207ed8254a`) — nested `Bundle` State,
   leaf views, and flat product projection (`bundleSignal`); layout pinned by
   `Tests/EvmStaticStorageSpec`
-- Still open: Anvil matrix for aggregate-storage consumer; nested product / constructed dynamic
-  return from storage field trees; tagged-in-array; depth ceiling raise
+- **Anvil matrix** for aggregate storage: `runtime-tests/evm/anvil_aggregate_storage.sh`
+  (`setBundle` / `setAmount`, leaf views, `bundleSignal`, Unauthorized non-admin)
+- Still open: nested product / constructed dynamic return from storage field trees;
+  tagged-in-array; depth ceiling raise
 
 ## Non-goals
 
@@ -49,4 +51,5 @@ powdr backend; changing Profile shared lock without coordinator; unbounded recur
 
 ## Acceptance
 
-P0 Feature A row in `multi-target-strategy.md` → done with Anvil evidence.
+P0 Feature A row in `multi-target-strategy.md` → wide/constructed Anvil + aggregate-storage Anvil
+evidence landed; remaining open items are listed under Progress.
