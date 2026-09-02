@@ -4,11 +4,12 @@ import ProofForge
 Feature A aggregate-storage consumer: nested State (depth 2).
 
 `declared` uses `Storage.Static.nestedRecord` so the compile-time leaf table matches Extract's
-`bundle_amount` / `bundle_details_side` / `bundle_details_enabled` spelling. Methods return both
-the nested static aggregate and a flat product projection — the nested return × aggregate
-storage combination called out by `evm-rt-nested-001`.
+`bundle_amount` / `bundle_details_side` / `bundle_details_enabled` spelling. Methods return leaf
+views, a flat product (`bundleSignal`), and nested product views (`bundleView` /
+`detailsView`) — the nested product return × aggregate storage combination called out by
+`evm-rt-nested-001`.
 `runtime-tests/evm/anvil_aggregate_storage.sh` covers admin-gated nested writes, sibling-leaf
-preservation, leaf views, and `bundleSignal`.
+preservation, leaf views, flat/nested product views, and `bundleSignal`.
 -/
 
 namespace Examples.Evm.EvmAggregateStorage
@@ -78,6 +79,17 @@ def enabledOf (s : State) : Bool :=
 @[pf_entry]
 def bundleSignal (s : State) : UInt64 × Bool :=
   (s.bundle.amount, s.bundle.details.enabled)
+
+/-- Nested product view of the full storage field tree: `(amount, (side, enabled))`.
+Feature A depth-2 product return sourced from `nestedRecord` leaves (not a flat projection). -/
+@[pf_entry]
+def bundleView (s : State) : UInt64 × (UInt8 × Bool) :=
+  (s.bundle.amount, (s.bundle.details.side, s.bundle.details.enabled))
+
+/-- Nested details product from the storage field subtree: `(side, enabled)`. -/
+@[pf_entry]
+def detailsView (s : State) : UInt8 × Bool :=
+  (s.bundle.details.side, s.bundle.details.enabled)
 
 /-- Admin-gated nested aggregate write. -/
 @[pf_entry]

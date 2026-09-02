@@ -240,13 +240,15 @@ open Examples.Evm.EvmAggregateStorage in
   | .ok (s, r) =>
       s.bundle.amount == 11 && s.bundle.details.side == 4 && s.bundle.details.enabled &&
         r == 11 && bundleSignal s == (11, true) &&
+        bundleView s == (11, (4, true)) && detailsView s == (4, true) &&
         amountOf s == 11 && sideOf s == 4 && enabledOf s
   | _ => false
 
 open Examples.Evm.EvmAggregateStorage in
 #guard match setAmount (init ⟨1, 2, 3⟩) 9 with
   | .ok (s, r) =>
-      s.bundle.amount == 9 && s.bundle.details.side == 0 && !s.bundle.details.enabled && r == 9
+      s.bundle.amount == 9 && s.bundle.details.side == 0 && !s.bundle.details.enabled && r == 9 &&
+        bundleView s == (9, (0, false)) && detailsView s == (0, false)
   | _ => false
 
 /-! ## Consumer layouts pin the compile-time declaration -/
@@ -348,16 +350,39 @@ elab "#pf_guard_evm_aggregate_storage" : command => do
     throwError s!"EvmAggregateStorage registry digest is stale: {digest}"
   let some _bundleSignal := program.entries.find? (·.ixName == "bundleSignal")
     | throwError "missing bundleSignal entry"
+  let some bundleView := program.entries.find? (·.ixName == "bundleView")
+    | throwError "missing bundleView entry"
+  let some detailsView := program.entries.find? (·.ixName == "detailsView")
+    | throwError "missing detailsView entry"
   let some _amountOf := program.entries.find? (·.ixName == "amountOf")
     | throwError "missing amountOf entry"
+  unless bundleView.retSchema ==
+      .tuple #[.scalar .uint64, .tuple #[.scalar .uint8, .scalar .boolean]] do
+    throwError s!"bundleView retSchema not nested product: {repr bundleView.retSchema}"
+  unless detailsView.retSchema ==
+      .tuple #[.scalar .uint8, .scalar .boolean] do
+    throwError s!"detailsView retSchema not product: {repr detailsView.retSchema}"
   let abi ←
     match ProofForge.Evm.Emit.emitAbiChecked program with
     | .ok abi => pure abi
     | .error reason => throwError reason
   unless abi.contains "\"name\":\"bundleSignal\"" &&
+      abi.contains "\"name\":\"bundleView\"" &&
+      abi.contains "\"name\":\"detailsView\"" &&
       abi.contains "\"name\":\"amountOf\"" &&
-      abi.contains "uint64" do
+      abi.contains "uint64" &&
+      abi.contains "uint8" do
     throwError s!"EvmAggregateStorage ABI missing nested/product surface: {abi}"
+  match ProofForge.Evm.Codec.abiTypeOfSchema bundleView.retSchema with
+  | .ok type =>
+      unless type == "(uint64,(uint8,bool))" do
+        throwError s!"bundleView ABI type mismatch: {type}"
+  | .error reason => throwError reason
+  match ProofForge.Evm.Codec.abiTypeOfSchema detailsView.retSchema with
+  | .ok type =>
+      unless type == "(uint8,bool)" do
+        throwError s!"detailsView ABI type mismatch: {type}"
+  | .error reason => throwError reason
 
 #pf_guard_evm_static_counter
 #pf_guard_evm_static_roster

@@ -64,7 +64,7 @@ examples 已证明工程链可用。
 
 | 优先级 | 包 ID 建议 | 内容 | 验收 |
 |---|---|---|---|
-| P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix（wide/constructed **Anvil 已通**；`nestedRecord` + `EvmAggregateStorage` Lean + Anvil **已通**；仍开：storage-field nested product / constructed dynamic return、tagged-in-array） |
+| P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix（wide/constructed **Anvil 已通**；`nestedRecord` + nested product view `bundleView`/`detailsView` + `EvmAggregateStorage` Lean + Anvil **已通**；仍开：constructed dynamic return from storage、tagged-in-array） |
 | P0 | Feature A next（powdr paused） | close remaining nested/aggregate gaps only; **no** powdr/yulc L3 on this track | Anvil matrix for open P0 rows; Feature B stays parked |
 | P0 | `evm-codec-manifest-001` | per-method codec/memory resource manifest | Profile/Extract 稳定错误 |
 | P1 | `evm-signed-001` | signed int 源类型 + 窄化 cast 词汇 | 双 consumer + Anvil |

@@ -21,7 +21,7 @@ def entries : Array Entry := #[
   { name := "EvmFindIndex", digest := "18f1ba6730bc0351" },
   { name := "EvmStaticCounter", digest := "ce10997e74a7972b" },
   { name := "EvmStaticRoster", digest := "5994b0ab59e7399b" },
-  { name := "EvmAggregateStorage", digest := "b752af207ed8254a" },
+  { name := "EvmAggregateStorage", digest := "4b648eab9d955dd2" },
   { name := "EvmOrderedStorage", digest := "c37f9c0a33352f4" },
   { name := "EvmVecLog", digest := "bea39a52948599c0" },
   { name := "EvmVecStack", digest := "8903e992dacdb808" },

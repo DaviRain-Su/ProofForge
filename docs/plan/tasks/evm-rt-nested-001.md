@@ -37,13 +37,17 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 - **Anvil OK/reject matrix** for wide/constructed: `runtime-tests/evm/anvil_bounded.sh`
   (`echoBoundedWide`, `echoBoundedPairs`, malformed/over-capacity calldata)
 - **Aggregate storage slice**: `Storage.Static.nestedRecord` (Feature A depth ≤ 2) +
-  `Examples.Evm.EvmAggregateStorage` (digest `b752af207ed8254a`) — nested `Bundle` State,
-  leaf views, and flat product projection (`bundleSignal`); layout pinned by
+  `Examples.Evm.EvmAggregateStorage` (digest `4b648eab9d955dd2`) — nested `Bundle` State,
+  leaf views, flat product (`bundleSignal`), and nested product views
+  (`bundleView` → `(uint64,(uint8,bool))`, `detailsView` → `(uint8,bool)`); layout pinned by
   `Tests/EvmStaticStorageSpec`
+- **Extract**: bare nested `Prod` returns flatten via `scalarResultValues` (was fail-closed
+  `pair return` beyond one flat pair)
 - **Anvil matrix** for aggregate storage: `runtime-tests/evm/anvil_aggregate_storage.sh`
-  (`setBundle` / `setAmount`, leaf views, `bundleSignal`, Unauthorized non-admin)
-- Still open: nested product / constructed dynamic return from storage field trees;
-  tagged-in-array; depth ceiling raise
+  (`setBundle` / `setAmount`, leaf views, `bundleSignal` / `bundleView` / `detailsView`,
+  Unauthorized non-admin)
+- Still open: constructed dynamic return from storage field trees; tagged-in-array;
+  depth ceiling raise
 
 ## Non-goals
 

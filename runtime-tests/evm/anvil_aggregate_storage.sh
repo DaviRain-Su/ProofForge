@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # EvmAggregateStorage: nested Bundle/Details static layout (Feature A depth ≤ 2).
 # Covers constructor admin limbs, admin-gated nested writes, sibling-leaf preservation,
-# leaf views, flat product projection (bundleSignal), and Unauthorized(non-admin).
+# leaf views, flat product (bundleSignal), nested product views (bundleView/detailsView),
+# and Unauthorized(non-admin).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,6 +55,12 @@ solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" 'enabledOf()(
 signal0="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleSignal()(uint64,bool)')"
 signal0_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$signal0''')))")"
 solana_lean_require_equal "$signal0_values" "0 false" "constructor bundleSignal"
+view0="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleView()(uint64,(uint8,bool))')"
+view0_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$view0''')))")"
+solana_lean_require_equal "$view0_values" "0 0 false" "constructor bundleView"
+details0="$("$cast" call --rpc-url "$rpc" "$addr" 'detailsView()(uint8,bool)')"
+details0_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$details0''')))")"
+solana_lean_require_equal "$details0_values" "0 false" "constructor detailsView"
 
 # Full nested write: amount + details.side + details.enabled in one admin call.
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
@@ -73,6 +80,12 @@ solana_lean_require_equal "$("$cast" call --rpc-url "$rpc" "$addr" 'enabledOf()(
 signal1="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleSignal()(uint64,bool)')"
 signal1_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$signal1''')))")"
 solana_lean_require_equal "$signal1_values" "11 true" "bundleSignal after setBundle"
+view1="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleView()(uint64,(uint8,bool))')"
+view1_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$view1''')))")"
+solana_lean_require_equal "$view1_values" "11 4 true" "bundleView after setBundle"
+details1="$("$cast" call --rpc-url "$rpc" "$addr" 'detailsView()(uint8,bool)')"
+details1_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$details1''')))")"
+solana_lean_require_equal "$details1_values" "4 true" "detailsView after setBundle"
 
 # Targeted amount update must preserve nested details sibling leaves.
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
@@ -85,6 +98,12 @@ solana_lean_require_uint "$("$cast" call --rpc-url "$rpc" "$addr" 'amountOf()(ui
 signal2="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleSignal()(uint64,bool)')"
 signal2_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$signal2''')))")"
 solana_lean_require_equal "$signal2_values" "42 true" "bundleSignal after setAmount"
+view2="$("$cast" call --rpc-url "$rpc" "$addr" 'bundleView()(uint64,(uint8,bool))')"
+view2_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$view2''')))")"
+solana_lean_require_equal "$view2_values" "42 4 true" "bundleView after setAmount"
+details2="$("$cast" call --rpc-url "$rpc" "$addr" 'detailsView()(uint8,bool)')"
+details2_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$details2''')))")"
+solana_lean_require_equal "$details2_values" "4 true" "detailsView after setAmount"
 
 # Non-admin nested write reverts Unauthorized(other) and cannot mutate leaves.
 other_key="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
@@ -110,4 +129,4 @@ if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
 fi
 solana_lean_require_storage "$addr" 3 42 "unauthorized setAmount holds amount"
 
-echo "evm-anvil-aggregate-storage: ok (nested Bundle/Details slots + leaf views + admin gates; engineering only)"
+echo "evm-anvil-aggregate-storage: ok (nested Bundle/Details slots + leaf/nested product views + admin gates; engineering only)"
