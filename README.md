@@ -110,12 +110,20 @@ Neither target name is a blanket public-deployment or standard-ABI compatibility
 
 ## Write a contract
 
-Start with [`Examples/Counter.lean`](Examples/Counter.lean): one account, `UInt64`, checked add. Entries are ordinary Lean.
+Contracts should import a **target SDK**, not the `ProofForge` umbrella (that pulls Emit / Assemble / Registry).
+
+| Target | Import |
+| --- | --- |
+| Solana / sBPF | `ProofForge.Attr` + `ProofForge.Svm.Sdk` |
+| EVM | `ProofForge.Attr` + `ProofForge.Evm.Sdk` |
+
+Good in-tree examples: [`Examples/VersionedLedger.lean`](Examples/VersionedLedger.lean) (SVM), [`Examples/TipJar.lean`](Examples/TipJar.lean) (EVM). Minimal shape:
 
 ```lean
-import ProofForge
+import ProofForge.Attr
+import ProofForge.Svm.Sdk
 
-namespace Examples.Counter
+namespace MyProgram.Counter
 
 structure State where
   value : UInt64

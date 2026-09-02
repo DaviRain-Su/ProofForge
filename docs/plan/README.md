@@ -7,11 +7,13 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 当前边界：[Runtime / SDK capability matrix](capability-matrix.md)。
 主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
+产品化拆分：[CLI / SDK / 模板 / Release](productization.md)（`prod-001`…`prod-004`）。
 
 **当前主线（SVM 全轨）**：[SVM 全面工作计划](svm-work-plan.md)
 （能力 Runtime/SDK + 应用 + 语义桥 + 工程 + 形式化）。
 形式化子计划：[svm-formalization-plan.md](svm-formalization-plan.md)（`sf-000`…`sf-016`）。
 WASM PR #4/#5 继续开着，不阻塞本轨。
+产品化与能力主线 **并行**：先冻结 SDK import 表面与 Lake 包边界，再做 `pf init` 与 release。
 
 **三 target 总图（EVM · SVM · NEAR + 人体工程学）**：[multi-target-strategy.md](multi-target-strategy.md)
 （含 powdr-labs 三仓库作为 EVM Feature B 的引入方案）。
@@ -317,6 +319,17 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | [sf-014](tasks/sf-014.md) | todo | Account / Memory / Sysvar / Telemetry L1 |
 | [sf-015](tasks/sf-015.md) | todo | Token / ATA / Pda / System / Memo 扫尾 |
 | [sf-016](tasks/sf-016.md) | todo | SVM 形式化收口审计 |
+
+### Productization — CLI / SDK / 模板 / Release
+
+权威方案：[productization.md](productization.md)。与 SVM 能力主线并行，默认不改 IR digest。
+
+| ID | 状态 | 内容 |
+|---|---|---|
+| [prod-001](tasks/prod-001.md) | done | P0：SDK 推荐 import + CI 伞模块/Sdk→Emit 守卫 |
+| [prod-002](tasks/prod-002.md) | todo | P1：Lake 拆 `*Sdk` / Compiler；CLI 去 `Examples.*` 硬编码 |
+| [prod-003](tasks/prod-003.md) | todo | P2：`pf init` + `templates/svm-counter` / `evm-counter` |
+| [prod-004](tasks/prod-004.md) | todo | P3：Release 打包 CLI 二进制 + SDK tag |
 
 ### Track B–F — 能力 / 应用 / 语义 / 工程
 

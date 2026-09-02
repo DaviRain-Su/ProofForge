@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build pf (linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build pf
+        run: lake build pf
+
+      - name: Stage artifact
+        run: |
+          mkdir -p dist
+          cp .lake/build/bin/pf "dist/pf-linux-x86_64"
+          chmod +x "dist/pf-linux-x86_64"
+          (cd dist && sha256sum pf-linux-x86_64 > pf-linux-x86_64.sha256)
+          ./.lake/build/bin/pf --version | tee dist/pf-version.txt
+
+      - name: Upload linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pf-linux
+          path: dist/*
+
+  build-macos:
+    name: Build pf (macos)
+    runs-on: macos-14
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Install elan + lake deps
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          # macos setup is lean-focused; full .agents/setup is linux-oriented
+          lake --version || true
+
+      - name: Build pf
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake build pf
+
+      - name: Stage artifact
+        run: |
+          mkdir -p dist
+          cp .lake/build/bin/pf "dist/pf-macos-aarch64"
+          chmod +x "dist/pf-macos-aarch64"
+          (cd dist && shasum -a 256 pf-macos-aarch64 > pf-macos-aarch64.sha256)
+          ./.lake/build/bin/pf --version | tee dist/pf-version.txt
+
+      - name: Upload macos artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pf-macos
+          path: dist/*
+
+  publish:
+    name: GitHub Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Compose release notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          {
+            echo "## ProofForge ${TAG}"
+            echo
+            echo "### CLI"
+            echo
+            echo "- \`pf-linux-x86_64\` / \`pf-macos-aarch64\` (+ \`.sha256\`)"
+            echo "- Run \`pf --version\` for Lean / sbpf / solc / wat2wasm pins"
+            echo
+            echo "### SDK (Lake require)"
+            echo
+            echo '```lean'
+            echo "require «proofforge» from git"
+            echo "  \"https://github.com/${GITHUB_REPOSITORY}.git\" @ \"${TAG}\""
+            echo '```'
+            echo
+            echo "Lake libs: \`ProofForgeSvmSdk\` / \`ProofForgeEvmSdk\` (+ \`ProofForgeCore\`)."
+            echo "Contract imports: \`ProofForge.Attr\` + \`ProofForge.Svm.Sdk\` / \`ProofForge.Evm.Sdk\`."
+            echo "Do not \`import ProofForge\` (umbrella) in user contracts."
+            echo
+            echo "### Capability ceiling"
+            echo
+            if [[ -f docs/plan/release-capability-summary.md ]]; then
+              cat docs/plan/release-capability-summary.md
+            else
+              echo "See docs/plan/capability-matrix.md for the fail-closed surface."
+            fi
+            echo
+            echo "### Quick start"
+            echo
+            echo '```text'
+            echo "pf init demo --target svm"
+            echo "cd demo   # edit lakefile require to @ \"${TAG}\" for clean machines"
+            echo "lake build && lake exe pf -- build --target svm"
+            echo '```'
+          } > RELEASE_NOTES.md
+          ls -la dist
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/pf-linux-x86_64
+            dist/pf-linux-x86_64.sha256
+            dist/pf-macos-aarch64
+            dist/pf-macos-aarch64.sha256
+            dist/pf-version.txt
+          body_path: RELEASE_NOTES.md
+          fail_on_unmatched_files: false

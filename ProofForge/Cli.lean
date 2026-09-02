@@ -37,6 +37,7 @@ inductive Command where
   | build
   | deploy
   | call
+  | init
   deriving BEq, Repr, Inhabited
 
 structure Options where
@@ -45,6 +46,10 @@ structure Options where
   outDir : System.FilePath := "build/out"
   names : Array String := #[]
   evmBackend : Option ProofForge.Evm.Assemble.Backend := none
+  /-- Fully-qualified Lean modules (`MyProgram.Counter`). Overrides Examples.<Name> when set. -/
+  modules : Array String := #[]
+  /-- Project directory name for `pf init`. -/
+  initName : String := ""
   rpcUrl : String := "https://alphanet.xrpl.org"
   wallet : String := "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
   contract : String := ""
@@ -53,25 +58,25 @@ structure Options where
   /-- Create-time tfSendAmount drops. Empty = no InstanceParameterValues. -/
   sendAmount : String := ""
   help : Bool := false
+  version : Bool := false
 
 private def usage : String :=
   "pf — ProofForge compiler\n" ++
     "\n" ++
     "Usage:\n" ++
-    "  pf build --target <svm|evm|xrpl|xrpl-alphanet|near> [--out DIR] [--backend solc|yulc] [Program ...]\n" ++
+    "  pf build --target <svm|evm|xrpl|xrpl-alphanet|near> [--out DIR] [--backend solc|yulc] [--module MOD] [Program ...]\n" ++
+    "  pf init <name> --target <svm|evm>\n" ++
     "  pf deploy --target <xrpl|xrpl-alphanet> [--out DIR] [--rpc URL] [--wallet SEED] [--send-amount DROPS] Program\n" ++
     "  pf call --target <xrpl|xrpl-alphanet> --contract ACCOUNT [--rpc URL] [--wallet SEED] Function [UINT64 ...]\n" ++
+    "  pf --version\n" ++
     "\n" ++
     "svm  writes Name.so / Name.s / Name.idl.json\n" ++
     "evm  writes Name.bin / Name.yul / Name.abi.json (default backend solc; --backend yulc or PROOFFORGE_EVM_BACKEND=yulc)\n" ++
     "xrpl writes Name.wat / Name.wasm (XRPL Bedrock local; locked wat2wasm)\n" ++
     "xrpl-alphanet same IR, XLS-0102 host names for live AlphaNet\n" ++
     "near writes Name.wat / Name.wasm (NEAR raw-u64; locked wat2wasm)\n" ++
-    "deploy/call talk via runtime-tests/xrpl/alphanet-rpc.js.\n" ++
-    "     --target xrpl = Bedrock/get_* names (local 2.6.1). xrpl-alphanet = XLS-0102.\n" ++
-    "     --send-amount funds the pseudo-account (local 2.6.1 first-install only).\n" ++
-    "     Public 3.3.0: Function ABI + increment(1) / initialize(7) live.\n" ++
-    "     wasm is a chain family, not a target; pick a member such as xrpl or near\n" ++
+    "--module takes a dotted Lean module (repeatable). Bare Program names still map to Examples.<Name>.\n" ++
+    "User projects should pass --module or list [[program]] entries in pf.toml.\n" ++
     "No program names on build means every registered source module for the selected target.\n"
 
 def parseArgs (args : List String) : Except String Options :=
@@ -79,6 +84,7 @@ def parseArgs (args : List String) : Except String Options :=
     match rest with
     | [] => .ok o
     | "-h" :: _ | "--help" :: _ => .ok { o with help := true }
+    | "--version" :: _ | "-V" :: _ => .ok { o with version := true }
     | "--target" :: t :: rest =>
       match parseTarget t with
       | some tgt => go rest { o with target := tgt }
@@ -87,6 +93,7 @@ def parseArgs (args : List String) : Except String Options :=
             .error "wasm is a chain family, not a target; pick a concrete member (e.g. xrpl or near)"
           else .error s!"unknown target {t}"
     | "--out" :: d :: rest => go rest { o with outDir := d }
+    | "--module" :: m :: rest => go rest { o with modules := o.modules.push m }
     | "--rpc" :: u :: rest => go rest { o with rpcUrl := u }
     | "--wallet" :: s :: rest => go rest { o with wallet := s }
     | "--contract" :: a :: rest => go rest { o with contract := a }
@@ -102,6 +109,8 @@ def parseArgs (args : List String) : Except String Options :=
         | some backend => go rest { o with evmBackend := some backend }
         | none => .error s!"unknown evm backend {b} (want solc or yulc)"
       else if flag.startsWith "-" then .error s!"unknown flag {flag}"
+      else if o.command == .init && o.initName.isEmpty then
+        go rest { o with initName := flag }
       else if o.command == .call && o.functionName.isEmpty then
         go rest { o with functionName := flag }
       else if o.command == .call then
@@ -114,10 +123,12 @@ def parseArgs (args : List String) : Except String Options :=
     | "build" :: rest => (Command.build, rest)
     | "deploy" :: rest => (Command.deploy, rest)
     | "call" :: rest => (Command.call, rest)
+    | "init" :: rest => (Command.init, rest)
     | rest => (Command.build, rest)
   let start : Options :=
     match cmd with
     | .deploy | .call => { command := cmd, target := .xrplAlphaNet }
+    | .init => { command := cmd, target := .svm }
     | .build => { command := cmd }
   go rest start
 
@@ -135,28 +146,136 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
 def svmModuleName (name : String) : Lean.Name :=
   Lean.Name.str `Examples name
 
+structure BuildUnit where
+  name : String
+  module : Lean.Name
+  deriving Repr
+
+private def dottedToName (mod : String) : Lean.Name :=
+  (mod.splitOn ".").foldl (fun n p => if p.isEmpty then n else Lean.Name.str n p) .anonymous
+
+private def basenameOfModule (mod : String) : String :=
+  match (mod.splitOn ".").getLast? with
+  | some n => n
+  | none => mod
+
+private def trimStr (s : String) : String :=
+  s.trimAscii.toString
+
+private def dropStr (s : String) (n : Nat) : String :=
+  (s.drop n).toString
+
+private def dropEndStr (s : String) (n : Nat) : String :=
+  (s.dropEnd n).toString
+
+private def unquoteToml (v0 : String) : String :=
+  let v := trimStr v0
+  if v.startsWith "\"" && v.endsWith "\"" && v.length ≥ 2 then
+    dropEndStr (dropStr v 1) 1
+  else if v.startsWith "'" && v.endsWith "'" && v.length ≥ 2 then
+    dropEndStr (dropStr v 1) 1
+  else v
+
+/-- Value after the first `=` on a TOML assignment line. -/
+private def tomlValue (line : String) : Option String :=
+  match line.splitOn "=" with
+  | _ :: rest =>
+    if rest.isEmpty then none
+    else some (unquoteToml (String.intercalate "=" rest))
+  | _ => none
+
+/-- Minimal `pf.toml` reader: collect `[[program]]` tables with `name` / `module`. -/
+private def parsePfTomlPrograms (text : String) : Array BuildUnit := Id.run do
+  let mut units : Array BuildUnit := #[]
+  let mut inProgram := false
+  let mut curName : Option String := none
+  let mut curModule : Option String := none
+  let flush (units : Array BuildUnit) (curName : Option String) (curModule : Option String) :=
+    match curModule with
+    | some m =>
+      let n := curName.getD (basenameOfModule m)
+      units.push { name := n, module := dottedToName m }
+    | none => units
+  for line0 in text.splitOn "\n" do
+    let line := trimStr line0
+    if line.isEmpty || line.startsWith "#" then
+      pure ()
+    else if line == "[[program]]" then
+      if inProgram then
+        units := flush units curName curModule
+      inProgram := true
+      curName := none
+      curModule := none
+    else if inProgram then
+      if line.startsWith "name" then
+        match tomlValue line with
+        | some v => curName := some v
+        | none => pure ()
+      else if line.startsWith "module" then
+        match tomlValue line with
+        | some v => curModule := some v
+        | none => pure ()
+      else if line.startsWith "[" then
+        units := flush units curName curModule
+        inProgram := false
+        curName := none
+        curModule := none
+  if inProgram then
+    units := flush units curName curModule
+  units
+
+private def loadPfTomlUnits : IO (Array BuildUnit) := do
+  let path : System.FilePath := "pf.toml"
+  if !(← path.pathExists) then
+    return #[]
+  let text ← IO.FS.readFile path
+  return parsePfTomlPrograms text
+
+private def resolveUnits (opts : Options)
+    (selectNames : Array String → Except String (Array String))
+    (tomlUnits : Array BuildUnit) :
+    Except String (Array BuildUnit) := do
+  if !opts.modules.isEmpty then
+    pure <| opts.modules.map fun m =>
+      { name := basenameOfModule m, module := dottedToName m }
+  else if !opts.names.isEmpty then
+    let names ← selectNames opts.names
+    pure <| names.map fun n => { name := n, module := Lean.Name.str `Examples n }
+  else if !tomlUnits.isEmpty then
+    pure tomlUnits
+  else
+    let names ← selectNames #[]
+    pure <| names.map fun n => { name := n, module := Lean.Name.str `Examples n }
+
+private def isExamplesModule : Lean.Name → Bool
+  | .str .anonymous "Examples" => true
+  | .str pref _ => isExamplesModule pref
+  | _ => false
+
 /--
-CLI 构建必须重新从用户模块抽 IR，不能组装 legacy Golden smoke fixture。target registry
-只负责列出可构建模块并钉 canonical digest。
+CLI builds must re-extract IR from user modules; never assemble legacy Golden smoke fixtures.
+The target registry only lists buildable modules and pins canonical digests for Examples fixtures.
 -/
-private unsafe def extractSvmPrograms (names : Array String) :
+private unsafe def extractSvmPrograms (units : Array BuildUnit) :
     IO (Except String (Array Svm.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let modules := names.map fun name => ({ module := svmModuleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      let ns := svmModuleName name
-      match Extract.extractModuleIR env ns none >>= Svm.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Svm.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Svm.IR.digestHex program
-        match Svm.Registry.digestOf name with
-        | some expected =>
-          if digest == expected then .ok program
-          else .error s!"{name}: ir/mismatch: extracted digest {digest} != fixture {expected}"
-        | none => .ok program
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Svm.IR.digestHex program
+          match Svm.Registry.digestOf u.name with
+          | some expected =>
+            if digest == expected then .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
 
@@ -171,24 +290,26 @@ private def selectEvmNames (names : Array String) : Except String (Array String)
       | some _ => .ok n
       | none => .error s!"unknown evm program {n}"
 
-private unsafe def extractEvmPrograms (names : Array String) :
+private unsafe def extractEvmPrograms (units : Array BuildUnit) :
     IO (Except String (Array ProofForge.Evm.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let moduleName (name : String) := Lean.Name.str `Examples name
-    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Evm.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Evm.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Evm.IR.digestHex program
-        match Evm.Registry.digestOf name with
-        | some expected =>
-          if digest == expected then .ok program
-          else .error s!"{name}: ir/mismatch: extracted evm digest {digest} != fixture {expected}"
-        | none => .ok program
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Evm.IR.digestHex program
+          match Evm.Registry.digestOf u.name with
+          | some expected =>
+            if digest == expected then .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted evm digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
 
@@ -203,24 +324,26 @@ private def selectXrplNames (names : Array String) : Except String (Array String
       | some _ => .ok n
       | none => .error s!"unknown xrpl program {n}"
 
-private unsafe def extractXrplPrograms (names : Array String) :
+private unsafe def extractXrplPrograms (units : Array BuildUnit) :
     IO (Except String (Array ProofForge.Wasm.Xrpl.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let moduleName (name : String) := Lean.Name.str `Examples name
-    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Xrpl.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Wasm.Xrpl.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Wasm.Xrpl.IR.digestHex program
-        match Wasm.Xrpl.Registry.digestOf name with
-        | some expected =>
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Wasm.Xrpl.IR.digestHex program
+          match Wasm.Xrpl.Registry.digestOf u.name with
+          | some expected =>
             if digest == expected then .ok program
-            else .error s!"{name}: ir/mismatch: extracted xrpl digest {digest} != fixture {expected}"
-        | none => .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted xrpl digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
 
@@ -272,7 +395,7 @@ private unsafe def runDeploy (opts : Options) : IO UInt32 := do
       return 1
     let name := names[0]!
     let outDir := defaultXrplOut opts
-    match ← extractXrplPrograms #[name] with
+    match ← extractXrplPrograms #[{ name := name, module := Lean.Name.str `Examples name }] with
     | .error reason =>
       IO.eprintln s!"pf: {reason}"
       return 1
@@ -354,26 +477,103 @@ private def selectNearNames (names : Array String) : Except String (Array String
       | some _ => .ok n
       | none => .error s!"unknown near program {n}"
 
-private unsafe def extractNearPrograms (names : Array String) :
+private unsafe def extractNearPrograms (units : Array BuildUnit) :
     IO (Except String (Array ProofForge.Wasm.Near.IR.Program)) :=
   try
     Lean.initSearchPath (← Lean.findSysroot)
     Lean.enableInitializersExecution
-    let moduleName (name : String) := Lean.Name.str `Examples name
-    let modules := names.map fun name => ({ module := moduleName name } : Lean.Import)
+    let modules := units.map fun u => ({ module := u.module } : Lean.Import)
     let env ← Lean.importModules modules {} (loadExts := true)
-    return names.mapM fun name =>
-      match Extract.extractModuleIR env (moduleName name) none >>= Wasm.Near.IR.fromExtracted with
-      | .error reason => .error s!"{name}: {reason}"
+    return units.mapM fun u =>
+      match Extract.extractModuleIR env u.module none >>= Wasm.Near.IR.fromExtracted with
+      | .error reason => .error s!"{u.name}: {reason}"
       | .ok program =>
-        let digest := Wasm.Near.IR.digestHex program
-        match Wasm.Near.Registry.digestOf name with
-        | some expected =>
+        if !isExamplesModule u.module then
+          .ok program
+        else
+          let digest := Wasm.Near.IR.digestHex program
+          match Wasm.Near.Registry.digestOf u.name with
+          | some expected =>
             if digest == expected then .ok program
-            else .error s!"{name}: ir/mismatch: extracted near digest {digest} != fixture {expected}"
-        | none => .ok program
+            else .error s!"{u.name}: ir/mismatch: extracted near digest {digest} != fixture {expected}"
+          | none => .ok program
   catch e =>
     return .error s!"source import failed: {e}"
+
+private def runInit (opts : Options) : IO UInt32 := do
+  if opts.initName.isEmpty then
+    IO.eprintln "pf: init wants a project name"
+    return 1
+  let targetName? : Option String :=
+    match opts.target with
+    | .svm => some "svm"
+    | .evm => some "evm"
+    | _ => none
+  let some targetName := targetName? |
+    do
+      IO.eprintln "pf: init supports --target svm|evm only"
+      return 1
+  let dst : System.FilePath := opts.initName
+  if ← dst.pathExists then
+    IO.eprintln s!"pf: refusing to overwrite {dst}"
+    return 1
+  let src : System.FilePath :=
+    if targetName == "svm" then "templates/svm-counter" else "templates/evm-counter"
+  if !(← src.pathExists) then
+    IO.eprintln s!"pf: template missing at {src} (run from the ProofForge checkout)"
+    return 1
+  let proc ← IO.Process.output { cmd := "cp", args := #["-R", toString src, toString dst] }
+  if proc.exitCode != 0 then
+    IO.eprintln s!"pf: cp failed\n{proc.stderr}"
+    return 1
+  -- Rewrite template `require … from ".." / ".."` (templates/* → repo root).
+  -- Sibling of the checkout → `from ".."`; otherwise absolute path to this checkout
+  -- so `pf init /tmp/demo` still resolves the SDK (prod-003 temp-dir acceptance).
+  let lakefile := dst / "lakefile.lean"
+  if ← lakefile.pathExists then
+    let repoRoot ← IO.currentDir
+    let dstAbs ←
+      try
+        IO.FS.realPath dst
+      catch _ =>
+        pure (repoRoot / dst)
+    let parentAbs ←
+      match dstAbs.parent with
+      | some p =>
+        try IO.FS.realPath p catch _ => pure p
+      | none => pure dstAbs
+    let requireFrom :=
+      if parentAbs == repoRoot then ".."
+      else repoRoot.toString
+    let old ← IO.FS.readFile lakefile
+    let rewritten :=
+      old.replace "from \"..\" / \"..\"" s!"from \"{requireFrom}\""
+        |>.replace "from \"../..\"" s!"from \"{requireFrom}\""
+    IO.FS.writeFile lakefile rewritten
+  let tipModule := if targetName == "svm" then "MyProgram.Counter" else "MyContract.Counter"
+  IO.println s!"initialized {dst} (target={targetName})"
+  IO.println s!"next: cd {dst} && lake build && lake exe pf -- build --target {targetName}"
+  IO.println s!"  (or: lake exe pf -- build --target {targetName} --module {tipModule})"
+  return 0
+
+private def toolLine (cmd : String) (args : Array String) (fallback : String) : IO String := do
+  try
+    let proc ← IO.Process.output { cmd := cmd, args := args }
+    if proc.exitCode == 0 then
+      let line := (trimStr proc.stdout).splitOn "\n" |>.headD (trimStr proc.stdout)
+      return if line.isEmpty then fallback else line
+    else
+      return fallback
+  catch _ =>
+    return fallback
+
+private def printVersion : IO Unit := do
+  IO.println "pf 0.0.1 (ProofForge)"
+  IO.println s!"lean {Lean.versionString}"
+  IO.println s!"sbpf {(← toolLine "sbpf" #["--version"] "sbpf 0.2.2 (pin; binary not on PATH)")}"
+  IO.println s!"solc {(← toolLine "solc" #["--version"] "0.8.34+commit.80d5c536 (pin; binary not on PATH)")}"
+  IO.println s!"wat2wasm {(← toolLine "wat2wasm" #["--version"] "1.0.41 (pin; binary not on PATH)")}"
+  IO.println "pins: lean v4.31.0; sbpf 0.2.2@d835bc6; solc 0.8.34; wat2wasm/wabt 1.0.41; foundry 1.7.1"
 
 unsafe def run (args : List String) : IO UInt32 := do
   match parseArgs args with
@@ -385,18 +585,23 @@ unsafe def run (args : List String) : IO UInt32 := do
     if opts.help then
       IO.println usage
       return 0
+    if opts.version then
+      printVersion
+      return 0
     match opts.command with
     | .deploy => return ← runDeploy opts
     | .call => return ← runCall opts
+    | .init => return ← runInit opts
     | .build =>
+    let tomlUnits ← loadPfTomlUnits
     match opts.target with
     | .svm =>
-      match selectSvmNames opts.names with
+      match resolveUnits opts selectSvmNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractSvmPrograms names with
+      | .ok units =>
+        match ← extractSvmPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -407,12 +612,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.soPath} {r.idlPath} ({r.soBytes.size} bytes)"
           return 0
     | .evm =>
-      match selectEvmNames opts.names with
+      match resolveUnits opts selectEvmNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractEvmPrograms names with
+      | .ok units =>
+        match ← extractEvmPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -430,12 +635,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.binPath} {r.abiPath} ({r.binHex.length / 2} bytes, {backendName})"
           return 0
     | .xrpl =>
-      match selectXrplNames opts.names with
+      match resolveUnits opts selectXrplNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractXrplPrograms names with
+      | .ok units =>
+        match ← extractXrplPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -446,12 +651,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; deployable=false)"
           return 0
     | .xrplAlphaNet =>
-      match selectXrplNames opts.names with
+      match resolveUnits opts selectXrplNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractXrplPrograms names with
+      | .ok units =>
+        match ← extractXrplPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
@@ -462,12 +667,12 @@ unsafe def run (args : List String) : IO UInt32 := do
             IO.println s!"wrote {r.watPath} {r.wasmPath} ({r.watSource.length} bytes WAT; AlphaNet host)"
           return 0
     | .near =>
-      match selectNearNames opts.names with
+      match resolveUnits opts selectNearNames tomlUnits with
       | .error reason =>
         IO.eprintln s!"pf: {reason}"
         return 1
-      | .ok names =>
-        match ← extractNearPrograms names with
+      | .ok units =>
+        match ← extractNearPrograms units with
         | .error reason =>
           IO.eprintln s!"pf: {reason}"
           return 1
