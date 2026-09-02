@@ -62,6 +62,7 @@ import Tests.CoreCodecSpec
 import Tests.CoreCollectionsSpec
 import Tests.CrossTargetCodecSpec
 import Tests.CrossTargetCounterSpec
+import Tests.CrossTargetTokenSpec
 import Tests.EvmBuildSpec
 import Tests.XrplSpec
 import Tests.NearSpec
