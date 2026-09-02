@@ -1,7 +1,7 @@
 ---
 id: svm-sem-140
 track: E-l3
-status: todo
+status: done
 plan: ../svm-work-plan.md
 rung: E∞-knife
 depends-on: [svm-sem-139]
@@ -24,10 +24,11 @@ chains one more zero-`dataLen` skip so the host cursor lands on the account-19 d
    `scripts/regenerate_account19_knives.py` sibling (same pattern as
    `regenerate_account18_knives.py`)
 
-## Evidence (when landed)
+## Evidence
 
-- `ProofForge/Svm/Solanalib.lean` E∞ knife 135 section
-- Spec guards for account-19 after nonadecuple skip
+- `ProofForge/Svm/Solanalib.lean` E∞ knife 135 section (`account18SkipNextInputMem` / `walkAccount18SkipNextAfterSkipChain?` / `evalAbsAccount19Marker?`)
+- Spec `#guard`s in `Tests/SolanalibSpec.lean`
+- Regenerator: `scripts/regenerate_account19_knives.py` (default skip-only; `--all` for field arc)
 
 ## Still open after this knife
 
