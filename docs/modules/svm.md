@@ -70,7 +70,7 @@ allocator 仍是固定容量、index/offset based 的持久字节布局，绝不
 SDK global allocator 本身仍固定使用 32 KiB；`BatchRecorder` 因此不假设 Agave 可选的大 frame。
 `Svm.Heap.Emit` 是这份协议的唯一 assembly interpreter，BatchRecorder 与
 `Svm.TransientVec` 共用它。source-facing `Sdk.Transient.Vector64` 只携带编译期 capacity；
-当前一个 invocation 只允许一个 active handle，payload 固定分配且 `finish` 不回收，full/OOB、
+当前一个 invocation 默认两个 active slot（更多 handle 需 resource manifest 显式加界），payload 固定分配且 `finish` 不回收，full/OOB、
 inactive/capacity mismatch、OOM 分别 fail with `0x1202`、`0x1203`、`0x1201`。native address
 不进入 source value、IR value 或 account bytes。
 

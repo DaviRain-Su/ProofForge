@@ -62,7 +62,7 @@ theorem Span.overlaps_symm (left right : Span) :
   · -- same account: overlap is symmetric in the two offset tests
     have hb : (left.account == right.account) = true := by simp [ha]
     have hc : (right.account == left.account) = true := by simp [ha]
-    simp only [Span.overlaps, hb, hc, true_and]
+    simp only [Span.overlaps, hb, hc]
     exact Bool.and_comm
       (decide (left.offsetBytes < right.endOffset))
       (decide (right.offsetBytes < left.endOffset))
@@ -75,7 +75,7 @@ theorem Span.overlaps_symm (left right : Span) :
 
 /-- Same-account spans that abut (`end = start`) do not overlap. -/
 theorem Span.abut_not_overlaps (account start mid finish : Nat)
-    (hle : start ≤ mid) (hle' : mid ≤ finish) :
+    (hle : start ≤ mid) (_hle' : mid ≤ finish) :
     ({ account, offsetBytes := start, lengthBytes := mid - start } : Span).overlaps
         { account, offsetBytes := mid, lengthBytes := finish - mid } = false := by
   simp [Span.overlaps, Span.endOffset]

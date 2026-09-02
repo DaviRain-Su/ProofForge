@@ -193,11 +193,11 @@ SVM 拥有账户几何、CPI 和 IDL。持久 Map / Queue 是账户 bytes 上的
 | --- | --- |
 | 存储 | 128-seat trader tree 与双 512-node order book 直接驻留账户 bytes。槽位 one-based（`0` 为哨兵）。不用 heap `Map`、detached node、copied tree 或账户外 pointer。 |
 | 撮合 | 固定容量 Sokoban 插入/删除、trader get-or-register deposit、bid/ask `ReduceOrderWithFreeFunds`（partial / full）、collateral unlock、checked preflight。 |
-| 官方 tag 4–7 | Tag 6/7 `FifoCancel` 按 bids→asks 与各侧 FIFO 原位取消，带 owner 过滤、unlock、event index、released-lot 累加器。Tag 6 再按 quote→base claim/withdraw。Tag 7 完全不进 Token CPI。 |
+| 官方 tag 3–14 | Tag 3 `PlaceLimit` 严格子集（PostOnly、无 TIF、只用已存入资金）。Tag 4/5 `ReduceOrder(WithFreeFunds)` partial/full。Tag 6/7 `FifoCancel` 按 bids→asks 与各侧 FIFO 原位取消，带 owner 过滤、unlock、event index、released-lot 累加器；tag 6 再按 quote→base claim/withdraw，tag 7 完全不进 Token CPI。Tag 8/9 `CancelUpTo` 增加 side 与可选 tick/search/cancel 上限的有界 FIFO 过滤。Tag 10/11 `CancelMultipleOrdersById`（有界 id 向量）。Tag 12 `WithdrawFunds`、tag 13 `DepositFunds`（`Option<u64>` 全量变体）、tag 14 `RequestSeat`（System CPI seat PDA + trader 注册）。 |
 | 审计 | `BatchRecorder.begin/append/finish` 用官方 SDK `0x300000000` / 32 KiB 向下 bump。32 条 35-byte Reduce record，第 33 条前自动 flush。empty finish 仍发 93-byte header-only batch。heap 地址不进 source 或账户。 |
 | 游标 | PDA mint seed 读经过认证的 `MarketHeader` 固定 byte slice。FIFO cursor 只保留 `(price, sequence)` scalar key，从账户 root 做有界 strict upper-bound。删除后不保存 node address，也不收集 heap `Vec`。 |
 
-下一步仍在同一 component 边界上：官方 tag 8/9 `CancelUpTo`。细节见 [docs/modules/phoenix.md](docs/modules/phoenix.md)。
+官方指令面目前在同一 component 边界上覆盖 tag 3–14。细节见 [docs/modules/phoenix.md](docs/modules/phoenix.md)。
 
 ### EVM（Yul / ABI）
 
