@@ -103,7 +103,7 @@ examples 已证明工程链可用。
 | **E-B1** | `evm-yul-fragment-001` | 审计 ProofForge `EmitYul` 输出 ⊆ yul-compiler verified fragment；列 reject 清单（`gas()`、超深栈、未支持 builtin） | **partial ✓** — `scripts/check_yul_fragment.py` + `emit_evm_golden_yul.lean` + reject 表（`docs/plan/tasks/evm-yul-fragment-001.md`）；CI self-test 待接 | 指导 Emit 保持「可双编」子集 |
 | **E-B2** | `evm-yulc-backend-001` | `pf build --target evm --backend=yulc`（或 env）；同一 `.yul` 走 yulc CLI | **partial ✓** — backend wired; Counter smoke + Anvil diff **verified** | 与 solc **并行**；默认仍 solc |
 | **E-B3** | `evm-yulc-diff-001` | CI optional lane：Counter 等 **双 backend** differential vs solc | **partial ✓** — `anvil_yulc_counter.sh` + `yulc.sh` runner | 基线允许已知差异表 |
-| **E-B4** | `evm-l3-bridge-001` | 选定 emit 片段 ↔ `yul-semantics` `RunCommitted` / `evm-semantics` `Steps` 对应（Counter 级） | 有界证明或 assume+audit 边界明示 | 对标 SVM `svm-sem-*` |
+| **E-B4** | `evm-l3-bridge-001` | 选定 emit 片段 ↔ `yul-semantics` `RunCommitted` / `evm-semantics` `Steps` 对应（Counter 级） | **partial ✓** — `CounterBridge.lean` mapping + increment interp proof; full `pf_pc` ladder open | 对标 SVM `svm-sem-*` |
 
 **Feature A vs B 决策表：**
 

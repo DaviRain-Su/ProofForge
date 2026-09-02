@@ -1,9 +1,9 @@
 ---
 id: evm-l3-bridge-001
 scope: evm
-status: todo
+status: partial
 depends-on: [evm-yul-fragment-001, evm-yulc-backend-001]
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # evm-l3-bridge-001 — Emit fragment ↔ powdr L3 semantics bridge (Counter-level)
@@ -36,8 +36,8 @@ mirroring SVM `svm-sem-*` evidence style.
 | Phase | Content | Acceptance |
 |---|---|---|
 | P0 | Pin golden Yul + fragment audit table | `check_yul_fragment.py` green on Counter |
-| P1 | Import yul-semantics `RunCommitted` in probe | `build_powdr_probe.sh` green |
-| P2 | Counter ctor/increment/get opcode trace map | Written correspondence doc in probe |
+| P1 | Import yul-semantics `RunCommitted` in probe | **partial ✓** — `CounterBridge.lean` + `build_powdr_probe.sh` |
+| P2 | Counter ctor/increment/get opcode trace map | **partial ✓** — mapping table + `counterIncrement42` interp proof |
 | P3 | Bounded lemma or explicit `assume` list | Reviewable boundary in task + probe README |
 
 ## Dependencies
@@ -48,10 +48,11 @@ mirroring SVM `svm-sem-*` evidence style.
 
 ## Acceptance
 
-- [ ] `powdr-probe/CounterBridge.lean` builds in isolated target
-- [ ] Golden Counter Yul listed in fragment allowlist
-- [ ] Documented mapping: PF emit names ↔ yul-semantics constructs (≥ ctor + one method)
-- [ ] Explicit list of unproved assumptions (externals, gas, deep stack)
+- [x] `powdr-probe/ProofForgePowdrProbe/CounterBridge.lean` builds in isolated target
+- [x] Golden Counter Yul digest pinned (`254202356ee921d6` in probe + `emit_evm_golden_yul.lean`)
+- [x] Documented mapping: PF emit names ↔ yul-semantics constructs (sload/sstore/increment/get)
+- [x] Explicit list of unproved assumptions (`counterBridgeAssumptions`)
+- [ ] `RunCommitted` lemma for full PF selector/`pf_pc` ladder
 - [ ] Optional CI job does not block main `lake build`
 
 ## Non-goals

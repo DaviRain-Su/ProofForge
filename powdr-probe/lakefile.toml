@@ -24,7 +24,7 @@ rev = "c2e44cd2d487fd59b14897732189acc0c1724873"
 # Fast smoke: evm-semantics + yul-semantics (Mathlib-free closure).
 [[lean_lib]]
 name = "ProofForgePowdrProbe"
-roots = ["ProofForgePowdrProbe.Basic", "ProofForgePowdrProbe.YulSemanticsSmoke"]
+roots = ["ProofForgePowdrProbe.Basic", "ProofForgePowdrProbe.YulSemanticsSmoke", "ProofForgePowdrProbe.CounterBridge"]
 
 # Full smoke: adds yul-compiler (+ Mathlib v4.33). Optional; ~10min cold build.
 [[lean_lib]]

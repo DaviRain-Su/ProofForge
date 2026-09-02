@@ -25,7 +25,7 @@ for EVM Feature B, without pulling them into the default `ProofForge` / CI build
 | Repo | Pin | Smoke module |
 |---|---|---|
 | evm-semantics | `2f8714d6…` | `ProofForgePowdrProbe.Basic` |
-| yul-semantics | `c9914c13…` | `ProofForgePowdrProbe.YulSemanticsSmoke` |
+| yul-semantics | `c9914c13…` | `ProofForgePowdrProbe.YulSemanticsSmoke`, `CounterBridge` |
 | yul-compiler | `c2e44cd2…` | `ProofForgePowdrProbe.YulCompilerSmoke` (optional `--full`) |
 
 - `powdr-probe/` — separate Lake package on Lean v4.33.
