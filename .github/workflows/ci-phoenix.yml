@@ -1,8 +1,9 @@
 name: CI Phoenix (nightly)
 
 # Nightly / manual safety net for the dedicated Phoenix lane. Day-to-day PR coverage
-# lives in ci.yml's `phoenix` job (path-filtered). This workflow keeps a scheduled
-# full Phoenix run even when no Phoenix PR is open.
+# lives in ci.yml's `phoenix` job (path-filtered): Lean + Mollusk + Phoenix Surfpool.
+# PhoenixV1Profile Surfpool (~10MB ELF / Loader-v3 writeback) is nightly-only — it
+# timed out at 45m on PR runners (#14).
 
 on:
   schedule:
@@ -20,7 +21,7 @@ jobs:
   phoenix:
     name: Phoenix nightly
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +64,8 @@ jobs:
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh Phoenix
 
+      # ~10MB ELF: Loader-v3 writeback regularly exceeds 45m on GitHub runners.
+      # Kept on nightly/manual only (not PR ci.yml).
       - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
-        timeout-minutes: 45
+        timeout-minutes: 90
         run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile

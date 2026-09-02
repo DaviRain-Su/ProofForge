@@ -286,7 +286,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.phoenix == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    # PR wall budget: Lean + Mollusk + Phoenix Surfpool. PhoenixV1Profile Surfpool
+    # (~10MB ELF) lives in ci-phoenix.yml nightly — it timed out at 45m on PR runners.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -329,11 +331,6 @@ jobs:
       - name: Deploy Phoenix through Surfpool Loader-v3
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh Phoenix
-
-      # ~10MB ELF: Loader-v3 writeback regularly exceeds 15–30m on GitHub runners.
-      - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
-        timeout-minutes: 45
-        run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 
   evm:
     name: EVM

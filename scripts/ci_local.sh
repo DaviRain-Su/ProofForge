@@ -6,11 +6,12 @@
 #   scripts/ci_local.sh --fast           # python guards only
 #   scripts/ci_local.sh --lane lean
 #   scripts/ci_local.sh --lane svm --lane near
-#   scripts/ci_local.sh --phoenix        # dedicated Phoenix lane
+#   scripts/ci_local.sh --phoenix        # dedicated Phoenix lane (no V1 Surfpool)
+#   scripts/ci_local.sh --phoenix --phoenix-v1-surfpool  # also run ~10MB V1 deploy
 #   scripts/ci_local.sh --all            # every lane including Phoenix
 #   scripts/ci_local.sh --base origin/main
 #
-# Env: CI_LOCAL_BASE, SKIP_SETUP=1
+# Env: CI_LOCAL_BASE, SKIP_SETUP=1, PHOENIX_V1_SURFPOOL=1
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,9 +21,10 @@ BASE="${CI_LOCAL_BASE:-origin/main}"
 FAST=0
 ALL=0
 PHOENIX_ONLY=0
+PHOENIX_V1_SURFPOOL="${PHOENIX_V1_SURFPOOL:-0}"
 declare -a LANES=()
 
-usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --lane) LANES+=("$2"); shift 2 ;;
     --all) ALL=1; shift ;;
     --phoenix) PHOENIX_ONLY=1; shift ;;
+    --phoenix-v1-surfpool) PHOENIX_V1_SURFPOOL=1; shift ;;
     --fast) FAST=1; shift ;;
     *) echo "unknown arg: $1" >&2; usage 1 ;;
   esac
@@ -206,12 +209,16 @@ run_near() {
 }
 
 run_phoenix() {
-  log "Phoenix dedicated lane"
+  log "Phoenix dedicated lane (PR mirror: lake + Mollusk + Phoenix Surfpool)"
   lake build PhoenixExamples PhoenixTests
   lake exe pf -- build --target svm --module Examples.Svm.Phoenix --module Examples.Svm.PhoenixV1Profile --out build/sbpf
   cargo test --locked --manifest-path runtime-tests/phoenix/Cargo.toml
   runtime-tests/surfpool/smoke.sh Phoenix
-  runtime-tests/surfpool/smoke.sh PhoenixV1Profile
+  # PhoenixV1Profile Surfpool is nightly-only (ci-phoenix.yml); opt in locally:
+  if [[ "${PHOENIX_V1_SURFPOOL:-}" == "1" ]]; then
+    log "PhoenixV1Profile Surfpool (PHOENIX_V1_SURFPOOL=1)"
+    runtime-tests/surfpool/smoke.sh PhoenixV1Profile
+  fi
 }
 
 if (( FAST )) || have_lane guards; then

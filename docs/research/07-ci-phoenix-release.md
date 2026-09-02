@@ -218,6 +218,7 @@ prod-001…004 **必做项已勾选**；`.github/workflows/release.yml` 已能�
 | Phoenix Mollusk 独立 crate + lane | ✅（#15：`runtime-tests/phoenix`） |
 | Phoenix Surfpool 退出默认 SVM | ✅（专属 `phoenix` job） |
 | 聚合 `test` needs phoenix | ✅（修 #15 空 result 竞态） |
-| PhoenixV1 Surfpool timeout | ✅ 45m |
-| 本地 `scripts/ci_local.sh` | ✅ |
+| Phoenix Surfpool（非 V1） | ✅ 留在 PR `phoenix` lane |
+| PhoenixV1 Surfpool | ✅ 挪到 `ci-phoenix.yml` nightly（PR 上 45m 仍超时） |
+| 本地 `scripts/ci_local.sh` | ✅（V1 Surfpool 需 `PHOENIX_V1_SURFPOOL=1`） |
 | 首次 `v*` Release / Phoenix 独立仓 | 后续 |
