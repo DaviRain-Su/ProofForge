@@ -1075,8 +1075,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   match depositFundsRaw.entry with
   | .raw entry =>
       unless depositFundsRaw.kind == .get && entry.tag == 13 && entry.accountCount == 9 &&
-          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
-          entry.dataLen == 17 do
+          entry.programAccount == 0 && entry.optionWidths == #[8, 8] &&
+          entry.fixedParamCount == 0 && entry.minDataLen == 3 && entry.maxDataLen == 19 do
         throwError s!"wrong raw DepositFunds adapter: {repr entry}"
   | .generated => throwError "DepositFunds lost its raw adapter"
   unless opsHaveIntrinsic (· == .isWritableN 0) placeRaw.ops &&
@@ -1617,9 +1617,9 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "jgt r2, 141, raw_route_next_" &&
       asm.contains "jeq r1, 10, raw_route_match_" &&
       asm.contains "jeq r1, 11, raw_route_match_" &&
-      asm.contains "jne r2, 17, raw_route_next_" &&
+      asm.contains "jlt r2, 3, raw_route_next_" &&
+      asm.contains "jgt r2, 19, raw_route_next_" &&
       asm.contains "jeq r1, 12, raw_route_match_" &&
-      asm.contains "jne r2, 17, raw_route_next_" &&
       asm.contains "jeq r1, 13, raw_route_match_" &&
       asm.contains "jlt r2, 1, raw_route_next_" &&
       asm.contains "jeq r1, 15, raw_route_match_" &&

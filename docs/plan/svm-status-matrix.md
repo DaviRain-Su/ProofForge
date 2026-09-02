@@ -62,6 +62,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001`; Mollusk quote+base + zero/zero + insufficient |
 | [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` (at land); Mollusk quote+base + zero/zero + underflow |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Borsh Option wire; digest `f248b89dc0fb8def`; Mollusk Some/Some + None/None drain + header-only + reject |
+| [svm-app-015](tasks/svm-app-015.md) | Phoenix DepositFunds tag 13 (`Option<u64>` deposit-all) | **done** — Borsh Option wire; digest `1049b9843a832a95`; Mollusk Some/Some + None/None deposit-all + header-only + reject |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
@@ -191,6 +192,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-132](tasks/svm-sem-132.md) | E∞ Loader account-17 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Option withdraw-all; CancelMultiple already at cap 8 |
+| [svm-app-015](tasks/svm-app-015.md) | Phoenix DepositFunds tag 13 (`Option<u64>` deposit-all) | **done** — Option deposit-all; CancelMultiple already at cap 8 |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
 
