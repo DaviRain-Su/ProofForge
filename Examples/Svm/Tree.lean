@@ -2025,6 +2025,69 @@ theorem fixInserted_recolor_right_uncle_wf
     (before.nodes[(parentAddress.toNat - 1) % 4]!.parent) hwf hparent
     ⟨huncle.2.1, huncle.2.2.1⟩ hgrand
 
+/-- **fixInserted LL 旋转（父为祖父左子 + 黑叔 + direction≠1）**：
+控制流读 `before`，写回改 linked 态 `s` 上祖/父两槽（祖：`left:=0`/`parent:=父`/`color:=1`；
+父：`right:=祖`/`parent:=0`/`color:=0`）并把 `root` 设为父。
+几何 `wf` 经 `wf_nodes_set2`（`root` 不在谓词内）。
+`fixInserted` 在此有界切片内联「祖父即原 root」的右旋，**未**调用
+`rotateRight`；故直接复用 `wf_nodes_set2` 而非 `rotateRight_wf`
+（后者面向通用 `rotateRight` 成功路径与更宽父挂接分支）。 -/
+theorem fixInserted_ll_wf
+    (before s : State) (nodeAddress parentAddress direction : UInt64)
+    {t : State} {ret : UInt64}
+    (h : fixInserted before s nodeAddress parentAddress direction = .ok (t, ret))
+    (hwf : wf s)
+    (hparent : 1 ≤ parentAddress ∧ parentAddress < s.bumpIndex)
+    (hparentRed : before.nodes[(parentAddress.toNat - 1) % 4]!.color = 1)
+    (hgrandNe : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0)
+    (hgrand : 1 ≤ before.nodes[(parentAddress.toNat - 1) % 4]!.parent ∧
+      before.nodes[(parentAddress.toNat - 1) % 4]!.parent < s.bumpIndex)
+    (hleft :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left =
+        parentAddress)
+    (huncleBlack :
+      let grandAddress := before.nodes[(parentAddress.toNat - 1) % 4]!.parent
+      let uncleAddress := before.nodes[(grandAddress.toNat - 1) % 4]!.right
+      (if uncleAddress = 0 then (0 : UInt64)
+        else before.nodes[(uncleAddress.toNat - 1) % 4]!.color) ≠ 1)
+    (hdir : direction ≠ 1) :
+    wf t := by
+  unfold fixInserted at h
+  simp only [hparentRed, ↓reduceIte] at h
+  have hgrandNe' : before.nodes[(parentAddress.toNat - 1) % 4]!.parent ≠ 0 := hgrandNe
+  simp only [if_neg hgrandNe', ↓reduceIte] at h
+  have hleft' :
+      before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.left =
+        parentAddress := hleft
+  simp only [hleft', ↓reduceIte] at h
+  have huncleBlack' :
+      (if before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]!.right = 0
+        then (0 : UInt64)
+        else
+          before.nodes[(before.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) %
+              4]!.right.toNat - 1) % 4]!.color) ≠ 1 := huncleBlack
+  simp only [if_neg huncleBlack', ↓reduceIte] at h
+  simp only [if_neg hdir, ↓reduceIte] at h
+  simp only [Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  have hpn := hwf.2.2.2.2.2 parentAddress hparent.1 hparent.2
+  have hgn := hwf.2.2.2.2.2
+    (before.nodes[(parentAddress.toNat - 1) % 4]!.parent) hgrand.1 hgrand.2
+  apply wf_nodes_set2 s
+    ((before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4)
+    ((parentAddress.toNat - 1) % 4)
+    { s.nodes[(before.nodes[(parentAddress.toNat - 1) % 4]!.parent.toNat - 1) % 4]! with
+      left := 0
+      parent := parentAddress
+      color := 1 }
+    { s.nodes[(parentAddress.toNat - 1) % 4]! with
+      right := before.nodes[(parentAddress.toNat - 1) % 4]!.parent
+      parent := 0
+      color := 0 }
+    (by omega) (by omega) hwf
+  · exact ⟨Nat.zero_le _, hgn.2.1, u64_le_of_lt hparent.2, (by decide : (1 : UInt64) ≤ 1)⟩
+  · exact ⟨hpn.1, u64_le_of_lt hgrand.2, Nat.zero_le _, (by decide : (0 : UInt64) ≤ 1)⟩
+
 theorem rotateLeft_wf (s : State) (xAddress : UInt64) {t : State} {y : UInt64}
     (h : rotateLeft s xAddress = .ok (t, y)) (hwf : wf s)
     (hx : 1 ≤ xAddress ∧ xAddress < s.bumpIndex)

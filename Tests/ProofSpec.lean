@@ -41,7 +41,7 @@ import ProofForge.Svm.Sdk.Pubkey
 - `Examples.Svm.Tree.removeNode_size` / `init_wf` / `allocNode_wf` / `insertRoot_wf` / `paintNode_wf` / `linkLeft_wf` / `linkRight_wf`
   / `rotateLeft_wf` / `rotateRight_wf` / `insertAt_linked_wf` / `insertAt_wf`
   / `fixInserted_grand0_paint_parent_wf` / `fixInserted_recolor_left_uncle_wf`
-  / `fixInserted_recolor_right_uncle_wf`：`propext`（部分含 `Quot.sound`）
+  / `fixInserted_recolor_right_uncle_wf` / `fixInserted_ll_wf`：`propext`（部分含 `Quot.sound`）
 - `Evm.Sdk.Payments` 委托透明性（accept/send/transfer/transferFrom/...）：零公理（rfl 级）
 - `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
 - `Evm.Sdk.Fungible` guard 链：`propext`（两个零公理）
@@ -96,6 +96,7 @@ example : Examples.Svm.Tree.wf (Examples.Svm.Tree.init 0) := Examples.Svm.Tree.i
 #check Examples.Svm.Tree.fixInserted_grand0_paint_parent_wf
 #check Examples.Svm.Tree.fixInserted_recolor_left_uncle_wf
 #check Examples.Svm.Tree.fixInserted_recolor_right_uncle_wf
+#check Examples.Svm.Tree.fixInserted_ll_wf
 
 -- Pausable fail-closed：unknown flag 门关且不误报 paused
 #guard
