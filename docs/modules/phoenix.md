@@ -187,6 +187,11 @@ continuation、payload variant flatten、账户/PDA/owner/signer 校验不能完
 fail closed；不得用 scalar fallback、部分 state commit 或 Phoenix-specific emitter 特判
 换取成功。动态容量和部署声明不是本轮 P0 的非显式扩展目标。
 
+
+## Allocator vs bounded capacity (account limits)
+
+Phoenix Sokoban books, trader registries, and CancelMultiple `BoundedVec` capacities stay compile-time fixed under Solana account `data_len` limits. An account-resident allocator only recycles slots inside that predeclared region — it does **not** lift CancelMultiple cap 8 or book N. See [allocator-bounds.md](allocator-bounds.md).
+
 ## 官方有、本仓没有
 
 | 官方 | 为什么关 |

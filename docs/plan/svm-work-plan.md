@@ -239,6 +239,7 @@ Phase 7   收口
 | [svm-app-011](tasks/svm-app-011.md) | Phoenix CancelMultipleById tag-10 capacity 7→8 | **done** — seam 1216; maxDataLen 141; digest `6bf08db0730bf300` |
 | [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001` |
 | [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` |
+| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **doing** — CancelMultiple already at cap 8 |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）
@@ -366,6 +367,13 @@ Phase 7   收口
 | [svm-sem-116](tasks/svm-sem-116.md) | E∞ knife | Loader account-15 owner limbs 0/1 after skip chain | **done** — knife 111; acc15 owner lo |
 | [svm-sem-117](tasks/svm-sem-117.md) | E∞ knife | Loader account-15 owner limbs 2/3 after skip chain | **done** — knife 112; acc15 owner hi |
 | [svm-sem-118](tasks/svm-sem-118.md) | E∞ knife | Loader account-15 executable/rent after skip chain | **done** — knife 113; acc15 exec/rent |
+| [svm-sem-119](tasks/svm-sem-119.md) | E∞ knife | Loader account-15 → account-16 skip chain | **done** — knife 114; acc16 skip |
+| [svm-sem-120](tasks/svm-sem-120.md) | E∞ knife | Loader account-16 header/key after skip chain | **done** — knife 115; acc16 header/key |
+| [svm-sem-121](tasks/svm-sem-121.md) | E∞ knife | Loader account-16 signer/writable after skip chain | **done** — knife 116; acc16 flags |
+| [svm-sem-122](tasks/svm-sem-122.md) | E∞ knife | Loader account-16 lamports/data_len after skip chain | **done** — knife 117; acc16 budget |
+| [svm-sem-123](tasks/svm-sem-123.md) | E∞ knife | Loader account-16 owner limbs 0/1 after skip chain | **done** — knife 118; acc16 owner lo |
+| [svm-sem-124](tasks/svm-sem-124.md) | E∞ knife | Loader account-16 owner limbs 2/3 after skip chain | **done** — knife 119; acc16 owner hi |
+| [svm-sem-125](tasks/svm-sem-125.md) | E∞ knife | Loader account-16 executable/rent after skip chain | **done** — knife 120; acc16 exec/rent |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程
