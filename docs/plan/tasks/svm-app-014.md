@@ -1,7 +1,7 @@
 ---
 id: svm-app-014
 track: D-app
-status: doing
+status: done
 plan: ../svm-work-plan.md
 depends-on: [svm-app-013]
 ---
@@ -24,7 +24,10 @@ exact lots; both-`None` withdraws all free quote+base).
 
 ## Evidence
 
-- (pending) Lean extract/emit digest
+- Lean extract/emit digest `f248b89dc0fb8def`
+- Mollusk: claims Some/Some, None/None drain-all, zero/zero header-only, insufficient reject
+
+- Lean extract/emit digest `f248b89dc0fb8def`
 - (pending) Mollusk Option matrix
 
 ## 仍未覆盖

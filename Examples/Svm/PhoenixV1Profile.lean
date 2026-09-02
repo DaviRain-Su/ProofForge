@@ -2947,13 +2947,15 @@ def cancelMultipleOrdersById (_s : State)
         .ok (_s, 0)
 
 /--
-Official Phoenix `WithdrawFunds` tag 12 wire (exact-lots slice):
-`0c || quote_lots:u64 || base_lots:u64`. Zero lots skip that side. Reuses the shared nine-account
-classic Token withdraw context and claims from free balances before vault CPI. Missing trader or
-insufficient free lots fail closed. Zero/zero is a header-only sequence bump.
+Official Phoenix `WithdrawFunds` tag 12 wire (`Option<u64>` slice):
+`0c || Option<u64> || Option<u64>`. `None` withdraws that side's entire free balance; `Some(n)`
+keeps exact lots (`Some(0)` skips). Reuses the shared nine-account classic Token withdraw context
+and claims from free balances before vault CPI. Missing trader or insufficient free lots fail
+closed. Both-`None` with zero free (or both-`Some(0)`) is a header-only sequence bump.
 -/
-@[pf_entry, pf_svm_raw 12 9 0]
-def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
+@[pf_entry, pf_svm_raw_borsh_options 12 9 0 0 [8, 8]]
+def withdrawFunds (_s : State) (quotePresent : UInt8) (quoteLots : UInt64)
+    (basePresent : UInt8) (baseLots : UInt64) :
     Except Error (State × UInt64) := do
   if cancelWithdrawContextValid = 0 || cancelAllStorageValid512At 2 = 0 then
     .error .overflow
@@ -2968,23 +2970,27 @@ def withdrawFunds (_s : State) (quoteLots baseLots : UInt64) :
       let marketSequence := layout.marketSequence
       let _ := layout.setMarketSequence (marketSequence + 1)
       let _ := beginMarketBatchAt 12 2 2 marketSequence
-      if quoteLots = 0 && baseLots = 0 then
+      let quoteFree := layout.quoteFree traderIndex
+      let baseFree := layout.baseFree traderIndex
+      let quoteLotsEff := if quotePresent = 0 then quoteFree else quoteLots
+      let baseLotsEff := if basePresent = 0 then baseFree else baseLots
+      if quoteLotsEff = 0 && baseLotsEff = 0 then
         let _ := finishMarketBatch
         .ok (_s, 0)
       else
         let quoteLotSize := layout.quoteLotSize
         let baseLotSize := layout.baseLotSize
-        let quoteDivisor := if quoteLots = 0 then 1 else quoteLots
-        let baseDivisor := if baseLots = 0 then 1 else baseLots
+        let quoteDivisor := if quoteLotsEff = 0 then 1 else quoteLotsEff
+        let baseDivisor := if baseLotsEff = 0 then 1 else baseLotsEff
         if quoteLotSize ≤ u64Max / quoteDivisor && baseLotSize ≤ u64Max / baseDivisor then
-          let quoteAtoms := quoteLots * quoteLotSize
-          let baseAtoms := baseLots * baseLotSize
+          let quoteAtoms := quoteLotsEff * quoteLotSize
+          let baseAtoms := baseLotsEff * baseLotSize
           let _ ←
-            if quoteLots = 0 then .ok 0
-            else claimReleasedFunds512At layout traderIndex 0 quoteLots
+            if quoteLotsEff = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 0 quoteLotsEff
           let _ ←
-            if baseLots = 0 then .ok 0
-            else claimReleasedFunds512At layout traderIndex 1 baseLots
+            if baseLotsEff = 0 then .ok 0
+            else claimReleasedFunds512At layout traderIndex 1 baseLotsEff
           let _ := withdrawReleasedAt 0 quoteAtoms
           let _ := withdrawReleasedAt 1 baseAtoms
           let _ := finishMarketBatch

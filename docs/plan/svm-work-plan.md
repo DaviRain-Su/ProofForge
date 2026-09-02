@@ -238,8 +238,8 @@ Phase 7   收口
 | [svm-app-010](tasks/svm-app-010.md) | Phoenix CancelMultipleById tag-10 capacity 6→7 | **done** — seam 1152; maxDataLen 124; digest `31c33408a7d9dbf7` |
 | [svm-app-011](tasks/svm-app-011.md) | Phoenix CancelMultipleById tag-10 capacity 7→8 | **done** — seam 1216; maxDataLen 141; digest `6bf08db0730bf300` |
 | [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001` |
-| [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` |
-| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **doing** — CancelMultiple already at cap 8 |
+| [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` (at land) |
+| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — digest `f248b89dc0fb8def`; Mollusk Option matrix |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）

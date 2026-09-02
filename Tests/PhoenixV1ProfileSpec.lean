@@ -1068,8 +1068,8 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
   match withdrawFundsRaw.entry with
   | .raw entry =>
       unless withdrawFundsRaw.kind == .get && entry.tag == 12 && entry.accountCount == 9 &&
-          entry.programAccount == 0 && entry.paramWidths == #[8, 8] &&
-          entry.dataLen == 17 do
+          entry.programAccount == 0 && entry.optionWidths == #[8, 8] &&
+          entry.fixedParamCount == 0 && entry.minDataLen == 3 && entry.maxDataLen == 19 do
         throwError s!"wrong raw WithdrawFunds adapter: {repr entry}"
   | .generated => throwError "WithdrawFunds lost its raw adapter"
   match depositFundsRaw.entry with

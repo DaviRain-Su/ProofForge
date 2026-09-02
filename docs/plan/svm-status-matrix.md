@@ -60,8 +60,8 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-app-010](tasks/svm-app-010.md) | Phoenix CancelMultipleById tag-10 capacity 6→7 | **done** — seam 1152; maxDataLen 124; digest `31c33408a7d9dbf7`; Mollusk seven-id + reject len=8 |
 | [svm-app-011](tasks/svm-app-011.md) | Phoenix CancelMultipleById tag-10 capacity 7→8 | **done** — seam 1216; maxDataLen 141; digest `6bf08db0730bf300`; Mollusk eight-id + reject len=9 |
 | [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001`; Mollusk quote+base + zero/zero + insufficient |
-| [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf`; Mollusk quote+base + zero/zero + underflow |
-| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **doing** — Borsh Option routes; CancelMultiple already at cap 8 |
+| [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` (at land); Mollusk quote+base + zero/zero + underflow |
+| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Borsh Option wire; digest `f248b89dc0fb8def`; Mollusk Some/Some + None/None drain + header-only + reject |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
@@ -183,7 +183,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-124](tasks/svm-sem-124.md) | E∞ Loader account-16 owner limbs 2/3 after skip chain | **done** |
 | [svm-sem-125](tasks/svm-sem-125.md) | E∞ Loader account-16 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
-| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **doing** — CancelMultiple cap=8 already landed; Option wire next |
+| [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Option withdraw-all; CancelMultiple already at cap 8 |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
 

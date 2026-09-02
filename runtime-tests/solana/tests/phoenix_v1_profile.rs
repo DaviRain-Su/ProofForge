@@ -647,11 +647,23 @@ fn raw_cancel_by_id_data(tag: u8, orders: &[(u8, u64, u64)]) -> Vec<u8> {
     data
 }
 
-fn raw_withdraw_funds_data(quote_lots: u64, base_lots: u64) -> Vec<u8> {
+fn raw_withdraw_funds_data(quote_lots: Option<u64>, base_lots: Option<u64>) -> Vec<u8> {
     let mut data = vec![12];
-    data.extend_from_slice(&quote_lots.to_le_bytes());
-    data.extend_from_slice(&base_lots.to_le_bytes());
-    assert_eq!(data.len(), 17);
+    match quote_lots {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    match base_lots {
+        Some(value) => {
+            data.push(1);
+            data.extend_from_slice(&value.to_le_bytes());
+        }
+        None => data.push(0),
+    }
+    assert!((3..=19).contains(&data.len()));
     data
 }
 
@@ -4703,8 +4715,8 @@ fn official_raw_withdraw_funds_claims_quote_and_base_from_free() {
     write_word(&mut market, 8323, 7);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     let (mollusk, _) = raw_reduce_harness();
-    let data = raw_withdraw_funds_data(5, 3);
-    assert_eq!(data.len(), 17);
+    let data = raw_withdraw_funds_data(Some(5), Some(3));
+    assert_eq!(data.len(), 19);
     let result = mollusk.process_and_validate_instruction(
         &fixture.instruction(&data),
         &fixture.accounts(),
@@ -4748,7 +4760,7 @@ fn official_raw_withdraw_funds_zero_zero_is_header_only() {
     write_word(&mut market, 8323, 8);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
     let (mollusk, _) = raw_reduce_harness();
-    let data = raw_withdraw_funds_data(0, 0);
+    let data = raw_withdraw_funds_data(Some(0), Some(0));
     let result = mollusk.process_and_validate_instruction(
         &fixture.instruction(&data),
         &fixture.accounts(),
@@ -4772,6 +4784,53 @@ fn official_raw_withdraw_funds_zero_zero_is_header_only() {
 }
 
 #[test]
+
+#[test]
+fn official_raw_withdraw_funds_none_none_drains_all_free() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let mut market = market_with_signer_trader();
+    write_word(&mut market, 104, 1);
+    write_word(&mut market, 105, 1);
+    write_word(&mut market, MARKET_SEQUENCE_WORD, 415);
+    // quoteFree=8321, baseFree=8323 for trader index 1; lot sizes are 3 / 2 in the token fixture.
+    write_word(&mut market, 8321, 6);
+    write_word(&mut market, 8323, 4);
+    let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
+    let (mollusk, _) = raw_reduce_harness();
+    let data = raw_withdraw_funds_data(None, None);
+    assert_eq!(data.len(), 3);
+    let result = mollusk.process_and_validate_instruction(
+        &fixture.instruction(&data),
+        &fixture.accounts(),
+        &[Check::success(), Check::return_data(&0u64.to_le_bytes())],
+    );
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, MARKET_SEQUENCE_WORD), 416);
+    assert_eq!(read_word(&market, 8321), 0);
+    assert_eq!(read_word(&market, 8323), 0);
+    // quote atoms = 6 * 3 = 18; base atoms = 4 * 2 = 8.
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.quote_vault_key)),
+        982
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_quote_key)),
+        38
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.base_vault_key)),
+        992
+    );
+    assert_eq!(
+        token_amount(&resulting_account(&result, &fixture.trader_base_key)),
+        18
+    );
+    let payloads = phoenix_data_payloads(&mollusk);
+    assert_eq!(payloads.len(), 1);
+    assert_reduce_header(&payloads[0], 12, 415, market_key, trader_key);
+}
+
 fn official_raw_withdraw_funds_rejects_insufficient_free_atomically() {
     let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
     let market_key = Pubkey::new_unique();
@@ -4782,7 +4841,7 @@ fn official_raw_withdraw_funds_rejects_insufficient_free_atomically() {
     write_word(&mut market, 8321, 2);
     write_word(&mut market, 8323, 1);
     let fixture = RawReduceTokenFixture::new(market_key, trader_key, market);
-    assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_withdraw_funds_data(3, 0)));
+    assert_raw_reduce_token_rejected(&fixture, fixture.instruction(&raw_withdraw_funds_data(Some(3), Some(0))));
 }
 
 #[test]
