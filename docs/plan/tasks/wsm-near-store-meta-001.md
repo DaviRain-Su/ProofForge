@@ -37,15 +37,15 @@ updated: 2026-09-02
 
 1. `DirectQueue64.Handle`（capacity + `Prefix4`）；`head`/`length` 仍在 STATE
 2. `Examples/NearQueue.lean` 经 `@[pf_inline] slots`；digest **unchanged** `a8bf10c3476ef45f`
-3. Lookup / Iterable Handle 仍开
+3. Lookup Map/Set Handle landed (`d14778ca02c69012` unchanged); Iterable 仍开
 
 ## 非目标（本 task / follow-up）
 
-- Iterable / TreeMap Handle（Queue Handle 已落地）
+- Iterable / TreeMap Handle（Queue+Lookup Handle 已落地）
 - 通用 `T`、Sha256 键
 - N>8 `andN`、N15 digest 表
 - near-sdk Drop 语义
 
 ## 验收
 
-N14 行 → **done**（Vector + Queue Handle；golden digest 稳定）；Lookup/Iterable 开 follow-up。
+N14 行 → **done**（Vector + Queue Handle；golden digest 稳定）；Iterable 开 follow-up。
