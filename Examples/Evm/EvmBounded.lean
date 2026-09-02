@@ -68,6 +68,18 @@ Absent elements require a zero payload; nested tagged/dynamic children stay fail
 def echoBoundedOptions (_s : State) (items : BoundedVec (Option UInt64) 2) :
     BoundedVec (Option UInt64) 2 := items
 
+/-- Payload enum used for tagged-in-array coverage. Constructors map to Tagged Tuple v1
+`(uint8,uint64,uint64)` with zero inactive lanes (idle/one/pair). -/
+inductive TaggedSlot where
+  | idle
+  | one (value : UInt64)
+  | pair (left right : UInt64)
+
+/-- Tagged-in-array enums: each element is Tagged Tuple v1 `(uint8,uint64,uint64)`. -/
+@[pf_entry]
+def echoBoundedEnums (_s : State) (items : BoundedVec TaggedSlot 2) :
+    BoundedVec TaggedSlot 2 := items
+
 @[pf_entry]
 def echoBoundedBytes (_s : State) (bytes : BoundedBytes 8) : BoundedBytes 8 := bytes
 

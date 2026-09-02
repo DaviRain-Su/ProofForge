@@ -1503,6 +1503,15 @@ private partial def abiJsonShape : Core.Codec.Schema → Except String AbiJsonSh
                 ("value", ← abiJsonShape payload)
               ]
             }
+        | schema@(.enumeration ..) => do
+            let plan ← Codec.taggedTupleV1InputPlan schema
+            let mut components : Array (String × AbiJsonShape) := #[
+              ("tag", { type := "uint8" })
+            ]
+            for i in [1:plan.wordCount] do
+              components := components.push
+                ("p" ++ toString (i - 1), { type := ← Codec.abiType plan.words[i]! })
+            pure { type := "tuple", components }
         | _ => abiJsonShape element
       return { shape with type := shape.type ++ "[]" }
   | .boundedBytes _ => return { type := "bytes" }

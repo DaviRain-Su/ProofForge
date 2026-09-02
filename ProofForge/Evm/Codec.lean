@@ -90,6 +90,34 @@ private partial def abiTypeOfSchemaAt : Schema → Except String String
   | .boundedBytes .. => throw "evm/codec: bounded bytes require an explicit dynamic ABI policy"
   | .boundedString .. => throw "evm/codec: bounded strings require an explicit dynamic ABI policy"
 
+/-- Count UInt64 payload lanes for one Tagged Tuple v1 enum constructor. -/
+private def enumPayloadWords : Schema → Except String Nat
+  | .unit => pure 0
+  | .scalar (.uint 64) => pure 1
+  | .tuple items => do
+      unless items.all (· == .scalar .uint64) do
+        throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
+      return items.size
+  | _ => throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
+
+/-- Element ABI words for a Tagged Tuple v1 enum used inside a bounded array. -/
+private def taggedArrayEnumElementWords (element : Schema) : Except String (Array Scalar) := do
+  match element with
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
+        throw "evm/codec: tagged array enum requires a nonempty uint8 tag space"
+      let counts ← variants.mapM fun variant => enumPayloadWords variant.2
+      let payloadWords := counts.foldl (init := 0) max
+      pure (#[.uint8] ++ Array.replicate payloadWords .uint64)
+  | _ => throw "evm/codec: tagged array enum element words require an enumeration"
+
+/-- Solidity tuple spelling for a Tagged Tuple v1 enum element. -/
+private def taggedArrayEnumElementTypeName (element : Schema) : Except String String := do
+  let words ← taggedArrayEnumElementWords element
+  let types ← words.mapM abiType
+  pure ("(" ++ String.intercalate "," types.toList ++ ")")
+
+
 /-- Canonical Solidity ABI spelling for one logical parameter or result. Nested records and Lean
 products are tuples; literal vectors are fixed arrays. This target-owned function deliberately
 does not expose ABI words or padding to Core. Product nesting deeper than `maxProductNesting`
@@ -107,7 +135,7 @@ def abiTypeOfSchema (schema : Schema) : Except String String := do
       | .option _ =>
           throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
       | .enumeration .. =>
-          throw "evm/codec: tagged array enum elements are not yet supported"
+          return (← taggedArrayEnumElementTypeName element) ++ "[]"
       | _ =>
           return (← abiTypeOfSchemaAt element) ++ "[]"
   | .boundedBytes _ => pure "bytes"
@@ -356,7 +384,7 @@ def wrapBoundedArrayV1InputPlan (capacity : Nat) (elementPlan : AbiInputPlan) :
   }
 
 /-- **ProofForge EVM Bounded Array v1** binds a top-level `BoundedVec α capacity` to canonical
-standard ABI `α[]` calldata. Static product elements flatten through `staticInputPlan`. Option
+standard ABI `α[]` calldata. Static product elements flatten through `staticInputPlan`. Option and enum
 elements are selected by `inputPlan` via Tagged Tuple v1, then wrapped here. -/
 def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String AbiInputPlan := do
   wrapBoundedArrayV1InputPlan capacity (← staticInputPlan element)
@@ -390,8 +418,7 @@ def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
 source execution as `length || capacity × element source limbs`, then encoded as the canonical
 standard-ABI active prefix. Wide one-ABI-word scalars and constructed static products (flattenable
 by `staticAbiLeaves`) are accepted within the local-frame ceiling. Option elements opt into
-Tagged Tuple v1 `(bool,T)` words with remapped input guards; nested dynamics and enum-in-array
-stay fail closed. -/
+Tagged Tuple v1 `(bool,T)` words with remapped input guards; nested dynamics stay fail closed. Enum elements reuse Tagged Tuple v1 `(uint8,uint64,…)` words. -/
 def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPlan) := do
   let _ ← validate schema
   match schema with
@@ -404,7 +431,7 @@ def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPla
         | .option _ =>
             throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
         | .enumeration .. =>
-            throw "evm/codec: tagged array enum elements are not yet supported"
+            taggedArrayEnumElementWords element
         | _ => do
             let words := (← staticAbiLeaves element).map (·.type)
             unless !words.isEmpty do
@@ -422,7 +449,7 @@ def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPla
         | .option _ =>
             throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
         | .enumeration .. =>
-            throw "evm/codec: tagged array enum elements are not yet supported"
+            taggedArrayEnumElementTypeName element
         | _ => abiTypeOfSchema element
       return some (.boundedArray {
         capacity, elementTypeName, elementWords
@@ -437,14 +464,6 @@ def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPla
       return some (.packedBytes { capacity, validateUtf8 := true })
   | _ => pure none
 
-private def enumPayloadWords : Schema → Except String Nat
-  | .unit => pure 0
-  | .scalar (.uint 64) => pure 1
-  | .tuple items => do
-      unless items.all (· == .scalar .uint64) do
-        throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
-      return items.size
-  | _ => throw "evm/codec: tagged tuple v1 enum fields must be UInt64"
 
 /-- Derive Tagged Tuple v1 returndata geometry independently from the input plan. The first slice
 matches Extract's fixed tagged-result frame: one-limb scalar Option payloads and unit/UInt64 enum
@@ -571,8 +590,11 @@ def inputPlan (schema : Schema) : Except String AbiInputPlan := do
           unless elementPlan.words.size == 2 && elementPlan.words[0]? == some .boolean do
             throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
           wrapBoundedArrayV1InputPlan capacity elementPlan
-      | .enumeration .. =>
-          throw "evm/codec: tagged array enum elements are not yet supported"
+      | .enumeration .. => do
+          let elementPlan ← taggedTupleV1InputPlan element
+          unless elementPlan.words[0]? == some .uint8 do
+            throw "evm/codec: tagged array enum element requires a uint8 tag"
+          wrapBoundedArrayV1InputPlan capacity elementPlan
       | _ => boundedArrayV1InputPlan capacity element
   | .boundedBytes capacity => packedBytesV1InputPlan capacity false
   | .boundedString capacity => packedBytesV1InputPlan capacity true
