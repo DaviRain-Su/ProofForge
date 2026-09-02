@@ -31,6 +31,7 @@
 | [research/04-evm-feasibility.md](research/04-evm-feasibility.md) | EVM target：按当前 Lean 4 表面能否做 |
 | [research/05-evm-coverage-slices.md](research/05-evm-coverage-slices.md) | EVM 覆盖缺口与三块大切片 |
 | [research/06-wasm-feasibility.md](research/06-wasm-feasibility.md) | WASM 第三 target：Lean 自家编译器 vs 新 profile 的路线判定 |
+| [research/07-ci-phoenix-release.md](research/07-ci-phoenix-release.md) | CI 耗时根因、Phoenix 拆分路径、CLI/SDK 首次发版建议 |
 | [modules/wasm.md](modules/wasm.md) | WASM 链家族：Lean → `.wasm`；链拥有 host import 表与存储布局 |
 | [modules/xrpl.md](modules/xrpl.md) | WASM 家族成员：XRPL Bedrock Lean → WAT → `.wasm` |
 | [plan/analysis/xrpl-runtime.md](plan/analysis/xrpl-runtime.md) | XRPL Runtime 排期：向 EVM/SVM 学分层，不学物理模型 |
