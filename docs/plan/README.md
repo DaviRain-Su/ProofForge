@@ -327,9 +327,10 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | ID | 状态 | 内容 |
 |---|---|---|
 | [prod-001](tasks/prod-001.md) | done | P0：SDK 推荐 import + CI 伞模块/Sdk→Emit 守卫 |
-| [prod-002](tasks/prod-002.md) | todo | P1：Lake 拆 `*Sdk` / Compiler；CLI 去 `Examples.*` 硬编码 |
-| [prod-003](tasks/prod-003.md) | todo | P2：`pf init` + `templates/svm-counter` / `evm-counter` |
-| [prod-004](tasks/prod-004.md) | todo | P3：Release 打包 CLI 二进制 + SDK tag |
+| [prod-002](tasks/prod-002.md) | done | P1：Lake 拆 `*Sdk` / Compiler；CLI 去 `Examples.*` 硬编码 |
+| [prod-003](tasks/prod-003.md) | done | P2：`pf init` + `templates/svm-counter` / `evm-counter` |
+| [prod-004](tasks/prod-004.md) | done* | P3：Release 打包 CLI 二进制 + SDK tag（*首次 `v*` 烟测未做） |
+| [release-001](tasks/release-001.md) | checklist | 首次公开 tag `v0.0.1`：命令 / 制品 / 干净机器验收（**不**自动切 tag） |
 
 ### Track B–F — 能力 / 应用 / 语义 / 工程
 
