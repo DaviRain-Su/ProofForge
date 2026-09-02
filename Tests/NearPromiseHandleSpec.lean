@@ -6,6 +6,7 @@ open Lean Elab Command
 open ProofForge.Core.Value
 open ProofForge.Wasm.Near.Runtime
 open ProofForge.Wasm.Near.Sdk
+open ProofForge.Wasm.Near.Sdk.Store
 
 /-! Over-ceiling `maxFanIn` fixtures: Extract must reject N>8 (hard compile ceiling). -/
 
@@ -31,6 +32,10 @@ private def promiseRoot9 : Promises.PromiseHandle 9 :=
 @[pf_entry]
 def init (_seed : UInt64) : State :=
   { marker := 0 }
+
+@[pf_entry]
+def get (state : State) : UInt64 :=
+  state.marker
 
 /-- thenReturned on PromiseHandle 9 must fail closed at Extract. -/
 @[pf_entry]

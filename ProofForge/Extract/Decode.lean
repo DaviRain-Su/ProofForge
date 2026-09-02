@@ -5947,6 +5947,20 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
           | some (.defnInfo info) => mentionsNearEffect env fuel info.value
           | _ => false)
 
+/-- Read a compile-time Nat, unfolding plain `def` aliases such as `defaultMaxFanIn`. -/
+private partial def staticNatOrDefn? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      let e := strip e
+      staticNatVal? env e <|>
+        match e.getAppFn.constName? with
+        | some name =>
+            match env.find? name with
+            | some (.defnInfo info) => staticNatOrDefn? env fuel' info.value
+            | _ => none
+        | none => none
+
 /-- True when `e` is a PromiseHandle lifecycle API that carries compile-time `maxFanIn`. -/
 private def isPromiseHandleLifecycleApi (e : Expr) : Bool :=
   isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned ||
@@ -5959,14 +5973,13 @@ private def isPromiseHandleLifecycleApi (e : Expr) : Bool :=
 
 /-- Fail-closed message when a PromiseHandle API's `maxFanIn` literal exceeds the opcode ladder
 (`maxFanInCompileCeiling = 8`). N>8 requires new fixed `andN` ops; Extract must not silently
-accept an over-ceiling handle capacity. -/
+accept an over-ceiling handle capacity. Bare / partial apps (empty args) are ignored so the
+AST walk can reach the fully applied call. -/
 private def promiseHandleMaxFanInCeilingError? (env : Environment) (e : Expr) : Option String :=
   let e := strip e
-  if !isPromiseHandleLifecycleApi e then none
-  else if e.getAppArgs.isEmpty then
-    some "extract/unsupported: PromiseHandle API missing maxFanIn"
+  if !isPromiseHandleLifecycleApi e || e.getAppArgs.isEmpty then none
   else
-    match staticNatVal? env e.getAppArgs[0]! with
+    match staticNatOrDefn? env 16 e.getAppArgs[0]! with
     | some n =>
         if ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n then none
         else
@@ -5993,12 +6006,13 @@ private partial def findPromiseHandleMaxFanInCeilingError (env : Environment) :
         | _ => none
 
 /-- Whether the PromiseHandle API head at `e` has a static `maxFanIn` within the compile ceiling.
-Returns `none` when the head is not a PromiseHandle lifecycle API. -/
+Returns `none` when the head is not a PromiseHandle lifecycle API or is not yet applied.
+Returns `some false` when the API is applied but `maxFanIn` is non-static or over the ceiling. -/
 private def promiseHandleMaxFanInWithinCeiling? (env : Environment) (e : Expr) : Option Bool :=
   let e := strip e
   if !isPromiseHandleLifecycleApi e || e.getAppArgs.isEmpty then none
   else
-    match staticNatVal? env e.getAppArgs[0]! with
+    match staticNatOrDefn? env 16 e.getAppArgs[0]! with
     | some n => some (ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n)
     | none => some false
 
