@@ -123,7 +123,7 @@ jobs:
 
   publish:
     name: GitHub Release
-    if: github.event_name == 'push' || inputs.publish == true
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish == true)
     needs: [build-linux, build-macos]
     runs-on: ubuntu-24.04
     steps:
