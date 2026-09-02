@@ -177,6 +177,67 @@ def DirectIterableMap64.wellFormed (map : DirectIterableMap64) : Bool :=
     result.status
   else 0
 
+/-- Source-level IterableMap handle: compile-time capacity + derived vector/lookup namespaces.
+Length stays in STATE (N9); tags are stored directly (like `DirectVector64.Handle.tag`) so
+Extract erases projections to literals. Methods are thin `@[pf_inline]` facades. -/
+structure DirectIterableMap64.Handle where
+  capacity : DirectIterableMap64
+  vectorTag : Prefix4
+  lookupTag : Prefix4
+  deriving Repr
+
+@[pf_inline] def DirectIterableMap64.handle
+    (capacity : Nat) (vectorTag lookupTag : Prefix4) : DirectIterableMap64.Handle :=
+  { capacity := capacity, vectorTag := vectorTag, lookupTag := lookupTag }
+
+@[pf_inline] def DirectIterableMap64.handleFromBase
+    (capacity : Nat) (base : Prefix3) : DirectIterableMap64.Handle :=
+  handle capacity base.vectorTag base.lookupTag
+
+@[pf_inline] def DirectIterableMap64.Handle.validLength
+    (h : DirectIterableMap64.Handle) (length : UInt64) : Bool :=
+  DirectIterableMap64.validLength h.capacity length
+
+@[pf_inline] def DirectIterableMap64.Handle.canInsert
+    (h : DirectIterableMap64.Handle) (length : UInt64) : Bool :=
+  DirectIterableMap64.canInsert h.capacity length
+
+@[pf_inline] def DirectIterableMap64.Handle.containsIndex
+    (h : DirectIterableMap64.Handle) (length index : UInt64) : Bool :=
+  DirectIterableMap64.containsIndex h.capacity length index
+
+@[pf_inline] def DirectIterableMap64.Handle.vectorKey
+    (h : DirectIterableMap64.Handle) (index : UInt64) : BoundedBytes 8 :=
+  DirectIterableMap64.vectorKey h.capacity h.vectorTag index
+
+@[pf_inline] def DirectIterableMap64.Handle.lookupKey
+    (h : DirectIterableMap64.Handle) (key : UInt64) : BoundedBytes 12 :=
+  DirectIterableMap64.lookupKey h.capacity h.lookupTag key
+
+@[pf_inline] def DirectIterableMap64.Handle.vectorValue
+    (h : DirectIterableMap64.Handle) (key : UInt64) : BoundedBytes 8 :=
+  DirectIterableMap64.vectorValue h.capacity key
+
+@[pf_inline] def DirectIterableMap64.Handle.lookupValue
+    (h : DirectIterableMap64.Handle) (value index : UInt64) : BoundedBytes 12 :=
+  DirectIterableMap64.lookupValue h.capacity value index
+
+@[pf_inline] def DirectIterableMap64.Handle.indexCode
+    (h : DirectIterableMap64.Handle) (key : UInt64) : UInt64 :=
+  DirectIterableMap64.indexCode h.capacity h.lookupTag key
+
+@[pf_inline] def DirectIterableMap64.Handle.getD
+    (h : DirectIterableMap64.Handle) (key fallback : UInt64) : UInt64 :=
+  DirectIterableMap64.getD h.capacity h.lookupTag key fallback
+
+@[pf_inline] def DirectIterableMap64.Handle.keyAtD
+    (h : DirectIterableMap64.Handle) (length index fallback : UInt64) : UInt64 :=
+  DirectIterableMap64.keyAtD h.capacity h.vectorTag length index fallback
+
+@[pf_inline] def DirectIterableMap64.Handle.hasKeyAt
+    (h : DirectIterableMap64.Handle) (length index : UInt64) : UInt64 :=
+  DirectIterableMap64.hasKeyAt h.capacity h.vectorTag length index
+
 /-- Compile-time bound for a direct `UInt64` Identity `IterableSet`. -/
 abbrev DirectIterableSet64 := Nat
 
@@ -243,5 +304,62 @@ def DirectIterableSet64.wellFormed (set : DirectIterableSet64) : Bool :=
     let _ := result.hasKey (set.vectorKey vectorTag index)
     result.status
   else 0
+
+/-- Source-level IterableSet handle: compile-time capacity + derived vector/lookup namespaces.
+Length stays in STATE (N9); tags are stored directly so Extract erases projections to literals.
+Methods are thin `@[pf_inline]` facades. -/
+structure DirectIterableSet64.Handle where
+  capacity : DirectIterableSet64
+  vectorTag : Prefix4
+  lookupTag : Prefix4
+  deriving Repr
+
+@[pf_inline] def DirectIterableSet64.handle
+    (capacity : Nat) (vectorTag lookupTag : Prefix4) : DirectIterableSet64.Handle :=
+  { capacity := capacity, vectorTag := vectorTag, lookupTag := lookupTag }
+
+@[pf_inline] def DirectIterableSet64.handleFromBase
+    (capacity : Nat) (base : Prefix3) : DirectIterableSet64.Handle :=
+  handle capacity base.vectorTag base.lookupTag
+
+@[pf_inline] def DirectIterableSet64.Handle.validLength
+    (h : DirectIterableSet64.Handle) (length : UInt64) : Bool :=
+  DirectIterableSet64.validLength h.capacity length
+
+@[pf_inline] def DirectIterableSet64.Handle.canInsert
+    (h : DirectIterableSet64.Handle) (length : UInt64) : Bool :=
+  DirectIterableSet64.canInsert h.capacity length
+
+@[pf_inline] def DirectIterableSet64.Handle.containsIndex
+    (h : DirectIterableSet64.Handle) (length index : UInt64) : Bool :=
+  DirectIterableSet64.containsIndex h.capacity length index
+
+@[pf_inline] def DirectIterableSet64.Handle.vectorKey
+    (h : DirectIterableSet64.Handle) (index : UInt64) : BoundedBytes 8 :=
+  DirectIterableSet64.vectorKey h.capacity h.vectorTag index
+
+@[pf_inline] def DirectIterableSet64.Handle.lookupKey
+    (h : DirectIterableSet64.Handle) (value : UInt64) : BoundedBytes 12 :=
+  DirectIterableSet64.lookupKey h.capacity h.lookupTag value
+
+@[pf_inline] def DirectIterableSet64.Handle.vectorValue
+    (h : DirectIterableSet64.Handle) (value : UInt64) : BoundedBytes 8 :=
+  DirectIterableSet64.vectorValue h.capacity value
+
+@[pf_inline] def DirectIterableSet64.Handle.lookupValue
+    (h : DirectIterableSet64.Handle) (index : UInt64) : BoundedBytes 4 :=
+  DirectIterableSet64.lookupValue h.capacity index
+
+@[pf_inline] def DirectIterableSet64.Handle.indexCode
+    (h : DirectIterableSet64.Handle) (value : UInt64) : UInt64 :=
+  DirectIterableSet64.indexCode h.capacity h.lookupTag value
+
+@[pf_inline] def DirectIterableSet64.Handle.keyAtD
+    (h : DirectIterableSet64.Handle) (length index fallback : UInt64) : UInt64 :=
+  DirectIterableSet64.keyAtD h.capacity h.vectorTag length index fallback
+
+@[pf_inline] def DirectIterableSet64.Handle.hasKeyAt
+    (h : DirectIterableSet64.Handle) (length index : UInt64) : UInt64 :=
+  DirectIterableSet64.hasKeyAt h.capacity h.vectorTag length index
 
 end ProofForge.Wasm.Near.Sdk.Store
