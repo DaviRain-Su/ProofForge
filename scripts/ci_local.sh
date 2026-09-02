@@ -214,8 +214,9 @@ run_phoenix() {
   runtime-tests/surfpool/smoke.sh PhoenixV1Profile
 }
 
-have_lane guards && run_guards
-(( FAST )) && run_guards
+if (( FAST )) || have_lane guards; then
+  run_guards
+fi
 have_lane lean && run_lean
 have_lane svm && run_svm
 have_lane evm && run_evm
