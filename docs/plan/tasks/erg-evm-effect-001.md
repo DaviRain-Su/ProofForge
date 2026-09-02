@@ -1,7 +1,7 @@
 ---
 id: erg-evm-effect-001
 scope: ergonomics
-status: partial
+status: done
 depends-on: [erg-do-001]
 plan: ../multi-target-strategy.md
 updated: 2026-09-02
@@ -47,10 +47,14 @@ instead of nested `if`/`match`.
    `hold`; `pause_preserves_supply` / `unpause_preserves_supply` added;
    registry digest `4519c849c36cc5ca`
 
+## Landed (Token UInt64 permit)
+
+10. `Examples.Evm.Token.permit` uses sequential pause-gate `Effect.ensureCode` / `hold`;
+    registry digest `7d01d10202d87dd3`
+
 ## Follow-up
 
-- Port permit gates to `Effect.ensureCode` where CallResult-shaped
-- Nested-`if` remains on remaining UInt64-returning mutators for now
+- Nested-`if` remains on remaining UInt64-returning mutators for now (non-permit)
 
 ## Non-goals
 
@@ -61,5 +65,5 @@ instead of nested `if`/`match`.
 ## Acceptance (slice)
 
 §5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.
-Token Bool ABI trio + `mint` / `burn` / `burnFrom` / allowance / `pause` / `unpause` are sequential;
-`permit` stays nested-`if`.
+Token Bool ABI trio + `mint` / `burn` / `burnFrom` / allowance / `pause` / `unpause` / `permit`
+are sequential.
