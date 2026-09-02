@@ -1092,6 +1092,175 @@ theorem allocNode_wf (s : State) (k v : UInt64) {t : State} {a : UInt64}
         · simp at h
   · simp at h
 
+/-- **insertRoot 保持 wf**：空树首插与 `allocNode_wf` 同构的分配路径，
+额外设置 `root := address` 不改变几何 `wf` 所约束的字段。 -/
+theorem insertRoot_wf (s : State) (k v : UInt64) {t : State} {a : UInt64}
+    (h : insertRoot s k v = .ok (t, a)) (hwf : wf s) : wf t := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  unfold insertRoot at h
+  split at h
+  · rename_i hsz4
+    by_cases hfbeq : s.freeHead = s.bumpIndex
+    · -- bump 分支（fresh = 1）
+      simp only [hfbeq, ↓reduceIte] at h
+      by_cases hb0 : s.bumpIndex = 0
+      · simp [hb0] at h
+      · by_cases hb4 : s.bumpIndex < 5
+        · -- 成功
+          simp only [hb0, hb4, ↓reduceIte] at h
+          simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hb : s.bumpIndex.toNat < 5 := hb4
+          have hbi : (s.bumpIndex + 1).toNat = s.bumpIndex.toNat + 1 :=
+            u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)
+          refine ⟨?_, ?_, ?_, ?_, Nat.le_refl _, ?_⟩
+          · show (s.size + 1).toNat ≤ 4
+            have hst : s.size.toNat < 4 := hsz4
+            rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]
+            omega
+          · show (1 : Nat) ≤ (s.bumpIndex + 1).toNat
+            have hb1' : (1 : Nat) ≤ s.bumpIndex.toNat := hb1
+            rw [hbi]
+            omega
+          · show (s.bumpIndex + 1).toNat ≤ 5
+            rw [hbi]
+            omega
+          · show (s.bumpIndex + 1).toNat ≤ 5
+            rw [hbi]
+            omega
+          · intro a ha0 ha1
+            have ha1' : a.toNat < (s.bumpIndex + 1).toNat := ha1
+            rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)] at ha1'
+            by_cases hab : a = s.bumpIndex
+            · rw [hab, vec_set_self]
+              exact ⟨by exact Nat.zero_le _, by exact Nat.zero_le _, by exact Nat.zero_le _, by exact Nat.zero_le _⟩
+            · have hslot_ne : (a.toNat - 1) % 4 ≠ (s.bumpIndex.toNat - 1) % 4 := by
+                intro heq
+                have ha5 : a.toNat < 5 := by omega
+                exact hab (slot_inj ha0 ha5 hb1 hb heq)
+              have hslot_lt : (a.toNat - 1) % 4 < 4 := by omega
+              have hlt : a < s.bumpIndex := by
+                have hne : a.toNat ≠ s.bumpIndex.toNat := by
+                  intro heq; exact hab (UInt64.toNat_inj.mp heq)
+                show a.toNat < s.bumpIndex.toNat
+                omega
+              have hget : (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                (by omega))[(a.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+                show (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]?.get! = _
+                have h2 : (s.nodes.set ((s.bumpIndex.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]? = s.nodes[(a.toNat - 1) % 4]? := by
+                  simp [Vector.getElem_set, Ne.symm hslot_ne]
+                rw [h2]
+                simp [hslot_lt]
+              simp only []
+              rw [hget]
+              obtain ⟨hl, hr, hp, hc⟩ := hptr a ha0 hlt
+              refine ⟨?_, ?_, ?_, ?_⟩
+              · show (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ (s.bumpIndex + 1).toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]
+                omega
+              · show (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ (s.bumpIndex + 1).toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ s.bumpIndex.toNat := hr
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]
+                omega
+              · show (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ (s.bumpIndex + 1).toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ s.bumpIndex.toNat := hp
+                rw [u64_toNat_add_one (show s.bumpIndex.toNat < 6 by omega)]
+                omega
+              · exact hc
+        · simp [hb4] at h
+    · -- free-list 分支（fresh = 0）
+      simp only [hfbeq, ↓reduceIte] at h
+      by_cases he0 : s.freeHead = 0
+      · simp [he0] at h
+      · by_cases hf4 : s.freeHead < 5
+        · -- 成功
+          simp only [he0, hf4, ↓reduceIte] at h
+          dsimp at h
+          simp only [Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hne0 : s.freeHead.toNat ≠ 0 := by
+            intro heq; exact he0 (UInt64.toNat_inj.mp heq)
+          have hb1' : (1 : Nat) ≤ s.bumpIndex.toNat := hb1
+          have hle' : s.freeHead.toNat ≤ s.bumpIndex.toNat := hfb
+          have hb5' : s.bumpIndex.toNat ≤ 5 := hb5
+          have hfh : (1 : Nat) ≤ s.freeHead.toNat := by omega
+          have hfblt : s.freeHead.toNat < s.bumpIndex.toNat := by
+            have hne : s.freeHead.toNat ≠ s.bumpIndex.toNat := fun heq =>
+              hfbeq (UInt64.toNat_inj.mp heq)
+            omega
+          have hfh4 : s.freeHead < 5 := by
+            show s.freeHead.toNat < 5
+            omega
+          have hmod : (s.freeHead.toNat - 1) % 4 = s.freeHead.toNat - 1 := by
+            have h2 : s.freeHead.toNat - 1 < 4 := by omega
+            exact Nat.mod_eq_of_lt h2
+          have hptr' := hptr s.freeHead hfh hfblt
+          obtain ⟨hl, _, _, _⟩ := hptr'
+          have hl' : (s.nodes[(s.freeHead.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+          rw [hmod] at hl'
+          refine ⟨?_, hb1, hb5, ?_, ?_, ?_⟩
+          · show (s.size + 1).toNat ≤ 4
+            have hst : s.size.toNat < 4 := hsz4
+            rw [u64_toNat_add_one (show s.size.toNat < 6 by omega)]
+            omega
+          · show (s.nodes[(s.freeHead.toNat - 1) % 4]!).left.toNat ≤ 5
+            have hl5 : (s.nodes[(s.freeHead.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+            omega
+          · show (s.nodes[(s.freeHead.toNat - 1) % 4]!).left ≤ s.bumpIndex
+            exact hl
+          · intro a ha0 ha1
+            have ha1' : a.toNat < s.bumpIndex.toNat := ha1
+            by_cases hab : a = s.freeHead
+            · rw [hab, vec_set_self]
+              exact ⟨by exact Nat.zero_le _, by exact Nat.zero_le _, by exact Nat.zero_le _, by exact Nat.zero_le _⟩
+            · have hslot_ne : (a.toNat - 1) % 4 ≠ (s.freeHead.toNat - 1) % 4 := by
+                intro heq
+                have ha5 : a.toNat < 5 := by
+                  have hb : s.bumpIndex.toNat ≤ 5 := hb5
+                  omega
+                exact hab (slot_inj ha0 ha5 hfh hfh4 heq)
+              have hlt : a < s.bumpIndex := by
+                have hne : a.toNat ≠ s.freeHead.toNat := by
+                  intro heq; exact hab (UInt64.toNat_inj.mp heq)
+                show a.toNat < s.bumpIndex.toNat
+                omega
+              have hslot_lt : (a.toNat - 1) % 4 < 4 := by omega
+              have hget : (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                (by omega))[(a.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+                show (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]?.get! = _
+                have h2 : (s.nodes.set ((s.freeHead.toNat - 1) % 4)
+                  ({ left := 0, right := 0, parent := 0, color := 0, key := k, value := v } : Node)
+                  (by omega))[(a.toNat - 1) % 4]? = s.nodes[(a.toNat - 1) % 4]? := by
+                  simp [Vector.getElem_set, Ne.symm hslot_ne]
+                rw [h2]
+                simp [hslot_lt]
+              simp only []
+              rw [hget]
+              obtain ⟨hl, hr, hp, hc⟩ := hptr a ha0 hlt
+              refine ⟨?_, ?_, ?_, ?_⟩
+              · show (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).left.toNat ≤ s.bumpIndex.toNat := hl
+                omega
+              · show (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ s.bumpIndex.toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).right.toNat ≤ s.bumpIndex.toNat := hr
+                omega
+              · show (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ s.bumpIndex.toNat
+                have hf' : (s.nodes[(a.toNat - 1) % 4]!).parent.toNat ≤ s.bumpIndex.toNat := hp
+                omega
+              · show (s.nodes[(a.toNat - 1) % 4]!).color.toNat ≤ 1
+                exact hc
+        · simp [hf4] at h
+  · simp at h
+
 /-! ## 第二批 kernel 证明：N=4 分配器与旋转的结构不变量
 
 `u64_pred_add`：`(a-1)+1 = a` 对 UInt64 无条件成立（模 2^64），所以 removeNode
