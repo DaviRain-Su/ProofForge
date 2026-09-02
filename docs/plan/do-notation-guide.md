@@ -43,4 +43,5 @@ plain `UInt64` when no failure path exists — Extract stays simpler.
 ## Related
 
 - Task: `docs/plan/tasks/erg-do-001.md`
-- NEAR Promise handles: still opaque `UInt64` at Extract boundary (N13 follow-up)
+- Next surface: `docs/plan/tasks/erg-evm-effect-001.md` (Token sequential `Effect`)
+- NEAR PromiseHandle Extract through `and8Returned` landed (N13); see `wsm-near-promise-general-001`

@@ -1,7 +1,11 @@
 # 三 Target 推进战略（EVM · SVM · NEAR）
 
-> 更新：2026-09-01。本文回答「接下来怎么继续往后做」：在 **XRPL 暂不管** 的前提下，
+> 更新：2026-09-02。本文回答「接下来怎么继续往后做」：在 **XRPL 暂不管** 的前提下，
 > 只推进 **SVM、EVM、NEAR** 三条线，并把 **Runtime/SDK 人体工程学** 作为横切目标。
+>
+> **EVM Feature B（powdr / yulc L3）本轨暂停**——产品默认仍 solc；E-B0..B4 已落的探针保留，
+> 不继续扩 powdr 工作。Feature A（nested/codec/signed）与 NEAR N14 / SVM sf-011 / erg-evm
+> 优先。
 >
 > 继承：[runtime-sdk-roadmap.md](runtime-sdk-roadmap.md) ·
 > [svm-work-plan.md](svm-work-plan.md) ·
@@ -174,8 +178,8 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
-| **N13** | [`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md) | 有界 Promise handle、N 路 join（仍 fail-closed 上限） | N12 | DAG sandbox ✓（handle Extract `sendHandleThen`/`And3`..`And8` ✓；**3..8-way `andN` + promise.py** ✓；compile-time `maxFanIn` beyond N=8 仍开） |
-| **N14** | `wsm-near-store-meta-001` | collection prefix/metadata（仍 **不** 冒充 near-sdk `Drop`/cache） | N5 基础 ✓ | layout golden |
+| **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；N>8 ops 仍开 |
+| **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | collection prefix/metadata Handle（仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | Vector Handle + layout golden（第一切片） |
 | **N15** | `wsm-near-conformance-001` | Counter/Token 形 cross-target 示例（SVM/EVM 已有对照） | N12d | 三 target digest 表 |
 
 **明确不做（与计划一致）：**
@@ -209,10 +213,10 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 | ID | 交付 | 范围 | 原则 |
 |---|---|---|---|
-| **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | EVM/SVM/NEAR `andThen` 示例已通；NEAR mutating JSON u128 `NearToken` 返回已通 |
-| **erg-near-token-001** | `NearToken` 高层 API：`isZero`/`le`/`lt`/`add?`/`sub?`/`mulUInt64?`/`addChecked` 等 | Near.Sdk + `NearTokenErgonomics` | limb 级 op 复用既有 Runtime |
-| **erg-evm-effect-001** | `Evm.CallResult` / `Effect.then` 链式文档 + Token 示例改写 | Evm.Sdk | 已有 R5-012 能力，只改 surface |
-| **erg-svm-account-001** | `Account.Handle` 方法链（`.transferLamports`、`.resizeData`、`.closeTo`）示例化 | Svm.Sdk | 已有 R2/R3，补 cookbook |
+| **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | ✓ EVM/SVM/NEAR |
+| **erg-near-token-001** | `NearToken` 高层 API | Near.Sdk + `NearTokenErgonomics` | ✓ |
+| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.then` / Token 顺序 surface | Evm.Sdk + `Examples/Token.lean` | 第一切片：transfer/approve 链式改写 + digest |
+| **erg-svm-account-001** | `Account.Handle` 方法链 cookbook | Svm.Sdk | 已有 `LamportTransfer`；补文档切片 |
 
 ### 5.3 「像传统语言」的验收标准（可测）
 
