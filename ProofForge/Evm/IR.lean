@@ -315,18 +315,46 @@ private def rewriteAbiRoot (method : Core.IR.Method Ops.ValKind Ops.OpExt)
       -- Generic `pf_inline` helpers can erase the host Vector's implicit Nat argument before
       -- Extract observes it, leaving the compatibility `indexGet.length` at zero. The typed ABI
       -- plan remains authoritative for capacity and the fixed local frame.
-      unless name == "values" && (length == 0 || length == capacity) && elementOffset == 0 do
+      unless name == "values" && (length == 0 || length == capacity) do
         throw (s!"evm/codec: dynamic index projection {name}/{length}/{elementOffset} " ++
-          s!"does not match values/{capacity}/0")
-      let some elementType := elementWords[0]?
-        | throw "evm/codec: dynamic element plan is empty"
-      unless elementWords.size == 1 && Codec.limbCount elementType == 1 do
-        throw "evm/codec: dynamic reads currently require one-limb scalar elements"
+          s!"does not match values/{capacity}/…")
+      unless !elementWords.isEmpty do
+        throw "evm/codec: dynamic element plan is empty"
+      unless elementOffset % 8 == 0 do
+        throw s!"evm/codec: dynamic element byte offset {elementOffset} is not limb-aligned"
+      let limb := elementOffset / 8
       let start := paramWordStart plans param
-      let mut selected : Ops.Val := .lit 0
-      for i in [0:capacity] do
-        selected := .select .eq index (.lit (UInt64.ofNat i)) (.arg (start + 1 + i)) selected
-      return some selected
+      let elementSource := fun (elemIdx : Nat) => do
+        if elementWords.size == 1 then
+          let elementType := elementWords[0]!
+          let limbs := Codec.limbCount elementType
+          unless limb < limbs do
+            throw s!"evm/codec: dynamic element limb {limb} exceeds {limbs}"
+          let physical := start + 1 + elemIdx
+          if limbs == 1 then
+            pure (.arg physical)
+          else
+            pure (.field (.arg physical) s!"w{limb}")
+        else do
+          unless elementWords.all (fun type => Codec.limbCount type == 1) do
+            throw "evm/codec: constructed dynamic elements currently require one-limb words"
+          unless limb < elementWords.size do
+            throw s!"evm/codec: constructed element word {limb} exceeds {elementWords.size}"
+          pure (.arg (start + 1 + elemIdx * elementWords.size + limb))
+      match index with
+      | .lit idx =>
+          let elemIdx := idx.toNat
+          unless elemIdx < capacity do
+            throw s!"evm/codec: dynamic element index {elemIdx} exceeds capacity {capacity}"
+          return some (← elementSource elemIdx)
+      | _ => do
+          unless limb == 0 && elementWords.size == 1 &&
+              Codec.limbCount elementWords[0]! == 1 do
+            throw "evm/codec: dynamic indexed reads currently require one-limb scalar elements"
+          let mut selected : Ops.Val := .lit 0
+          for i in [0:capacity] do
+            selected := .select .eq index (.lit (UInt64.ofNat i)) (.arg (start + 1 + i)) selected
+          return some selected
   | .field (.arg index) name => do
       if index ≥ method.paramCount then return none
       let some plan := plans[index]?

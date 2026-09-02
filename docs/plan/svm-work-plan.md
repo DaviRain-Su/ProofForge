@@ -127,7 +127,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 
 - Phase 1–7 **不变**；外分支不插入新 Phase。  
 - 本轨实现 PR **禁止**以 `wasm-near` / `wasm-feature` 为 base。  
-- 若 WASM 先合 main：本轨下一次 `merge origin/main` 时只做 §3.2 窄缝 + README 表合并，然后继续 sf-001。  
+- 若 WASM 先合 main：本轨下一次 `merge origin/main` 时只做 §3.2 窄缝 + README 表合并，然后继续 sf-002。  
 - 若本轨证明先合：WASM 合入时由他们补 reject 臂（他们分支上已有）。
 
 ---
@@ -142,8 +142,8 @@ Phase 0   导航对齐
           · 确认 WASM PR 不阻塞
 
 Phase 1   证明主线（吃 main 余量）+ L3 阶梯启动 + Runtime 小缺口   ← 立刻
-          · A: sf-000..sf-011 几何 **done** → **sf-012 FifoCancel / sf-013 BatchRecorder**（doing）
-            （nowrap push / pop clear·advance 已在 main，禁止重做）
+          · A: sf-000..sf-011 几何 **done** → **sf-012 FifoCancel / sf-013 BatchRecorder**（done）
+            （empty/nowrap/wrap push 链接+读回、pop clear/advance/wrap 已完成，禁止重做）
           · E: svm-sem-001 operand materialization / straightline（**done**）
           · B: svm-rt-001 signed Clock（可并行）
           · F: svm-eng-001 形式化 CI 门（**done**）
@@ -446,9 +446,8 @@ Phase 7   收口
 
 ## 9. 开工建议（本周）
 
-1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → Tracks A–F closeout audit **done**（`tasks/svm-closeout-audit.md`） 或 closeout audit
-2. **并行**：`svm-app-003` 非 Phoenix 小例子；Tracks A–F closeout audit
-3. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
+1. **主线能力**：through `svm-rt-005` + SDK + eng + **`svm-sem-001`..`005`** + **`svm-app-001`..`003`** done → Tracks A–F closeout audit **done**（`tasks/svm-closeout-audit.md`）
+2. **WASM**：PR #4/#5 继续开着；本轨不跟 `wasm-near` 抢写
 
 能力片合并时：若引入新 SDK 表面，同步开/扩对应 `sf-*`。
 状态板：[`svm-status-matrix.md`](svm-status-matrix.md) / `python3 scripts/svm_status_summary.py`。

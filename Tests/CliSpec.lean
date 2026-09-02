@@ -21,6 +21,8 @@ namespace Tests.CliSpec
 #guard ProofForge.Cli.svmModuleName "Counter" == `Examples.Counter
 #guard ProofForge.Cli.fixtureModule .evm "Counter" == `Examples.Counter
 #guard ProofForge.Cli.fixtureModule .evm "TipJar" == `Examples.Evm.TipJar
+#guard ProofForge.Cli.fixtureModule .evm "EvmTokenErgonomics" == `Examples.EvmTokenErgonomics
+#guard ProofForge.Cli.fixtureModule .near "NearPromiseHandle" == `Examples.NearPromiseHandle
 #guard ProofForge.Cli.fixtureModule .xrpl "XrplSmoke" == `Examples.Xrpl.XrplSmoke
 #guard ProofForge.Cli.fixtureModule .near "NearCtx" == `Examples.Near.NearCtx
 

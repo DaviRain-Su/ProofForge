@@ -367,6 +367,9 @@ def ft_transfer (state : State) (args : ProofForge.Wasm.Near.Runtime.FtTransferA
       if !Ledger.isZero args.amount then
         let _ := balances.read sender
         if Registration.readWasValidPresent then
+          -- Capture sender limbs before the receiver read. The storage result buffer is
+          -- effectful; computing nextSender after that read (or via a delayed NearToken
+          -- projection) can overwrite present-zero retention on full depletion.
           let senderW0 := resultNearTokenW0D 0
           let senderW1 := resultNearTokenW1D 0
           if ProofForge.Wasm.Near.Runtime.nearTokenSubOk

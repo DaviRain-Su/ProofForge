@@ -267,6 +267,27 @@ This keeps application code free of the carrier's arbitrary numeric result. -/
 @[pf_inline] def thenTrue (effect : UInt64) : Bool :=
   (effect ||| 1) != 0
 
+/-- Soft-fail CallResult terminal (R5-012): keep `state`, sequence `effect` into a Bool ABI. -/
+@[reducible, pf_inline] def abort {σ ε : Type} (state : σ) (effect : UInt64) : Except ε (σ × Bool) :=
+  .ok (state, thenTrue effect)
+
+/-- Sequential fail-closed gate: on `false`, soft-abort with `effect`; otherwise continue.
+Preserves CallResult shape — reverts stay `.ok (state, Bool)`, not `Except` errors. -/
+@[reducible, pf_inline] def ensure {σ ε : Type} (cond : Bool) (state : σ) (effect : UInt64)
+    (cont : Unit → Except ε (σ × Bool)) : Except ε (σ × Bool) :=
+  if cond then cont () else abort state effect
+
+/-- Soft-fail CallResult terminal for UInt64 ABI methods: keep `state`, return `effect` as-is. -/
+@[reducible, pf_inline] def abortCode {σ ε : Type} (state : σ) (effect : UInt64) :
+    Except ε (σ × UInt64) :=
+  .ok (state, effect)
+
+/-- Sequential fail-closed gate for UInt64 CallResult methods (mint/burn/allowance).
+Soft reverts stay `.ok (state, UInt64)` — no Bool coercion via `thenTrue`. -/
+@[reducible, pf_inline] def ensureCode {σ ε : Type} (cond : Bool) (state : σ) (effect : UInt64)
+    (cont : Unit → Except ε (σ × UInt64)) : Except ε (σ × UInt64) :=
+  if cond then cont () else abortCode state effect
+
 end Effect
 
 namespace Event

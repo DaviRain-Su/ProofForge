@@ -77,6 +77,7 @@ import Examples.Svm.TransientWide128
 import Examples.Svm.TransientWide256
 import Examples.Svm.LamportTransfer
 import Examples.Svm.PubkeyGate
+import Examples.SvmExceptErgonomics
 import Examples.Svm.AccountViewMutation
 import Examples.Svm.InstructionsSlice
 import Examples.Svm.MemoUtf8
@@ -94,6 +95,7 @@ import Examples.Evm.EvmSearch
 import Examples.Evm.EvmFindIndex
 import Examples.Evm.EvmStaticCounter
 import Examples.Evm.EvmStaticRoster
+import Examples.Evm.EvmAggregateStorage
 import Examples.Evm.EvmOrderedStorage
 import Examples.Evm.EvmVecLog
 import Examples.Evm.EvmVecStack
@@ -125,6 +127,8 @@ import Examples.Evm.TwoStepCounter
 import Examples.Evm.Credits
 import Examples.Evm.Wide
 import Examples.Evm.Const
+import Examples.EvmExceptErgonomics
+import Examples.EvmTokenErgonomics
 
 -- XRPL
 import Examples.Xrpl.XrplCtx
@@ -188,3 +192,5 @@ import Examples.Near.NearFungibleTokenEvent
 import Examples.Near.NearFungibleLedger
 import Examples.Near.NearTokenArithmetic
 import Examples.Near.NearTokenStorage
+import Examples.NearPromiseHandle
+import Examples.NearTokenErgonomics

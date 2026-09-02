@@ -569,6 +569,410 @@ actions are appended to the callback receipt, never to the join itself. -/
   let _ := callbackGas
   0
 
+/-- Schedule three ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..2
+preserve left/middle/right input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd3ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
+/-- Schedule four ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..3
+preserve left/middle/right/fourth input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd4ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
+/-- Schedule five ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..4
+preserve left/middle/right/fourth/fifth input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd5ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (fifthArguments : ProofForge.Core.Value.BoundedBytes fifthArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (fifthDepositLo fifthDepositHi fifthGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := fifthArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := fifthReceiver
+  let _ := fifthMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := fifthArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := fifthDepositLo
+  let _ := fifthDepositHi
+  let _ := fifthGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
+/-- Schedule six ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..5
+preserve left/middle/right/fourth/fifth/sixth input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd6ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (fifthArguments : ProofForge.Core.Value.BoundedBytes fifthArgsCapacity)
+    (sixthArguments : ProofForge.Core.Value.BoundedBytes sixthArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (fifthDepositLo fifthDepositHi fifthGas : UInt64)
+    (sixthDepositLo sixthDepositHi sixthGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := fifthArgsCapacity
+  let _ := sixthArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := fifthReceiver
+  let _ := fifthMethod
+  let _ := sixthReceiver
+  let _ := sixthMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := fifthArguments
+  let _ := sixthArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := fifthDepositLo
+  let _ := fifthDepositHi
+  let _ := fifthGas
+  let _ := sixthDepositLo
+  let _ := sixthDepositHi
+  let _ := sixthGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
+/-- Schedule seven ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..6
+preserve left/middle/right/fourth/fifth/sixth/seventh input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd7ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+      seventhReceiver seventhMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (fifthArguments : ProofForge.Core.Value.BoundedBytes fifthArgsCapacity)
+    (sixthArguments : ProofForge.Core.Value.BoundedBytes sixthArgsCapacity)
+    (seventhArguments : ProofForge.Core.Value.BoundedBytes seventhArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (fifthDepositLo fifthDepositHi fifthGas : UInt64)
+    (sixthDepositLo sixthDepositHi sixthGas : UInt64)
+    (seventhDepositLo seventhDepositHi seventhGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := fifthArgsCapacity
+  let _ := sixthArgsCapacity
+  let _ := seventhArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := fifthReceiver
+  let _ := fifthMethod
+  let _ := sixthReceiver
+  let _ := sixthMethod
+  let _ := seventhReceiver
+  let _ := seventhMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := fifthArguments
+  let _ := sixthArguments
+  let _ := seventhArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := fifthDepositLo
+  let _ := fifthDepositHi
+  let _ := fifthGas
+  let _ := sixthDepositLo
+  let _ := sixthDepositHi
+  let _ := sixthGas
+  let _ := seventhDepositLo
+  let _ := seventhDepositHi
+  let _ := seventhGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
+/-- Schedule eight ordered static child calls, join them, then schedule one static callback on the
+current contract and forward only the callback's eventual result. Callback result indices 0..7
+preserve left/middle/right/fourth/fifth/sixth/seventh/eighth input order even when any child fails. -/
+@[irreducible] def promiseFunctionCallAnd8ThenReturned
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat)
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+      seventhReceiver seventhMethod eighthReceiver eighthMethod callbackMethod : String)
+    (leftArguments : ProofForge.Core.Value.BoundedBytes leftArgsCapacity)
+    (midArguments : ProofForge.Core.Value.BoundedBytes midArgsCapacity)
+    (rightArguments : ProofForge.Core.Value.BoundedBytes rightArgsCapacity)
+    (fourthArguments : ProofForge.Core.Value.BoundedBytes fourthArgsCapacity)
+    (fifthArguments : ProofForge.Core.Value.BoundedBytes fifthArgsCapacity)
+    (sixthArguments : ProofForge.Core.Value.BoundedBytes sixthArgsCapacity)
+    (seventhArguments : ProofForge.Core.Value.BoundedBytes seventhArgsCapacity)
+    (eighthArguments : ProofForge.Core.Value.BoundedBytes eighthArgsCapacity)
+    (callbackArguments : ProofForge.Core.Value.BoundedBytes callbackArgsCapacity)
+    (leftDepositLo leftDepositHi leftGas : UInt64)
+    (midDepositLo midDepositHi midGas : UInt64)
+    (rightDepositLo rightDepositHi rightGas : UInt64)
+    (fourthDepositLo fourthDepositHi fourthGas : UInt64)
+    (fifthDepositLo fifthDepositHi fifthGas : UInt64)
+    (sixthDepositLo sixthDepositHi sixthGas : UInt64)
+    (seventhDepositLo seventhDepositHi seventhGas : UInt64)
+    (eighthDepositLo eighthDepositHi eighthGas : UInt64)
+    (callbackDepositLo callbackDepositHi callbackGas : UInt64) : UInt64 :=
+  let _ := leftArgsCapacity
+  let _ := midArgsCapacity
+  let _ := rightArgsCapacity
+  let _ := fourthArgsCapacity
+  let _ := fifthArgsCapacity
+  let _ := sixthArgsCapacity
+  let _ := seventhArgsCapacity
+  let _ := eighthArgsCapacity
+  let _ := callbackArgsCapacity
+  let _ := leftReceiver
+  let _ := leftMethod
+  let _ := midReceiver
+  let _ := midMethod
+  let _ := rightReceiver
+  let _ := rightMethod
+  let _ := fourthReceiver
+  let _ := fourthMethod
+  let _ := fifthReceiver
+  let _ := fifthMethod
+  let _ := sixthReceiver
+  let _ := sixthMethod
+  let _ := seventhReceiver
+  let _ := seventhMethod
+  let _ := eighthReceiver
+  let _ := eighthMethod
+  let _ := callbackMethod
+  let _ := leftArguments
+  let _ := midArguments
+  let _ := rightArguments
+  let _ := fourthArguments
+  let _ := fifthArguments
+  let _ := sixthArguments
+  let _ := seventhArguments
+  let _ := eighthArguments
+  let _ := callbackArguments
+  let _ := leftDepositLo
+  let _ := leftDepositHi
+  let _ := leftGas
+  let _ := midDepositLo
+  let _ := midDepositHi
+  let _ := midGas
+  let _ := rightDepositLo
+  let _ := rightDepositHi
+  let _ := rightGas
+  let _ := fourthDepositLo
+  let _ := fourthDepositHi
+  let _ := fourthGas
+  let _ := fifthDepositLo
+  let _ := fifthDepositHi
+  let _ := fifthGas
+  let _ := sixthDepositLo
+  let _ := sixthDepositHi
+  let _ := sixthGas
+  let _ := seventhDepositLo
+  let _ := seventhDepositHi
+  let _ := seventhGas
+  let _ := eighthDepositLo
+  let _ := eighthDepositHi
+  let _ := eighthGas
+  let _ := callbackDepositLo
+  let _ := callbackDepositHi
+  let _ := callbackGas
+  0
+
 /-!
 Callback-result foundation. `promiseResultsCount` is immutable invocation context. Every
 `promiseResultRead` replaces one invocation-local bounded descriptor. Status is the exact nearcore

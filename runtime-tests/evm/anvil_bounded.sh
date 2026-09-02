@@ -49,6 +49,23 @@ call_packed() {
   "$cast" call --rpc-url "$rpc" "$addr" --data "$(packed_data "$signature" "$hex_bytes")"
 }
 
+require_cast_json() {
+  local signature="$1"
+  local input="$2"
+  local expected="$3"
+  local message="$4"
+  local actual
+  actual="$("$cast" call --json --rpc-url "$rpc" "$addr" "$signature" "$input")"
+  "$python" -I -S -c \
+    "import json, sys
+actual = json.loads(sys.argv[1])
+expected = json.loads(sys.argv[2])
+if actual != expected:
+    print(f\"FAIL: {sys.argv[3]} (expected {expected!r}, got {actual!r})\", file=sys.stderr)
+    raise SystemExit(1)" \
+    "$actual" "$expected" "$message"
+}
+
 packed_pair_data() {
   local signature="$1"
   local left="$2"
@@ -170,6 +187,56 @@ for malformed in \
   fi
 done
 
+wide_selector="$("$cast" sig 'echoBoundedWide(uint128[])')"
+wide_array_data() {
+  "$python" -I -S -c \
+    "import sys; print(sys.argv[1] + ''.join(f'{int(v):064x}' for v in sys.argv[2:]))" \
+    "$wide_selector" "$@"
+}
+
+for malformed in \
+  "$(wide_array_data 0 2 11 13)" \
+  "$(wide_array_data 32 3 1 2 3)" \
+  "$(wide_array_data 32 2 11)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: malformed wide bounded dynamic ABI calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+pairs_selector="$("$cast" sig 'echoBoundedPairs((uint64,uint16)[])')"
+pairs_array_data() {
+  "$python" -I -S -c \
+    "import sys
+sel = sys.argv[1]
+offset = int(sys.argv[2])
+length = int(sys.argv[3])
+words = [f'{int(v):064x}' for v in sys.argv[4:]]
+print(sel + f'{offset:064x}{length:064x}' + ''.join(words))" \
+    "$pairs_selector" "$@"
+}
+
+for malformed in \
+  "$(pairs_array_data 0 1 11 13)" \
+  "$(pairs_array_data 32 3 1 2 3 4 5 6)" \
+  "$(pairs_array_data 32 2 11 13)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: malformed constructed bounded dynamic ABI calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+for over_capacity in \
+  '[1,2,3]' \
+  '[(1,2),(3,4),(5,6)]'; do
+  signature='echoBoundedWide(uint128[])(uint128[])'
+  [[ "$over_capacity" == *"("* ]] && signature='echoBoundedPairs((uint64,uint16)[])((uint64,uint16)[])'
+  if "$cast" call --rpc-url "$rpc" "$addr" "$signature" "$over_capacity" >/dev/null 2>&1; then
+    echo "FAIL: over-capacity wide/constructed bounded input unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
 bytes_selector="$("$cast" sig 'boundedBytes(bytes)')"
 malformed_packed_data() {
   "$python" -I -S -c \
@@ -220,6 +287,29 @@ for case in \
   echo_array="$("$cast" call --rpc-url "$rpc" "$addr" \
     'echoBoundedValues(uint16[])(uint16[])' "$input")"
   solana_lean_require_equal "$echo_array" "$expected" "bounded array dynamic result $input"
+done
+
+# Wide one-ABI-word elements: each uint128 occupies one dynamic tail word at the ABI boundary.
+for case in \
+  '[]|[[]]' \
+  '[11,13]|[[11,13]]' \
+  '[340282366920938463463374607431768211455,1]|[["340282366920938463463374607431768211455",1]]'; do
+  input="${case%%|*}"
+  expected="${case#*|}"
+  require_cast_json 'echoBoundedWide(uint128[])(uint128[])' "$input" "$expected" \
+    "wide bounded array dynamic result $input"
+done
+
+# Constructed static-product elements: each tuple is two adjacent ABI words in the dynamic tail.
+for case in \
+  '[]|[]' \
+  '[(11,13)]|[(11, 13)]' \
+  '[(11,13),(17,19)]|[(11, 13), (17, 19)]'; do
+  input="${case%%|*}"
+  expected="${case#*|}"
+  echo_pairs="$("$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedPairs((uint64,uint16)[])((uint64,uint16)[])' "$input")"
+  solana_lean_require_equal "$echo_pairs" "$expected" "constructed bounded array dynamic result $input"
 done
 
 for input in 0x 0x0b0d 0x0b0d1113171d1f25; do
@@ -275,4 +365,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-bounded: ok (canonical dynamic input/output + UTF-8 matrix; engineering only)"
+echo "evm-anvil-bounded: ok (canonical dynamic input/output + wide/constructed + UTF-8 matrix; engineering only)"

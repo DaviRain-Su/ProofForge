@@ -1,0 +1,32 @@
+name = "ProofForgePowdrProbe"
+version = "0.1.0"
+defaultTargets = ["ProofForgePowdrProbe"]
+
+# Isolated from the main ProofForge package (Lean v4.31 + Mathlib). This probe
+# pins powdr-labs Feature B repos on Lean v4.33 without linking the default
+# `lake build ProofForge` graph.
+
+[[require]]
+name = "evm_semantics"
+git = "https://github.com/powdr-labs/evm-semantics"
+rev = "2f8714d6ba960a3de67720019b54513f5bc1a2e3"
+
+[[require]]
+name = "yul_semantics"
+git = "https://github.com/powdr-labs/yul-semantics"
+rev = "c9914c13df47efe026376723acd632bc33bc16e3"
+
+[[require]]
+name = "yul_evm_compiler"
+git = "https://github.com/powdr-labs/yul-compiler"
+rev = "c2e44cd2d487fd59b14897732189acc0c1724873"
+
+# Fast smoke: evm-semantics + yul-semantics (Mathlib-free closure).
+[[lean_lib]]
+name = "ProofForgePowdrProbe"
+roots = ["ProofForgePowdrProbe.Basic", "ProofForgePowdrProbe.YulSemanticsSmoke", "ProofForgePowdrProbe.CounterBridge"]
+
+# Full smoke: adds yul-compiler (+ Mathlib v4.33). Optional; ~10min cold build.
+[[lean_lib]]
+name = "ProofForgePowdrProbeFull"
+roots = ["ProofForgePowdrProbe.YulCompilerSmoke"]

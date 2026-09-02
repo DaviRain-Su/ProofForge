@@ -80,4 +80,39 @@ host read. -/
     else fallback
   else fallback
 
+/-- Source-level collection handle: compile-time capacity + `Prefix4`. Length stays in STATE
+(N9); this type never persists metadata or invents a second length key. Methods are thin
+`@[pf_inline]` facades over `DirectVector64` so Extract sees the same shapes as raw calls. -/
+structure DirectVector64.Handle where
+  capacity : DirectVector64
+  tag : Prefix4
+  deriving Repr
+
+@[pf_inline] def DirectVector64.handle (capacity : Nat) (tag : Prefix4) : DirectVector64.Handle :=
+  { capacity := capacity, tag := tag }
+
+@[pf_inline] def DirectVector64.Handle.validLength
+    (h : DirectVector64.Handle) (length : UInt64) : Bool :=
+  DirectVector64.validLength h.capacity length
+
+@[pf_inline] def DirectVector64.Handle.contains
+    (h : DirectVector64.Handle) (length index : UInt64) : Bool :=
+  DirectVector64.contains h.capacity length index
+
+@[pf_inline] def DirectVector64.Handle.canPush
+    (h : DirectVector64.Handle) (length : UInt64) : Bool :=
+  DirectVector64.canPush h.capacity length
+
+@[pf_inline] def DirectVector64.Handle.elementKey
+    (h : DirectVector64.Handle) (index : UInt64) : BoundedBytes 8 :=
+  DirectVector64.elementKey h.capacity h.tag index
+
+@[pf_inline] def DirectVector64.Handle.elementValue
+    (h : DirectVector64.Handle) (value : UInt64) : BoundedBytes 8 :=
+  DirectVector64.elementValue h.capacity value
+
+@[pf_inline] def DirectVector64.Handle.getD
+    (h : DirectVector64.Handle) (length index fallback : UInt64) : UInt64 :=
+  DirectVector64.getD h.capacity h.tag length index fallback
+
 end ProofForge.Wasm.Near.Sdk.Store

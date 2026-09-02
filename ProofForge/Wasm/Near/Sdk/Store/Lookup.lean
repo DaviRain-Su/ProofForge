@@ -112,4 +112,49 @@ already present. This is the inverse of the Boolean returned by Rust `LookupSet.
   let _ := result.remove (set.elementKey value)
   result.status
 
+/-- Source handle for a LookupMap namespace: compile-time `Prefix4` only (no capacity; keys are
+caller-supplied). Methods are `@[pf_inline]` facades so Extract erases to raw map ops. -/
+structure DirectLookupMap64.Handle where
+  tag : DirectLookupMap64
+  deriving Repr
+
+@[pf_inline] def DirectLookupMap64.handle (tag : Nat) : DirectLookupMap64.Handle :=
+  { tag := tag }
+
+@[pf_inline] def DirectLookupMap64.Handle.getD
+    (h : DirectLookupMap64.Handle) (key fallback : UInt64) : UInt64 :=
+  DirectLookupMap64.getD h.tag key fallback
+
+@[pf_inline] def DirectLookupMap64.Handle.has
+    (h : DirectLookupMap64.Handle) (key : UInt64) : UInt64 :=
+  DirectLookupMap64.has h.tag key
+
+@[pf_inline] def DirectLookupMap64.Handle.put
+    (h : DirectLookupMap64.Handle) (key value : UInt64) : UInt64 :=
+  DirectLookupMap64.put h.tag key value
+
+@[pf_inline] def DirectLookupMap64.Handle.remove
+    (h : DirectLookupMap64.Handle) (key : UInt64) : UInt64 :=
+  DirectLookupMap64.remove h.tag key
+
+/-- Source handle for a LookupSet namespace: compile-time `Prefix4` only. -/
+structure DirectLookupSet64.Handle where
+  tag : DirectLookupSet64
+  deriving Repr
+
+@[pf_inline] def DirectLookupSet64.handle (tag : Nat) : DirectLookupSet64.Handle :=
+  { tag := tag }
+
+@[pf_inline] def DirectLookupSet64.Handle.has
+    (h : DirectLookupSet64.Handle) (value : UInt64) : UInt64 :=
+  DirectLookupSet64.has h.tag value
+
+@[pf_inline] def DirectLookupSet64.Handle.insert
+    (h : DirectLookupSet64.Handle) (value : UInt64) : UInt64 :=
+  DirectLookupSet64.insert h.tag value
+
+@[pf_inline] def DirectLookupSet64.Handle.remove
+    (h : DirectLookupSet64.Handle) (value : UInt64) : UInt64 :=
+  DirectLookupSet64.remove h.tag value
+
 end ProofForge.Wasm.Near.Sdk.Store

@@ -112,4 +112,55 @@ that need to distinguish an absent slot from a stored fallback value first call 
     queue.resultValueD fallback
   else fallback
 
+/-- Source-level queue handle: compile-time capacity + `Prefix4`. `head`/`length` stay in STATE
+(N9); this type never persists metadata or invents a second length key. Methods are thin
+`@[pf_inline]` facades over `DirectQueue64` so Extract sees the same shapes as raw calls. -/
+structure DirectQueue64.Handle where
+  capacity : DirectQueue64
+  tag : Prefix4
+  deriving Repr
+
+@[pf_inline] def DirectQueue64.handle (capacity : Nat) (tag : Prefix4) : DirectQueue64.Handle :=
+  { capacity := capacity, tag := tag }
+
+@[pf_inline] def DirectQueue64.Handle.validState
+    (h : DirectQueue64.Handle) (head length : UInt64) : Bool :=
+  DirectQueue64.validState h.capacity head length
+
+@[pf_inline] def DirectQueue64.Handle.canPush
+    (h : DirectQueue64.Handle) (head length : UInt64) : Bool :=
+  DirectQueue64.canPush h.capacity head length
+
+@[pf_inline] def DirectQueue64.Handle.canPop
+    (h : DirectQueue64.Handle) (head length : UInt64) : Bool :=
+  DirectQueue64.canPop h.capacity head length
+
+@[pf_inline] def DirectQueue64.Handle.offsetInRange
+    (h : DirectQueue64.Handle) (head length offset : UInt64) : Bool :=
+  DirectQueue64.offsetInRange h.capacity head length offset
+
+@[pf_inline] def DirectQueue64.Handle.physicalIndex
+    (h : DirectQueue64.Handle) (head offset : UInt64) : UInt64 :=
+  DirectQueue64.physicalIndex h.capacity head offset
+
+@[pf_inline] def DirectQueue64.Handle.nextHead
+    (h : DirectQueue64.Handle) (head : UInt64) : UInt64 :=
+  DirectQueue64.nextHead h.capacity head
+
+@[pf_inline] def DirectQueue64.Handle.elementKey
+    (h : DirectQueue64.Handle) (index : UInt64) : BoundedBytes 8 :=
+  DirectQueue64.elementKey h.capacity h.tag index
+
+@[pf_inline] def DirectQueue64.Handle.elementValue
+    (h : DirectQueue64.Handle) (value : UInt64) : BoundedBytes 8 :=
+  DirectQueue64.elementValue h.capacity value
+
+@[pf_inline] def DirectQueue64.Handle.hasOffset
+    (h : DirectQueue64.Handle) (head length offset : UInt64) : UInt64 :=
+  DirectQueue64.hasOffset h.capacity h.tag head length offset
+
+@[pf_inline] def DirectQueue64.Handle.getD
+    (h : DirectQueue64.Handle) (head length offset fallback : UInt64) : UInt64 :=
+  DirectQueue64.getD h.capacity h.tag head length offset fallback
+
 end ProofForge.Wasm.Near.Sdk.Store

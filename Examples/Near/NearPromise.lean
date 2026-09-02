@@ -147,6 +147,126 @@ def callbackJoined (state : State) (callbackValue : UInt64) : Except Error (Stat
   else
     .error .overflow
 
+/-- Authenticated three-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined3 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 3 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let right := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, right)
+  else
+    .error .overflow
+
+/-- Authenticated four-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined4 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 4 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let fourth := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, fourth)
+  else
+    .error .overflow
+
+/-- Authenticated five-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined5 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 5 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let _ := result.borshUInt64D 999
+    let _ := result.read 4
+    let fifth := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, fifth)
+  else
+    .error .overflow
+
+/-- Authenticated six-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined6 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 6 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let _ := result.borshUInt64D 999
+    let _ := result.read 4
+    let _ := result.borshUInt64D 999
+    let _ := result.read 5
+    let sixth := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, sixth)
+  else
+    .error .overflow
+
+/-- Authenticated seven-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined7 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 7 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let _ := result.borshUInt64D 999
+    let _ := result.read 4
+    let _ := result.borshUInt64D 999
+    let _ := result.read 5
+    let _ := result.borshUInt64D 999
+    let _ := result.read 6
+    let seventh := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, seventh)
+  else
+    .error .overflow
+
+/-- Authenticated eight-input callback. Reads remain ordered and independent. -/
+@[pf_entry, pf_near_private]
+def callbackJoined8 (state : State) (callbackValue : UInt64) : Except Error (State × UInt64) :=
+  if Promises.resultsCount == 8 then
+    let result : Promises.ResultBuffer := 8
+    let _ := result.read 0
+    let left := result.borshUInt64D 999
+    let _ := result.read 1
+    let mid := result.borshUInt64D 999
+    let _ := result.read 2
+    let _ := result.borshUInt64D 999
+    let _ := result.read 3
+    let _ := result.borshUInt64D 999
+    let _ := result.read 4
+    let _ := result.borshUInt64D 999
+    let _ := result.read 5
+    let _ := result.borshUInt64D 999
+    let _ := result.read 6
+    let _ := result.borshUInt64D 999
+    let _ := result.read 7
+    let eighth := result.borshUInt64D 999
+    .ok ({ state with marker := callbackValue, depositLo := left, depositHi := mid }, eighth)
+  else
+    .error .overflow
+
 /-- Diagnostic callback for the strict standalone quoted-u128 result codec. This callback owns the
 exact one-result guard and index zero read. Status is returned while validity and both limbs are persisted
 for sandbox observation; this is not the FT resolver. -/
@@ -369,6 +489,156 @@ def sendAndLeftMissing (state : State) (value : UInt64) : Except Error (State ×
     receiver "missing" (borshUInt64 123) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     receiver "echo" (borshUInt64 456) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
     "callbackJoined" (borshUInt64 82) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join three successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd3Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd3ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined3" (borshUInt64 83) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed right child retains left/middle/right callback-result ordering. -/
+@[pf_entry]
+def sendAnd3RightMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd3ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined3" (borshUInt64 84) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join four successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd4Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd4ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined4" (borshUInt64 85) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed fourth child retains left/middle/right/fourth callback-result ordering. -/
+@[pf_entry]
+def sendAnd4FourthMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd4ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined4" (borshUInt64 86) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join five successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd5Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd5ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined5" (borshUInt64 87) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed fifth child retains left/middle/right/fourth/fifth callback-result ordering. -/
+@[pf_entry]
+def sendAnd5FifthMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd5ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined5" (borshUInt64 88) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join six successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd6Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd6ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined6" (borshUInt64 89) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed sixth child retains left/middle/right/fourth/fifth/sixth callback-result ordering. -/
+@[pf_entry]
+def sendAnd6SixthMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd6ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined6" (borshUInt64 90) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join seven successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd7Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd7ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined7" (borshUInt64 91) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed seventh child retains left/middle/right/fourth/fifth/sixth/seventh callback-result ordering. -/
+@[pf_entry]
+def sendAnd7SeventhMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd7ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined7" (borshUInt64 92) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- Join eight successful ordered child calls, then return the self callback receipt. -/
+@[pf_entry]
+def sendAnd8Success (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd8ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 888) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined8" (borshUInt64 93) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- A failed eighth child retains left/middle/right/fourth/fifth/sixth/seventh/eighth callback-result ordering. -/
+@[pf_entry]
+def sendAnd8EighthMissing (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := Promises.callAnd8ThenReturned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 444) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 555) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 666) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 777) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "missing" (borshUInt64 888) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackJoined8" (borshUInt64 94) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
   .ok ({ state with marker := value }, value)
 
 /-- The caller succeeds while this detached receipt fails remotely on an absent method. -/

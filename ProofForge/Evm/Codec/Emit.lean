@@ -229,10 +229,41 @@ structure ReturnContext (Value State : Type) where
   indent : String
   materialize : String → Value → State → Except String (String × String × State)
 
+/-- Pack Extract source limbs back into one ABI word for a dynamic array element. -/
+private def packElementWord (type : Core.Codec.Scalar) (limbs : Array String) : Except String String := do
+  let expected := limbCount type
+  unless limbs.size == expected && expected ≠ 0 do
+    throw "evm/codec: malformed wide element limb frame"
+  if expected == 1 then
+    return limbs[0]!
+  if isWideIntegerCarrier type then
+    let a0 := limbs[0]!
+    let a1 := (limbs[1]?).getD "0"
+    let a2 := (limbs[2]?).getD "0"
+    let a3 := (limbs[3]?).getD "0"
+    return "or(or(" ++ a0 ++ ", shl(64, " ++ a1 ++ ")), or(shl(128, " ++ a2 ++
+      "), shl(192, " ++ a3 ++ ")))"
+  if isAddressCarrier type then
+    unless limbs.size == 3 do
+      throw "evm/codec: address element requires three source limbs"
+    -- Little-endian 20-byte address in the low 20 bytes of the ABI word (matches pf_store_addr20).
+    return "or(or(" ++ limbs[0]! ++ ", shl(64, " ++ limbs[1]! ++ ")), shl(128, and(" ++
+      limbs[2]! ++ ", 0xffffffff)))"
+  if isFixedBytesCarrier type then
+    let a0 := limbs[0]!
+    let a1 := (limbs[1]?).getD "0"
+    let a2 := (limbs[2]?).getD "0"
+    let a3 := (limbs[3]?).getD "0"
+    return "or(or(" ++ a0 ++ ", shl(64, " ++ a1 ++ ")), or(shl(128, " ++ a2 ++
+      "), shl(192, " ++ a3 ++ ")))"
+  throw "evm/codec: unsupported wide element carrier for dynamic return"
+
 /-- Interpret one bounded dynamic output plan. The fixed source frame is never returned directly:
-the encoder emits the canonical ABI offset/length header and only the active array or byte prefix. -/
+the encoder emits the canonical ABI offset/length header and only the active array or byte prefix.
+Wide one-ABI-word elements and constructed multi-word static elements are packed from the Extract
+limb frame; nested dynamics remain outside this plan. -/
 def renderDynamicReturn [Inhabited Value] (context : ReturnContext Value State)
-    (plan : Codec.DynamicOutputPlan) (values : Array Value) (state : State) :
+    (plan : DynamicOutputPlan) (values : Array Value) (state : State) :
     Except String (String × State) := do
   let indent := context.indent
   unless values.size == plan.sourceWords.size do
@@ -244,18 +275,38 @@ def renderDynamicReturn [Inhabited Value] (context : ReturnContext Value State)
     indent ++ "mstore(32, " ++ length ++ ")" ++ nl
   match plan with
   | .boundedArray array =>
-      unless array.elementWords.size == 1 do
+      unless !array.elementWords.isEmpty do
         throw "evm/codec: malformed bounded array output plan"
+      let abiWordsPerElement := array.elementWords.size
+      let sourceLimbsPerElement := elementSourceLimbCount array.elementWords
       out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString array.capacity ++
         ") { " ++ revert0 ++ " }" ++ nl
       for i in [0:array.capacity] do
         out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString i ++ ") {" ++ nl
-        let (pre, value, next) ←
-          context.materialize (indent ++ "  ") values[1 + i]! state
-        state := next
-        out := out ++ pre ++ indent ++ "  mstore(" ++ toString (64 + i * 32) ++
-          ", " ++ value ++ ")" ++ nl ++ indent ++ "}" ++ nl
-      out := out ++ indent ++ "return(0, add(64, mul(" ++ length ++ ", 32)))" ++ nl
+        let base := 1 + i * sourceLimbsPerElement
+        let mut limbOffset := 0
+        for wordIndex in [0:abiWordsPerElement] do
+          let type := array.elementWords[wordIndex]!
+          let nLimbs := limbCount type
+          let mut limbExprs : Array String := #[]
+          for _ in [0:nLimbs] do
+            let (pre, value, next) ←
+              context.materialize (indent ++ "  ") values[base + limbOffset]! state
+            state := next
+            limbOffset := limbOffset + 1
+            out := out ++ pre
+            limbExprs := limbExprs.push value
+          let packed ← packElementWord type limbExprs
+          let memOffset := 64 + (i * abiWordsPerElement + wordIndex) * 32
+          if isAddressCarrier type && nLimbs == 3 then
+            out := out ++ indent ++ "  pf_store_addr20(" ++ toString memOffset ++ ", " ++
+              limbExprs[0]! ++ ", " ++ limbExprs[1]! ++ ", " ++ limbExprs[2]! ++ ")" ++ nl
+          else
+            out := out ++ indent ++ "  mstore(" ++ toString memOffset ++ ", " ++ packed ++
+              ")" ++ nl
+        out := out ++ indent ++ "}" ++ nl
+      out := out ++ indent ++ "return(0, add(64, mul(" ++ length ++ ", " ++
+        toString (abiWordsPerElement * 32) ++ ")))" ++ nl
   | .packedBytes bytes =>
       out := out ++ indent ++ "if gt(" ++ length ++ ", " ++ toString bytes.capacity ++
         ") { " ++ revert0 ++ " }" ++ nl
@@ -281,13 +332,13 @@ def renderDynamicReturn [Inhabited Value] (context : ReturnContext Value State)
 output plan has no input offsets or decoded guard state; tag range and inactive-zero lanes are
 checked again immediately before publishing returndata. -/
 def renderTaggedTupleReturn [Inhabited Value] (context : ReturnContext Value State)
-    (plan : Codec.TaggedTupleOutputPlan) (values : Array Value) (state : State) :
+    (plan : TaggedTupleOutputPlan) (values : Array Value) (state : State) :
     Except String (String × State) := do
   let indent := context.indent
   unless !plan.words.isEmpty && values.size == plan.words.size &&
       plan.words.size == 1 + plan.activePayloadWords.foldl (init := 0) max &&
       (plan.words[0]! == .boolean || plan.words[0]! == .uint8) &&
-      (plan.words.extract 1 plan.words.size |>.all fun type => Codec.limbCount type == 1) do
+      (plan.words.extract 1 plan.words.size |>.all fun type => limbCount type == 1) do
     throw "evm/codec: malformed tagged tuple output plan"
   let mut out := ""
   let mut state := state
@@ -301,14 +352,14 @@ def renderTaggedTupleReturn [Inhabited Value] (context : ReturnContext Value Sta
   out := out ++ (← renderWordGuard indent names[0]! plan.words[0]!)
   for i in [1:plan.words.size] do
     let type := plan.words[i]!
-    unless Codec.isFixedBytesCarrier type do
+    unless isFixedBytesCarrier type do
       out := out ++ (← renderWordGuard indent names[i]! type)
   out := out ++ (← renderTaggedFrameGuards indent names[0]! (plan.words.size - 1)
     (fun lane => names[lane + 1]!) plan.activePayloadWords)
   for i in [0:plan.words.size] do
     let offset := i * 32
     let type := plan.words[i]!
-    if Codec.isFixedBytesCarrier type then
+    if isFixedBytesCarrier type then
       out := out ++ indent ++ "pf_store_fixed_bytes(" ++ toString offset ++ ", " ++
         names[i]! ++ ", 0, 0, 0, " ++ toString type.byteWidth ++ ")" ++ nl
     else
@@ -319,7 +370,7 @@ def renderTaggedTupleReturn [Inhabited Value] (context : ReturnContext Value Sta
 /-- Interpret the single target-owned ABI output sum. Adding an output shape extends this adapter
 boundary rather than the main EVM operation emitter. -/
 def renderReturn [Inhabited Value] (context : ReturnContext Value State)
-    (plan : Codec.OutputPlan) (values : Array Value) (state : State) :
+    (plan : OutputPlan) (values : Array Value) (state : State) :
     Except String (String × State) :=
   match plan with
   | .dynamic dynamic => renderDynamicReturn context dynamic values state

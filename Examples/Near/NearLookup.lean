@@ -14,6 +14,14 @@ inductive Error where
   | overflow
   deriving Repr, DecidableEq, Inhabited, BEq
 
+/-- N14 LookupMap Handle: bare prefix `MAP1` (`0x3150414d`). -/
+@[pf_inline] def mapSlots : DirectLookupMap64.Handle :=
+  DirectLookupMap64.handle 0x3150414d
+
+/-- N14 LookupSet Handle: bare prefix `SET1` (`0x31544553`). -/
+@[pf_inline] def setSlots : DirectLookupSet64.Handle :=
+  DirectLookupSet64.handle 0x31544553
+
 @[pf_entry]
 def init (marker : UInt64) : State :=
   { marker }
@@ -24,34 +32,34 @@ def get (state : State) : UInt64 :=
 
 @[pf_entry]
 def mapGet (_state : State) (key : UInt64) : UInt64 :=
-  (0x3150414d : DirectLookupMap64).getD key 0
+  mapSlots.getD key 0
 
 @[pf_entry]
 def mapHas (_state : State) (key : UInt64) : UInt64 :=
-  (0x3150414d : DirectLookupMap64).has key
+  mapSlots.has key
 
 @[pf_entry]
 def mapPut (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
-  let status := (0x3150414d : DirectLookupMap64).put 7 value
+  let status := mapSlots.put 7 value
   .ok ({ marker := status }, status)
 
 @[pf_entry]
 def mapRemove (_state : State) : Except Error (State × UInt64) :=
-  let status := (0x3150414d : DirectLookupMap64).remove 7
+  let status := mapSlots.remove 7
   .ok ({ marker := status }, status)
 
 @[pf_entry]
 def setHas (_state : State) (value : UInt64) : UInt64 :=
-  (0x31544553 : DirectLookupSet64).has value
+  setSlots.has value
 
 @[pf_entry]
 def setInsert (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
-  let inserted := (0x31544553 : DirectLookupSet64).insert value
+  let inserted := setSlots.insert value
   .ok ({ marker := inserted }, inserted)
 
 @[pf_entry]
 def setRemove (_state : State) (value : UInt64) : Except Error (State × UInt64) :=
-  let removed := (0x31544553 : DirectLookupSet64).remove value
+  let removed := setSlots.remove value
   .ok ({ marker := removed }, removed)
 
 abbrev balances : DirectAccountNearTokenMap := 0x314c4142

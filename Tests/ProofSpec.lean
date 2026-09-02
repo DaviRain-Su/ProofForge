@@ -31,13 +31,18 @@ import ProofForge.Svm.Sdk.Pubkey
   / `decrement_ok_le`：`propext`、`Quot.sound`（标准公理，无未完成占位公理）
 - `Examples.Evm.Capped.mint_supply_within_cap` / `mint_supply_effect`：`propext`
 - `Examples.Evm.Token.transfer_preserves_supply` / `mint_supply_effect`
-  / `burn_supply_effect` / `transferFrom_preserves_supply`
-  / `approve_preserves_supply`：`propext`（部分含 `Quot.sound`）
+  / `burn_supply_effect` / `burnFrom_supply_effect` / `transferFrom_preserves_supply`
+  / `approve_preserves_supply` / `increaseAllowance_preserves_supply`
+  / `decreaseAllowance_preserves_supply` / `pause_preserves_supply`
+  / `unpause_preserves_supply`：`propext`（部分含 `Quot.sound`）
 - `Examples.Svm.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
-- `Examples.Svm.Tree.removeNode_size` / `init_wf` / `allocNode_wf`：
-  `propext`（部分含 `Quot.sound`）
+- `Examples.Svm.Tree.removeNode_size` / `init_wf` / `allocNode_wf` / `insertRoot_wf` / `paintNode_wf` / `linkLeft_wf` / `linkRight_wf`
+  / `rotateLeft_wf` / `rotateRight_wf` / `insertAt_linked_wf` / `insertAt_wf`
+  / `fixInserted_grand0_paint_parent_wf` / `fixInserted_recolor_left_uncle_wf`
+  / `fixInserted_recolor_right_uncle_wf` / `fixInserted_ll_wf`
+  / `fixInserted_rr_wf` / `fixInserted_lr_wf` / `fixInserted_rl_wf`：`propext`（部分含 `Quot.sound`）
 - `Evm.Sdk.Payments` 委托透明性（accept/send/transfer/transferFrom/...）：零公理（rfl 级）
 - `Evm.Sdk.Reentrancy` fail-closed 包（unknown_neither / 互斥）：`propext`
 - `Evm.Sdk.Fungible` guard 链：`propext`（两个零公理）

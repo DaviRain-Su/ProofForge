@@ -23,11 +23,20 @@ def _require(name: str) -> str:
     return value
 
 
+# Outer prepaid gas must cover parent burn plus every attached child/callback budget.
+# AndN scenes use joinedChildGas=8 Tgas × N + callbackGas=20 Tgas (And8 ⇒ 84 Tgas attached),
+# so the default 50 Tgas FunctionCall allowance is too small from And4 upward.
+_JOIN_CALL_GAS = 300_000_000_000_000
+
+
 def _call_u64(
     client: NearClient, method: str, value: int, *, expect_success: bool = True
 ) -> dict:
     return client.call(
-        method, NearClient.encode_u64_le(value), expect_success=expect_success
+        method,
+        NearClient.encode_u64_le(value),
+        expect_success=expect_success,
+        gas=_JOIN_CALL_GAS,
     )
 
 
@@ -387,15 +396,172 @@ def main() -> None:
         raise AssertionError("left-child failure short-circuited or reordered the right result")
     print("near-promise: failed left child did not short-circuit successful right result")
 
+    joined3_success = _call_u64(client, "sendAnd3Success", 607)
+    if NearClient.success_value_bytes(joined3_success) != NearClient.encode_u64_le(333):
+        raise AssertionError("3-way joined callback did not forward the successful right result")
+    if client.view_u64("get") != 83:
+        raise AssertionError("3-way joined callback did not commit its independent argument 83")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("3-way joined callback did not preserve left/middle/right order")
+    print("near-promise: ordered 3-way join exposed three successful child results to one callback")
+
+    joined3_right_failure = _call_u64(
+        client, "sendAnd3RightMissing", 608, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined3_right_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("3-way right-child failure did not forward the right-result fallback")
+    if client.view_u64("get") != 84:
+        raise AssertionError("3-way right-child failure did not run and commit callback argument 84")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("3-way right-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed right child in 3-way join retained successful left/middle results"
+    )
+
+    joined4_success = _call_u64(client, "sendAnd4Success", 609)
+    if NearClient.success_value_bytes(joined4_success) != NearClient.encode_u64_le(444):
+        raise AssertionError("4-way joined callback did not forward the successful fourth result")
+    if client.view_u64("get") != 85:
+        raise AssertionError("4-way joined callback did not commit its independent argument 85")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("4-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 4-way join exposed four successful child results to one callback")
+
+    joined4_fourth_failure = _call_u64(
+        client, "sendAnd4FourthMissing", 610, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined4_fourth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("4-way fourth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 86:
+        raise AssertionError("4-way fourth-child failure did not run and commit callback argument 86")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("4-way fourth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed fourth child in 4-way join retained successful left/middle/right results"
+    )
+
+    joined5_success = _call_u64(client, "sendAnd5Success", 611)
+    if NearClient.success_value_bytes(joined5_success) != NearClient.encode_u64_le(555):
+        raise AssertionError("5-way joined callback did not forward the successful fifth result")
+    if client.view_u64("get") != 87:
+        raise AssertionError("5-way joined callback did not commit its independent argument 87")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("5-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 5-way join exposed five successful child results to one callback")
+
+    joined5_fifth_failure = _call_u64(
+        client, "sendAnd5FifthMissing", 612, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined5_fifth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("5-way fifth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 88:
+        raise AssertionError("5-way fifth-child failure did not run and commit callback argument 88")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("5-way fifth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed fifth child in 5-way join retained successful left/middle/right/fourth results"
+    )
+
+    joined6_success = _call_u64(client, "sendAnd6Success", 613)
+    if NearClient.success_value_bytes(joined6_success) != NearClient.encode_u64_le(666):
+        raise AssertionError("6-way joined callback did not forward the successful sixth result")
+    if client.view_u64("get") != 89:
+        raise AssertionError("6-way joined callback did not commit its independent argument 89")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("6-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 6-way join exposed six successful child results to one callback")
+
+    joined6_sixth_failure = _call_u64(
+        client, "sendAnd6SixthMissing", 614, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined6_sixth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("6-way sixth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 90:
+        raise AssertionError("6-way sixth-child failure did not run and commit callback argument 90")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("6-way sixth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed sixth child in 6-way join retained successful left/middle/right/fourth/fifth results"
+    )
+
+    joined7_success = _call_u64(client, "sendAnd7Success", 615)
+    if NearClient.success_value_bytes(joined7_success) != NearClient.encode_u64_le(777):
+        raise AssertionError("7-way joined callback did not forward the successful seventh result")
+    if client.view_u64("get") != 91:
+        raise AssertionError("7-way joined callback did not commit its independent argument 91")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("7-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 7-way join exposed seven successful child results to one callback")
+
+    joined7_seventh_failure = _call_u64(
+        client, "sendAnd7SeventhMissing", 616, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined7_seventh_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("7-way seventh-child failure did not forward the fallback result")
+    if client.view_u64("get") != 92:
+        raise AssertionError("7-way seventh-child failure did not run and commit callback argument 92")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("7-way seventh-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed seventh child in 7-way join retained successful left/middle/right/fourth/fifth/sixth results"
+    )
+
+    joined8_success = _call_u64(client, "sendAnd8Success", 617)
+    if NearClient.success_value_bytes(joined8_success) != NearClient.encode_u64_le(888):
+        raise AssertionError("8-way joined callback did not forward the successful eighth result")
+    if client.view_u64("get") != 93:
+        raise AssertionError("8-way joined callback did not commit its independent argument 93")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("8-way joined callback did not preserve left/middle ordering")
+    print("near-promise: ordered 8-way join exposed eight successful child results to one callback")
+
+    joined8_eighth_failure = _call_u64(
+        client, "sendAnd8EighthMissing", 618, expect_success=False
+    )
+    if NearClient.success_value_bytes(joined8_eighth_failure) != NearClient.encode_u64_le(999):
+        raise AssertionError("8-way eighth-child failure did not forward the fallback result")
+    if client.view_u64("get") != 94:
+        raise AssertionError("8-way eighth-child failure did not run and commit callback argument 94")
+    if client.view_u64("receivedDepositLo") != 111 or client.view_u64(
+        "receivedDepositHi"
+    ) != 222:
+        raise AssertionError("8-way eighth-child failure changed left/middle ordering or fallback")
+    print(
+        "near-promise: failed eighth child in 8-way join retained successful left/middle/right/fourth/fifth/sixth/seventh results"
+    )
+
+    # And8 eighth-missing commits marker 94; panic/deposit failures below must leave it there.
     _call_u64(client, "sendThenFail", 111, expect_success=False)
-    if client.view_u64("get") != 82:
+    if client.view_u64("get") != 94:
         raise AssertionError("caller panic did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("caller panic did not discard its staged outgoing receipt")
     print("near-promise: caller panic discarded staged receipt and rolled back")
 
     _call_u64(client, "sendTooMuch", 222, expect_success=False)
-    if client.view_u64("get") != 82:
+    if client.view_u64("get") != 94:
         raise AssertionError("synchronous deposit failure did not roll back caller state")
     if client.view_u64_on(RECEIVER, "get") != 456:
         raise AssertionError("synchronous deposit failure emitted an outgoing receipt")

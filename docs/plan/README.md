@@ -18,6 +18,9 @@ P0 落地：[ci-002](tasks/ci-002.md)（NEAR 去重、Phoenix 重闸、`scripts/
 WASM PR #4/#5 继续开着，不阻塞本轨。
 产品化与能力主线 **并行**：先冻结 SDK import 表面与 Lake 包边界，再做 `pf init` 与 release。
 
+**三 target 总图（EVM · SVM · NEAR + 人体工程学）**：[multi-target-strategy.md](multi-target-strategy.md)
+（含 powdr-labs 三仓库作为 EVM Feature B 的引入方案）。
+
 任务：
 
 | ID | 状态 | 内容 |
@@ -303,14 +306,14 @@ WASM PR #4/#5 继续开着，不阻塞本轨。
 | ID | 状态 | 内容 |
 |---|---|---|
 | [sf-000](tasks/sf-000.md) | done | 证明基础设施成文 |
-| [sf-001](tasks/sf-001.md) | doing | Queue wrap push + 读回（nowrap 已在 main） |
-| [sf-002](tasks/sf-002.md) | doing | Queue wrap pop / peek / 往返（clear/advance 已在 main） |
+| [sf-001](tasks/sf-001.md) | done | Queue wrap push + 读回（nowrap/wrap links + readback） |
+| [sf-002](tasks/sf-002.md) | done | Queue wrap pop / peek / 往返（clear/advance 已在 main） |
 | [sf-003](tasks/sf-003.md) | done | BoundedVec pop + setAt 读回 |
 | [sf-004](tasks/sf-004.md) | done | Versioned 状态机 |
 | [sf-005](tasks/sf-005.md) | done | StorageBitSet mask 代数 + 账户桥 |
 | [sf-006](tasks/sf-006.md) | done | TransientModel + Vector64 |
 | [sf-007](tasks/sf-007.md) | done | Bytes + Record64 + WideVec |
-| [sf-008](tasks/sf-008.md) | done | Allocator alloc/free 往返 |
+| [sf-008](tasks/sf-008.md) | done | Allocator alloc/free 往返（mAlloc/mFree + 满/invalid + free→alloc 同一槽） |
 | [sf-009](tasks/sf-009.md) | done | OrderedMap 索引层 find/insert/remove |
 | [sf-010](tasks/sf-010.md) | done | StorageEnumerableSet 索引/前缀层 |
 | [sf-011](tasks/sf-011.md) | done | Tree 全树 wf 保持（几何 done；可达/互逆可选） |

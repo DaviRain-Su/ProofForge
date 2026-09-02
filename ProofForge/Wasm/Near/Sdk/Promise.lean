@@ -24,11 +24,38 @@ self-callback edge; its explicit callback arguments are independent of the child
 `callAndThenReturned` closes two ordered static children through one internal join and self callback.
 Strict fixed-width Borsh UInt64 decoding remains SDK policy over the active descriptor; additional
 scalar decoders and general Promise handles remain outside this slice.
+
+`PromiseHandle` (N13) wraps the opaque host promise index with bounded depth and fan-in metadata.
+Depth and fan-in ceilings are enforced via `depthOk` / `fanInOk` before chaining further edges.
 -/
 
 namespace ProofForge.Wasm.Near.Sdk.Promises
 
 open ProofForge.Core.Value
+
+/-- Default compile-time fan-in capacity for bounded Promise joins (N13). -/
+def defaultMaxFanIn : Nat := 4
+
+/-- Hard ceiling on the `maxFanIn` type parameter; values above this require extending the
+fixed `andN` opcode ladder (currently through N=8). Extract fail-closes any PromiseHandle
+lifecycle API (`thenReturned` / `and3Returned`..`and8Returned`) whose `maxFanIn` literal
+exceeds this ceiling — there is no And9 opcode. -/
+def maxFanInCompileCeiling : Nat := 8
+
+/-- Whether a compile-time `maxFanIn` literal is within the supported opcode ladder.
+`false` for N>8; Extract independently rejects those APIs (see `NearPromiseHandleSpec`). -/
+@[pf_inline] def maxFanInWithinCeiling (n : Nat) : Bool :=
+  decide (n ≤ maxFanInCompileCeiling)
+
+/-- Hard ceiling on Promise DAG depth tracked by source handles. -/
+def maxPromiseDepth : Nat := 8
+
+/-- Source-visible bounded Promise handle. The host index remains opaque to applications. -/
+structure PromiseHandle (maxFanIn : Nat := defaultMaxFanIn) where
+  id : UInt64
+  depth : UInt8
+  fanIn : UInt8
+  deriving Repr, Inhabited
 
 /-- Schedule one detached cross-contract function call. `receiver` and `method` must be static
 literals accepted by the NEAR target. -/
@@ -119,6 +146,468 @@ input order even when either child fails. -/
     leftDeposit.w0 leftDeposit.w1 leftGas
     rightDeposit.w0 rightDeposit.w1 rightGas
     callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule three ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..2 preserve
+left/middle/right input order even when any child fails. -/
+@[pf_inline] def callAnd3ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd3ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+    leftArguments midArguments rightArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule four ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..3 preserve
+left/middle/right/fourth input order even when any child fails. -/
+@[pf_inline] def callAnd4ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd4ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+    callbackMethod leftArguments midArguments rightArguments fourthArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    fourthDeposit.w0 fourthDeposit.w1 fourthGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule five ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..4 preserve
+left/middle/right/fourth/fifth input order even when any child fails. -/
+@[pf_inline] def callAnd5ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd5ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod
+    leftArguments midArguments rightArguments fourthArguments fifthArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    fourthDeposit.w0 fourthDeposit.w1 fourthGas
+    fifthDeposit.w0 fifthDeposit.w1 fifthGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule six ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..5 preserve
+left/middle/right/fourth/fifth/sixth input order even when any child fails. -/
+@[pf_inline] def callAnd6ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd6ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod
+    leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    fourthDeposit.w0 fourthDeposit.w1 fourthGas
+    fifthDeposit.w0 fifthDeposit.w1 fifthGas
+    sixthDeposit.w0 sixthDeposit.w1 sixthGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule seven ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..6 preserve
+left/middle/right/fourth/fifth/sixth/seventh input order even when any child fails. -/
+@[pf_inline] def callAnd7ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (seventhReceiver seventhMethod : String)
+    (seventhArguments : BoundedBytes seventhArgsCapacity)
+    (seventhDeposit : Runtime.NearToken) (seventhGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd7ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+    leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    fourthDeposit.w0 fourthDeposit.w1 fourthGas
+    fifthDeposit.w0 fifthDeposit.w1 fifthGas
+    sixthDeposit.w0 sixthDeposit.w1 sixthGas
+    seventhDeposit.w0 seventhDeposit.w1 seventhGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+/-- Schedule eight ordered independent child calls, join them, then run one callback on the current
+contract and forward only the callback receipt. Callback result indices 0..7 preserve
+left/middle/right/fourth/fifth/sixth/seventh/eighth input order even when any child fails. -/
+@[pf_inline] def callAnd8ThenReturned
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat}
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (seventhReceiver seventhMethod : String)
+    (seventhArguments : BoundedBytes seventhArgsCapacity)
+    (seventhDeposit : Runtime.NearToken) (seventhGas : UInt64)
+    (eighthReceiver eighthMethod : String)
+    (eighthArguments : BoundedBytes eighthArgsCapacity)
+    (eighthDeposit : Runtime.NearToken) (eighthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : UInt64 :=
+  Runtime.promiseFunctionCallAnd8ThenReturned
+    leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod
+      eighthReceiver eighthMethod callbackMethod
+    leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments eighthArguments callbackArguments
+    leftDeposit.w0 leftDeposit.w1 leftGas
+    midDeposit.w0 midDeposit.w1 midGas
+    rightDeposit.w0 rightDeposit.w1 rightGas
+    fourthDeposit.w0 fourthDeposit.w1 fourthGas
+    fifthDeposit.w0 fifthDeposit.w1 fifthGas
+    sixthDeposit.w0 sixthDeposit.w1 sixthGas
+    seventhDeposit.w0 seventhDeposit.w1 seventhGas
+    eighthDeposit.w0 eighthDeposit.w1 eighthGas
+    callbackDeposit.w0 callbackDeposit.w1 callbackGas
+
+namespace PromiseHandle
+
+@[pf_inline] def depthOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=
+  handle.depth.toNat ≤ maxPromiseDepth
+
+@[pf_inline] def fanInOk {maxFanIn : Nat} (handle : PromiseHandle maxFanIn) : Bool :=
+  handle.fanIn.toNat ≤ maxFanIn
+
+@[pf_inline] def withinCompileCeiling {maxFanIn : Nat} (_ : PromiseHandle maxFanIn) : Bool :=
+  maxFanInWithinCeiling maxFanIn
+
+/-- Schedule one returned child call and expose it as a root handle (`depth = 0`). -/
+@[pf_inline] def createReturned {argsCapacity : Nat}
+    (receiver method : String) (arguments : BoundedBytes argsCapacity)
+    (deposit : Runtime.NearToken) (gas : UInt64) : PromiseHandle :=
+  { id := callReturned receiver method arguments deposit gas
+    depth := 0, fanIn := 0 }
+
+/-- Attach one self callback edge; increments tracked depth. Callers must check `depthOk`. -/
+def thenReturned {maxFanIn : Nat}
+    {childArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (receiver childMethod : String)
+    (childArguments : BoundedBytes childArgsCapacity)
+    (childDeposit : Runtime.NearToken) (childGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callThenReturned receiver childMethod childArguments childDeposit childGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := handle.fanIn }
+
+/-- Join three static child edges through one internal join and self callback; sets tracked fan-in to 3. -/
+def and3Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd3ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 3 }
+
+/-- Join four static child edges through one internal join and self callback; sets tracked fan-in to 4. -/
+def and4Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd4ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      fourthReceiver fourthMethod fourthArguments fourthDeposit fourthGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 4 }
+
+/-- Join five static child edges through one internal join and self callback; sets tracked fan-in to 5. -/
+def and5Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd5ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      fourthReceiver fourthMethod fourthArguments fourthDeposit fourthGas
+      fifthReceiver fifthMethod fifthArguments fifthDeposit fifthGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 5 }
+
+/-- Join six static child edges through one internal join and self callback; sets tracked fan-in to 6. -/
+def and6Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd6ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      fourthReceiver fourthMethod fourthArguments fourthDeposit fourthGas
+      fifthReceiver fifthMethod fifthArguments fifthDeposit fifthGas
+      sixthReceiver sixthMethod sixthArguments sixthDeposit sixthGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 6 }
+
+/-- Join seven static child edges through one internal join and self callback; sets tracked fan-in to 7. -/
+def and7Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (seventhReceiver seventhMethod : String)
+    (seventhArguments : BoundedBytes seventhArgsCapacity)
+    (seventhDeposit : Runtime.NearToken) (seventhGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd7ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      fourthReceiver fourthMethod fourthArguments fourthDeposit fourthGas
+      fifthReceiver fifthMethod fifthArguments fifthDeposit fifthGas
+      sixthReceiver sixthMethod sixthArguments sixthDeposit sixthGas
+      seventhReceiver seventhMethod seventhArguments seventhDeposit seventhGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 7 }
+
+/-- Join eight static child edges through one internal join and self callback; sets tracked fan-in to 8. -/
+def and8Returned {maxFanIn : Nat}
+    {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat}
+    (handle : PromiseHandle maxFanIn)
+    (leftReceiver leftMethod : String)
+    (leftArguments : BoundedBytes leftArgsCapacity)
+    (leftDeposit : Runtime.NearToken) (leftGas : UInt64)
+    (midReceiver midMethod : String)
+    (midArguments : BoundedBytes midArgsCapacity)
+    (midDeposit : Runtime.NearToken) (midGas : UInt64)
+    (rightReceiver rightMethod : String)
+    (rightArguments : BoundedBytes rightArgsCapacity)
+    (rightDeposit : Runtime.NearToken) (rightGas : UInt64)
+    (fourthReceiver fourthMethod : String)
+    (fourthArguments : BoundedBytes fourthArgsCapacity)
+    (fourthDeposit : Runtime.NearToken) (fourthGas : UInt64)
+    (fifthReceiver fifthMethod : String)
+    (fifthArguments : BoundedBytes fifthArgsCapacity)
+    (fifthDeposit : Runtime.NearToken) (fifthGas : UInt64)
+    (sixthReceiver sixthMethod : String)
+    (sixthArguments : BoundedBytes sixthArgsCapacity)
+    (sixthDeposit : Runtime.NearToken) (sixthGas : UInt64)
+    (seventhReceiver seventhMethod : String)
+    (seventhArguments : BoundedBytes seventhArgsCapacity)
+    (seventhDeposit : Runtime.NearToken) (seventhGas : UInt64)
+    (eighthReceiver eighthMethod : String)
+    (eighthArguments : BoundedBytes eighthArgsCapacity)
+    (eighthDeposit : Runtime.NearToken) (eighthGas : UInt64)
+    (callbackMethod : String)
+    (callbackArguments : BoundedBytes callbackArgsCapacity)
+    (callbackDeposit : Runtime.NearToken) (callbackGas : UInt64) : PromiseHandle maxFanIn :=
+  { id := callAnd8ThenReturned leftReceiver leftMethod leftArguments leftDeposit leftGas
+      midReceiver midMethod midArguments midDeposit midGas
+      rightReceiver rightMethod rightArguments rightDeposit rightGas
+      fourthReceiver fourthMethod fourthArguments fourthDeposit fourthGas
+      fifthReceiver fifthMethod fifthArguments fifthDeposit fifthGas
+      sixthReceiver sixthMethod sixthArguments sixthDeposit sixthGas
+      seventhReceiver seventhMethod seventhArguments seventhDeposit seventhGas
+      eighthReceiver eighthMethod eighthArguments eighthDeposit eighthGas
+      callbackMethod callbackArguments callbackDeposit callbackGas
+    depth := handle.depth + 1, fanIn := 8 }
+
+end PromiseHandle
 
 /-- Number of callback inputs for this invocation. Ordinary calls report zero. -/
 @[pf_inline] def resultsCount : UInt64 :=

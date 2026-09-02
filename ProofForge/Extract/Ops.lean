@@ -289,6 +289,142 @@ private def nearLeaf (kind : ProofForge.Wasm.Near.Ops.ValKind) : Val :=
     leftDepositLo leftDepositHi leftGas rightDepositLo rightDepositHi rightGas
     callbackDepositLo callbackDepositHi callbackGas))
 
+@[match_pattern] def Op.nearPromiseFunctionCallAnd3ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd3ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+    leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+    leftArguments midArguments rightArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAnd4ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd4ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+    callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+    callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAnd5ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd5ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+      fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+      rightArguments fourthArguments fifthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAnd6ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (sixthDepositLo sixthDepositHi sixthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd6ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod leftArgsCapacity midArgsCapacity
+      rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAnd7ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (sixthDepositLo sixthDepositHi sixthGas : Val)
+    (seventhDepositLo seventhDepositHi seventhGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd7ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+    seventhDepositLo seventhDepositHi seventhGas callbackDepositLo callbackDepositHi callbackGas))
+
+@[match_pattern] def Op.nearPromiseFunctionCallAnd8ThenReturned
+    (leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+      eighthMethod callbackMethod : String)
+    (leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+      sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat)
+    (leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments eighthArguments callbackArguments : Array Val)
+    (leftDepositLo leftDepositHi leftGas : Val)
+    (midDepositLo midDepositHi midGas : Val)
+    (rightDepositLo rightDepositHi rightGas : Val)
+    (fourthDepositLo fourthDepositHi fourthGas : Val)
+    (fifthDepositLo fifthDepositHi fifthGas : Val)
+    (sixthDepositLo sixthDepositHi sixthGas : Val)
+    (seventhDepositLo seventhDepositHi seventhGas : Val)
+    (eighthDepositLo eighthDepositHi eighthGas : Val)
+    (callbackDepositLo callbackDepositHi callbackGas : Val) : Op :=
+  .ext (.near (.promiseFunctionCallAnd8ThenReturned
+    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+      fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+      eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+      fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+      leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+      seventhArguments eighthArguments callbackArguments
+    leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+    rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+    fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+    seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+    callbackDepositLo callbackDepositHi callbackGas))
+
 @[match_pattern] def Op.nearPromiseResultRead (capacity : Nat) (index : Val) : Op :=
   .ext (.near (.promiseResultRead capacity index))
 

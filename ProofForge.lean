@@ -5,6 +5,7 @@ import ProofForge.Core.Eval
 import ProofForge.Core.Codec
 import ProofForge.Core.Value
 import ProofForge.Core.SafeCast
+import ProofForge.Core.Except
 import ProofForge.Core.Math
 import ProofForge.Core.FixedPoint
 import ProofForge.Core.Collections

@@ -46,7 +46,11 @@
 | RB 结构 | `Examples/Svm/Tree.lean`（p-003/p-004 + sf-011） | **几何全树 wf done**；可达/父子互逆操作保持可选 |
 | Solanalib 桥 | `ProofForge/Svm/Solanalib.lean` | checked arith / branch；与组件代数正交 |
 
-**Queue 收口（Phase 1，2026-09-01）**：已完成（见 §6 SF-1）。
+**Queue 收口（Phase 1，2026-09-01）**：SF-1a / SF-1b **done**（见 §6 SF-1）。
+
+已落地：空/nowrap/wrap push 链接与读回；pop clear / advance / wrap 链接与读回；
+`mQueuePeek*`、`mQueueInitialize*`、`mQueuePush_pop_roundtrip_empty`；
+通用 `u64toNatAdd/Sub` 无回绕桥。
 
 **Track A 收口（2026-09-01）**：§6 SF-0..SF-10 全部 **done**；详见 §7。后续能力/语义见总计划 Track B–F（`svm-*`）。
 ---
@@ -58,12 +62,12 @@
 | 组件 | 文件 | L1 | L2 | 备注 |
 |---|---|---|---|---|
 | Field / Region / scalarHeader | `Sdk/Storage.lean` | 部分 done | 字段代数 done | 收成标准引理包 |
-| BoundedVec | `Sdk/Storage.lean` | done | push/pop/setAt **done** | 底座 |
+| BoundedVec | `Sdk/Storage.lean` | done | push/pop/setAt 读回闭环 **done** | SF-2a 收口 |
 | BoundedQueue | `Sdk/Queue.lean` | wf parts done | push/pop 全分支链接+读回、peek、initialize、空往返 **done** | **已收口** |
-| BitSet | `Sdk/StorageBitSet.lean` + `StorageBitSetModel.lean` | wf parts done | mask 代数 + OOB 无写 + insert/remove 读回 **done** | **SF-3 已收口** |
+| BitSet | `Sdk/StorageBitSet.lean` + `StorageBitSetModel.lean` | wf parts **done** | mask 代数 + OOB 无写 + insert/remove 读回 **done** | **SF-3 已收口** |
 | EnumerableSet | `Sdk/StorageEnumerableSet.lean` + `StorageEnumerableSetModel.lean` | 索引层 | 索引/前缀层 **done**（sf-010） | **SF-6 已收口** |
 | OrderedMap / RbTree / Allocator | `Sdk/Storage.lean` + `*Model.lean` | 部分委托 done | Allocator/Map 索引层 **done**；Tree 几何 **done** | SF-5/7 |
-| Versioned | `Sdk/Versioned.lean` + model | done | classify / initialize / apply **done** | **SF-2b 已收口** |
+| Versioned | `Sdk/Versioned.lean` + `VersionedModel.lean` | wf parts **done** | classify / initialize / apply 模型 **done** | **SF-2b 已收口** |
 
 ### 4.2 薄 facade（几乎只要 L1）
 
@@ -155,7 +159,7 @@ SF-9 曾可与 SF-1..4 并行；Track A 现已全部收口。
 | SF-3 | BitSet mask + 账户桥 | L1+L2 | **done** | [sf-005](tasks/sf-005.md) |
 | SF-4a | TransientModel + Vector64 | L2 | **done** | [sf-006](tasks/sf-006.md) |
 | SF-4b | Bytes + Record64 + WideVec | L2 | **done** | [sf-007](tasks/sf-007.md) |
-| SF-5a | Allocator alloc/free 往返 | L2 | done | [sf-008](tasks/sf-008.md) |
+| SF-5a | Allocator alloc/free 往返 | L2 | **done** | [sf-008](tasks/sf-008.md) |
 | SF-5b | OrderedMap find/insert/remove（索引层） | L2 | done | [sf-009](tasks/sf-009.md) |
 | SF-6 | EnumerableSet（索引/前缀层） | L2 | done | [sf-010](tasks/sf-010.md) |
 | SF-7 | Tree 全树 wf 保持 | L2 | **几何 done** | [sf-011](tasks/sf-011.md) |

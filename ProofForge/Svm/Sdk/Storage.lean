@@ -1,6 +1,7 @@
 import ProofForge.Attr
 import ProofForge.Svm.AccountStorage
 import ProofForge.Svm.AccountStorage.Source
+import Std.Tactic.BVDecide
 
 /-!
 # SVM SDK persistent-storage facade
@@ -488,6 +489,40 @@ theorem initialCursor_decompose :
     Allocator.initialCursor &&& 0xffffffff = 1 ∧
     Allocator.initialCursor >>> 32 = 1 := by
   constructor <;> (unfold Allocator.initialCursor; decide)
+
+/-- **packed cursor 高 32 位读回**（bump 已掩码到 u32）。 -/
+theorem packed_cursor_high (cursor slot : UInt64) :
+    ((cursor &&& (0xffffffff : UInt64)) ||| slot <<< 32) >>> 32 = slot &&& (0xffffffff : UInt64) := by
+  bv_decide
+
+private theorem testBit_u32_mask {i : Nat} (h : i < 32) : (4294967295).testBit i = true := by
+  rw [show 4294967295 = 2 ^ 32 - 1 by rfl, Nat.testBit_two_pow_sub_one]
+  simp [h]
+
+private theorem nat_and_u32_id {n : Nat} (h : n ≤ 4294967295) : n &&& 4294967295 = n := by
+  apply Nat.le_antisymm Nat.and_le_left ?_
+  apply Nat.le_of_testBit
+  intro i hi
+  rw [Nat.testBit_and]
+  simp only [Bool.and_eq_true]
+  refine ⟨hi, ?_⟩
+  by_cases h32 : i < 32
+  · exact testBit_u32_mask h32
+  · exfalso
+    have hn32 : n < 2 ^ 32 := by omega
+    have hi' : 32 ≤ i := by omega
+    have hpow : 2 ^ 32 ≤ 2 ^ i := Nat.pow_le_pow_right (by decide) hi'
+    have hlt : n < 2 ^ i := Nat.lt_of_lt_of_le hn32 hpow
+    have hf : n.testBit i = false := Nat.testBit_lt_two_pow hlt
+    rw [hf] at hi
+    exact Bool.false_eq_true.mp hi
+
+/-- **容器 slot 索引落在 u32 内时，low-mask 为恒等**。 -/
+theorem slot_low_u32 (slot : UInt64) (h : slot.toNat ≤ containerCapacityLimit) :
+    slot &&& (0xffffffff : UInt64) = slot := by
+  apply UInt64.toNat_inj.mp
+  simp only [UInt64.toNat_and, UInt64.toNat_ofNat]
+  exact nat_and_u32_id (Nat.le_trans h (by decide : containerCapacityLimit ≤ 4294967295))
 
 /-- **Allocator.alloc 满返回 0**。 -/
 theorem allocator_alloc_full (allocator : Allocator)

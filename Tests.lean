@@ -61,6 +61,8 @@ import Tests.EvmEnvironmentSpec
 import Tests.CoreCodecSpec
 import Tests.CoreCollectionsSpec
 import Tests.CrossTargetCodecSpec
+import Tests.CrossTargetCounterSpec
+import Tests.CrossTargetTokenSpec
 import Tests.EvmBuildSpec
 import Tests.XrplSpec
 import Tests.NearSpec
@@ -69,6 +71,7 @@ import Tests.NearBytesSpec
 import Tests.NearFungibleTokenEventSpec
 import Tests.NearFungibleLedgerSpec
 import Tests.NearTokenArithmeticSpec
+import Tests.NearTokenErgonomicsSpec
 import Tests.NearTokenStorageSpec
 import Tests.NearMemorySpec
 import Tests.NearOutputSpec
@@ -103,6 +106,10 @@ import Tests.NearPromiseResultSpec
 import Tests.NearMigrationSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
+import Tests.EvmExceptErgonomicsSpec
+import Tests.EvmTokenErgonomicsSpec
+import Tests.SvmExceptErgonomicsSpec
+import Tests.NearPromiseHandleSpec
 import Tests.EvmSearchSpec
 import Tests.EvmStaticStorageSpec
 import Tests.EvmOrderedStorageSpec

@@ -3,6 +3,7 @@ import ProofForge.Extract.Ops
 import ProofForge.Profile
 import ProofForge.Attr
 import ProofForge.Core.Value
+import ProofForge.Core.Except
 import ProofForge.Svm.Runtime
 import ProofForge.Evm.Runtime
 import ProofForge.Wasm.Near.Runtime
@@ -17,6 +18,13 @@ import ProofForge.Extract.Lexical
 open Lean
 
 namespace ProofForge.Extract
+
+/-- Recognize std `Except` and `Core.Except` result constructors interchangeably. -/
+private def isExceptOkHead (e : Expr) : Bool :=
+  isConstNamed e ``Except.ok || isConstNamed e ``ProofForge.Core.Except.ok
+
+private def isExceptErrorHead (e : Expr) : Bool :=
+  isConstNamed e ``Except.error || isConstNamed e ``ProofForge.Core.Except.err
 
 /-- NEAR Runtime host reads. Matched by const name before any empty-arg UInt64
 unfold that would bake the irreducible stub body `0` into a literal. -/
@@ -2477,7 +2485,7 @@ private def asIndexSets (env : Environment) (e0 : Expr) : Option (Array Ops.Op) 
       | .letE _ _ value body _ => go fuel' value <|> go fuel' body
       | .lam _ _ body _ => go fuel' body
       | _ =>
-        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 1]!
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 2]!
@@ -3002,7 +3010,10 @@ private def scalarResultValues (env : Environment) (fuel : Nat) (e : Expr) :
       let right ← scalarResultValues env fuel' args[args.size - 1]!
       return left ++ right
     else
-      asWideCtorFields env e <|> asRegisteredBoundaryCtorFields env e <|>
+      let unfolded := strip (unfoldUserHelpers env 16 e)
+      asWideCtorFields env unfolded <|> asWideCtorFields env e
+        <|> asRegisteredBoundaryCtorFields env unfolded
+        <|> asRegisteredBoundaryCtorFields env e <|>
         (asBoolVal env fuel e <|> val env e).map (#[·])
 
 /-- Keep the historical scalar `okState` shorthand, but spell multi-leaf effectful results as the
@@ -3019,23 +3030,56 @@ private def effectfulResultOps (env : Environment) (e : Expr) : Option (Array Op
     -- rather than exposing it as a public result.
     return #[.okState (.lit 0)]
 
+/-- `Except.ok` carrying a fixed-width boundary value (for example `NearToken` / `UInt128`). -/
+private def asExceptOkBoundaryReturns (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
+  let e := peelControl 8 (dropUnusedHeadLets 32 e)
+  if !isExceptOkHead e || e.getAppArgs.size < 1 then none else
+  let payload := strip (unfoldUserHelpers env 16 (strip e.getAppArgs[e.getAppArgs.size - 1]!))
+  if isConstNamed payload ``Prod.mk then none else
+  match asWideCtorFields env payload <|> asRegisteredBoundaryCtorFields env payload with
+  | some values => some (values.map fun value => (.returnU64 value : Ops.Op))
+  | none =>
+      match scalarResultValues env 16 payload with
+      | some values =>
+          if values.size > 1 then some (values.map fun value => (.returnU64 value : Ops.Op)) else none
+      | none => none
+
 /-- `Except.ok (State.mk …, ret)`：按叶 diff，改了几个槽就写几条。 -/
 private def asStoreFields (env : Environment) (e : Expr)
     (includeSingle : Bool := false) : Option (Array Ops.Op) :=
   -- Preserve the RHS of `let next := ...` before peeling the state constructor. Dropping a used
   -- scalar binder turns `next` into an unrelated outer `.arg` and silently stores the wrong value.
   let e := peelControl 8 (substUInt64Lets 64 (dropUnusedHeadLets 32 e))
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if args.size ≥ 1 then
       let pair := strip args[args.size - 1]!
       if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
         let st := pair.getAppArgs[pair.getAppArgs.size - 2]!
         let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
+        -- Bare `.ok (methodArgRef, scalar)` must stay opaque here: `asStoreFields` is also consulted
+        -- from `ite` arms before the recursively decoded then-branch, and succeeding with a lone
+        -- `.okState` would erase preceding ignored SVM effects (fifo cancel / CPI). Wide boundary
+        -- returns (NearToken / UInt128 limbs as `.returnU64`) still need this short path.
+        if isConstNamed (strip st) ``methodArgRef then
+          match effectfulResultOps env ret with
+          | some returns =>
+              if returns.any fun op => match op with | .returnU64 _ => true | _ => false then
+                some returns
+              else none
+          | none => none
+        else
         let vectorBase := vectorBaseName env 32 st
         let leaves := (flattenLeaves env "" st).filter fun p => some p.1 != vectorBase
         let explicitSingle := includeSingle || containsUInt64NewtypeCtor env 16 st
-        if leaves.isEmpty || (!explicitSingle && leaves.size == 1) then none
+        if leaves.isEmpty then none
+        else if !explicitSingle && leaves.size == 1 then
+          match effectfulResultOps env ret with
+          | some returns =>
+              if returns.any fun op => match op with | .returnU64 _ => true | _ => false then
+                some returns
+              else none
+          | none => none
         else
           let stores := leaves.map fun p => (.storeField p.1 p.2 : Ops.Op)
           match effectfulResultOps env ret with
@@ -3047,7 +3091,7 @@ private def asStoreFields (env : Environment) (e : Expr)
 
 private def asOkStateCore (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if args.size ≥ 1 then
       let pair := strip args[args.size - 1]!
@@ -3166,7 +3210,7 @@ private def asOkState (env : Environment) (e : Expr) : Option Ops.Val :=
 /-- Scalar `Except.ok` is an intermediate value producer, not a state commit. -/
 private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let payload := strip args[args.size - 1]
@@ -3178,7 +3222,7 @@ private def asOkScalar (env : Environment) (e : Expr) : Option Ops.Val :=
 result may be one scalar or a statically bounded product of scalar leaves. -/
 private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if isConstNamed e ``Except.ok then
+  if isExceptOkHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let pair := strip args[args.size - 1]
@@ -3202,17 +3246,13 @@ private def asOkNoop (env : Environment) (e : Expr) : Option (Array Ops.Val) :=
                         | _ => false
                       else false
                 | none => false
+              let retValues? := scalarResultValues env 16 pairArgs[pairArgs.size - 1]!
               let reconstructedUnchanged :=
                 let leaves := flattenLeaves env "" state
-                match userCtorFields env state with
-                | some fields =>
-                  -- A reconstructed multi-field State can be entirely projections of the input.
-                  -- `flattenLeaves` then has no writes; preserve an independent wide result rather
-                  -- than letting the scalar state fallback expose the final State field.
-                  !fields.isEmpty && leaves.isEmpty &&
-                    (scalarResultValues env 16 pairArgs[pairArgs.size - 1]).any
-                      (·.size > 1)
-                | none => false
+                match userCtorFields env state, retValues? with
+                | some fields, some retValues =>
+                  !fields.isEmpty && leaves.isEmpty && retValues.size > 1
+                | _, _ => false
               if reconstructedFromOneBinder || reconstructedUnchanged then
                 scalarResultValues env 16 pairArgs[pairArgs.size - 1]
               else none
@@ -3233,7 +3273,7 @@ The first safe slice accepts one through four explicitly named UInt64 fields. Un
 must not silently degrade to selector-only errors. -/
 private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
   let e := peelControl 8 e
-  if isConstNamed e ``Except.error then
+  if isExceptErrorHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       let applied := strip args[args.size - 1]
@@ -3287,7 +3327,7 @@ private def decodeErrorCtor (env : Environment) (e : Expr) : DecodedError :=
 
 private def isErrorOverflow (e : Expr) : Bool :=
   let e := peelControl 8 e
-  if isConstNamed e ``Except.error then
+  if isExceptErrorHead e then
     let args := e.getAppArgs
     if h : args.size > 0 then
       endsWith (strip args[args.size - 1]) ".overflow"
@@ -4643,7 +4683,7 @@ private def findOkRet (env : Environment) (e : Expr) : Option Ops.Val :=
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
-      if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+      if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
         let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
         if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
           let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
@@ -5141,7 +5181,7 @@ private def collectIndexSets (env : Environment) (e : Expr)
       | .letE _ _ value body _ => go fuel' (body.instantiate1 value) state
       | .lam _ _ body _ => go fuel' body state
       | _ =>
-        if isConstNamed e ``Except.ok && e.getAppArgs.size ≥ 1 then
+        if isExceptOkHead e && e.getAppArgs.size ≥ 1 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 1]! state
         else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
           go fuel' e.getAppArgs[e.getAppArgs.size - 2]! state
@@ -5853,6 +5893,12 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Runtime.promiseFtOnTransferThenResolveReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallThenReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAndThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd3ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd4ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd5ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd6ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd7ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd8ThenReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseTransferDetached ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseTransferReturned ||
         name == ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
@@ -5878,6 +5924,19 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
         name == ``ProofForge.Wasm.Near.Sdk.Promises.ftOnTransferThenResolveReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callThenReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.callAndThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd3ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd4ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd5ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd6ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd7ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.callAnd8ThenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and3Returned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and4Returned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and5Returned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and6Returned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and7Returned ||
+        name == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and8Returned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferDetached ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferReturned ||
         name == ``ProofForge.Wasm.Near.Sdk.Promises.transferAccountDetached ||
@@ -5897,6 +5956,75 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
           | some (.defnInfo info) => mentionsNearEffect env fuel info.value
           | _ => false)
 
+/-- Read a compile-time Nat, unfolding plain `def` aliases such as `defaultMaxFanIn`. -/
+private partial def staticNatOrDefn? (env : Environment) (fuel : Nat) (e : Expr) : Option Nat :=
+  match fuel with
+  | 0 => none
+  | fuel' + 1 =>
+      let e := strip e
+      staticNatVal? env e <|>
+        match e.getAppFn.constName? with
+        | some name =>
+            match env.find? name with
+            | some (.defnInfo info) => staticNatOrDefn? env fuel' info.value
+            | _ => none
+        | none => none
+
+/-- True when `e` is a PromiseHandle lifecycle API that carries compile-time `maxFanIn`. -/
+private def isPromiseHandleLifecycleApi (e : Expr) : Bool :=
+  isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and3Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and4Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and5Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and6Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and7Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and8Returned
+
+/-- Fail-closed message when a PromiseHandle API's `maxFanIn` literal exceeds the opcode ladder
+(`maxFanInCompileCeiling = 8`). N>8 requires new fixed `andN` ops; Extract must not silently
+accept an over-ceiling handle capacity. Bare / partial apps (empty args) are ignored so the
+AST walk can reach the fully applied call. -/
+private def promiseHandleMaxFanInCeilingError? (env : Environment) (e : Expr) : Option String :=
+  let e := strip e
+  if !isPromiseHandleLifecycleApi e || e.getAppArgs.isEmpty then none
+  else
+    match staticNatOrDefn? env 16 e.getAppArgs[0]! with
+    | some n =>
+        if ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n then none
+        else
+          some s!"extract/unsupported: PromiseHandle maxFanIn {n} exceeds compile ceiling {ProofForge.Wasm.Near.Sdk.Promises.maxFanInCompileCeiling}"
+    | none =>
+        some "extract/unsupported: PromiseHandle maxFanIn must be a static Nat within the compile ceiling"
+
+/-- Walk a body for over-ceiling PromiseHandle APIs before effect decode can accept them. -/
+private partial def findPromiseHandleMaxFanInCeilingError (env : Environment) :
+    Nat → Expr → Option String
+  | 0, _ => none
+  | fuel + 1, e =>
+      let e := strip e
+      promiseHandleMaxFanInCeilingError? env e <|>
+        match e with
+        | .letE _ _ value body _ =>
+            findPromiseHandleMaxFanInCeilingError env fuel value <|>
+              findPromiseHandleMaxFanInCeilingError env fuel (body.instantiate1 value)
+        | .lam _ _ body _ => findPromiseHandleMaxFanInCeilingError env fuel body
+        | .app fn arg =>
+            findPromiseHandleMaxFanInCeilingError env fuel fn <|>
+              findPromiseHandleMaxFanInCeilingError env fuel arg
+        | .mdata _ inner => findPromiseHandleMaxFanInCeilingError env fuel inner
+        | _ => none
+
+/-- Whether the PromiseHandle API head at `e` has a static `maxFanIn` within the compile ceiling.
+Returns `none` when the head is not a PromiseHandle lifecycle API or is not yet applied.
+Returns `some false` when the API is applied but `maxFanIn` is non-static or over the ceiling. -/
+private def promiseHandleMaxFanInWithinCeiling? (env : Environment) (e : Expr) : Option Bool :=
+  let e := strip e
+  if !isPromiseHandleLifecycleApi e || e.getAppArgs.isEmpty then none
+  else
+    match staticNatOrDefn? env 16 e.getAppArgs[0]! with
+    | some n => some (ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n)
+    | none => some false
+
 /-- NEAR logging and invocation-memory mutations stay effects so CFG rewrites cannot duplicate,
 discard, or reorder them as pure scalar expressions. Buffer capacities remain compile-time. -/
 private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
@@ -5905,7 +6033,9 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
-      if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
+      -- Defense in depth: never decode PromiseHandle APIs above the compile ceiling.
+      if let some false := promiseHandleMaxFanInWithinCeiling? env e then none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
       else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded &&
           e.getAppArgs.size ≥ 2 then
@@ -6208,6 +6338,1030 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
               | _, _, _ => none
             else none
         | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd3ThenReturned &&
+          e.getAppArgs.size ≥ 23 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 16]!
+        let midDeposit := args[args.size - 11]!
+        let rightDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 23]!,
+            staticNatVal? env args[args.size - 22]!,
+            staticNatVal? env args[args.size - 21]!,
+            staticNatVal? env args[args.size - 20]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd3ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+                      callbackArgsCapacity leftArguments midArguments rightArguments
+                      callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo
+                      midDepositHi midGas rightDepositLo rightDepositHi rightGas
+                      callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned &&
+          e.getAppArgs.size ≥ 13 then
+        let args := e.getAppArgs
+        let childDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 12]!,
+            staticNatVal? env args[args.size - 11]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) childDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) childDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some childArgsCapacity, some callbackArgsCapacity,
+            some receiver, some childMethod, some callbackMethod,
+            some childDepositLo, some childDepositHi, some childGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid childMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid childArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env childArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some childArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallThenReturned receiver childMethod callbackMethod
+                    childArgsCapacity callbackArgsCapacity childArguments callbackArguments
+                    childDepositLo childDepositHi childGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and3Returned &&
+          e.getAppArgs.size ≥ 25 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 16]!
+        let midDeposit := args[args.size - 11]!
+        let rightDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 24]!,
+            staticNatVal? env args[args.size - 23]!,
+            staticNatVal? env args[args.size - 22]!,
+            staticNatVal? env args[args.size - 21]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd3ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+                      callbackArgsCapacity leftArguments midArguments rightArguments
+                      callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo
+                      midDepositHi midGas rightDepositLo rightDepositHi rightGas
+                      callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and4Returned &&
+          e.getAppArgs.size ≥ 31 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 21]!
+        let midDeposit := args[args.size - 16]!
+        let rightDeposit := args[args.size - 11]!
+        let fourthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 30]!,
+            staticNatVal? env args[args.size - 29]!,
+            staticNatVal? env args[args.size - 28]!,
+            staticNatVal? env args[args.size - 27]!,
+            staticNatVal? env args[args.size - 26]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some callbackArgsCapacity, some leftReceiver, some leftMethod,
+            some midReceiver, some midMethod, some rightReceiver, some rightMethod,
+            some fourthReceiver, some fourthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd4ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod callbackMethod leftArgsCapacity midArgsCapacity
+                      rightArgsCapacity fourthArgsCapacity callbackArgsCapacity leftArguments
+                      midArguments rightArguments fourthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and5Returned &&
+          e.getAppArgs.size ≥ 37 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 26]!
+        let midDeposit := args[args.size - 21]!
+        let rightDeposit := args[args.size - 16]!
+        let fourthDeposit := args[args.size - 11]!
+        let fifthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 35]!,
+            staticNatVal? env args[args.size - 34]!,
+            staticNatVal? env args[args.size - 33]!,
+            staticNatVal? env args[args.size - 32]!,
+            staticNatVal? env args[args.size - 31]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 25]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some midReceiver, some midMethod,
+            some rightReceiver, some rightMethod, some fourthReceiver, some fourthMethod,
+            some fifthReceiver, some fifthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 27]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd5ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod
+                      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi
+                      callbackGas)
+              | _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and6Returned &&
+          e.getAppArgs.size ≥ 43 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 31]!
+        let midDeposit := args[args.size - 26]!
+        let rightDeposit := args[args.size - 21]!
+        let fourthDeposit := args[args.size - 16]!
+        let fifthDeposit := args[args.size - 11]!
+        let sixthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticString? env 64 args[args.size - 33]!,
+            staticString? env 64 args[args.size - 33]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 30]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 25]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) sixthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) sixthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some fourthReceiver,
+            some fourthMethod, some fifthReceiver, some fifthMethod, some sixthReceiver,
+            some sixthMethod, some callbackMethod, some leftDepositLo, some leftDepositHi,
+            some leftGas, some midDepositLo, some midDepositHi, some midGas, some rightDepositLo,
+            some rightDepositHi, some rightGas, some fourthDepositLo, some fourthDepositHi,
+            some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 32]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 27]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd6ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments sixthArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas callbackDepositLo
+                      callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and7Returned &&
+          e.getAppArgs.size ≥ 48 then
+        let args := e.getAppArgs
+        find fuel'
+          (mkAppN (mkConst ``ProofForge.Wasm.Near.Sdk.Promises.callAnd7ThenReturned)
+            (args.extract 1 9 ++ args.extract 10 args.size))
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and8Returned &&
+          e.getAppArgs.size ≥ 55 then
+        let args := e.getAppArgs
+        -- Layout: maxFanIn, 9 capacity Nats, handle, then callAnd8 business args.
+        -- Force `@[pf_inline]` unfold to Runtime: a 53-arg `callAnd8ThenReturned` hits the
+        -- SDK decoder (size ≥ 53) which returns `none` on match failure and never falls
+        -- through. and7 accidentally avoids this because its delegated size is 47 < 48.
+        let delegated :=
+          mkAppN (mkConst ``ProofForge.Wasm.Near.Sdk.Promises.callAnd8ThenReturned)
+            (args.extract 1 10 ++ args.extract 11 args.size)
+        match unfoldUserHelper env delegated with
+        | some (_, unfolded) => find fuel' unfolded
+        | none => find fuel' delegated
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned) &&
+          e.getAppArgs.size ≥ 6 then
+        let args := e.getAppArgs
+        let deposit := args[args.size - 2]!
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned
+        match staticNatVal? env args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) deposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) deposit),
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 3]!).map fun arguments =>
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
+      else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallDetached ||
+          isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned) &&
+          e.getAppArgs.size ≥ 7 then
+        let args := e.getAppArgs
+        let returned := isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallReturned
+        match staticNatVal? env args[args.size - 7]!,
+            staticString? env 64 args[args.size - 6]!,
+            staticString? env 64 args[args.size - 5]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some argsCapacity, some receiver, some method, some depositLo, some depositHi, some gas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid receiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid method &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid argsCapacity then
+              (boundedStorageFrame? env argsCapacity args[args.size - 4]!).map fun arguments =>
+                if returned then
+                  .nearPromiseFunctionCallReturned receiver method argsCapacity arguments
+                    depositLo depositHi gas
+                else
+                  .nearPromiseFunctionCallDetached receiver method argsCapacity arguments
+                    depositLo depositHi gas
+            else none
+        | _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd4ThenReturned &&
+          e.getAppArgs.size ≥ 29 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 21]!
+        let midDeposit := args[args.size - 16]!
+        let rightDeposit := args[args.size - 11]!
+        let fourthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 29]!,
+            staticNatVal? env args[args.size - 28]!,
+            staticNatVal? env args[args.size - 27]!,
+            staticNatVal? env args[args.size - 26]!,
+            staticNatVal? env args[args.size - 25]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some callbackArgsCapacity, some leftReceiver, some leftMethod,
+            some midReceiver, some midMethod, some rightReceiver, some rightMethod,
+            some fourthReceiver, some fourthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd4ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod callbackMethod leftArgsCapacity midArgsCapacity
+                      rightArgsCapacity fourthArgsCapacity callbackArgsCapacity leftArguments
+                      midArguments rightArguments fourthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd5ThenReturned &&
+          e.getAppArgs.size ≥ 35 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 26]!
+        let midDeposit := args[args.size - 21]!
+        let rightDeposit := args[args.size - 16]!
+        let fourthDeposit := args[args.size - 11]!
+        let fifthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 35]!,
+            staticNatVal? env args[args.size - 34]!,
+            staticNatVal? env args[args.size - 33]!,
+            staticNatVal? env args[args.size - 32]!,
+            staticNatVal? env args[args.size - 31]!,
+            staticNatVal? env args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 25]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some midReceiver, some midMethod,
+            some rightReceiver, some rightMethod, some fourthReceiver, some fourthMethod,
+            some fifthReceiver, some fifthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 27]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd5ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod
+                      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi
+                      callbackGas)
+              | _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd6ThenReturned &&
+          e.getAppArgs.size ≥ 42 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 32]!
+        let midDeposit := args[args.size - 27]!
+        let rightDeposit := args[args.size - 22]!
+        let fourthDeposit := args[args.size - 17]!
+        let fifthDeposit := args[args.size - 12]!
+        let sixthDeposit := args[args.size - 7]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 42]!,
+            staticNatVal? env args[args.size - 41]!,
+            staticNatVal? env args[args.size - 40]!,
+            staticNatVal? env args[args.size - 39]!,
+            staticNatVal? env args[args.size - 38]!,
+            staticNatVal? env args[args.size - 37]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticString? env 64 args[args.size - 35]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 25]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 20]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 15]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 10]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 31]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 26]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 21]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 16]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 11]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) sixthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) sixthDeposit),
+            val env args[args.size - 6]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some fourthReceiver,
+            some fourthMethod, some fifthReceiver, some fifthMethod, some sixthReceiver,
+            some sixthMethod, some callbackMethod, some leftDepositLo, some leftDepositHi,
+            some leftGas, some midDepositLo, some midDepositHi, some midGas, some rightDepositLo,
+            some rightDepositHi, some rightGas, some fourthDepositLo, some fourthDepositHi,
+            some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 33]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 28]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 23]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 18]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 13]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 8]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd6ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments sixthArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas callbackDepositLo
+                      callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd7ThenReturned &&
+          e.getAppArgs.size ≥ 48 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 37]!
+        let midDeposit := args[args.size - 32]!
+        let rightDeposit := args[args.size - 27]!
+        let fourthDeposit := args[args.size - 22]!
+        let fifthDeposit := args[args.size - 17]!
+        let sixthDeposit := args[args.size - 13]!
+        let seventhDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 48]!,
+            staticNatVal? env args[args.size - 47]!,
+            staticNatVal? env args[args.size - 46]!,
+            staticNatVal? env args[args.size - 45]!,
+            staticNatVal? env args[args.size - 44]!,
+            staticNatVal? env args[args.size - 43]!,
+            staticNatVal? env args[args.size - 42]!,
+            staticNatVal? env args[args.size - 41]!,
+            staticString? env 64 args[args.size - 40]!,
+            staticString? env 64 args[args.size - 39]!,
+            staticString? env 64 args[args.size - 35]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 25]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 20]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 15]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 36]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 31]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 26]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 21]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 16]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) sixthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) sixthDeposit),
+            val env args[args.size - 12]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) seventhDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) seventhDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some seventhArgsCapacity, some callbackArgsCapacity, some leftReceiver, some leftMethod,
+            some midReceiver, some midMethod, some rightReceiver, some rightMethod, some fourthReceiver,
+            some fourthMethod, some fifthReceiver, some fifthMethod, some sixthReceiver,
+            some sixthMethod, some seventhReceiver, some seventhMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo, some midDepositHi,
+            some midGas, some rightDepositLo, some rightDepositHi, some rightGas, some fourthDepositLo,
+            some fourthDepositHi, some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas, some seventhDepositLo,
+            some seventhDepositHi, some seventhGas, some callbackDepositLo, some callbackDepositHi,
+            some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid seventhReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid seventhMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid seventhArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 39]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 34]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 29]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 24]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 19]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 14]!,
+                  boundedStorageFrame? env seventhArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some seventhArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd7ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      seventhReceiver seventhMethod callbackMethod leftArgsCapacity midArgsCapacity
+                      rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity
+                      seventhArgsCapacity callbackArgsCapacity leftArguments midArguments rightArguments
+                      fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo
+                      seventhDepositHi seventhGas callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callAnd8ThenReturned &&
+          e.getAppArgs.size ≥ 53 then
+        let args := e.getAppArgs
+        let leftDeposit := args[args.size - 41]!
+        let midDeposit := args[args.size - 36]!
+        let rightDeposit := args[args.size - 31]!
+        let fourthDeposit := args[args.size - 26]!
+        let fifthDeposit := args[args.size - 21]!
+        let sixthDeposit := args[args.size - 16]!
+        let seventhDeposit := args[args.size - 11]!
+        let eighthDeposit := args[args.size - 6]!
+        let callbackDeposit := args[args.size - 2]!
+        match staticNatVal? env args[args.size - 53]!,
+            staticNatVal? env args[args.size - 52]!,
+            staticNatVal? env args[args.size - 51]!,
+            staticNatVal? env args[args.size - 50]!,
+            staticNatVal? env args[args.size - 49]!,
+            staticNatVal? env args[args.size - 48]!,
+            staticNatVal? env args[args.size - 47]!,
+            staticNatVal? env args[args.size - 46]!,
+            staticNatVal? env args[args.size - 45]!,
+            staticString? env 64 args[args.size - 44]!,
+            staticString? env 64 args[args.size - 43]!,
+            staticString? env 64 args[args.size - 39]!,
+            staticString? env 64 args[args.size - 38]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 33]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 14]!,
+            staticString? env 64 args[args.size - 13]!,
+            staticString? env 64 args[args.size - 9]!,
+            staticString? env 64 args[args.size - 8]!,
+            staticString? env 64 args[args.size - 4]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) leftDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) leftDeposit),
+            val env args[args.size - 40]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) midDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) midDeposit),
+            val env args[args.size - 35]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) rightDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) rightDeposit),
+            val env args[args.size - 30]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fourthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fourthDeposit),
+            val env args[args.size - 25]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) fifthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) fifthDeposit),
+            val env args[args.size - 20]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) sixthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) sixthDeposit),
+            val env args[args.size - 15]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) seventhDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) seventhDeposit),
+            val env args[args.size - 10]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) eighthDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) eighthDeposit),
+            val env args[args.size - 5]!,
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w0) callbackDeposit),
+            val env (mkApp (mkConst ``ProofForge.Core.Value.UInt128.w1) callbackDeposit),
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some seventhArgsCapacity, some eighthArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some midReceiver, some midMethod, some rightReceiver,
+            some rightMethod, some fourthReceiver, some fourthMethod, some fifthReceiver,
+            some fifthMethod, some sixthReceiver, some sixthMethod, some seventhReceiver,
+            some seventhMethod, some eighthReceiver, some eighthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo, some midDepositHi,
+            some midGas, some rightDepositLo, some rightDepositHi, some rightGas, some fourthDepositLo,
+            some fourthDepositHi, some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas, some seventhDepositLo,
+            some seventhDepositHi, some seventhGas, some eighthDepositLo, some eighthDepositHi,
+            some eighthGas, some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid seventhReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid seventhMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid eighthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid eighthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid seventhArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid eighthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 43]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 38]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 33]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 28]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 23]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 18]!,
+                  boundedStorageFrame? env seventhArgsCapacity args[args.size - 12]!,
+                  boundedStorageFrame? env eighthArgsCapacity args[args.size - 7]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 3]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some seventhArguments, some eighthArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd8ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      seventhReceiver seventhMethod eighthReceiver eighthMethod callbackMethod
+                      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity
+                      callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments
+                      fifthArguments sixthArguments seventhArguments eighthArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo
+                      seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas callbackDepositLo
+                      callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callDetached ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.callReturned) &&
           e.getAppArgs.size ≥ 6 then
@@ -6328,6 +7482,495 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
               | _, _, _ => none
             else none
         | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd3ThenReturned &&
+          e.getAppArgs.size ≥ 27 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 27]!,
+            staticNatVal? env args[args.size - 26]!,
+            staticNatVal? env args[args.size - 25]!,
+            staticNatVal? env args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 22]!,
+            staticString? env 64 args[args.size - 21]!,
+            staticString? env 64 args[args.size - 20]!,
+            staticString? env 64 args[args.size - 19]!,
+            staticString? env 64 args[args.size - 18]!,
+            staticString? env 64 args[args.size - 17]!,
+            val env args[args.size - 12]!, val env args[args.size - 11]!,
+            val env args[args.size - 10]!, val env args[args.size - 9]!,
+            val env args[args.size - 8]!, val env args[args.size - 7]!,
+            val env args[args.size - 6]!, val env args[args.size - 5]!,
+            val env args[args.size - 4]!, val env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 16]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 15]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 14]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 13]! with
+              | some leftArguments, some midArguments, some rightArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd3ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                    callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+                    callbackArgsCapacity leftArguments midArguments rightArguments
+                    callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo
+                    midDepositHi midGas rightDepositLo rightDepositHi rightGas
+                    callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd4ThenReturned &&
+          e.getAppArgs.size ≥ 34 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 34]!,
+            staticNatVal? env args[args.size - 33]!,
+            staticNatVal? env args[args.size - 32]!,
+            staticNatVal? env args[args.size - 31]!,
+            staticNatVal? env args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 27]!,
+            staticString? env 64 args[args.size - 26]!,
+            staticString? env 64 args[args.size - 25]!,
+            staticString? env 64 args[args.size - 24]!,
+            staticString? env 64 args[args.size - 23]!,
+            staticString? env 64 args[args.size - 22]!,
+            staticString? env 64 args[args.size - 21]!,
+            val env args[args.size - 15]!, val env args[args.size - 14]!,
+            val env args[args.size - 13]!, val env args[args.size - 12]!,
+            val env args[args.size - 11]!, val env args[args.size - 10]!,
+            val env args[args.size - 9]!, val env args[args.size - 8]!,
+            val env args[args.size - 7]!, val env args[args.size - 6]!,
+            val env args[args.size - 5]!, val env args[args.size - 4]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some callbackArgsCapacity, some leftReceiver, some leftMethod,
+            some midReceiver, some midMethod, some rightReceiver, some rightMethod,
+            some fourthReceiver, some fourthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 20]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 19]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 18]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 17]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 16]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd4ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod callbackMethod leftArgsCapacity midArgsCapacity
+                      rightArgsCapacity fourthArgsCapacity callbackArgsCapacity leftArguments
+                      midArguments rightArguments fourthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd5ThenReturned &&
+          e.getAppArgs.size ≥ 41 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 41]!,
+            staticNatVal? env args[args.size - 40]!,
+            staticNatVal? env args[args.size - 39]!,
+            staticNatVal? env args[args.size - 38]!,
+            staticNatVal? env args[args.size - 37]!,
+            staticNatVal? env args[args.size - 36]!,
+            staticString? env 64 args[args.size - 35]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 33]!,
+            staticString? env 64 args[args.size - 32]!,
+            staticString? env 64 args[args.size - 31]!,
+            staticString? env 64 args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            staticString? env 64 args[args.size - 28]!,
+            staticString? env 64 args[args.size - 27]!,
+            staticString? env 64 args[args.size - 26]!,
+            staticString? env 64 args[args.size - 25]!,
+            val env args[args.size - 18]!, val env args[args.size - 17]!,
+            val env args[args.size - 16]!, val env args[args.size - 15]!,
+            val env args[args.size - 14]!, val env args[args.size - 13]!,
+            val env args[args.size - 12]!, val env args[args.size - 11]!,
+            val env args[args.size - 10]!, val env args[args.size - 9]!,
+            val env args[args.size - 8]!, val env args[args.size - 7]!,
+            val env args[args.size - 6]!, val env args[args.size - 5]!,
+            val env args[args.size - 4]!, val env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some midReceiver, some midMethod,
+            some rightReceiver, some rightMethod, some fourthReceiver, some fourthMethod,
+            some fifthReceiver, some fifthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo,
+            some midDepositHi, some midGas, some rightDepositLo, some rightDepositHi,
+            some rightGas, some fourthDepositLo, some fourthDepositHi, some fourthGas,
+            some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 24]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 23]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 22]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 21]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 20]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 19]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd5ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod callbackMethod
+                      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments callbackArguments leftDepositLo
+                      leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                      fifthDepositLo fifthDepositHi fifthGas callbackDepositLo callbackDepositHi
+                      callbackGas)
+              | _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd6ThenReturned &&
+          e.getAppArgs.size ≥ 48 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 48]!,
+            staticNatVal? env args[args.size - 47]!,
+            staticNatVal? env args[args.size - 46]!,
+            staticNatVal? env args[args.size - 45]!,
+            staticNatVal? env args[args.size - 44]!,
+            staticNatVal? env args[args.size - 43]!,
+            staticNatVal? env args[args.size - 42]!,
+            staticString? env 64 args[args.size - 41]!,
+            staticString? env 64 args[args.size - 40]!,
+            staticString? env 64 args[args.size - 39]!,
+            staticString? env 64 args[args.size - 38]!,
+            staticString? env 64 args[args.size - 37]!,
+            staticString? env 64 args[args.size - 36]!,
+            staticString? env 64 args[args.size - 35]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 33]!,
+            staticString? env 64 args[args.size - 32]!,
+            staticString? env 64 args[args.size - 31]!,
+            staticString? env 64 args[args.size - 30]!,
+            staticString? env 64 args[args.size - 29]!,
+            val env args[args.size - 21]!, val env args[args.size - 20]!,
+            val env args[args.size - 19]!, val env args[args.size - 18]!,
+            val env args[args.size - 17]!, val env args[args.size - 16]!,
+            val env args[args.size - 15]!, val env args[args.size - 14]!,
+            val env args[args.size - 13]!, val env args[args.size - 12]!,
+            val env args[args.size - 11]!, val env args[args.size - 10]!,
+            val env args[args.size - 9]!, val env args[args.size - 8]!,
+            val env args[args.size - 7]!, val env args[args.size - 6]!,
+            val env args[args.size - 5]!, val env args[args.size - 4]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some callbackArgsCapacity, some leftReceiver, some leftMethod, some midReceiver,
+            some midMethod, some rightReceiver, some rightMethod, some fourthReceiver,
+            some fourthMethod, some fifthReceiver, some fifthMethod, some sixthReceiver,
+            some sixthMethod, some callbackMethod, some leftDepositLo, some leftDepositHi,
+            some leftGas, some midDepositLo, some midDepositHi, some midGas, some rightDepositLo,
+            some rightDepositHi, some rightGas, some fourthDepositLo, some fourthDepositHi,
+            some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas,
+            some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 28]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 27]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 26]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 25]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 24]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 23]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 22]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd6ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                      rightArguments fourthArguments fifthArguments sixthArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas callbackDepositLo
+                      callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd7ThenReturned &&
+          e.getAppArgs.size ≥ 55 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 55]!,
+            staticNatVal? env args[args.size - 54]!,
+            staticNatVal? env args[args.size - 53]!,
+            staticNatVal? env args[args.size - 52]!,
+            staticNatVal? env args[args.size - 51]!,
+            staticNatVal? env args[args.size - 50]!,
+            staticNatVal? env args[args.size - 49]!,
+            staticNatVal? env args[args.size - 48]!,
+            staticString? env 64 args[args.size - 47]!,
+            staticString? env 64 args[args.size - 46]!,
+            staticString? env 64 args[args.size - 45]!,
+            staticString? env 64 args[args.size - 44]!,
+            staticString? env 64 args[args.size - 43]!,
+            staticString? env 64 args[args.size - 42]!,
+            staticString? env 64 args[args.size - 41]!,
+            staticString? env 64 args[args.size - 40]!,
+            staticString? env 64 args[args.size - 39]!,
+            staticString? env 64 args[args.size - 38]!,
+            staticString? env 64 args[args.size - 37]!,
+            staticString? env 64 args[args.size - 36]!,
+            staticString? env 64 args[args.size - 35]!,
+            staticString? env 64 args[args.size - 34]!,
+            staticString? env 64 args[args.size - 33]!,
+            val env args[args.size - 24]!, val env args[args.size - 23]!,
+            val env args[args.size - 22]!, val env args[args.size - 21]!,
+            val env args[args.size - 20]!, val env args[args.size - 19]!,
+            val env args[args.size - 18]!, val env args[args.size - 17]!,
+            val env args[args.size - 16]!, val env args[args.size - 15]!,
+            val env args[args.size - 14]!, val env args[args.size - 13]!,
+            val env args[args.size - 12]!, val env args[args.size - 11]!,
+            val env args[args.size - 10]!, val env args[args.size - 9]!,
+            val env args[args.size - 8]!, val env args[args.size - 7]!,
+            val env args[args.size - 6]!, val env args[args.size - 5]!,
+            val env args[args.size - 4]!, val env args[args.size - 3]!,
+            val env args[args.size - 2]!, val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some seventhArgsCapacity, some callbackArgsCapacity, some leftReceiver, some leftMethod,
+            some midReceiver, some midMethod, some rightReceiver, some rightMethod, some fourthReceiver,
+            some fourthMethod, some fifthReceiver, some fifthMethod, some sixthReceiver,
+            some sixthMethod, some seventhReceiver, some seventhMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo, some midDepositHi,
+            some midGas, some rightDepositLo, some rightDepositHi, some rightGas, some fourthDepositLo,
+            some fourthDepositHi, some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas, some seventhDepositLo,
+            some seventhDepositHi, some seventhGas, some callbackDepositLo, some callbackDepositHi,
+            some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid seventhReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid seventhMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid seventhArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 32]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 31]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 30]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 29]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 28]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 27]!,
+                  boundedStorageFrame? env seventhArgsCapacity args[args.size - 26]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 25]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some seventhArguments, some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd7ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      seventhReceiver seventhMethod callbackMethod leftArgsCapacity midArgsCapacity
+                      rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity
+                      seventhArgsCapacity callbackArgsCapacity leftArguments midArguments rightArguments
+                      fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo
+                      seventhDepositHi seventhGas callbackDepositLo callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseFunctionCallAnd8ThenReturned &&
+          e.getAppArgs.size ≥ 62 then
+        let args := e.getAppArgs
+        match staticNatVal? env args[args.size - 62]!,
+            staticNatVal? env args[args.size - 61]!,
+            staticNatVal? env args[args.size - 60]!,
+            staticNatVal? env args[args.size - 59]!,
+            staticNatVal? env args[args.size - 58]!,
+            staticNatVal? env args[args.size - 57]!,
+            staticNatVal? env args[args.size - 56]!,
+            staticNatVal? env args[args.size - 55]!,
+            staticNatVal? env args[args.size - 54]!,
+            staticString? env 64 args[args.size - 53]!,
+            staticString? env 64 args[args.size - 52]!,
+            staticString? env 64 args[args.size - 51]!,
+            staticString? env 64 args[args.size - 50]!,
+            staticString? env 64 args[args.size - 49]!,
+            staticString? env 64 args[args.size - 48]!,
+            staticString? env 64 args[args.size - 47]!,
+            staticString? env 64 args[args.size - 46]!,
+            staticString? env 64 args[args.size - 45]!,
+            staticString? env 64 args[args.size - 44]!,
+            staticString? env 64 args[args.size - 43]!,
+            staticString? env 64 args[args.size - 42]!,
+            staticString? env 64 args[args.size - 41]!,
+            staticString? env 64 args[args.size - 40]!,
+            staticString? env 64 args[args.size - 39]!,
+            staticString? env 64 args[args.size - 38]!,
+            staticString? env 64 args[args.size - 37]!,
+            val env args[args.size - 27]!, val env args[args.size - 26]!,
+            val env args[args.size - 25]!, val env args[args.size - 24]!,
+            val env args[args.size - 23]!, val env args[args.size - 22]!,
+            val env args[args.size - 21]!, val env args[args.size - 20]!,
+            val env args[args.size - 19]!, val env args[args.size - 18]!,
+            val env args[args.size - 17]!, val env args[args.size - 16]!,
+            val env args[args.size - 15]!, val env args[args.size - 14]!,
+            val env args[args.size - 13]!, val env args[args.size - 12]!,
+            val env args[args.size - 11]!, val env args[args.size - 10]!,
+            val env args[args.size - 9]!, val env args[args.size - 8]!,
+            val env args[args.size - 7]!, val env args[args.size - 6]!,
+            val env args[args.size - 5]!, val env args[args.size - 4]!,
+            val env args[args.size - 3]!, val env args[args.size - 2]!,
+            val env args[args.size - 1]! with
+        | some leftArgsCapacity, some midArgsCapacity, some rightArgsCapacity,
+            some fourthArgsCapacity, some fifthArgsCapacity, some sixthArgsCapacity,
+            some seventhArgsCapacity, some eighthArgsCapacity, some callbackArgsCapacity,
+            some leftReceiver, some leftMethod, some midReceiver, some midMethod, some rightReceiver,
+            some rightMethod, some fourthReceiver, some fourthMethod, some fifthReceiver,
+            some fifthMethod, some sixthReceiver, some sixthMethod, some seventhReceiver,
+            some seventhMethod, some eighthReceiver, some eighthMethod, some callbackMethod,
+            some leftDepositLo, some leftDepositHi, some leftGas, some midDepositLo, some midDepositHi,
+            some midGas, some rightDepositLo, some rightDepositHi, some rightGas, some fourthDepositLo,
+            some fourthDepositHi, some fourthGas, some fifthDepositLo, some fifthDepositHi, some fifthGas,
+            some sixthDepositLo, some sixthDepositHi, some sixthGas, some seventhDepositLo,
+            some seventhDepositHi, some seventhGas, some eighthDepositLo, some eighthDepositHi,
+            some eighthGas, some callbackDepositLo, some callbackDepositHi, some callbackGas =>
+            if ProofForge.Wasm.Near.Codec.accountIdLiteralValid leftReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid leftMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid midReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid midMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid rightReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid rightMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fourthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fourthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid fifthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid fifthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid sixthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid sixthMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid seventhReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid seventhMethod &&
+                ProofForge.Wasm.Near.Codec.accountIdLiteralValid eighthReceiver &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid eighthMethod &&
+                ProofForge.Wasm.Near.Codec.promiseMethodLiteralValid callbackMethod &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid leftArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid midArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid rightArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fourthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid fifthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid sixthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid seventhArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid eighthArgsCapacity &&
+                ProofForge.Wasm.Near.Codec.storageCapacityValid callbackArgsCapacity then
+              match boundedStorageFrame? env leftArgsCapacity args[args.size - 36]!,
+                  boundedStorageFrame? env midArgsCapacity args[args.size - 35]!,
+                  boundedStorageFrame? env rightArgsCapacity args[args.size - 34]!,
+                  boundedStorageFrame? env fourthArgsCapacity args[args.size - 33]!,
+                  boundedStorageFrame? env fifthArgsCapacity args[args.size - 32]!,
+                  boundedStorageFrame? env sixthArgsCapacity args[args.size - 31]!,
+                  boundedStorageFrame? env seventhArgsCapacity args[args.size - 30]!,
+                  boundedStorageFrame? env eighthArgsCapacity args[args.size - 29]!,
+                  boundedStorageFrame? env callbackArgsCapacity args[args.size - 28]! with
+              | some leftArguments, some midArguments, some rightArguments, some fourthArguments,
+                  some fifthArguments, some sixthArguments, some seventhArguments, some eighthArguments,
+                  some callbackArguments =>
+                  some (.nearPromiseFunctionCallAnd8ThenReturned
+                    leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod
+                      fourthReceiver fourthMethod fifthReceiver fifthMethod sixthReceiver sixthMethod
+                      seventhReceiver seventhMethod eighthReceiver eighthMethod callbackMethod
+                      leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                      fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity
+                      callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments
+                      fifthArguments sixthArguments seventhArguments eighthArguments callbackArguments
+                      leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                      rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                      fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo
+                      seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas callbackDepositLo
+                      callbackDepositHi callbackGas)
+              | _, _, _, _, _, _, _, _, _ => none
+            else none
+        | _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => none
       else if (isConstNamed e ``ProofForge.Wasm.Near.Runtime.promiseResultRead ||
           isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.ResultBuffer.read) &&
           e.getAppArgs.size ≥ 2 then
@@ -6498,6 +8141,16 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
                   .nearStorageHasKey resultCapacity keyCapacity key
             else none
         | _, _ => none
+      else if let some fields := userCtorFields env e then
+        match e.getAppFn.constName? with
+        | some ctorName =>
+          match env.find? ctorName with
+          | some (.ctorInfo c) =>
+            if c.induct == ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle && fields.size ≥ 1 then
+              find fuel' fields[0]!
+            else none
+          | _ => none
+        | none => none
       else
         match unfoldUserHelper env e with
         | some (_, unfolded) => find fuel' unfolded
@@ -7338,7 +8991,7 @@ private def asInlineStateSuccess (env : Environment) (e : Expr) (localDepth : Na
     (stateType? : Option Name := none) (deepScalars : Bool := false) :
     Option (Except String (Array Ops.Op)) :=
   let e := peelControl 8 (dropUnusedHeadLets 32 e)
-  if !isConstNamed e ``Except.ok || e.getAppArgs.size < 1 then none else
+  if !isExceptOkHead e || e.getAppArgs.size < 1 then none else
   let pair := strip e.getAppArgs[e.getAppArgs.size - 1]!
   if !isConstNamed pair ``Prod.mk || pair.getAppArgs.size < 2 then none else
   let args := pair.getAppArgs
@@ -7464,6 +9117,8 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
       .ok (values.map fun value => .returnU64 value)
   else if let some ops := asStoreFields env e includeSingleStore then
     .ok (snapshotStateUpdate localDepth ops)
+  else if let some ops := asExceptOkBoundaryReturns env e then
+    .ok ops
   else if let some v := asOkState env e then
     .ok #[.okState v]
   else if let some v := asOkScalar env e then
@@ -7479,10 +9134,15 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if let some v := asStateMk env e then
     .ok #[.returnState v]
   else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
-    match val env e.getAppArgs[e.getAppArgs.size - 2]!,
-          val env e.getAppArgs[e.getAppArgs.size - 1]! with
-    | some a, some b => .ok #[.returnU64 a, .returnU64 b]
-    | _, _ => .error "extract/unsupported: pair return"
+    -- Flat pairs remain the common path; nested products (Feature A depth ≤ 2) flatten to the
+    -- same ordered scalar return frame that codecs already pack as nested ABI tuples.
+    match scalarResultValues env 16 e with
+    | some values =>
+        if values.isEmpty then
+          .error "extract/unsupported: empty pair return"
+        else
+          .ok (values.map fun value => .returnU64 value)
+    | none => .error "extract/unsupported: pair return"
   else if (match e.getAppFn.constName? with
       | some name =>
         match env.find? name with
@@ -7639,6 +9299,85 @@ private partial def lowerBindProducer (slot : Nat) (ops : Array Ops.Op) :
     | _ => return none
   return some (lowered, hadSuccess, false)
 
+/-- Like `lowerBindProducer`, but terminal success assigns `limbCount` consecutive `.returnU64`
+values into `slot .. slot + limbCount - 1`. -/
+private def terminalReturnLimbs? (limbCount : Nat) (ops : Array Ops.Op) : Option (Array Ops.Val) :=
+  if ops.size < limbCount then none else
+  let tail := ops.extract (ops.size - limbCount) ops.size
+  tail.mapM fun op =>
+    match op with
+    | .returnU64 value => some value
+    | _ => none
+
+private partial def lowerBindProducerMulti (slot limbCount : Nat) (ops : Array Ops.Op) :
+    Option (Array Ops.Op × Bool × Bool) :=
+  if let some values := terminalReturnLimbs? limbCount ops then
+    some (ops.extract 0 (ops.size - limbCount) ++ (Array.range limbCount).map fun i =>
+      (.setLocal (slot + i) values[i]! : Ops.Op), true, true)
+  else Id.run do
+    let mut lowered := #[]
+    let mut hadSuccess := false
+    for op in ops do
+      match op with
+      | .errorOverflow | .errorNamed _ =>
+          return some (lowered.push op, hadSuccess, true)
+      | .ite cmp lhs rhs thn els =>
+          let some (thn', thnSuccess, thnTerminates) := lowerBindProducerMulti slot limbCount thn
+            | return none
+          let some (els', elsSuccess, elsTerminates) := lowerBindProducerMulti slot limbCount els
+            | return none
+          lowered := lowered.push (.ite cmp lhs rhs thn' els')
+          hadSuccess := hadSuccess || thnSuccess || elsSuccess
+          if thnTerminates && elsTerminates then
+            return some (lowered, hadSuccess, true)
+      | .okState value =>
+          if limbCount == 1 then
+            return some (lowered.push (.setLocal slot value), true, true)
+          else
+            return none
+      | .letLocal .. | .joinLocal .. | .setLocal ..
+      | .checkedAddU64 .. | .checkedSubU64 .. | .checkedMulU64 ..
+      | .checkedDivU64 .. | .checkedModU64 .. | .forAccum .. =>
+          lowered := lowered.push op
+      | .forBody bound body =>
+          let some (body', bodySuccess, bodyTerminates) := lowerBindProducerMulti slot limbCount body
+            | return none
+          if bodySuccess || bodyTerminates then return none
+          lowered := lowered.push (.forBody bound body')
+      | .ext _ =>
+          lowered := lowered.push op
+      | _ => return none
+    return some (lowered, hadSuccess, false)
+
+private def boundaryBindArg (localDepth : Nat) (ty : Expr) : Expr :=
+  let ty := ty.consumeMData
+  let localRefLit (offset : Nat) : Expr :=
+    mkApp (mkConst ``localRef) (mkNatLit (localDepth + offset))
+  if isUInt128Type ty then
+    mkApp (mkApp (mkConst ``ProofForge.Core.Value.UInt128.mk) (localRefLit 0))
+      (localRefLit 1)
+  else if isUInt256Type ty then
+    mkApp (mkApp (mkApp (mkApp (mkConst ``ProofForge.Core.Value.UInt256.mk)
+          (localRefLit 0)) (localRefLit 1)) (localRefLit 2)) (localRefLit 3)
+  else if isAddr20Type ty then
+    mkApp (mkApp (mkApp (mkConst ``ProofForge.Evm.Runtime.Addr20.mk)
+          (localRefLit 0)) (localRefLit 1)) (localRefLit 2)
+  else
+    localRefLit 0
+
+private def joinLocals (localDepth limbCount : Nat) : Array Ops.Op :=
+  (Array.range limbCount).map fun i => (.joinLocal (localDepth + i) : Ops.Op)
+
+/-- After a fixed-limb bind producer stores into locals, the continuation must run on the success
+path before the branch ends. Appending it after a top-level `ite` leaves `setLocal` sequences
+without a terminal and drops JSON u128 returns on the floor. -/
+private partial def appendBindContinuation (continuation : Array Ops.Op) (ops : Array Ops.Op) :
+    Array Ops.Op :=
+  match ops.toList with
+  | [.ite cmp lhs rhs thn els] =>
+      #[.ite cmp lhs rhs (appendBindContinuation continuation thn ++ continuation) els]
+  | _ => ops ++ continuation
+
 /-- The return of an ignored scalar helper is not a method return. Keep its branch structure and
 effects, but splice the caller's continuation after every successful helper path. -/
 private partial def dropIgnoredScalarTerminals (ops : Array Ops.Op) : Array Ops.Op :=
@@ -7650,6 +9389,11 @@ private partial def dropIgnoredScalarTerminals (ops : Array Ops.Op) : Array Ops.
     | .forBody n body => some (.forBody n (dropIgnoredScalarTerminals body))
     | op => some op
 
+/-- Monadic join heads that sequence a fallible scalar producer into a continuation. -/
+private def isExceptSequencerHead (e : Expr) : Bool :=
+  isConstNamed e ``Bind.bind || endsWith e ".bind" ||
+    isConstNamed e ``ProofForge.Core.Except.andThen || endsWith e ".andThen"
+
 /-- A bind enclosing a loop belongs to the surrounding monadic control flow and must be decoded
 before loop discovery. Binds inside the callback body are part of that iteration and do not hide
 the state loop itself. -/
@@ -7659,7 +9403,7 @@ private def loopUnderBind (fuel : Nat) (e : Expr) (underBind : Bool := false) : 
   | fuel' + 1 =>
     let e := strip e
     if e.getAppFn.constName? == some ``ForIn.forIn || endsWith e ".forIn" then underBind
-    else if isConstNamed e ``Bind.bind || endsWith e ".bind" then
+    else if isExceptSequencerHead e then
       let args := e.getAppArgs
       if h : args.size ≥ 2 then
         let producer := args[args.size - 2]
@@ -7698,8 +9442,7 @@ private def nestedSequencedScalarHelper? (env : Environment) (e : Expr) : Option
     | fuel' + 1 =>
       let candidate := candidate.consumeMData
       let head := strip candidate
-      if isConstNamed head ``ite || isConstNamed head ``dite ||
-          isConstNamed head ``Bind.bind || endsWith head ".bind" then
+      if isConstNamed head ``ite || isConstNamed head ``dite || isExceptSequencerHead head then
         none
       else
         match unfoldUserHelper env candidate with
@@ -7729,6 +9472,9 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     -- looking for effects or control flow; this keeps helper composition out of target Ops/Emit.
     let e := e.headBeta
     let e := (reducePureInlineMatch? env e).getD e
+    -- NEAR N13: reject PromiseHandle APIs whose maxFanIn exceeds the fixed and3..and8 ladder.
+    if let some reason := findPromiseHandleMaxFanInCeilingError env 64 e then
+      return .error reason
     let (effects, continuation, malformedWrite) := leadingSvmEffects env e
     if malformedWrite then
       return .error "extract/unsupported: external account write operands"
@@ -7869,7 +9615,7 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
       else if (unfoldUserHelper env controlled).isSome then controlled
       else e
     let e0 := strip e
-    if (isConstNamed e0 ``Bind.bind || endsWith e0 ".bind") && e0.getAppArgs.size ≥ 2 then
+    if isExceptSequencerHead e0 && e0.getAppArgs.size ≥ 2 then
       let args := e0.getAppArgs
       let producer := args[args.size - 2]!
       let continuation := args[args.size - 1]!
@@ -7894,6 +9640,27 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
                   return .error s!"extract/unsupported: bind continuation: {reason}"
             | _ =>
                 return .error "extract/unsupported: bind producer is not a scalar control value"
+        else if let some limbCount := fixedLimbBindCount? env ty then
+          let producer := unfoldUserHelpers env 16 producer
+          match decodeExpr env fuel' producer (preserveLocals := preserveLocals)
+              (localDepth := localDepth + limbCount) (stateType? := stateType?)
+              (deepScalars := deepScalars) with
+          | .error reason =>
+              return .error s!"extract/unsupported: bind producer: {reason}"
+          | .ok producerOps =>
+            match lowerBindProducerMulti localDepth limbCount producerOps with
+            | some (joinedProducer, true, true) =>
+              let boundArg := boundaryBindArg localDepth ty
+              match decodeExpr env fuel' (body.instantiate1 boundArg) (stateful := stateful)
+                  (preserveLocals := preserveLocals) (localDepth := localDepth + limbCount)
+                  (stateType? := stateType?) (deepScalars := deepScalars) with
+              | .ok continuationOps =>
+                  let joined := appendBindContinuation continuationOps joinedProducer
+                  return .ok (joinLocals localDepth limbCount ++ joined)
+              | .error reason =>
+                  return .error s!"extract/unsupported: bind continuation: {reason}"
+            | _ =>
+                return .error "extract/unsupported: bind producer is not a fixed-limb boundary value"
         else
           pure ()
       | _ => pure ()

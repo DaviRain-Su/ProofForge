@@ -105,7 +105,18 @@ EVM does not consume `Svm.AccountStorage`, account indexes, one-based allocators
 SVM does not consume EVM slot cursors or hashed-map namespaces. Shared semantics can have two
 bindings, but the physical storage descriptor is always target-owned.
 
-## 5. Application boundary
+## 5. NEAR (WASM)
+
+| Source/API surface | Owner | Component bridge | Target effect | Physical state/resource | Current status / fail-closed edge |
+|---|---|---|---|---|---|
+| invocation context, u128 deposit/balance, bounded storage, logs, NEP-141 events | `Wasm.Near.Runtime` + `Near.Sdk` + `Near.Codec` | target-specific IR ops | register I/O, exact-key storage, bounded logs/events, promise batch effects | fixed LE-u64 slots plus bounded raw/binary frames; guest arena for transient buffers | Context, u128 token math, storage read/write/remove/has-key, init/migration envelope, bounded Vector/LookupMap/Queue/IterableMap, NEP-141 FT surface, and static Promise call/return/transfer are available with near-sandbox evidence. Views reject promise/storage mutation; private/payable entry policies are enforced at emit time |
+| Promise static DAG | `Near.Sdk.Promises` + `Near.Runtime` | specialized promise ops in `Near.Ops` | `promise_batch_create`, function-call/transfer/weighted actions, `promise_batch_then`, `promise_and`, `promise_return`, callback result reads | static receiver/method literals; bounded argument frames; lossless u128 deposits/gas | Detached/returned calls, native transfers, dynamic AccountId carriers, `ft_on_transfer` weighted child, then-callback, **2-way** through **8-way** joins (`callAndThenReturned`..`callAnd8ThenReturned`) are extracted and pinned by `Tests/NearPromiseSpec` / `NearPromiseHandleSpec` plus `runtime-tests/near/promise.py`. `PromiseHandle` exposes compile-time depth/fan-in metadata (`createReturned`, `thenReturned`, `and3Returned`..`and8Returned`, `maxFanInCompileCeiling=8`); handle-typed entries through `sendHandleAnd8` landed. **`maxFanIn>8` fail-closes at Extract** (no And9). Join depth above profile ceiling, views creating promises, and multiple returned receipts on one path fail closed |
+| bounded callback-result decode | `Near.Sdk.Promises.ResultBuffer` | promise-result read ops | ordered `promise_results_count` / `promise_result` with strict Borsh-u64 and quoted-u128 decoders | invocation-local bounded descriptor | Available for status-1 exact-length UInt64 and standalone quoted-u128 JSON subset; failed/malformed results use explicit fallbacks without trapping |
+
+NEAR does not consume SVM account indexes, EVM storage cursors, or solc ABI. Cross-target shared
+math/collections/Except ergonomics bind independently per target codec policy.
+
+## 6. Application boundary
 
 | Application | Owns | Must consume | Must not create |
 |---|---|---|---|
@@ -117,7 +128,7 @@ Registry and historical golden fixtures may name applications because they enume
 artifacts. Production target Runtime/Component/Emit modules may not import applications or contain
 application protocol vocabulary.
 
-## 6. Enforced gates
+## 7. Enforced gates
 
 `python3 scripts/check_ownership.py` runs in CI and enforces the source-level freeze:
 

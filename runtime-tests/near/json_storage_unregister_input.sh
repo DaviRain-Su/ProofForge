@@ -19,30 +19,51 @@ lake exe pf -- build --target near --out build/near NearJsonStorageUnregisterInp
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/near-json-storage-unregister-input.XXXXXX")"; sandbox_pid=""
 cleanup() { if [[ -n "$sandbox_pid" ]] && kill -0 "$sandbox_pid" 2>/dev/null; then kill "$sandbox_pid" 2>/dev/null || true; wait "$sandbox_pid" 2>/dev/null || true; fi; rm -rf "$workdir"; }
 trap cleanup EXIT
-home="$workdir/home"; mkdir -p "$home"; "$sandbox" --home "$home" init >/dev/null
-rpc_port="$("$python" - <<'PY'
+
+pick_port() {
+  "$python" - <<'PY'
 import socket
 s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()
 PY
-)"
-net_port="$("$python" - <<'PY'
-import socket
-s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()
-PY
-)"
-"$python" - <<PY
+}
+
+# Ephemeral bind(0) then close has a TOCTOU race with other sandbox steps on the same
+# runner (jsonrpc AddrInUse / os error 98). Re-pick ports and retry.
+rpc=""
+ready=0
+for attempt in $(seq 1 8); do
+  if [[ -n "$sandbox_pid" ]] && kill -0 "$sandbox_pid" 2>/dev/null; then
+    kill "$sandbox_pid" 2>/dev/null || true
+    wait "$sandbox_pid" 2>/dev/null || true
+    sandbox_pid=""
+  fi
+  rm -rf "$workdir/home" "$workdir/node.log"
+  home="$workdir/home"; mkdir -p "$home"; "$sandbox" --home "$home" init >/dev/null
+  rpc_port="$(pick_port)"
+  net_port="$(pick_port)"
+  "$python" - <<PY
 import json
 from pathlib import Path
 p=Path("$home")/"config.json"; c=json.loads(p.read_text()); c.setdefault("rpc",{})["addr"]="127.0.0.1:${rpc_port}"; c.setdefault("network",{})["addr"]="127.0.0.1:${net_port}"; c["network"]["boot_nodes"]=""; p.write_text(json.dumps(c,indent=2)+"\n")
 PY
-"$sandbox" --home "$home" run >"$workdir/node.log" 2>&1 & sandbox_pid=$!
-rpc="http://127.0.0.1:${rpc_port}"; ready=0
-for _ in $(seq 1 90); do
-  if curl -sf -X POST "$rpc" -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"status","params":[]}' >/dev/null 2>&1; then ready=1; break; fi
-  if ! kill -0 "$sandbox_pid" 2>/dev/null; then tail -80 "$workdir/node.log" >&2 || true; die "near-sandbox exited early"; fi
-  sleep 0.5
+  "$sandbox" --home "$home" run >"$workdir/node.log" 2>&1 & sandbox_pid=$!
+  rpc="http://127.0.0.1:${rpc_port}"; ready=0
+  for _ in $(seq 1 90); do
+    if curl -sf -X POST "$rpc" -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"status","params":[]}' >/dev/null 2>&1; then ready=1; break; fi
+    if ! kill -0 "$sandbox_pid" 2>/dev/null; then
+      if grep -Eq "Address already in use|AddrInUse|os error 98" "$workdir/node.log" 2>/dev/null; then
+        echo "near-local-json-storage-unregister-input: port busy on attempt ${attempt}, retrying" >&2
+        break
+      fi
+      tail -80 "$workdir/node.log" >&2 || true
+      die "near-sandbox exited early"
+    fi
+    sleep 0.5
+  done
+  [[ "$ready" -eq 1 ]] && break
 done
-[[ "$ready" -eq 1 ]] || die "RPC not ready"
+[[ "$ready" -eq 1 ]] || { tail -80 "$workdir/node.log" >&2 || true; die "RPC not ready after retries"; }
+
 export PF_NEAR_RPC="$rpc" PF_NEAR_HOME="$home" PF_NEAR_WASM="$wasm" PYTHONPATH="${PWD}/runtime-tests/near${PYTHONPATH:+:$PYTHONPATH}"
 "$python" runtime-tests/near/json_storage_unregister_input.py
 echo "near-local-json-storage-unregister-input: ok"

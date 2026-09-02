@@ -50,6 +50,26 @@ private def abiPartIndex : String → Option Nat
   | "w3" => some 3
   | _ => none
 
+/-- Feature A nesting ceiling for product schemas (tuple/record). Depth 0 = scalar leaf;
+depth 1 = flat product of scalars/arrays-of-scalars; depth 2 = one nested product (already used
+by existing codecs). Depth ≥ 3 stays fail-closed until `evm-rt-nested-001` widens the surface. -/
+def maxProductNesting : Nat := 2
+
+/-- Product nesting depth: tuples/records add one level; fixed arrays inherit the element depth;
+scalars stay at 0. Dynamic carriers are not measured here (they keep their explicit policy gate). -/
+partial def productNestingDepth : Schema → Nat
+  | .unit | .scalar _ => 0
+  | .tuple items =>
+      1 + items.foldl (fun acc item => Nat.max acc (productNestingDepth item)) 0
+  | .record _ fields =>
+      1 + fields.foldl (fun acc field => Nat.max acc (productNestingDepth field.2)) 0
+  | .fixedArray _ element => productNestingDepth element
+  | .option inner => productNestingDepth inner
+  | .enumeration _ _ variants =>
+      variants.foldl (fun acc variant => Nat.max acc (productNestingDepth variant.2)) 0
+  | .boundedArray _ element => productNestingDepth element
+  | .boundedBytes _ | .boundedString _ => 0
+
 private partial def abiTypeOfSchemaAt : Schema → Except String String
   | .unit => throw "evm/codec: unit has no canonical ABI parameter type"
   | .scalar type => abiType type
@@ -72,9 +92,13 @@ private partial def abiTypeOfSchemaAt : Schema → Except String String
 
 /-- Canonical Solidity ABI spelling for one logical parameter or result. Nested records and Lean
 products are tuples; literal vectors are fixed arrays. This target-owned function deliberately
-does not expose ABI words or padding to Core. -/
+does not expose ABI words or padding to Core. Product nesting deeper than `maxProductNesting`
+fail-closes (see `evm-rt-nested-001`). -/
 def abiTypeOfSchema (schema : Schema) : Except String String := do
   let _ ← validate schema
+  let depth := productNestingDepth schema
+  if depth > maxProductNesting then
+    throw s!"evm/codec: product nesting depth {depth} exceeds Feature A ceiling {maxProductNesting}"
   match schema with
   | .boundedArray _ element =>
       return (← abiTypeOfSchemaAt element) ++ "[]"
@@ -200,10 +224,22 @@ def AbiInputPlan.packedBytes (plan : AbiInputPlan) : Option PackedBytesPlan :=
   | some (.packedBytes bytes) => some bytes
   | _ => none
 
-/-- Fixed source-frame scalar metadata consumed by the output codec interpreter. -/
+/-- Expand one ABI element word into the fixed source limbs Extract publishes (`w0..`). -/
+def sourceLimbWords (type : Scalar) : Array Scalar :=
+  let limbs := limbCount type
+  if limbs ≤ 1 then #[type]
+  else Array.replicate limbs .uint64
+
+/-- Source limbs occupied by one bounded-array element (sum of per-word limb counts). -/
+def elementSourceLimbCount (elementWords : Array Scalar) : Nat :=
+  elementWords.foldl (init := 0) fun acc type => acc + limbCount type
+
+/-- Fixed source-frame scalar metadata consumed by the output codec interpreter. Wide one-ABI-word
+elements expand to `limbCount` `uint64` limbs so returndata packing can rebuild the ABI word. -/
 def DynamicOutputPlan.sourceWords : DynamicOutputPlan → Array Scalar
   | .boundedArray array =>
-      #[.uint32] ++ (Array.range array.capacity).flatMap fun _ => array.elementWords
+      #[.uint32] ++ (Array.range array.capacity).flatMap fun _ =>
+        array.elementWords.flatMap sourceLimbWords
   | .packedBytes bytes => #[.uint32] ++ Array.replicate bytes.capacity .uint8
 
 def TaggedTupleOutputPlan.sourceWords (plan : TaggedTupleOutputPlan) : Array Scalar :=
@@ -327,16 +363,21 @@ def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
   }
 
 /-- Select an independent top-level dynamic result policy. A bounded result is represented during
-source execution as `length || capacity slots`, then encoded as the canonical standard-ABI active
-prefix. Nested/tagged dynamics and multi-limb elements remain fail closed. -/
+source execution as `length || capacity × element source limbs`, then encoded as the canonical
+standard-ABI active prefix. Wide one-ABI-word scalars and constructed static products (flattenable
+by `staticAbiLeaves`) are accepted within the local-frame ceiling. Nested/tagged dynamics stay
+fail closed because `staticAbiLeaves` rejects them. -/
 def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPlan) := do
   let _ ← validate schema
   match schema with
   | .boundedArray capacity element =>
       let elementWords := (← staticAbiLeaves element).map (·.type)
-      unless elementWords.size == 1 && limbCount elementWords[0]! == 1 do
-        throw "evm/codec: bounded array result currently requires one-limb scalar elements"
-      let localWords := 1 + capacity * elementWords.size
+      unless !elementWords.isEmpty do
+        throw "evm/codec: bounded array result element must contain a scalar"
+      for type in elementWords do
+        unless Scalar.isWellFormed type do
+          throw "evm/codec: bounded array result has a malformed element scalar"
+      let localWords := 1 + capacity * elementSourceLimbCount elementWords
       unless localWords ≤ maxBoundedArrayLocalWords do
         throw s!"evm/codec: bounded array result frame exceeds {maxBoundedArrayLocalWords} words"
       return some (.boundedArray {

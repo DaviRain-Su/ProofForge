@@ -92,6 +92,17 @@ private partial def codecSchemaOfTypeAt (env : Environment) (fuel : Nat)
   if fuel == 0 then
     throw "extract/unsupported: boundary schema nesting exceeds extractor limit"
   let type := type.consumeMData
+  let type :=
+    if type.getAppFn.constName? == some ``ProofForge.Wasm.Near.Runtime.NearToken then
+      mkConst ``ProofForge.Core.Value.UInt128
+    else
+      match type.getAppFn.constName? with
+      | some name =>
+          match env.find? name with
+          | some (.defnInfo info) =>
+              if info.type.hasLooseBVars then type else info.value
+          | _ => type
+      | none => type
   if let some scalar := codecScalarOfType type then
     return .scalar scalar
   let head := type.getAppFn.constName?
@@ -261,19 +272,31 @@ private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except 
 /-- Expand one static element at `values[i]` into its fixed UInt64 return limbs. -/
 private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
     (element : Core.Codec.Schema) : Except String (Array Ops.Op) := do
-  -- Limb offsets ride on `indexGet`'s final argument so vector leaf resolution stays flat
-  -- (`values` + limb), matching wide-scalar input projection. Nested product elements remain
-  -- schema-legal at the SVM Borsh adapter but are not yet expanded through this shared path.
+  -- `indexGet`'s final argument is a limb-aligned *byte* offset so EVM ABI rewrite and SVM
+  -- Borsh rewrite share one Extract contract (`offset % 8 == 0`, limb := offset / 8). One-level
+  -- static products flatten through `staticLeaves` to one-limb scalar leaves; nested dynamics
+  -- stay fail-closed.
   match element with
   | .scalar _ =>
       let parts ← staticReturnLimbCount element
       let mut limbs : Array Ops.Op := #[]
       for part in [0:parts] do
         limbs := limbs.push
-          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity part))
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (part * 8)))
       pure limbs
-  | .tuple _ | .record _ _ =>
-      throw "extract/unsupported: bounded result product elements are not yet projected through shared Extract"
+  | .tuple _ | .record _ _ => do
+      -- One-level static products: flatten to one-limb scalar leaves at byte offsets 0, 8, …
+      let leaves ← Core.Codec.staticLeaves element
+      unless !leaves.isEmpty do
+        throw "extract/unsupported: constructed bounded result element must contain a scalar"
+      for leaf in leaves do
+        unless (← staticReturnLimbCount (.scalar leaf.type)) == 1 do
+          throw "extract/unsupported: constructed bounded elements currently require one-limb scalar leaves"
+      let mut limbs : Array Ops.Op := #[]
+      for leafIdx in [0:leaves.size] do
+        limbs := limbs.push
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (leafIdx * 8)))
+      pure limbs
   | _ => throw "extract/unsupported: bounded result requires static scalar elements"
 
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
@@ -721,6 +744,164 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
                   (flipVal fuel' rightDepositHi) (flipVal fuel' rightGas)
                   (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
                   (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd3ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+                leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+                leftArguments midArguments rightArguments callbackArguments
+                leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+                rightDepositLo rightDepositHi rightGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd3ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod callbackMethod
+                  leftArgsCapacity midArgsCapacity rightArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' callbackDepositLo)
+                  (flipVal fuel' callbackDepositHi) (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd4ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                callbackArgsCapacity leftArguments midArguments rightArguments fourthArguments
+                callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+                rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd4ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                  callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd5ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+                fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity leftArguments midArguments
+                rightArguments fourthArguments fifthArguments callbackArguments leftDepositLo leftDepositHi
+                leftGas midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas
+                fourthDepositLo fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd5ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  fifthReceiver fifthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity
+                  fourthArgsCapacity fifthArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (fifthArguments.map (flipVal fuel')) (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' fifthDepositLo) (flipVal fuel' fifthDepositHi)
+                  (flipVal fuel' fifthGas) (flipVal fuel' callbackDepositLo)
+                  (flipVal fuel' callbackDepositHi) (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd6ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod leftArgsCapacity midArgsCapacity
+                rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity
+                leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+                callbackArguments leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas
+                rightDepositLo rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas
+                fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd6ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  fifthReceiver fifthMethod sixthReceiver sixthMethod callbackMethod leftArgsCapacity midArgsCapacity
+                  rightArgsCapacity fourthArgsCapacity fifthArgsCapacity sixthArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (fifthArguments.map (flipVal fuel')) (sixthArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' fifthDepositLo) (flipVal fuel' fifthDepositHi)
+                  (flipVal fuel' fifthGas) (flipVal fuel' sixthDepositLo)
+                  (flipVal fuel' sixthDepositHi) (flipVal fuel' sixthGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd7ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+                leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+                sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity leftArguments midArguments
+                rightArguments fourthArguments fifthArguments sixthArguments seventhArguments callbackArguments
+                leftDepositLo leftDepositHi leftGas midDepositLo midDepositHi midGas rightDepositLo
+                rightDepositHi rightGas fourthDepositLo fourthDepositHi fourthGas fifthDepositLo
+                fifthDepositHi fifthGas sixthDepositLo sixthDepositHi sixthGas seventhDepositLo seventhDepositHi
+                seventhGas callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd7ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod callbackMethod
+                  leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
+                  sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (fifthArguments.map (flipVal fuel')) (sixthArguments.map (flipVal fuel'))
+                  (seventhArguments.map (flipVal fuel')) (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' fifthDepositLo) (flipVal fuel' fifthDepositHi)
+                  (flipVal fuel' fifthGas) (flipVal fuel' sixthDepositLo)
+                  (flipVal fuel' sixthDepositHi) (flipVal fuel' sixthGas)
+                  (flipVal fuel' seventhDepositLo) (flipVal fuel' seventhDepositHi)
+                  (flipVal fuel' seventhGas) (flipVal fuel' callbackDepositLo)
+                  (flipVal fuel' callbackDepositHi) (flipVal fuel' callbackGas)
+            | .promiseFunctionCallAnd8ThenReturned
+                leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+                eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+                leftArguments midArguments rightArguments fourthArguments fifthArguments sixthArguments
+                seventhArguments eighthArguments callbackArguments leftDepositLo leftDepositHi leftGas
+                midDepositLo midDepositHi midGas rightDepositLo rightDepositHi rightGas fourthDepositLo
+                fourthDepositHi fourthGas fifthDepositLo fifthDepositHi fifthGas sixthDepositLo sixthDepositHi
+                sixthGas seventhDepositLo seventhDepositHi seventhGas eighthDepositLo eighthDepositHi eighthGas
+                callbackDepositLo callbackDepositHi callbackGas =>
+                .promiseFunctionCallAnd8ThenReturned
+                  leftReceiver leftMethod midReceiver midMethod rightReceiver rightMethod fourthReceiver fourthMethod
+                  fifthReceiver fifthMethod sixthReceiver sixthMethod seventhReceiver seventhMethod eighthReceiver
+                  eighthMethod callbackMethod leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity
+                  fifthArgsCapacity sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity
+                  (leftArguments.map (flipVal fuel')) (midArguments.map (flipVal fuel'))
+                  (rightArguments.map (flipVal fuel')) (fourthArguments.map (flipVal fuel'))
+                  (fifthArguments.map (flipVal fuel')) (sixthArguments.map (flipVal fuel'))
+                  (seventhArguments.map (flipVal fuel')) (eighthArguments.map (flipVal fuel'))
+                  (callbackArguments.map (flipVal fuel'))
+                  (flipVal fuel' leftDepositLo) (flipVal fuel' leftDepositHi)
+                  (flipVal fuel' leftGas) (flipVal fuel' midDepositLo)
+                  (flipVal fuel' midDepositHi) (flipVal fuel' midGas)
+                  (flipVal fuel' rightDepositLo) (flipVal fuel' rightDepositHi)
+                  (flipVal fuel' rightGas) (flipVal fuel' fourthDepositLo)
+                  (flipVal fuel' fourthDepositHi) (flipVal fuel' fourthGas)
+                  (flipVal fuel' fifthDepositLo) (flipVal fuel' fifthDepositHi)
+                  (flipVal fuel' fifthGas) (flipVal fuel' sixthDepositLo)
+                  (flipVal fuel' sixthDepositHi) (flipVal fuel' sixthGas)
+                  (flipVal fuel' seventhDepositLo) (flipVal fuel' seventhDepositHi)
+                  (flipVal fuel' seventhGas) (flipVal fuel' eighthDepositLo)
+                  (flipVal fuel' eighthDepositHi) (flipVal fuel' eighthGas)
+                  (flipVal fuel' callbackDepositLo) (flipVal fuel' callbackDepositHi)
+                  (flipVal fuel' callbackGas)
             | .promiseResultRead capacity index =>
                 .promiseResultRead capacity (flipVal fuel' index)
             | .transientBuffer64Begin capacity => .transientBuffer64Begin capacity
@@ -926,7 +1107,13 @@ def extractMethod (env : Environment) (kind : Core.IR.MethodKind) (n : Name) :
       if retSchema == .unit then 0
       else
         let nRet := maxReturnCount 32 ops
-        if nRet = 0 then 1 else nRet
+        let nRet := if nRet = 0 then 1 else nRet
+        match retSchema with
+        | .scalar s =>
+            if s == Core.Codec.Scalar.uint128 then max nRet 2
+            else if s == Core.Codec.Scalar.uint256 then max nRet 4
+            else nRet
+        | _ => nRet
     | .init => 1
   let retTypes :=
     match retSchema with

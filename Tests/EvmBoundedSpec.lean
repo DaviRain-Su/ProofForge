@@ -63,6 +63,10 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing boundedString entry"
   let some echoValues := program.entries.find? (·.ixName == "echoBoundedValues")
     | throwError "missing bounded array result entry"
+  let some echoWide := program.entries.find? (·.ixName == "echoBoundedWide")
+    | throwError "missing wide bounded array result entry"
+  let some echoPairs := program.entries.find? (·.ixName == "echoBoundedPairs")
+    | throwError "missing constructed bounded array result entry"
   let some echoBytes := program.entries.find? (·.ixName == "echoBoundedBytes")
     | throwError "missing bounded bytes result entry"
   let some echoString := program.entries.find? (·.ixName == "echoBoundedString")
@@ -105,6 +109,21 @@ elab "#pf_guard_evm_bounded_abi" : command => do
         capacity := 4, elementTypeName := "uint16", elementWords := #[.uint16]
       })) &&
       echoValues.outputPolicy == "bounded-array-return-v1(uint16[];capacity=4;element-words=1)" &&
+      echoWide.paramCount == 3 && echoWide.retCount == 5 &&
+      echoWide.paramTypes == #[.uint32, .uint128, .uint128] &&
+      echoWide.retTypes == #[.uint32, .uint64, .uint64, .uint64, .uint64] &&
+      echoWide.outputPlan == some (.dynamic (.boundedArray {
+        capacity := 2, elementTypeName := "uint128", elementWords := #[.uint128]
+      })) &&
+      echoWide.outputPolicy == "bounded-array-return-v1(uint128[];capacity=2;element-words=1)" &&
+      echoPairs.paramCount == 5 && echoPairs.retCount == 5 &&
+      echoPairs.retTypes == #[.uint32, .uint64, .uint16, .uint64, .uint16] &&
+      echoPairs.outputPlan == some (.dynamic (.boundedArray {
+        capacity := 2, elementTypeName := "(uint64,uint16)",
+        elementWords := #[.uint64, .uint16]
+      })) &&
+      echoPairs.outputPolicy ==
+        "bounded-array-return-v1((uint64,uint16)[];capacity=2;element-words=2)" &&
       echoBytes.retCount == 9 && echoBytes.outputPlan == some (.dynamic (.packedBytes {
         capacity := 8, validateUtf8 := false })) &&
       echoString.retCount == 9 && echoString.outputPlan == some (.dynamic (.packedBytes {

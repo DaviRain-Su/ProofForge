@@ -13,6 +13,7 @@ def entries : Array Entry := #[
   { name := "NearFungibleTokenEvent", digest := "768db0d9cec95f94" },
   { name := "NearFungibleLedger", digest := "e1e290ddec221fa5" },
   { name := "NearTokenArithmetic", digest := "f85fa4f3182ec1eb" },
+  { name := "NearTokenErgonomics", digest := "c2e097e411bbd3b4" },
   { name := "NearTokenStorage", digest := "92e4c2bf2a7f74a0" },
   { name := "NearMemory", digest := "830255873ad66d7c" },
   { name := "NearOutput", digest := "ff2281fdab18ece" },
@@ -42,7 +43,8 @@ def entries : Array Entry := #[
   { name := "NearLookup", digest := "d14778ca02c69012" },
   { name := "NearQueue", digest := "a8bf10c3476ef45f" },
   { name := "NearIterable", digest := "98d132f8e2c7cd5c" },
-  { name := "NearPromise", digest := "e51b20dad70b3a29" },
+  { name := "NearPromise", digest := "4376e3bda34c941b" },
+  { name := "NearPromiseHandle", digest := "c5a967669da142d8" },
   { name := "NearPromiseResult", digest := "7f65ba128b01a035" },
   { name := "NearMigration", digest := "19a760409263b854" }
 ]
