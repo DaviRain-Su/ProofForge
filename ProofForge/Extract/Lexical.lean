@@ -755,6 +755,7 @@ def reduceCtorProjection? (env : Environment) (e : Expr) : Option Expr :=
         !name.startsWith "ProofForge.Evm.ClosedCall." &&
         !name.startsWith "ProofForge.Evm.WideWord." &&
         !name.startsWith "ProofForge.Evm.NativeFx." &&
+        !name.startsWith "ProofForge.Wasm.Near.Sdk.Store." &&
         !name.startsWith "MProd." &&
         !Attr.isInline env projection then none else pure ()
     reduceCtorProjectionFuel? env 64 e

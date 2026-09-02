@@ -1,7 +1,7 @@
 ---
 id: wsm-near-store-meta-001
 scope: near
-status: todo
+status: done
 depends-on: [wsm-near-state-envelope-001, wsm-near-vector-001]
 plan: ../multi-target-strategy.md
 updated: 2026-09-02
@@ -24,14 +24,16 @@ updated: 2026-09-02
 | 元素键 | 保持现状：`VEC1 ‖ u32_le(index)` + Borsh u64 |
 | Drop/cache | **不做**；文档写 compatibility diff |
 
-## 第一切片（Vector only）
+## 第一切片（Vector only）— landed
 
-1. `Vector.Handle`（或等价命名）绑定 `Prefix4` + capacity
-2. Example：`Examples/NearVector.lean` 经 Handle 读写，不再直接传 raw prefix / `ResultBuffer` 拼装
-3. IR digest pin + `runtime-tests/near/vector.py` 仍绿
-4. 更新 `capability-matrix.md` §5 / `analysis/near-runtime-sdk.md` N5 行
+1. `DirectVector64.Handle` 绑定 `Prefix4` + capacity（`ProofForge/Wasm/Near/Sdk/Store/Vector.lean`）
+2. `Examples/NearVector.lean` 经 `@[pf_inline] slots` Handle 读写（不再在 entry 手写 raw prefix）
+3. Extract：`reduceCtorProjection?` 允许 `ProofForge.Wasm.Near.Sdk.Store.*` 投影，使
+   `Handle.capacity` / `Handle.tag` 在 `@[pf_inline]` 下擦除为字面量
+4. IR digest **unchanged** `cd60fb0f3ce40ade`（Handle 为零成本 facade）；`Tests/NearVectorSpec`
+   绿；registry pin 不变
 
-## 非目标（本 task）
+## 非目标（本 task / follow-up）
 
 - Queue / Iterable / TreeMap Handle
 - 通用 `T`、Sha256 键
@@ -40,4 +42,4 @@ updated: 2026-09-02
 
 ## 验收
 
-N14 行 → done（至少 Vector Handle + golden/sandbox）；其余集合可开 follow-up 切片。
+N14 行 → **done**（Vector Handle + golden digest 稳定）；其余集合开 follow-up 切片。

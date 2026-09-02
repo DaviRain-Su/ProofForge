@@ -173,13 +173,13 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 - `ft_transfer` / `ft_transfer_call` / `ft_resolve_transfer` + storage 全套 + NEP-141 events
 - near-sandbox 矩阵见 `runtime-tests/near/ledger.py`
-- **剩余**：N13 handle Extract 已收口（`And3`..`And8`）；collection metadata（N14）、三 target conformance（N15）
+- **剩余**：N13 handle Extract 已收口（`And3`..`And8`）；N14 Vector Handle 已落地（其余集合 follow-up）；三 target conformance（N15）
 
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
 | **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；N>8 ops 仍开 |
-| **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | collection prefix/metadata Handle（仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | Vector Handle + layout golden（第一切片） |
+| **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | ~~collection prefix/metadata Handle~~（Vector 切片 done；仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | ✓ `DirectVector64.Handle` + `NearVector`；digest `cd60fb0f3ce40ade` 不变 |
 | **N15** | `wsm-near-conformance-001` | Counter/Token 形 cross-target 示例（SVM/EVM 已有对照） | N12d | 三 target digest 表 |
 
 **明确不做（与计划一致）：**
