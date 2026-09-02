@@ -273,19 +273,20 @@ private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except 
 private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
     (element : Core.Codec.Schema) : Except String (Array Ops.Op) := do
   -- Limb offsets ride on `indexGet`'s final argument so vector leaf resolution stays flat
-  -- (`values` + limb), matching wide-scalar input projection. Nested product elements remain
-  -- schema-legal at the SVM Borsh adapter but are not yet expanded through this shared path.
+  -- (`values` + limb), matching wide-scalar input projection. One-level static products flatten
+  -- through `staticLeaves` to one-limb scalar leaves; nested dynamics stay fail-closed.
   match element with
   | .scalar _ =>
       let parts ← staticReturnLimbCount element
       let mut limbs : Array Ops.Op := #[]
       for part in [0:parts] do
         limbs := limbs.push
-          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity part))
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (part * 8)))
       pure limbs
   | .tuple _ | .record _ _ => do
-      -- One-level static products: flatten to one-limb scalar leaves (same frame as
-      -- constructed bounded results). Nested dynamics / wide multi-limb leaves stay closed.
+      -- One-level static products: flatten to one-limb scalar leaves. `indexGet`'s final
+      -- argument is a byte offset (limb-aligned), matching the pre-merge Extract contract
+      -- that EVM codec validates with `elementOffset % 8 == 0`.
       let leaves ← Core.Codec.staticLeaves element
       unless !leaves.isEmpty do
         throw "extract/unsupported: constructed bounded result element must contain a scalar"
@@ -295,7 +296,7 @@ private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
       let mut limbs : Array Ops.Op := #[]
       for leafIdx in [0:leaves.size] do
         limbs := limbs.push
-          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity leafIdx))
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (leafIdx * 8)))
       pure limbs
   | _ => throw "extract/unsupported: bounded result requires static scalar elements"
 
