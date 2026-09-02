@@ -62,6 +62,8 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-app-012](tasks/svm-app-012.md) | Phoenix WithdrawFunds tag 12 (exact-lots) | **done** — wire 17; digest `c67cc383aa680001`; Mollusk quote+base + zero/zero + insufficient |
 | [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` (at land); Mollusk quote+base + zero/zero + underflow |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Borsh Option wire; digest `f248b89dc0fb8def`; Mollusk Some/Some + None/None drain + header-only + reject |
+| [svm-app-015](tasks/svm-app-015.md) | Phoenix DepositFunds tag 13 (`Option<u64>` deposit-all) | **done** — Borsh Option wire; digest `1049b9843a832a95`; Mollusk Some/Some + None/None deposit-all + header-only + reject |
+| [svm-app-016](tasks/svm-app-016.md) | Phoenix RequestSeat tag 14 | **done** — System CPI seat PDA + Approved record + trader register; digest `c50584a88d34bf4b` |
 | [svm-sem-006](tasks/svm-sem-006.md) | E∞ walked `r7` arg0 | **done** |
 | [svm-sem-007](tasks/svm-sem-007.md) | E∞ two consecutive walked `r7` args | **done** |
 | [svm-sem-008](tasks/svm-sem-008.md) | E∞ Loader account-0 header/key walk | **done** |
@@ -189,8 +191,16 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | [svm-sem-130](tasks/svm-sem-130.md) | E∞ Loader account-17 owner limbs 0/1 after skip chain | **done** |
 | [svm-sem-131](tasks/svm-sem-131.md) | E∞ Loader account-17 owner limbs 2/3 after skip chain | **done** |
 | [svm-sem-132](tasks/svm-sem-132.md) | E∞ Loader account-17 executable/rent after skip chain | **done** |
+| [svm-sem-133](tasks/svm-sem-133.md) | E∞ Loader account-17 → account-18 skip chain | **done** |
+| [svm-sem-134](tasks/svm-sem-134.md) | E∞ Loader account-18 header/key after skip chain | **done** |
+| [svm-sem-135](tasks/svm-sem-135.md) | E∞ Loader account-18 signer/writable after skip chain | **done** |
+| [svm-sem-136](tasks/svm-sem-136.md) | E∞ Loader account-18 lamports/data_len after skip chain | **done** |
+| [svm-sem-137](tasks/svm-sem-137.md) | E∞ Loader account-18 owner limbs 0/1 after skip chain | **done** |
+| [svm-sem-138](tasks/svm-sem-138.md) | E∞ Loader account-18 owner limbs 2/3 after skip chain | **done** |
+| [svm-sem-139](tasks/svm-sem-139.md) | E∞ Loader account-18 executable/rent after skip chain | **done** |
 | [svm-app-003](tasks/svm-app-003.md) | Non-Phoenix SDK reuse examples | **done** |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — Option withdraw-all; CancelMultiple already at cap 8 |
+| [svm-app-015](tasks/svm-app-015.md) | Phoenix DepositFunds tag 13 (`Option<u64>` deposit-all) | **done** — Option deposit-all; CancelMultiple already at cap 8 |
 
 ## 6. Track E — L3 sBPF bridge (`svm-sem-*`)
 
@@ -202,7 +212,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[132](tasks/svm-sem-132.md) | walked `r7` + account-0..17 skip host knives | **doing** — account-17 field arc landed; acc17→acc18 skip open |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[139](tasks/svm-sem-139.md) | walked `r7` + account-0..18 skip host knives | **done** — account-18 field arc landed; acc18→acc19 skip open |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
