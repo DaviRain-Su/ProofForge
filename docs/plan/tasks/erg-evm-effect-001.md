@@ -28,10 +28,16 @@ instead of nested `if`/`match`.
    supply-preservation theorems retargeted; registry digest `f6a3fcbc3c7331fe`
    (was `b69773a11a64286e` → `1dc6b7a9d09f1478` after approve-only)
 
+## Landed (Token UInt64 mint/burn)
+
+6. `Effect.ensureCode` / `Effect.abortCode` — soft-abort keeps `.ok (state, UInt64)` (no `thenTrue`)
+7. `Examples.Evm.Token.mint` / `burn` use sequential `Effect.ensureCode` / `hold`;
+   `mint_supply_effect` / `burn_supply_effect` retargeted
+
 ## Follow-up
 
-- Port mint/burn/allowance/pause gates to `Effect.ensure` where CallResult-shaped
-- Nested-`if` remains on UInt64-returning mutators for now
+- Port burnFrom/allowance/pause/permit gates to `Effect.ensureCode` where CallResult-shaped
+- Nested-`if` remains on remaining UInt64-returning mutators for now
 
 ## Non-goals
 
@@ -42,4 +48,4 @@ instead of nested `if`/`match`.
 ## Acceptance (slice)
 
 §5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.
-Token `approve` is sequential; `transfer` / `transferFrom` remain nested-`if`.
+Token Bool ABI trio + `mint` / `burn` are sequential; remaining UInt64 mutators stay nested-`if`.
