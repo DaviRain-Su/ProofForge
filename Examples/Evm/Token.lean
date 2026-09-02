@@ -198,55 +198,43 @@ def burnFrom (s : State) (owner : Address) (amount : UInt256) :
     .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
       Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
 
+/-- Pause-gated transfer: sequential `Effect.ensure` soft-aborts (R5-012 Bool ABI). -/
 @[pf_entry]
 def transfer (s : State) (destination : Address) (amount : UInt256) :
     Except Error (State × Bool) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Access.runningViolation)
-  else if Address.isZero destination then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Revert.zeroAddress)
-  else if Fungible.Balances.canDebit storage.balances Context.caller amount then
-    if Address.eq Context.caller destination ||
-        Fungible.Balances.canCredit storage.balances destination amount then
-      let movement :=
-        Fungible.Balances.transfer storage.balances Context.caller destination amount
-      .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
-        Effect.thenTrue (Event.transfer Context.caller destination amount))
-    else
-      .error .overflow
+  Effect.ensure (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensure (!Address.isZero destination) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensure (Fungible.Balances.canDebit storage.balances Context.caller amount) (hold s)
+      (Fungible.Balances.insufficient storage.balances Context.caller amount) fun _ =>
+  if Address.eq Context.caller destination ||
+      Fungible.Balances.canCredit storage.balances destination amount then
+    let movement :=
+      Fungible.Balances.transfer storage.balances Context.caller destination amount
+    .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
+      Effect.thenTrue (Event.transfer Context.caller destination amount))
   else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue (Fungible.Balances.insufficient storage.balances Context.caller amount))
+    .error .overflow
 
+/-- Pause-gated transferFrom: sequential `Effect.ensure` soft-aborts (R5-012 Bool ABI). -/
 @[pf_entry]
 def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
     Except Error (State × Bool) :=
-  if s.paused != Pausable.running then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Access.runningViolation)
-  else if Address.isZero destination then
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue Revert.zeroAddress)
-  else if Fungible.Allowances.canSpend storage.allowances owner Context.caller amount then
-    if Fungible.Balances.canDebit storage.balances owner amount then
-      if Address.eq owner destination ||
-          Fungible.Balances.canCredit storage.balances destination amount then
-        let movement :=
-          (Fungible.Balances.transfer storage.balances owner destination amount) |||
-          (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
-        .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
-          Effect.thenTrue (Event.transfer owner destination amount))
-      else
-        .error .overflow
-    else
-      .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-        Effect.thenTrue (Fungible.Balances.insufficient storage.balances owner amount))
+  Effect.ensure (Access.requireRunning s.paused) (hold s) Access.runningViolation fun _ =>
+  Effect.ensure (!Address.isZero destination) (hold s) Revert.zeroAddress fun _ =>
+  Effect.ensure (Fungible.Allowances.canSpend storage.allowances owner Context.caller amount)
+      (hold s) (Fungible.Allowances.insufficient storage.allowances owner Context.caller amount)
+      fun _ =>
+  Effect.ensure (Fungible.Balances.canDebit storage.balances owner amount) (hold s)
+      (Fungible.Balances.insufficient storage.balances owner amount) fun _ =>
+  if Address.eq owner destination ||
+      Fungible.Balances.canCredit storage.balances destination amount then
+    let movement :=
+      (Fungible.Balances.transfer storage.balances owner destination amount) |||
+      (Fungible.Allowances.spend storage.allowances owner Context.caller amount)
+    .ok ({ dummy := movement, paused := s.paused, cap := s.cap, supply := s.supply },
+      Effect.thenTrue (Event.transfer owner destination amount))
   else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Effect.thenTrue
-        (Fungible.Allowances.insufficient storage.allowances owner Context.caller amount))
+    .error .overflow
 
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
@@ -310,14 +298,9 @@ theorem transfer_preserves_supply (s : State) (d : Address) (a : UInt256)
     {t : State} {r : Bool}
     (h : transfer s d a = .ok (t, r)) : t.supply = s.supply := by
   unfold transfer at h
+  simp only [Effect.ensure, Effect.abort, hold] at h
   split at h
-  · simp at h
-    obtain ⟨rfl, rfl⟩ := h
-    rfl
   · split at h
-    · simp at h
-      obtain ⟨rfl, rfl⟩ := h
-      rfl
     · split at h
       · split at h
         · have hs := congrArg (fun result =>
@@ -329,6 +312,12 @@ theorem transfer_preserves_supply (s : State) (d : Address) (a : UInt256)
       · simp at h
         obtain ⟨rfl, rfl⟩ := h
         rfl
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
 
 /-- **mint 效应**：supply 要么不动，要么恰好加上 `v`。 -/
 theorem mint_supply_effect (s : State) (to_ : Address) (v : UInt256)
@@ -381,14 +370,9 @@ theorem transferFrom_preserves_supply (s : State) (o d : Address) (a : UInt256)
     {t : State} {r : Bool}
     (h : transferFrom s o d a = .ok (t, r)) : t.supply = s.supply := by
   unfold transferFrom at h
+  simp only [Effect.ensure, Effect.abort, hold] at h
   split at h
-  · simp at h
-    obtain ⟨rfl, rfl⟩ := h
-    rfl
   · split at h
-    · simp at h
-      obtain ⟨rfl, rfl⟩ := h
-      rfl
     · split at h
       · split at h
         · split at h
@@ -404,6 +388,12 @@ theorem transferFrom_preserves_supply (s : State) (o d : Address) (a : UInt256)
       · simp at h
         obtain ⟨rfl, rfl⟩ := h
         rfl
+    · simp at h
+      obtain ⟨rfl, rfl⟩ := h
+      rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
 
 /-- **approve 不动 supply**。 -/
 theorem approve_preserves_supply (s : State) (sp : Address) (a : UInt256)

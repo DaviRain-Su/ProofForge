@@ -25,7 +25,7 @@ instead of nested `if`/`match`.
 ## Landed (Token `approve` port)
 
 5. `Examples.Evm.Token.approve` uses `Effect.ensure` / `hold` (pause + zero-address gates);
-   `approve_preserves_supply` retargeted; registry digest `1dc6b7a9d09f1478`
+   `approve_preserves_supply` retargeted; registry digest `f6a3fcbc3c7331fe`
    (was `b69773a11a64286e`)
 
 ## Follow-up

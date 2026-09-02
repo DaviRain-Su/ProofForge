@@ -46,7 +46,7 @@ surfaces:
 - No shared Lean source module for Token (unlike Counter)
 - NEAR has no `approve` / allowance surface (NEP-141)
 - SVM transfer entry is named `send`, not `transfer`
-- Full EVM `Examples.Evm.Token` (`1dc6b7a9d09f1478`) and NEAR `NearTokenErgonomics`
+- Full EVM `Examples.Evm.Token` (`f6a3fcbc3c7331fe`) and NEAR `NearTokenErgonomics`
   arithmetic remain outside this approve/transfer table
 - Runtime sandbox matrix pointers / optional `conformance` CI lane label
 

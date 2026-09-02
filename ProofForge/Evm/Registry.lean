@@ -32,7 +32,7 @@ def entries : Array Entry := #[
   { name := "Lang", digest := "d2a43e6bf208bff0" },
   { name := "Vault", digest := "bb2f93cb28d7501" },
   { name := "Ownable", digest := "2dc1afccaffe17c4" },
-  { name := "Token", digest := "1dc6b7a9d09f1478" },
+  { name := "Token", digest := "f6a3fcbc3c7331fe" },
   { name := "Capped", digest := "bd609aceeaafd713" },
   { name := "MultiToken", digest := "c688769941bd4cfe" },
   { name := "CraftToken", digest := "2e6738a3705bc7dd" },
