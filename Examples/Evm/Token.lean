@@ -213,27 +213,19 @@ def transferFrom (s : State) (owner destination : Address) (amount : UInt256) :
   else
     .error .overflow
 
+/-- Owner-only pause: sequential `Effect.ensureCode` soft-abort (UInt64 CallResult ABI). -/
 @[pf_entry]
 def pause (s : State) : Except Error (State × UInt64) :=
-  if Address.eqImmutable Context.caller then
-    if (0 : UInt64) ≠ 1 then
-      .ok ({ dummy := s.dummy, paused := Pausable.pause s.paused, cap := s.cap, supply := s.supply }, 1)
-    else
-      .error .overflow
-  else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.unauthorized Context.caller)
+  Effect.ensureCode (Address.eqImmutable Context.caller) (hold s)
+      (Revert.unauthorized Context.caller) fun _ =>
+  .ok ({ dummy := s.dummy, paused := Pausable.pause s.paused, cap := s.cap, supply := s.supply }, 1)
 
+/-- Owner-only unpause: sequential `Effect.ensureCode` soft-abort (UInt64 CallResult ABI). -/
 @[pf_entry]
 def unpause (s : State) : Except Error (State × UInt64) :=
-  if Address.eqImmutable Context.caller then
-    if (0 : UInt64) ≠ 1 then
-      .ok ({ dummy := s.dummy, paused := Pausable.unpause s.paused, cap := s.cap, supply := s.supply }, 0)
-    else
-      .error .overflow
-  else
-    .ok ({ dummy := s.dummy, paused := s.paused, cap := s.cap, supply := s.supply },
-      Revert.unauthorized Context.caller)
+  Effect.ensureCode (Address.eqImmutable Context.caller) (hold s)
+      (Revert.unauthorized Context.caller) fun _ =>
+  .ok ({ dummy := s.dummy, paused := Pausable.unpause s.paused, cap := s.cap, supply := s.supply }, 0)
 
 @[pf_entry]
 def pausedOf (s : State) : UInt8 :=
@@ -458,6 +450,32 @@ theorem decreaseAllowance_preserves_supply (s : State) (sp : Address) (a : UInt2
     · simp at h
       obtain ⟨rfl, rfl⟩ := h
       rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- **pause 不动 supply**。 -/
+theorem pause_preserves_supply (s : State) {t : State} {r : UInt64}
+    (h : pause s = .ok (t, r)) : t.supply = s.supply := by
+  unfold pause at h
+  simp only [Effect.ensureCode, Effect.abortCode, hold] at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- **unpause 不动 supply**。 -/
+theorem unpause_preserves_supply (s : State) {t : State} {r : UInt64}
+    (h : unpause s = .ok (t, r)) : t.supply = s.supply := by
+  unfold unpause at h
+  simp only [Effect.ensureCode, Effect.abortCode, hold] at h
+  split at h
+  · simp at h
+    obtain ⟨rfl, rfl⟩ := h
+    rfl
   · simp at h
     obtain ⟨rfl, rfl⟩ := h
     rfl
