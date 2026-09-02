@@ -5,15 +5,17 @@ Feature A aggregate-storage consumer: nested State (depth 2).
 
 `declared` uses `Storage.Static.nestedRecord` so the compile-time leaf table matches Extract's
 `bundle_amount` / `bundle_details_side` / `bundle_details_enabled` spelling. Methods return leaf
-views, a flat product (`bundleSignal`), and nested product views (`bundleView` /
-`detailsView`) — the nested product return × aggregate storage combination called out by
-`evm-rt-nested-001`.
+views, a flat product (`bundleSignal`), nested product views (`bundleView` /
+`detailsView`), and a constructed dynamic `(uint64,uint8)[]` from storage leaves
+(`amountSidePairs`) — the nested product / constructed-array × aggregate storage combination
+called out by `evm-rt-nested-001`.
 `runtime-tests/evm/anvil_aggregate_storage.sh` covers admin-gated nested writes, sibling-leaf
-preservation, leaf views, flat/nested product views, and `bundleSignal`.
+preservation, leaf views, flat/nested product views, `amountSidePairs`, and `bundleSignal`.
 -/
 
 namespace Examples.Evm.EvmAggregateStorage
 open ProofForge.Evm.Sdk
+open ProofForge.Core.Value
 
 /-- Nested leaf record: flattens under `bundle_details_side` / `bundle_details_enabled`. -/
 structure Details where
@@ -90,6 +92,15 @@ def bundleView (s : State) : UInt64 × (UInt8 × Bool) :=
 @[pf_entry]
 def detailsView (s : State) : UInt8 × Bool :=
   (s.bundle.details.side, s.bundle.details.enabled)
+
+/-- Constructed dynamic return from nested storage leaves: a capacity-1 `(uint64,uint8)[]`
+whose single element is `(bundle.amount, bundle.details.side)`. Closes the Feature A gap that
+combined `BoundedVec` of static products with `nestedRecord` field trees (echo path already
+covered constructed arrays; aggregate path already covered nested product views). -/
+@[pf_entry]
+def amountSidePairs (s : State) : BoundedVec (UInt64 × UInt8) 1 :=
+  { length := 1
+    values := #v[(s.bundle.amount, s.bundle.details.side)] }
 
 /-- Admin-gated nested aggregate write. -/
 @[pf_entry]

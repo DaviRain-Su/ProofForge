@@ -37,7 +37,7 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 - **Anvil OK/reject matrix** for wide/constructed: `runtime-tests/evm/anvil_bounded.sh`
   (`echoBoundedWide`, `echoBoundedPairs`, malformed/over-capacity calldata)
 - **Aggregate storage slice**: `Storage.Static.nestedRecord` (Feature A depth ≤ 2) +
-  `Examples.Evm.EvmAggregateStorage` (digest `4b648eab9d955dd2`) — nested `Bundle` State,
+  `Examples.Evm.EvmAggregateStorage` (digest `f66d438ad668929d`) — nested `Bundle` State,
   leaf views, flat product (`bundleSignal`), and nested product views
   (`bundleView` → `(uint64,(uint8,bool))`, `detailsView` → `(uint8,bool)`); layout pinned by
   `Tests/EvmStaticStorageSpec`
@@ -46,11 +46,11 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 - **Anvil matrix** for aggregate storage: `runtime-tests/evm/anvil_aggregate_storage.sh`
   (`setBundle` / `setAmount`, leaf views, `bundleSignal` / `bundleView` / `detailsView`,
   Unauthorized non-admin)
+- Constructed dynamic return from storage field trees: **landed** (`amountSidePairs` → `(uint64,uint8)[]`)
 - **Tagged-in-array**: `echoBoundedOptions` (`BoundedVec (Option UInt64) 2` ↔ `(bool,uint64)[]`) —
   Codec wrap of Tagged Tuple v1 element plans + remapped `taggedGuards`, Extract 2-limb
   element expansion, Emit ABI JSON tuple[], Anvil OK/reject matrix
-- Still open: constructed dynamic return from storage field trees; enum-in-array;
-  depth ceiling raise
+- Still open: enum-in-array; depth ceiling raise
 
 ## Non-goals
 

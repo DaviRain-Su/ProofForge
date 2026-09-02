@@ -64,7 +64,7 @@ examples 已证明工程链可用。
 
 | 优先级 | 包 ID 建议 | 内容 | 验收 |
 |---|---|---|---|
-| P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix（wide/constructed **Anvil 已通**；`nestedRecord` + nested product view `bundleView`/`detailsView` + `EvmAggregateStorage` Lean + Anvil **已通**；仍开：constructed dynamic return from storage；**tagged-in-array Option echo ✓**） |
+| P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix（wide/constructed **Anvil 已通**；`nestedRecord` + nested product view `bundleView`/`detailsView` + `EvmAggregateStorage` Lean + Anvil **已通**；constructed dynamic from storage **已通**（`amountSidePairs`）；**tagged-in-array Option echo ✓**；仍开：enum-in-array） |
 | P0 | Feature A next（powdr paused） | close remaining nested/aggregate gaps only; **no** powdr/yulc L3 on this track | Anvil matrix for open P0 rows; Feature B stays parked |
 | P0 | `evm-codec-manifest-001` | per-method codec/memory resource manifest | Profile/Extract 稳定错误 |
 | P1 | `evm-signed-001` | signed int 源类型 + 窄化 cast 词汇 | 双 consumer + Anvil |
@@ -174,14 +174,14 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 - `ft_transfer` / `ft_transfer_call` / `ft_resolve_transfer` + storage 全套 + NEP-141 events
 - near-sandbox 矩阵见 `runtime-tests/near/ledger.py`
-- **剩余**：N13 handle Extract 已收口（`And3`..`And8` + N>8 fail-closed）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；N15 Counter+Token digest 表已钉（仍无共享 Token source / NEAR approve）
+- **剩余**：N13 handle Extract 已收口（`And3`..`And8` + N>8 fail-closed）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；N15 Counter+Token digest 表已钉 + runtime sandbox matrix pointers 已钉（仍无共享 Token source / NEAR approve）
 
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
 | **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；✓ N>8 Extract fail-closed（ceiling=8，无 And9） |
 | **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | ~~collection prefix/metadata Handle~~（Vector+Queue+Lookup+Iterable done；仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | ✓ all N14 Handles；digests unchanged |
-| **N15** | [`wsm-near-conformance-001`](tasks/wsm-near-conformance-001.md) | Counter + Token-shaped cross-target digest 表 | N12d | ✓ Counter 三 target；✓ Token approve/xfer digests（target-local；NEAR approve gap） |
+| **N15** | [`wsm-near-conformance-001`](tasks/wsm-near-conformance-001.md) | Counter + Token-shaped cross-target digest 表 | N12d | ✓ Counter 三 target；✓ Token approve/xfer digests（target-local；NEAR approve gap）；✓ runtime sandbox matrix pointers |
 
 **明确不做（与计划一致）：**
 

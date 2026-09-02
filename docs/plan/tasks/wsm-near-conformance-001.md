@@ -47,13 +47,29 @@ surfaces:
 - NEAR has no `approve` / allowance surface (NEP-141)
 - SVM transfer entry is named `send`, not `transfer`
 - Full EVM `Examples.Evm.Token` (`7d01d10202d87dd3`) and NEAR `NearTokenErgonomics`
-  arithmetic remain outside this approve/transfer table
-- Runtime sandbox matrix pointers / optional `conformance` CI lane label
+  arithmetic remain outside this approve/transfer digest table
+- Optional CI lane label `conformance` (Lean gate already covers digests)
+
+## Landed (runtime sandbox matrix pointers)
+
+Token-shaped **engineering** gates (not shared digests) live at:
+
+| Target | Fixture / role | Runtime gate |
+|---|---|---|
+| SVM approve | `Examples.Svm.TokenApprove` | `runtime-tests/solana/tests/token_approve.rs` (Mollusk) |
+| SVM transfer | `Examples.Svm.TokenXfer` | `runtime-tests/solana/tests/token_xfer.rs` (Mollusk) |
+| EVM Token (full) | `Examples.Evm.Token` | `runtime-tests/evm/anvil_token.sh` |
+| EVM ergonomics | `Examples.EvmTokenErgonomics` | Lean `#pf_evm_build` via `Tests/CrossTargetTokenSpec` (no dedicated Anvil scene) |
+| NEAR FT ledger | `Examples.Near.NearFungibleLedger` | `runtime-tests/near/ledger.sh` → `ledger.py` |
+| NEAR FT events | companion | `runtime-tests/near/ft_event.sh` → `ft_event.py` |
+| NEAR JSON FT inputs | companion | `runtime-tests/near/json_ft_transfer_input.sh`, `json_ft_transfer_call_input.sh` |
+
+Lean digest authority remains `Tests/CrossTargetTokenSpec.lean` +
+`Tests/CrossTargetCounterSpec.lean`. Runtime scripts are engineering gates only.
 
 ## Follow-up
 
 - Optional shared `Examples.TokenShape` UInt64 stub if a true three-target source is needed
-- Runtime sandbox matrix pointers in one doc (near `ledger.py`, Anvil, Mollusk)
 - Optional CI lane label `conformance` (currently covered by aggregate Lean gate)
 
 ## Non-goals
@@ -64,4 +80,5 @@ surfaces:
 ## Acceptance
 
 N15 Counter row → **done** (digest table + method surface pinned).
-N15 Token row → **partial** (target-local digest table + method surface + gaps documented).
+N15 Token row → **partial** (target-local digest table + method surface + gaps documented +
+runtime sandbox matrix pointers landed).

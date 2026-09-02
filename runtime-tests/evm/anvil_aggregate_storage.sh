@@ -2,6 +2,7 @@
 # EvmAggregateStorage: nested Bundle/Details static layout (Feature A depth ≤ 2).
 # Covers constructor admin limbs, admin-gated nested writes, sibling-leaf preservation,
 # leaf views, flat product (bundleSignal), nested product views (bundleView/detailsView),
+# constructed dynamic amountSidePairs from storage leaves,
 # and Unauthorized(non-admin).
 set -euo pipefail
 
@@ -86,6 +87,9 @@ solana_lean_require_equal "$view1_values" "11 4 true" "bundleView after setBundl
 details1="$("$cast" call --rpc-url "$rpc" "$addr" 'detailsView()(uint8,bool)')"
 details1_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$details1''')))")"
 solana_lean_require_equal "$details1_values" "4 true" "detailsView after setBundle"
+pairs1="$("$cast" call --rpc-url "$rpc" "$addr" 'amountSidePairs()((uint64,uint8)[])')"
+pairs1_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+', '''$pairs1''')))")"
+solana_lean_require_equal "$pairs1_values" "11 4" "amountSidePairs after setBundle"
 
 # Targeted amount update must preserve nested details sibling leaves.
 "$cast" send --rpc-url "$rpc" --private-key "$private_key" \
@@ -104,6 +108,9 @@ solana_lean_require_equal "$view2_values" "42 4 true" "bundleView after setAmoun
 details2="$("$cast" call --rpc-url "$rpc" "$addr" 'detailsView()(uint8,bool)')"
 details2_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+|true|false', '''$details2''')))")"
 solana_lean_require_equal "$details2_values" "4 true" "detailsView after setAmount"
+pairs2="$("$cast" call --rpc-url "$rpc" "$addr" 'amountSidePairs()((uint64,uint8)[])')"
+pairs2_values="$("$python" -I -S -c "import re; print(' '.join(re.findall(r'[0-9]+', '''$pairs2''')))")"
+solana_lean_require_equal "$pairs2_values" "42 4" "amountSidePairs after setAmount"
 
 # Non-admin nested write reverts Unauthorized(other) and cannot mutate leaves.
 other_key="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
@@ -129,4 +136,4 @@ if "$cast" send --rpc-url "$rpc" --private-key "$other_key" \
 fi
 solana_lean_require_storage "$addr" 3 42 "unauthorized setAmount holds amount"
 
-echo "evm-anvil-aggregate-storage: ok (nested Bundle/Details slots + leaf/nested product views + admin gates; engineering only)"
+echo "evm-anvil-aggregate-storage: ok (nested Bundle/Details slots + leaf/nested product views + amountSidePairs + admin gates; engineering only)"
