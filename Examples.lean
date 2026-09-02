@@ -1,9 +1,7 @@
-/-- In-tree fixtures, grouped by target.
-
-Shared dual-target programs stay at `Examples.<Name>`. Target-only programs live under
-`Examples.Svm`, `Examples.Evm`, `Examples.Xrpl`, and `Examples.Near`. Lake also builds
-every file under `Examples/` via `globs`.
--/
+-- In-tree fixtures, grouped by target.
+-- Shared dual-target programs stay at `Examples.<Name>`. Target-only programs live under
+-- `Examples.Svm`, `Examples.Evm`, `Examples.Xrpl`, and `Examples.Near`. Lake also builds
+-- every file under `Examples/` via `globs`.
 
 -- Shared (SVM + EVM, Counter also XRPL/NEAR)
 import Examples.Counter
