@@ -32,7 +32,7 @@ instead of nested `if`/`match`.
 
 6. `Effect.ensureCode` / `Effect.abortCode` — soft-abort keeps `.ok (state, UInt64)` (no `thenTrue`)
 7. `Examples.Evm.Token.mint` / `burn` use sequential `Effect.ensureCode` / `hold`;
-   `mint_supply_effect` / `burn_supply_effect` retargeted
+   `mint_supply_effect` / `burn_supply_effect` retargeted; registry digest `f48b399bf38a06bc`
 
 ## Follow-up
 
