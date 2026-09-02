@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+# Phoenix Mollusk suites are large; default-on for local full runs, but CI PR SVM
+# lanes pass `--no-default-features` unless `surfpool_heavy` paths changed.
+[features]
+default = ["phoenix-gates"]
+phoenix-gates = []
+
 [dependencies]
 base64 = "0.22"
 bytemuck = { version = "=1.25.2", features = ["derive"] }

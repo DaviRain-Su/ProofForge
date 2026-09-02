@@ -108,7 +108,9 @@ jobs:
               - 'ProofForge/Extract/**'
               - 'ProofForge/Core/**'
             # ~10MB Phoenix ELF deploy is the slowest Surfpool step; keep it off
-            # ordinary SVM SDK / fixture PRs that do not touch Phoenix emit paths.
+            # ordinary SVM SDK / fixture / CI-meta PRs that do not touch Phoenix emit paths.
+            # Note: `.github/workflows/ci.yml` is intentionally *not* listed here so
+            # shared infra edits still run all four lanes without paying Phoenix cost.
             surfpool_heavy:
               - 'Examples/Svm/Phoenix.lean'
               - 'Examples/Svm/PhoenixV1Layout.lean'
@@ -119,7 +121,7 @@ jobs:
               - 'runtime-tests/solana/tests/phoenix.rs'
               - 'runtime-tests/solana/tests/phoenix_v1_profile.rs'
               - 'runtime-tests/surfpool/**'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/ci-phoenix.yml'
               - '.agents/setup'
 
       - name: Publish lane gates
@@ -156,9 +158,10 @@ jobs:
           svm="$(or_shared "$SVM")"
           evm="$(or_shared "$EVM")"
           near="$(or_shared "$NEAR")"
-          # Heavy Surfpool deploy (~10MB ELF) only when Phoenix/stack emit paths move,
-          # or when the SVM lane itself is forced by shared infrastructure.
-          if [ "$SHARED" = "true" ] || [ "$SURFPOOL_HEAVY" = "true" ]; then
+          # Phoenix Mollusk + Surfpool stay opt-in on PRs. Shared infra changes still
+          # force the four lanes above, but must not silently re-introduce the 15–30m
+          # Loader-v3 writes unless Phoenix emit paths actually moved.
+          if [ "$SURFPOOL_HEAVY" = "true" ]; then
             surfpool_heavy=true
           else
             surfpool_heavy=false
@@ -276,15 +279,23 @@ jobs:
       - name: Check SVM artifact manifest
         run: python3 scripts/check_artifact_manifest.py --target svm --out build/sbpf
 
-      - name: Run Mollusk integration suite
+      # Default PR: skip compiling/running the ~7kLOC Phoenix Mollusk suites unless
+      # surfpool_heavy paths changed. Main pushes always set surfpool_heavy=true.
+      - name: Run Mollusk integration suite (without Phoenix)
+        if: needs.changes.outputs.surfpool_heavy != 'true'
+        run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml --no-default-features -- --test-threads=1
+
+      - name: Run Mollusk integration suite (including Phoenix)
+        if: needs.changes.outputs.surfpool_heavy == 'true'
         run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1
 
+      # Phoenix Loader-v3 deploys are the slowest Surfpool steps (~6–11m each).
+      # Keep them off ordinary SVM PRs; nightly / path-triggered workflow covers them.
       - name: Deploy Phoenix through Surfpool Loader-v3
+        if: needs.changes.outputs.surfpool_heavy == 'true'
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh Phoenix
 
-      # ~10MB ELF: Loader-v3 writeback regularly exceeds 15m on GitHub runners.
-      # Skip when the PR did not touch Phoenix / account-storage emit paths.
       - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
         if: needs.changes.outputs.surfpool_heavy == 'true'
         timeout-minutes: 30
@@ -392,10 +403,10 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Build Lean libraries and guards
-        run: |
-          lake build
-          lake build Tests
+      # Align with ci-001 / SVM+EVM lanes: do NOT recompile the full Tests aggregate
+      # (includes Phoenix specs). Lean lane already owns `lake build` + `lake build Tests`.
+      - name: Build program source modules
+        run: lake build Examples
 
       - name: Build all NEAR programs
         run: lake exe pf -- build --target near --out build/near

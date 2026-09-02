@@ -1,3 +1,5 @@
+#![cfg(feature = "phoenix-gates")]
+
 mod common;
 
 use {

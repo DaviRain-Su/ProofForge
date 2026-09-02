@@ -1,0 +1,105 @@
+name: CI Phoenix
+
+# Heavy Phoenix gates (Surfpool Loader-v3 + Mollusk phoenix suites).
+# Kept off the default PR SVM lane; runs on:
+#   - nightly schedule
+#   - workflow_dispatch
+#   - PRs that touch Phoenix / SVM emit / Surfpool paths (same as surfpool_heavy)
+#   - pushes to main (belt-and-suspenders with ci.yml heavy path)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Examples/Svm/Phoenix.lean"
+      - "Examples/Svm/PhoenixV1Layout.lean"
+      - "Examples/Svm/PhoenixV1Profile.lean"
+      - "ProofForge/Svm/AccountStorage/**"
+      - "ProofForge/Svm/FifoCancel/**"
+      - "ProofForge/Svm/Emit.lean"
+      - "runtime-tests/solana/tests/phoenix.rs"
+      - "runtime-tests/solana/tests/phoenix_v1_profile.rs"
+      - "runtime-tests/surfpool/**"
+      - ".github/workflows/ci-phoenix.yml"
+      - ".agents/setup"
+  pull_request:
+    paths:
+      - "Examples/Svm/Phoenix.lean"
+      - "Examples/Svm/PhoenixV1Layout.lean"
+      - "Examples/Svm/PhoenixV1Profile.lean"
+      - "ProofForge/Svm/AccountStorage/**"
+      - "ProofForge/Svm/FifoCancel/**"
+      - "ProofForge/Svm/Emit.lean"
+      - "runtime-tests/solana/tests/phoenix.rs"
+      - "runtime-tests/solana/tests/phoenix_v1_profile.rs"
+      - "runtime-tests/surfpool/**"
+      - ".github/workflows/ci-phoenix.yml"
+      - ".agents/setup"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-phoenix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phoenix:
+    name: Phoenix heavy gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Cache Rust build products
+        uses: actions/cache@v4
+        with:
+          path: runtime-tests/solana/target
+          key: mollusk-phoenix-${{ runner.os }}-${{ hashFiles('runtime-tests/solana/Cargo.lock', 'runtime-tests/solana/Cargo.toml') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build program source modules
+        run: lake build Examples
+
+      - name: Build Phoenix SVM programs
+        run: |
+          lake exe pf -- build --target svm --out build/sbpf Phoenix
+          lake exe pf -- build --target svm --out build/sbpf PhoenixV1Profile
+          lake exe pf -- build --target svm --out build/sbpf RawEntry
+
+      - name: Run Mollusk Phoenix suites
+        run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1 phoenix
+
+      - name: Deploy Phoenix through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh Phoenix
+
+      - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
+        timeout-minutes: 30
+        run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
+
+      - name: Deploy packed entry adapter fixture through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh RawEntry

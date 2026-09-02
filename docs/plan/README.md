@@ -8,6 +8,8 @@ SVM 与 EVM 各自拥有 Runtime、Component 和物理 storage SDK。
 主流能力基线：[Solana SDK / Solidity + OpenZeppelin parity](mainstream-parity.md)。
 多 agent 执行边界：[Runtime / SDK 并行开发执行图](parallel-workstreams.md)。
 产品化拆分：[CLI / SDK / 模板 / Release](productization.md)（`prod-001`…`prod-004`）。
+CI 降耗时 / Phoenix 拆分 / 首次发版调研：[research/07-ci-phoenix-release.md](../research/07-ci-phoenix-release.md)。
+P0 落地：[ci-002](tasks/ci-002.md)（NEAR 去重、Phoenix 重闸、`scripts/ci_local.sh`）。
 
 **当前主线（SVM 全轨）**：[SVM 全面工作计划](svm-work-plan.md)
 （能力 Runtime/SDK + 应用 + 语义桥 + 工程 + 形式化）。
