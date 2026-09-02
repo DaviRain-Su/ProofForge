@@ -1292,6 +1292,60 @@ theorem rotateRight_root (s : State) (x : UInt64) {t : State} {y : UInt64}
          | exact Or.inr rfl)
     | rfl)
 
+/-! ### sf-011 第二批：局部结构算子保持几何 `wf`
+
+旋转/链接只改 `nodes`（与 `root`），不改 `size`/`bumpIndex`/`freeHead`。
+BST 有序性仍是后续切片；此处先把 p-004 的几何不变量闭包补全。 -/
+
+/-- 单槽 `nodes.set` 保持几何 `wf`，新节点指针不超过原 `bumpIndex`。 -/
+private theorem wf_nodes_set (s : State) (idx : Nat) (n : Node) (hi : idx < 4) (hwf : wf s)
+    (hl : n.left ≤ s.bumpIndex) (hr : n.right ≤ s.bumpIndex) (hp : n.parent ≤ s.bumpIndex)
+    (hc : n.color ≤ 1) :
+    wf { s with nodes := s.nodes.set idx n hi } := by
+  obtain ⟨hsz, hb1, hb5, hf5, hfb, hptr⟩ := hwf
+  refine ⟨hsz, hb1, hb5, hf5, hfb, ?_⟩
+  intro a ha0 ha1
+  have hslot_lt : (a.toNat - 1) % 4 < 4 := by omega
+  by_cases heq : (a.toNat - 1) % 4 = idx
+  · have hidx : (s.nodes.set idx n hi)[(a.toNat - 1) % 4]! = n := by
+      show (s.nodes.set idx n hi)[(a.toNat - 1) % 4]?.get! = n
+      have h2 : (s.nodes.set idx n hi)[(a.toNat - 1) % 4]? = some n := by
+        simp [Vector.getElem_set, heq, hslot_lt]
+      rw [h2]
+      rfl
+    rw [hidx]
+    exact ⟨hl, hr, hp, hc⟩
+  · have hsame : (s.nodes.set idx n hi)[(a.toNat - 1) % 4]! = s.nodes[(a.toNat - 1) % 4]! := by
+      show (s.nodes.set idx n hi)[(a.toNat - 1) % 4]?.get! = _
+      have h2 : (s.nodes.set idx n hi)[(a.toNat - 1) % 4]? = s.nodes[(a.toNat - 1) % 4]? := by
+        simp [Vector.getElem_set, if_neg (ne_comm.mp heq), hslot_lt]
+      rw [h2]
+      simp [hslot_lt]
+    rw [hsame]
+    exact hptr a ha0 (by simpa using ha1)
+
+/-- 染色只改 `color` 字段，几何指针不变（要求 `address` 落在当前 bump 区）。 -/
+theorem paintNode_wf (s : State) (address color : UInt64) (hwf : wf s)
+    (haddr : 1 ≤ address ∧ address < s.bumpIndex) (hc : color ≤ 1) :
+    wf (paintNode s address color) := by
+  unfold paintNode
+  rcases haddr with ⟨ha0, ha1⟩
+  have hne : address ≠ 0 := by
+    intro heq
+    subst heq
+    have hfalse : ¬ (1 : UInt64) ≤ 0 := by decide
+    exact hfalse ha0
+  simp only [hne, ↓reduceIte]
+  have hi : (address.toNat - 1) % 4 < 4 := by omega
+  have hptr := hwf.2.2.2.2.2
+  have hnode := hptr address ha0 ha1
+  apply wf_nodes_set s ((address.toNat - 1) % 4)
+    { s.nodes[(address.toNat - 1) % 4]! with color := color } hi hwf
+  · exact hnode.1
+  · exact hnode.2.1
+  · exact hnode.2.2.1
+  · exact hc
+
 end Proofs
 
 end Examples.Tree
