@@ -5947,6 +5947,61 @@ partial def mentionsNearEffect (env : Environment) : Nat → Expr → Bool
           | some (.defnInfo info) => mentionsNearEffect env fuel info.value
           | _ => false)
 
+/-- True when `e` is a PromiseHandle lifecycle API that carries compile-time `maxFanIn`. -/
+private def isPromiseHandleLifecycleApi (e : Expr) : Bool :=
+  isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.thenReturned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and3Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and4Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and5Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and6Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and7Returned ||
+    isConstNamed e ``ProofForge.Wasm.Near.Sdk.Promises.PromiseHandle.and8Returned
+
+/-- Fail-closed message when a PromiseHandle API's `maxFanIn` literal exceeds the opcode ladder
+(`maxFanInCompileCeiling = 8`). N>8 requires new fixed `andN` ops; Extract must not silently
+accept an over-ceiling handle capacity. -/
+private def promiseHandleMaxFanInCeilingError? (env : Environment) (e : Expr) : Option String :=
+  let e := strip e
+  if !isPromiseHandleLifecycleApi e then none
+  else if e.getAppArgs.isEmpty then
+    some "extract/unsupported: PromiseHandle API missing maxFanIn"
+  else
+    match staticNatVal? env e.getAppArgs[0]! with
+    | some n =>
+        if ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n then none
+        else
+          some s!"extract/unsupported: PromiseHandle maxFanIn {n} exceeds compile ceiling {ProofForge.Wasm.Near.Sdk.Promises.maxFanInCompileCeiling}"
+    | none =>
+        some "extract/unsupported: PromiseHandle maxFanIn must be a static Nat within the compile ceiling"
+
+/-- Walk a body for over-ceiling PromiseHandle APIs before effect decode can accept them. -/
+private partial def findPromiseHandleMaxFanInCeilingError (env : Environment) :
+    Nat → Expr → Option String
+  | 0, _ => none
+  | fuel + 1, e =>
+      let e := strip e
+      promiseHandleMaxFanInCeilingError? env e <|>
+        match e with
+        | .letE _ _ value body _ =>
+            findPromiseHandleMaxFanInCeilingError env fuel value <|>
+              findPromiseHandleMaxFanInCeilingError env fuel (body.instantiate1 value)
+        | .lam _ _ body _ => findPromiseHandleMaxFanInCeilingError env fuel body
+        | .app fn arg =>
+            findPromiseHandleMaxFanInCeilingError env fuel fn <|>
+              findPromiseHandleMaxFanInCeilingError env fuel arg
+        | .mdata _ inner => findPromiseHandleMaxFanInCeilingError env fuel inner
+        | _ => none
+
+/-- Whether the PromiseHandle API head at `e` has a static `maxFanIn` within the compile ceiling.
+Returns `none` when the head is not a PromiseHandle lifecycle API. -/
+private def promiseHandleMaxFanInWithinCeiling? (env : Environment) (e : Expr) : Option Bool :=
+  let e := strip e
+  if !isPromiseHandleLifecycleApi e || e.getAppArgs.isEmpty then none
+  else
+    match staticNatVal? env e.getAppArgs[0]! with
+    | some n => some (ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling n)
+    | none => some false
+
 /-- NEAR logging and invocation-memory mutations stay effects so CFG rewrites cannot duplicate,
 discard, or reorder them as pure scalar expressions. Buffer capacities remain compile-time. -/
 private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.Op) :=
@@ -5955,7 +6010,9 @@ private def decodeNearEffect (env : Environment) (e : Expr) : Option (Array Ops.
     | 0 => none
     | fuel' + 1 =>
       let e := strip e
-      if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
+      -- Defense in depth: never decode PromiseHandle APIs above the compile ceiling.
+      if let some false := promiseHandleMaxFanInWithinCeiling? env e then none
+      else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8 then
         (e.getAppArgs.back? >>= staticString? env 64).map Ops.Op.nearLogUtf8
       else if isConstNamed e ``ProofForge.Wasm.Near.Runtime.logUtf8Bounded &&
           e.getAppArgs.size ≥ 2 then
@@ -9054,10 +9111,15 @@ private def decodePlain (env : Environment) (e : Expr) (stateful : Bool)
   else if let some v := asStateMk env e then
     .ok #[.returnState v]
   else if isConstNamed e ``Prod.mk && e.getAppArgs.size ≥ 2 then
-    match val env e.getAppArgs[e.getAppArgs.size - 2]!,
-          val env e.getAppArgs[e.getAppArgs.size - 1]! with
-    | some a, some b => .ok #[.returnU64 a, .returnU64 b]
-    | _, _ => .error "extract/unsupported: pair return"
+    -- Flat pairs remain the common path; nested products (Feature A depth ≤ 2) flatten to the
+    -- same ordered scalar return frame that codecs already pack as nested ABI tuples.
+    match scalarResultValues env 16 e with
+    | some values =>
+        if values.isEmpty then
+          .error "extract/unsupported: empty pair return"
+        else
+          .ok (values.map fun value => .returnU64 value)
+    | none => .error "extract/unsupported: pair return"
   else if (match e.getAppFn.constName? with
       | some name =>
         match env.find? name with
@@ -9387,6 +9449,9 @@ def decodeExpr (env : Environment) (fuel : Nat) (e : Expr)
     -- looking for effects or control flow; this keeps helper composition out of target Ops/Emit.
     let e := e.headBeta
     let e := (reducePureInlineMatch? env e).getD e
+    -- NEAR N13: reject PromiseHandle APIs whose maxFanIn exceeds the fixed and3..and8 ladder.
+    if let some reason := findPromiseHandleMaxFanInCeilingError env 64 e then
+      return .error reason
     let (effects, continuation, malformedWrite) := leadingSvmEffects env e
     if malformedWrite then
       return .error "extract/unsupported: external account write operands"

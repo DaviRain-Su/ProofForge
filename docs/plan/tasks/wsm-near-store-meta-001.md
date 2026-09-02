@@ -49,7 +49,7 @@ updated: 2026-09-02
 
 - TreeMap Handle
 - 通用 `T`、Sha256 键
-- N>8 `andN`、N15 digest 表
+- N>8 `andN` ops remain out of scope (ceiling 8 fail-closed); N15 digest 表
 - near-sdk Drop 语义
 
 ## 验收

@@ -174,12 +174,12 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 
 - `ft_transfer` / `ft_transfer_call` / `ft_resolve_transfer` + storage 全套 + NEP-141 events
 - near-sandbox 矩阵见 `runtime-tests/near/ledger.py`
-- **剩余**：N13 handle Extract 已收口（`And3`..`And8`）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；N15 Counter+Token digest 表已钉（仍无共享 Token source / NEAR approve）
+- **剩余**：N13 handle Extract 已收口（`And3`..`And8` + N>8 fail-closed）；N14 Vector+Queue+Lookup+Iterable Handle 已落地；N15 Counter+Token digest 表已钉（仍无共享 Token source / NEAR approve）
 
 | 阶段 | ID | 交付 | 前置 | 验收 |
 |---|---|---|---|---|
 | ~~**N12**~~ | ~~`wsm-near-ft-*-export`~~ | ~~公开 FT 面~~ | ✓ merge | sandbox ledger |
-| **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；N>8 ops 仍开 |
+| **N13** | ~~[`wsm-near-promise-general-001`](tasks/wsm-near-promise-general-001.md)~~ | ~~有界 Promise handle、N 路 join~~ | N12 | ✓ handle Extract `And3`..`And8` + sandbox；✓ N>8 Extract fail-closed（ceiling=8，无 And9） |
 | **N14** | [`wsm-near-store-meta-001`](tasks/wsm-near-store-meta-001.md) | ~~collection prefix/metadata Handle~~（Vector+Queue+Lookup+Iterable done；仍 **不** 冒充 near-sdk `Drop`/cache） | N5 + N9 ✓ | ✓ all N14 Handles；digests unchanged |
 | **N15** | [`wsm-near-conformance-001`](tasks/wsm-near-conformance-001.md) | Counter + Token-shaped cross-target digest 表 | N12d | ✓ Counter 三 target；✓ Token approve/xfer digests（target-local；NEAR approve gap） |
 

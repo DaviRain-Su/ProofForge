@@ -3,9 +3,63 @@ import ProofForge.Wasm.Near.IR
 import Examples.NearPromiseHandle
 
 open Lean Elab Command
+open ProofForge.Core.Value
+open ProofForge.Wasm.Near.Runtime
+open ProofForge.Wasm.Near.Sdk
+
+/-! Over-ceiling `maxFanIn` fixtures: Extract must reject N>8 (hard compile ceiling). -/
+
+namespace Tests.NearPromiseHandleSpec.OverCeilingFanIn
+
+structure State where
+  marker : UInt64
+  deriving Repr, DecidableEq, Inhabited
+
+inductive Error where
+  | rejected
+  deriving Repr, DecidableEq, Inhabited, BEq
+
+@[pf_inline] private def receiver : String := "receiver.test.near"
+@[pf_inline] private def callGas : UInt64 := 20_000_000_000_000
+@[pf_inline] private def callbackGas : UInt64 := 20_000_000_000_000
+@[pf_inline] private def joinedChildGas : UInt64 := 8_000_000_000_000
+
+/-- `maxFanIn = 9` exceeds `maxFanInCompileCeiling = 8`. -/
+private def promiseRoot9 : Promises.PromiseHandle 9 :=
+  { id := 0, depth := 0, fanIn := 0 }
+
+@[pf_entry]
+def init (_seed : UInt64) : State :=
+  { marker := 0 }
+
+/-- thenReturned on PromiseHandle 9 must fail closed at Extract. -/
+@[pf_entry]
+def sendHandleThenOverCeiling (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot9.thenReturned receiver "recordValue" (borshUInt64 123)
+    ({ w0 := 0, w1 := 0 } : NearToken) callGas
+    "callbackSuccess" (borshUInt64 77) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+/-- and3Returned on PromiseHandle 9 must fail closed at Extract (ceiling is on capacity, not N). -/
+@[pf_entry]
+def sendHandleAnd3OverCeiling (state : State) (value : UInt64) : Except Error (State × UInt64) :=
+  let _ := promiseRoot9.and3Returned
+    receiver "echo" (borshUInt64 111) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 222) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    receiver "echo" (borshUInt64 333) ({ w0 := 0, w1 := 0 } : NearToken) joinedChildGas
+    "callbackSuccess" (borshUInt64 83) ({ w0 := 0, w1 := 0 } : NearToken) callbackGas
+  .ok ({ state with marker := value }, value)
+
+end Tests.NearPromiseHandleSpec.OverCeilingFanIn
 
 elab "#pf_guard_near_promise_handle" : command => do
   let env ← getEnv
+  match ProofForge.Extract.extractModuleIR env
+      `Tests.NearPromiseHandleSpec.OverCeilingFanIn with
+  | .error reason =>
+      unless reason.contains "maxFanIn" && reason.contains "compile ceiling" do
+        throwError s!"wrong over-ceiling PromiseHandle rejection: {reason}"
+  | .ok _ => throwError "PromiseHandle maxFanIn 9 was accepted (expected Extract reject)"
   let source ←
     match ProofForge.Extract.extractModuleIR env `Examples.NearPromiseHandle with
     | .ok source => pure source
@@ -95,7 +149,10 @@ elab "#pf_guard_near_promise_handle" : command => do
 #pf_guard_near_promise_handle
 
 #guard ProofForge.Wasm.Near.Sdk.Promises.defaultMaxFanIn == 4
+#guard ProofForge.Wasm.Near.Sdk.Promises.maxFanInCompileCeiling == 8
 #guard ProofForge.Wasm.Near.Sdk.Promises.maxPromiseDepth == 8
+#guard ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling 8
+#guard (ProofForge.Wasm.Near.Sdk.Promises.maxFanInWithinCeiling 9) == false
 #guard Examples.NearPromiseHandle.handleDepthSmoke
 #guard Examples.NearPromiseHandle.handleAnd5Smoke
 #guard Examples.NearPromiseHandle.handleAnd8Smoke

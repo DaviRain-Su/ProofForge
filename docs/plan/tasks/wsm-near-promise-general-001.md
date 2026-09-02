@@ -4,7 +4,7 @@ scope: wasm-near
 status: partial
 depends-on: []
 plan: ../multi-target-strategy.md
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # wsm-near-promise-general-001 — bounded Promise handle generalization (N13)
@@ -61,19 +61,22 @@ N-way `and` is a single Extract-visible op with a **fixed** argument vector of l
    matching SDK/Extract/Emit/fixtures through **`sendAnd8*`** / **`callbackJoined8`**;
    registry digest updates with each N;
    **`maxFanInCompileCeiling := 8`** + `maxFanInWithinCeiling` / `withinCompileCeiling` smoke
-   (`Examples.NearPromiseHandle.handleFanInSmoke`); parameterized `andN` beyond fixed ladder remains follow-up
+   (`Examples.NearPromiseHandle.handleFanInSmoke`); **no And9** — hard ceiling stays 8
 3. ~~Sandbox DAG: create→then; create×3→and→callback~~ — **landed** in
    `runtime-tests/near/promise.py` (`sendAnd3Success` / `sendAnd3RightMissing` scenes on
    `NearPromise.wasm`); handle fixtures through `sendHandleAnd8` + registry digest `c5a967669da142d8`
 4. ~~Docs + capability-matrix row~~ — **landed** (`capability-matrix.md` §5 NEAR Promise row;
    `multi-target-strategy.md` N13 status)
+5. ~~Extract fail-closed N>8~~ — **landed** (`Decode.findPromiseHandleMaxFanInCeilingError`;
+   `Tests.NearPromiseHandleSpec.OverCeilingFanIn` proves `maxFanIn=9` rejected)
 
 ## Still open
 
-- Generic compile-time `andN` beyond the fixed opcode ladder (N>8 needs new ops)
+- Generic compile-time parameterized `andN` (would still need new ops to raise the ceiling)
 - ~~Extract of handle-typed entry bodies~~ — **landed** (`PromiseHandle.thenReturned` /
   `and3Returned`..`and8Returned` + Extract capacity-offset decode; `sendHandleThen` /
   `sendHandleAnd3`..`sendHandleAnd8` gates in `Tests/NearPromiseHandleSpec`)
+- ~~Extract reject for `maxFanIn` above ceiling~~ — **landed** (ceiling remains **8**)
 
 ## Deliverables
 

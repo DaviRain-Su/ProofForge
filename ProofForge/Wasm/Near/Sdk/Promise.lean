@@ -37,10 +37,13 @@ open ProofForge.Core.Value
 def defaultMaxFanIn : Nat := 4
 
 /-- Hard ceiling on the `maxFanIn` type parameter; values above this require extending the
-fixed `andN` opcode ladder (currently through N=8). -/
+fixed `andN` opcode ladder (currently through N=8). Extract fail-closes any PromiseHandle
+lifecycle API (`thenReturned` / `and3Returned`..`and8Returned`) whose `maxFanIn` literal
+exceeds this ceiling — there is no And9 opcode. -/
 def maxFanInCompileCeiling : Nat := 8
 
-/-- Whether a compile-time `maxFanIn` literal is within the supported opcode ladder. -/
+/-- Whether a compile-time `maxFanIn` literal is within the supported opcode ladder.
+`false` for N>8; Extract independently rejects those APIs (see `NearPromiseHandleSpec`). -/
 @[pf_inline] def maxFanInWithinCeiling (n : Nat) : Bool :=
   decide (n ≤ maxFanInCompileCeiling)
 
