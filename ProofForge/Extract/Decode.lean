@@ -3054,8 +3054,17 @@ private def asStoreFields (env : Environment) (e : Expr)
       if isConstNamed pair ``Prod.mk && pair.getAppArgs.size ≥ 2 then
         let st := pair.getAppArgs[pair.getAppArgs.size - 2]!
         let ret := pair.getAppArgs[pair.getAppArgs.size - 1]!
+        -- Bare `.ok (methodArgRef, scalar)` must stay opaque here: `asStoreFields` is also consulted
+        -- from `ite` arms before the recursively decoded then-branch, and succeeding with a lone
+        -- `.okState` would erase preceding ignored SVM effects (fifo cancel / CPI). Wide boundary
+        -- returns (NearToken / UInt128 limbs as `.returnU64`) still need this short path.
         if isConstNamed (strip st) ``methodArgRef then
-          effectfulResultOps env ret
+          match effectfulResultOps env ret with
+          | some returns =>
+              if returns.any fun op => match op with | .returnU64 _ => true | _ => false then
+                some returns
+              else none
+          | none => none
         else
         let vectorBase := vectorBaseName env 32 st
         let leaves := (flattenLeaves env "" st).filter fun p => some p.1 != vectorBase
