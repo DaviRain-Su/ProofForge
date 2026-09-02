@@ -1658,7 +1658,7 @@ elab "#pf_guard_phoenix_v1_profile" : command => do
       asm.contains "key4=65660 stride=18 capacity=8321" && asm.contains "be64 r1" &&
       asm.contains "r7 remains the walked instruction-data base outside this intrinsic" &&
       asm.contains "rb4_free_loop_" && asm.contains "add64 r9, -4096" &&
-      asm.contains "add64 r9, -3184" &&
+      asm.contains "add64 r9, -3048" &&
       asm.contains "fixed-stride external account word write acc=1 base=8314 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8315 stride=18 capacity=128" &&
       asm.contains "fixed-stride external account word write acc=1 base=8331 stride=18 capacity=128" &&
