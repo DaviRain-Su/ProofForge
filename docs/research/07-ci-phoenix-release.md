@@ -206,3 +206,19 @@ prod-001…004 **必做项已勾选**；`.github/workflows/release.yml` 已能�
 - 把 Phoenix 政策或撮合逻辑塞进 SDK。  
 - 一上来拆 `proof-forge-sdk` 独立仓（发版不需要）。  
 - 用「只跑 SVM」取代多 target 合入门——`main`/nightly 仍应全绿。
+
+
+## 7. P0 / P1 落地状态（2026-09-02，合并 #15）
+
+| 项 | 状态 |
+|---|---|
+| Path filter 四轨分流 | ✅ main 已有；保持 |
+| NEAR 去掉重复 `lake build Tests` | ✅ |
+| Phoenix Lean specs 退出默认 Tests | ✅（#15：`PhoenixTests`） |
+| Phoenix Mollusk 独立 crate + lane | ✅（#15：`runtime-tests/phoenix`） |
+| Phoenix Surfpool 退出默认 SVM | ✅（专属 `phoenix` job） |
+| 聚合 `test` needs phoenix | ✅（修 #15 空 result 竞态） |
+| Phoenix Surfpool（非 V1） | ✅ 留在 PR `phoenix` lane |
+| PhoenixV1 Surfpool | ✅ 挪到 `ci-phoenix.yml` nightly（PR 上 45m 仍超时） |
+| 本地 `scripts/ci_local.sh` | ✅（V1 Surfpool 需 `PHOENIX_V1_SURFPOOL=1`） |
+| 首次 `v*` Release / Phoenix 独立仓 | 后续 |

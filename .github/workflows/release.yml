@@ -143,11 +143,18 @@ jobs:
             echo
             echo "### Quick start"
             echo
+            echo "\`pf init\` needs a ProofForge checkout for \`templates/\` (cwd-relative)."
+            echo "On a clean machine: shallow-clone this tag, init, then pin the require."
+            echo
             echo '```text'
-            echo "pf init demo --target svm"
-            echo "cd demo   # edit lakefile require to @ \"${TAG}\" for clean machines"
-            echo "lake build && lake exe pf -- build --target svm"
+            echo "git clone --depth 1 --branch ${TAG} https://github.com/${GITHUB_REPOSITORY}.git"
+            echo "cd ProofForge && pf init /tmp/demo --target svm"
+            echo "# set lakefile require … @ \"${TAG}\" (replace path require)"
+            echo "cd /tmp/demo && lake build && lake env pf build --target svm"
+            echo "# or: lake exe pf -- build --target svm"
             echo '```'
+            echo
+            echo "Full checklist: docs/plan/tasks/release-001.md"
           } > RELEASE_NOTES.md
           ls -la dist
           cat RELEASE_NOTES.md

@@ -25,7 +25,7 @@ jobs:
       svm: ${{ steps.gate.outputs.svm }}
       evm: ${{ steps.gate.outputs.evm }}
       near: ${{ steps.gate.outputs.near }}
-      surfpool_heavy: ${{ steps.gate.outputs.surfpool_heavy }}
+      phoenix: ${{ steps.gate.outputs.phoenix }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,20 +107,23 @@ jobs:
               - 'ProofForge/Extract.lean'
               - 'ProofForge/Extract/**'
               - 'ProofForge/Core/**'
-            # ~10MB Phoenix ELF deploy is the slowest Surfpool step; keep it off
-            # ordinary SVM SDK / fixture PRs that do not touch Phoenix emit paths.
-            surfpool_heavy:
+            # Phoenix application surface: examples, spec gates, its own Mollusk crate,
+            # shared test helpers, Surfpool deploy scripts, and the SVM emit paths whose
+            # changes can move Phoenix digests. Drives the dedicated phoenix lane.
+            phoenix:
               - 'Examples/Svm/Phoenix.lean'
               - 'Examples/Svm/PhoenixV1Layout.lean'
               - 'Examples/Svm/PhoenixV1Profile.lean'
+              - 'Tests/PhoenixBuildSpec.lean'
+              - 'Tests/PhoenixSpec.lean'
+              - 'Tests/PhoenixV1ProfileSpec.lean'
               - 'ProofForge/Svm/AccountStorage/**'
               - 'ProofForge/Svm/FifoCancel/**'
+              - 'ProofForge/Svm/BatchRecorder/**'
               - 'ProofForge/Svm/Emit.lean'
-              - 'runtime-tests/solana/tests/phoenix.rs'
-              - 'runtime-tests/solana/tests/phoenix_v1_profile.rs'
+              - 'runtime-tests/phoenix/**'
+              - 'runtime-tests/solana/tests/common/**'
               - 'runtime-tests/surfpool/**'
-              - '.github/workflows/ci.yml'
-              - '.agents/setup'
 
       - name: Publish lane gates
         id: gate
@@ -131,7 +134,7 @@ jobs:
           SVM: ${{ steps.filter.outputs.svm }}
           EVM: ${{ steps.filter.outputs.evm }}
           NEAR: ${{ steps.filter.outputs.near }}
-          SURFPOOL_HEAVY: ${{ steps.filter.outputs.surfpool_heavy }}
+          PHOENIX: ${{ steps.filter.outputs.phoenix }}
         run: |
           set -euo pipefail
           # main pushes always exercise every lane.
@@ -140,7 +143,7 @@ jobs:
             echo "svm=true" >> "$GITHUB_OUTPUT"
             echo "evm=true" >> "$GITHUB_OUTPUT"
             echo "near=true" >> "$GITHUB_OUTPUT"
-            echo "surfpool_heavy=true" >> "$GITHUB_OUTPUT"
+            echo "phoenix=true" >> "$GITHUB_OUTPUT"
             echo "changes: push event → all lanes"
             exit 0
           fi
@@ -156,21 +159,16 @@ jobs:
           svm="$(or_shared "$SVM")"
           evm="$(or_shared "$EVM")"
           near="$(or_shared "$NEAR")"
-          # Heavy Surfpool deploy (~10MB ELF) only when Phoenix/stack emit paths move,
-          # or when the SVM lane itself is forced by shared infrastructure.
-          if [ "$SHARED" = "true" ] || [ "$SURFPOOL_HEAVY" = "true" ]; then
-            surfpool_heavy=true
-          else
-            surfpool_heavy=false
-          fi
+          # Phoenix lane: Phoenix app paths or shared infrastructure.
+          phoenix="$(or_shared "$PHOENIX")"
           {
             echo "lean=$lean"
             echo "svm=$svm"
             echo "evm=$evm"
             echo "near=$near"
-            echo "surfpool_heavy=$surfpool_heavy"
+            echo "phoenix=$phoenix"
           } >> "$GITHUB_OUTPUT"
-          echo "changes: lean=$lean svm=$svm evm=$evm near=$near surfpool_heavy=$surfpool_heavy"
+          echo "changes: lean=$lean svm=$svm evm=$evm near=$near phoenix=$phoenix"
 
   lean:
     name: Lean
@@ -277,22 +275,62 @@ jobs:
         run: python3 scripts/check_artifact_manifest.py --target svm --out build/sbpf
 
       - name: Run Mollusk integration suite
-        run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml -- --test-threads=1
-
-      - name: Deploy Phoenix through Surfpool Loader-v3
-        timeout-minutes: 15
-        run: runtime-tests/surfpool/smoke.sh Phoenix
-
-      # ~10MB ELF: Loader-v3 writeback regularly exceeds 15m on GitHub runners.
-      # Skip when the PR did not touch Phoenix / account-storage emit paths.
-      - name: Deploy Phoenix-v1 profile verifier through Surfpool Loader-v3
-        if: needs.changes.outputs.surfpool_heavy == 'true'
-        timeout-minutes: 30
-        run: runtime-tests/surfpool/smoke.sh PhoenixV1Profile
+        run: cargo test --locked --manifest-path runtime-tests/solana/Cargo.toml
 
       - name: Deploy packed entry adapter fixture through Surfpool Loader-v3
         timeout-minutes: 15
         run: runtime-tests/surfpool/smoke.sh RawEntry
+
+  phoenix:
+    name: Phoenix
+    needs: changes
+    if: needs.changes.outputs.phoenix == 'true'
+    runs-on: ubuntu-24.04
+    # PR wall budget: Lean + Mollusk + Phoenix Surfpool. PhoenixV1Profile Surfpool
+    # (~10MB ELF) lives in ci-phoenix.yml nightly — it timed out at 45m on PR runners.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and Lean dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+          key: toolchains-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', '.agents/setup') }}
+
+      - name: Cache Rust build products
+        uses: actions/cache@v4
+        with:
+          path: runtime-tests/phoenix/target
+          key: mollusk-phoenix-${{ runner.os }}-${{ hashFiles('runtime-tests/phoenix/Cargo.lock', 'runtime-tests/phoenix/Cargo.toml') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build Phoenix sources and spec gates
+        run: lake build PhoenixExamples PhoenixTests
+
+      - name: Build Phoenix programs
+        run: lake exe pf -- build --target svm --module Examples.Svm.Phoenix --module Examples.Svm.PhoenixV1Profile --out build/sbpf
+
+      - name: Run Phoenix Mollusk suite
+        run: cargo test --locked --manifest-path runtime-tests/phoenix/Cargo.toml
+
+      - name: Deploy Phoenix through Surfpool Loader-v3
+        timeout-minutes: 15
+        run: runtime-tests/surfpool/smoke.sh Phoenix
 
   evm:
     name: EVM
@@ -392,10 +430,10 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
-      - name: Build Lean libraries and guards
-        run: |
-          lake build
-          lake build Tests
+      # Align with ci-001 / SVM+EVM: do NOT recompile the full Tests aggregate.
+      # Lean lane already owns `lake build` + `lake build Tests`.
+      - name: Build program source modules
+        run: lake build Examples
 
       - name: Build all NEAR programs
         run: lake exe pf -- build --target near --out build/near
@@ -506,20 +544,22 @@ jobs:
   # failed or cancelled lanes still fail the merge gate.
   test:
     if: always()
-    needs: [changes, lean, svm, evm, near]
+    needs: [changes, lean, svm, evm, near, phoenix]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require enabled Lean, SVM, EVM, and NEAR lanes
+      - name: Require enabled Lean, SVM, EVM, NEAR, and Phoenix lanes
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           LEAN_RESULT: ${{ needs.lean.result }}
           SVM_RESULT: ${{ needs.svm.result }}
           EVM_RESULT: ${{ needs.evm.result }}
           NEAR_RESULT: ${{ needs.near.result }}
+          PHOENIX_RESULT: ${{ needs.phoenix.result }}
           LEAN_ENABLED: ${{ needs.changes.outputs.lean }}
           SVM_ENABLED: ${{ needs.changes.outputs.svm }}
           EVM_ENABLED: ${{ needs.changes.outputs.evm }}
           NEAR_ENABLED: ${{ needs.changes.outputs.near }}
+          PHOENIX_ENABLED: ${{ needs.changes.outputs.phoenix }}
         run: |
           set -euo pipefail
           test "$CHANGES_RESULT" = success
@@ -536,3 +576,4 @@ jobs:
           require_lane SVM "$SVM_ENABLED" "$SVM_RESULT"
           require_lane EVM "$EVM_ENABLED" "$EVM_RESULT"
           require_lane NEAR "$NEAR_ENABLED" "$NEAR_RESULT"
+          require_lane Phoenix "$PHOENIX_ENABLED" "$PHOENIX_RESULT"

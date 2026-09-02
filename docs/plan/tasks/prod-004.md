@@ -38,5 +38,5 @@ prod-003。本卡完成后 PR #11 可合并。
 - [x] `.github/workflows/release.yml`（linux/mac + checksums + notes）
 - [x] `pf --version` pin 输出
 - [x] `docs/plan/release-capability-summary.md`
-- [ ] 首次 tag 后干净机器验收
+- [ ] 首次 tag 后干净机器验收（操作清单：[release-001](release-001.md)，拟切 `v0.0.1`）
 - [x] 干净目录：独立 `pf` + git require@commit 构建 svm 模板并产出 `.so`

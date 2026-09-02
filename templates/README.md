@@ -22,5 +22,8 @@ ProofForge 用户工程骨架。权威拆分方案见
 ```text
 pf init demo --target svm
 cd demo && lake build
-lake exe pf -- build --target svm   # 读取 pf.toml 的 [[program]]
+lake env pf build --target svm      # 读取 pf.toml 的 [[program]]
+# 或：lake exe pf -- build --target svm
 ```
+
+首次公开 tag 与干净机器验收：[release-001](../docs/plan/tasks/release-001.md)（拟 `v0.0.1`）。
