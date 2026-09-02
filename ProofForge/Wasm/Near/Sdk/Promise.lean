@@ -431,7 +431,7 @@ def and3Returned {maxFanIn : Nat}
     depth := handle.depth + 1, fanIn := 3 }
 
 /-- Join four static child edges through one internal join and self callback; sets tracked fan-in to 4. -/
-@[pf_inline] def and4Returned {maxFanIn : Nat}
+def and4Returned {maxFanIn : Nat}
     {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
     (leftReceiver leftMethod : String)
@@ -457,7 +457,7 @@ def and3Returned {maxFanIn : Nat}
     depth := handle.depth + 1, fanIn := 4 }
 
 /-- Join five static child edges through one internal join and self callback; sets tracked fan-in to 5. -/
-@[pf_inline] def and5Returned {maxFanIn : Nat}
+def and5Returned {maxFanIn : Nat}
     {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
       callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
@@ -488,7 +488,7 @@ def and3Returned {maxFanIn : Nat}
     depth := handle.depth + 1, fanIn := 5 }
 
 /-- Join six static child edges through one internal join and self callback; sets tracked fan-in to 6. -/
-@[pf_inline] def and6Returned {maxFanIn : Nat}
+def and6Returned {maxFanIn : Nat}
     {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
       sixthArgsCapacity callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
@@ -523,7 +523,7 @@ def and3Returned {maxFanIn : Nat}
     depth := handle.depth + 1, fanIn := 6 }
 
 /-- Join seven static child edges through one internal join and self callback; sets tracked fan-in to 7. -/
-@[pf_inline] def and7Returned {maxFanIn : Nat}
+def and7Returned {maxFanIn : Nat}
     {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
       sixthArgsCapacity seventhArgsCapacity callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
@@ -562,7 +562,7 @@ def and3Returned {maxFanIn : Nat}
     depth := handle.depth + 1, fanIn := 7 }
 
 /-- Join eight static child edges through one internal join and self callback; sets tracked fan-in to 8. -/
-@[pf_inline] def and8Returned {maxFanIn : Nat}
+def and8Returned {maxFanIn : Nat}
     {leftArgsCapacity midArgsCapacity rightArgsCapacity fourthArgsCapacity fifthArgsCapacity
       sixthArgsCapacity seventhArgsCapacity eighthArgsCapacity callbackArgsCapacity : Nat}
     (handle : PromiseHandle maxFanIn)
