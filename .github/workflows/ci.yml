@@ -4,17 +4,21 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read
 
+# Cancel superseded PR runs only. Pushes to main must each finish so every main
+# commit keeps a completed CI result.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decide which lanes must run for this PR. Pushes to main always run every lane.
+  # Decide which lanes must run for this PR. Pushes to main and manual dispatches
+  # always run every lane.
   # Path sets are intentionally broad: shared compiler / toolchain / workflow changes
   # force all lanes so a latent cross-target break still gets caught on main.
   changes:
