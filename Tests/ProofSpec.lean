@@ -79,6 +79,7 @@ open Examples.Counter
 example : Examples.Tree.wf (Examples.Tree.init 0) := Examples.Tree.init_wf 0
 
 #check Examples.Tree.insertRoot_wf
+#check Examples.Tree.insertNode_wf_root
 #check Examples.Tree.paintNode_wf
 #check Examples.Tree.linkLeft_wf
 #check Examples.Tree.linkRight_wf

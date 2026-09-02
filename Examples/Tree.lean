@@ -1261,6 +1261,13 @@ theorem insertRoot_wf (s : State) (k v : UInt64) {t : State} {a : UInt64}
         · simp [hf4] at h
   · simp at h
 
+/-- **insertNode 空树路径保持 wf**：`root = 0` 时分派到 `insertRoot`。 -/
+theorem insertNode_wf_root (s : State) (k v : UInt64) {t : State} {a : UInt64}
+    (h : insertNode s k v = .ok (t, a)) (hwf : wf s) (hroot : s.root = 0) : wf t := by
+  unfold insertNode at h
+  simp only [hroot, ↓reduceIte] at h
+  exact insertRoot_wf s k v h hwf
+
 /-! ## 第二批 kernel 证明：N=4 分配器与旋转的结构不变量
 
 `u64_pred_add`：`(a-1)+1 = a` 对 UInt64 无条件成立（模 2^64），所以 removeNode
@@ -1495,6 +1502,22 @@ private theorem wf_nodes_set (s : State) (idx : Nat) (n : Node) (hi : idx < 4) (
       simp [hslot_lt]
     rw [hsame]
     exact hptr a ha0 (by simpa using ha1)
+
+/-- **duplicate-key 路径保持 wf**：`insertNode` 命中已有 key 时只改 `value`，几何指针不变。 -/
+private theorem insertNode_value_update_wf (s : State) (found v : UInt64) (hwf : wf s)
+    (hf0 : 1 ≤ found) (hf1 : found < s.bumpIndex) :
+    wf ({ s with
+      nodes := s.nodes.set ((found.toNat - 1) % 4)
+        { s.nodes[(found.toNat - 1) % 4]! with value := v }
+        (by omega) }) := by
+  have hi : (found.toNat - 1) % 4 < 4 := by omega
+  have hnode := hwf.2.2.2.2.2 found hf0 hf1
+  apply wf_nodes_set s ((found.toNat - 1) % 4)
+    { s.nodes[(found.toNat - 1) % 4]! with value := v } hi hwf
+  · exact hnode.1
+  · exact hnode.2.1
+  · exact hnode.2.2.1
+  · exact hnode.2.2.2
 
 /-- 染色只改 `color` 字段，几何指针不变（要求 `address` 落在当前 bump 区）。 -/
 theorem paintNode_wf (s : State) (address color : UInt64) (hwf : wf s)
