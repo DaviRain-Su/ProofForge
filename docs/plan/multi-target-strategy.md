@@ -216,7 +216,7 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 |---|---|---|---|
 | **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | ✓ EVM/SVM/NEAR |
 | **erg-near-token-001** | `NearToken` 高层 API | Near.Sdk + `NearTokenErgonomics` | ✓ |
-| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.ensure` / Token-shaped sequential surface | Evm.Sdk + `Examples/EvmTokenErgonomics.lean` + Token approve/transfer/transferFrom/mint/burn | ✓ ergonomics digest `138c08a82e1ad205`; ✓ Token Bool ABI trio → `f6a3fcbc3c7331fe`; ✓ mint/burn `Effect.ensureCode` → digest `f48b399bf38a06bc`; burnFrom/allowance/pause still nested-`if` |
+| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.ensure` / Token-shaped sequential surface | Evm.Sdk + `Examples/EvmTokenErgonomics.lean` + Token approve/transfer/transferFrom/mint/burn/burnFrom/allowance | ✓ ergonomics digest `138c08a82e1ad205`; ✓ Token Bool ABI trio → `f6a3fcbc3c7331fe`; ✓ mint/burn/burnFrom/allowance `Effect.ensureCode` → digest `18c55b9a7dd6ab7e`; pause/permit still nested-`if` |
 | **erg-svm-account-001** | `Account.Handle` 方法链 cookbook | Svm.Sdk | 已有 `LamportTransfer`；补文档切片 |
 
 ### 5.3 「像传统语言」的验收标准（可测）

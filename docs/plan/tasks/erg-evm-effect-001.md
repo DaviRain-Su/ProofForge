@@ -34,9 +34,16 @@ instead of nested `if`/`match`.
 7. `Examples.Evm.Token.mint` / `burn` use sequential `Effect.ensureCode` / `hold`;
    `mint_supply_effect` / `burn_supply_effect` retargeted; registry digest `f48b399bf38a06bc`
 
+## Landed (Token UInt64 burnFrom / allowance)
+
+8. `Examples.Evm.Token.burnFrom` / `increaseAllowance` / `decreaseAllowance` use sequential
+   `Effect.ensureCode` / `hold`; `burnFrom_supply_effect` /
+   `increaseAllowance_preserves_supply` / `decreaseAllowance_preserves_supply` added;
+   registry digest `18c55b9a7dd6ab7e`
+
 ## Follow-up
 
-- Port burnFrom/allowance/pause/permit gates to `Effect.ensureCode` where CallResult-shaped
+- Port pause/unpause/permit gates to `Effect.ensureCode` where CallResult-shaped
 - Nested-`if` remains on remaining UInt64-returning mutators for now
 
 ## Non-goals
@@ -48,4 +55,5 @@ instead of nested `if`/`match`.
 ## Acceptance (slice)
 
 §5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.
-Token Bool ABI trio + `mint` / `burn` are sequential; remaining UInt64 mutators stay nested-`if`.
+Token Bool ABI trio + `mint` / `burn` / `burnFrom` / allowance are sequential;
+`pause` / `unpause` / `permit` stay nested-`if`.

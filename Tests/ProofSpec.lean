@@ -31,8 +31,9 @@ import ProofForge.Svm.Sdk.Pubkey
   / `decrement_ok_le`：`propext`、`Quot.sound`（标准公理，无未完成占位公理）
 - `Examples.Evm.Capped.mint_supply_within_cap` / `mint_supply_effect`：`propext`
 - `Examples.Evm.Token.transfer_preserves_supply` / `mint_supply_effect`
-  / `burn_supply_effect` / `transferFrom_preserves_supply`
-  / `approve_preserves_supply`：`propext`（部分含 `Quot.sound`）
+  / `burn_supply_effect` / `burnFrom_supply_effect` / `transferFrom_preserves_supply`
+  / `approve_preserves_supply` / `increaseAllowance_preserves_supply`
+  / `decreaseAllowance_preserves_supply`：`propext`（部分含 `Quot.sound`）
 - `Examples.Svm.Tree.init_state` / `setHead_roundtrip` / `setAt_roundtrip`
   / `allocNode_size` / `rotateLeft_size` / `rotateRight_size`
   / `rotateLeft_root` / `rotateRight_root`：`propext`（部分含 `Quot.sound`）
