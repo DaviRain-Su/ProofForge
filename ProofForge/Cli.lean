@@ -148,8 +148,16 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
 private def sharedFixtureNames : Array String :=
   #["Counter", "Flag", "Lang", "Maybe", "Pair", "Phase", "Window"]
 
+/-- Ergonomics / handle fixtures not yet moved under `Examples.{Evm,Svm,Near}.`. -/
+private def rootTargetFixtureNames (target : Target) : Array String :=
+  match target with
+  | .evm => #["EvmExceptErgonomics", "EvmTokenErgonomics"]
+  | .svm => #["SvmExceptErgonomics"]
+  | .near => #["NearPromiseHandle", "NearTokenErgonomics"]
+  | _ => #[]
+
 def fixtureModule (target : Target) (name : String) : Lean.Name :=
-  if sharedFixtureNames.contains name then
+  if sharedFixtureNames.contains name || (rootTargetFixtureNames target).contains name then
     Lean.Name.str `Examples name
   else
     let family : Lean.Name :=
