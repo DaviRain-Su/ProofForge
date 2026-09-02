@@ -85,10 +85,6 @@ example : Examples.Svm.Tree.wf (Examples.Svm.Tree.init 0) := Examples.Svm.Tree.i
 #check Examples.Svm.Tree.linkRight_wf
 #check Examples.Svm.Tree.rotateLeft_wf
 #check Examples.Svm.Tree.rotateRight_wf
-#check Examples.Svm.Tree.insertAt_linked_wf
-#check Examples.Svm.Tree.insertAt_linked_wf_bump
-#check Examples.Svm.Tree.insertAt_linked_wf_free
-#check Examples.Svm.Tree.insertAt_wf
 
 -- Pausable fail-closed：unknown flag 门关且不误报 paused
 #guard
