@@ -1,40 +1,39 @@
 ---
 id: erg-evm-effect-001
 scope: ergonomics
-status: todo
+status: partial
 depends-on: [erg-do-001]
 plan: ../multi-target-strategy.md
 updated: 2026-09-02
 ---
 
-# erg-evm-effect-001 — EVM Effect / CallResult 链式 surface
+# erg-evm-effect-001 — EVM Effect / CallResult sequential surface
 
-## 目标
+## Goal
 
-在 **不改 R5-012 CallResult 策略** 的前提下，让 Token 级 example 读起来像
-**顺序 fail-closed 步骤**（`guard` / `andThen` / `Effect.thenTrue`），而不是嵌套
-`if`/`match`。
+Without changing the R5-012 CallResult policy, make Token-shaped examples read as
+**sequential fail-closed steps** (`Effect.ensure` / `Effect.abort` / `Effect.thenTrue`)
+instead of nested `if`/`match`.
 
-## 现状
+## Landed (first slice)
 
-- `ProofForge/Evm/Sdk/Base.lean` 已有 `Effect.thenTrue`
-- `Examples/Token.lean` 已部分使用，但 `transfer` / `approve` / `transferFrom` 仍偏嵌套分支
-- 能力已在 R5；本包只改 **source surface** + digest pin
+1. `ProofForge.Evm.Sdk.Effect.ensure` / `Effect.abort` — soft-abort keeps `.ok (state, Bool)`
+2. `Examples.EvmTokenErgonomics` — sequential `approve` / `transfer` (digest `8e7ec772def9558a`)
+3. `Tests.EvmTokenErgonomicsSpec` + registry pin; EVM artifact count → 46
+4. Full `Examples.Token` migration deferred (kernel supply proofs are nested-`if`-shaped)
 
-## 第一切片
+## Follow-up
 
-1. 重写 `Examples/Token.lean` 的 `transfer` / `approve`（必要时 `transferFrom`）为顺序组合
-2. bodies 不出现 `Runtime.evm*` stub 名
-3. `pf build --target evm` + 原 Token Anvil 门仍绿；**新 IR digest 钉死**
-4. 更新 `docs/plan/do-notation-guide.md`（去掉过时的 N13 PromiseHandle 备注）
+- Port `Examples.Token` `approve`/`transfer`/`transferFrom` to `Effect.ensure` and regenerate
+  supply-preservation proofs
+- Update `docs/plan/do-notation-guide.md` once Token itself is sequential
 
-## 非目标
+## Non-goals
 
-- CallResult interpreter / R5-012 策略变更
+- CallResult interpreter / R5-012 policy change
 - `erg-svm-account-001` cookbook
-- `erg-state-001` 隐式 state（Extract lock）
-- Import guard 全面禁止 `Runtime`（另包）
+- Implicit state (`erg-state-001`)
 
-## 验收
+## Acceptance (slice)
 
-§5.3「Token mint/transfer 像顺序语句」对 EVM Token 成立；digest 测试更新。
+§5.3 “Token mint/transfer like sequential statements” holds on `EvmTokenErgonomics`; digest pinned.

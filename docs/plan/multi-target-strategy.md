@@ -65,6 +65,7 @@ examples 已证明工程链可用。
 | 优先级 | 包 ID 建议 | 内容 | 验收 |
 |---|---|---|---|
 | P0 | [`evm-rt-nested-001`](tasks/evm-rt-nested-001.md) | nested/constructed/wide dynamic return 与 aggregate storage 组合 | Lean + solc + Anvil malformed matrix（wide/constructed **Anvil 已通**；aggregate storage 仍开） |
+| P0 | Feature A next（powdr paused） | close remaining nested/aggregate gaps only; **no** powdr/yulc L3 on this track | Anvil matrix for open P0 rows; Feature B stays parked |
 | P0 | `evm-codec-manifest-001` | per-method codec/memory resource manifest | Profile/Extract 稳定错误 |
 | P1 | `evm-signed-001` | signed int 源类型 + 窄化 cast 词汇 | 双 consumer + Anvil |
 | P1 | `evm-revert-bubble-001` | bounded revert bubbling / generic closed-call policy | 显式 fail-closed 边界文档 |
@@ -215,7 +216,7 @@ NEAR 已在 main（PR #5）。能力计划权威来源：[analysis/near-runtime-
 |---|---|---|---|
 | **erg-do-001** | 共享 `Except` 的 `ok`/`err`/`andThen`/`map`/`guard` | Core + Examples | ✓ EVM/SVM/NEAR |
 | **erg-near-token-001** | `NearToken` 高层 API | Near.Sdk + `NearTokenErgonomics` | ✓ |
-| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.then` / Token 顺序 surface | Evm.Sdk + `Examples/Token.lean` | 第一切片：transfer/approve 链式改写 + digest |
+| **erg-evm-effect-001** | [`erg-evm-effect-001`](tasks/erg-evm-effect-001.md) — `Effect.ensure` / Token-shaped sequential surface | Evm.Sdk + `Examples/EvmTokenErgonomics.lean` | ✓ first slice digest `8e7ec772def9558a`; Token port follow-up |
 | **erg-svm-account-001** | `Account.Handle` 方法链 cookbook | Svm.Sdk | 已有 `LamportTransfer`；补文档切片 |
 
 ### 5.3 「像传统语言」的验收标准（可测）

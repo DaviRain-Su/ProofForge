@@ -105,6 +105,7 @@ import Tests.NearMigrationSpec
 import Tests.EvmCtxSpec
 import Tests.EvmBoundedSpec
 import Tests.EvmExceptErgonomicsSpec
+import Tests.EvmTokenErgonomicsSpec
 import Tests.SvmExceptErgonomicsSpec
 import Tests.NearPromiseHandleSpec
 import Tests.EvmSearchSpec

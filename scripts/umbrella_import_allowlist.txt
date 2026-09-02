@@ -153,3 +153,4 @@ Examples/XrplStep.lean
 Examples/XrplTab.lean
 Examples/XrplTx.lean
 Examples/XrplVec.lean
+Examples/EvmTokenErgonomics.lean
