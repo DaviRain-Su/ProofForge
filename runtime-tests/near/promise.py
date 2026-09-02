@@ -23,11 +23,20 @@ def _require(name: str) -> str:
     return value
 
 
+# Outer prepaid gas must cover parent burn plus every attached child/callback budget.
+# AndN scenes use joinedChildGas=8 Tgas × N + callbackGas=20 Tgas (And8 ⇒ 84 Tgas attached),
+# so the default 50 Tgas FunctionCall allowance is too small from And4 upward.
+_JOIN_CALL_GAS = 300_000_000_000_000
+
+
 def _call_u64(
     client: NearClient, method: str, value: int, *, expect_success: bool = True
 ) -> dict:
     return client.call(
-        method, NearClient.encode_u64_le(value), expect_success=expect_success
+        method,
+        NearClient.encode_u64_le(value),
+        expect_success=expect_success,
+        gas=_JOIN_CALL_GAS,
     )
 
 
