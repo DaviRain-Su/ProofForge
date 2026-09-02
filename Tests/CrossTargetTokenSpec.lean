@@ -25,7 +25,7 @@ open ProofForge
 #guard ProofForge.Svm.Registry.digestOf "TokenApprove" == some "e99f2008d320e15c"
 #guard ProofForge.Svm.Registry.digestOf "TokenXfer" == some "c9edc88528b425dd"
 #guard ProofForge.Evm.Registry.digestOf "EvmTokenErgonomics" == some "138c08a82e1ad205"
-#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "fa280d85ffcd8859"
+#guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" == some "e1e290ddec221fa5"
 
 open Lean Elab Command
 
@@ -80,7 +80,7 @@ elab "#pf_cross_target_token_check" : command => do
   let nearDigest := ProofForge.Wasm.Near.IR.digestHex near
   let nearMethods :=
     (#[near.initializer.ixName] ++ near.entries.map (·.ixName)) |>.qsort (· < ·)
-  unless nearDigest == "fa280d85ffcd8859" do
+  unless nearDigest == "e1e290ddec221fa5" do
     throwError s!"NearFungibleLedger digest mismatch: {nearDigest}"
   unless containsAll nearMethods #["ft_transfer", "ft_transfer_call", "ft_balance_of", "initialize"] do
     throwError

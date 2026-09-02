@@ -37,7 +37,7 @@ surfaces:
 | SVM approve | `Examples.Svm.TokenApprove` | `e99f2008d320e15c` | `approve`, `get`, `initialize` |
 | SVM transfer | `Examples.Svm.TokenXfer` | `c9edc88528b425dd` | `send`, `get`, `initialize` |
 | EVM approve/xfer | `Examples.EvmTokenErgonomics` | `138c08a82e1ad205` | `approve`, `transfer`, `transferFrom`, … |
-| NEAR transfer | `Examples.Near.NearFungibleLedger` | `fa280d85ffcd8859` | `ft_transfer`, `ft_transfer_call`, … |
+| NEAR transfer | `Examples.Near.NearFungibleLedger` | `e1e290ddec221fa5` | `ft_transfer`, `ft_transfer_call`, … |
 
 **Shared conceptual subset:** transfer-shaped on all three (names differ:
 `send` / `transfer` / `ft_transfer`); approve-shaped on SVM+EVM only.

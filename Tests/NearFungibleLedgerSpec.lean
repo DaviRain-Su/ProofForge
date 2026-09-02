@@ -506,6 +506,6 @@ elab "#pf_near_fungible_ledger_check" : command => do
 #pf_near_fungible_ledger_check
 
 #guard ProofForge.Wasm.Near.Registry.digestOf "NearFungibleLedger" ==
-  some "fa280d85ffcd8859"
+  some "e1e290ddec221fa5"
 
 end Tests.NearFungibleLedgerSpec

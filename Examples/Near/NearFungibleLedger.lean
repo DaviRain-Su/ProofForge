@@ -367,18 +367,29 @@ def ft_transfer (state : State) (args : ProofForge.Wasm.Near.Runtime.FtTransferA
       if !Ledger.isZero args.amount then
         let _ := balances.read sender
         if Registration.readWasValidPresent then
-          let senderBalance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
-          if NearToken.canSub senderBalance args.amount then
-            let nextSender :=
-              NearToken.ofLimbs (NearToken.subW0 senderBalance args.amount)
-                (NearToken.subW1 senderBalance args.amount)
+          -- Capture sender limbs before the receiver read. The storage result buffer is
+          -- effectful; computing nextSender after that read (or via a delayed NearToken
+          -- projection) can overwrite present-zero retention on full depletion.
+          let senderW0 := resultNearTokenW0D 0
+          let senderW1 := resultNearTokenW1D 0
+          if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+              senderW0 senderW1 args.amount.w0 args.amount.w1 != 0 then
             let _ := balances.read args.receiverId
             if Registration.readWasValidPresent then
-              let receiverBalance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
-              if NearToken.canAdd receiverBalance args.amount then
-                let nextReceiver :=
-                  NearToken.ofLimbs (NearToken.addW0 receiverBalance args.amount)
-                    (NearToken.addW1 receiverBalance args.amount)
+              let receiverW0 := resultNearTokenW0D 0
+              let receiverW1 := resultNearTokenW1D 0
+              if ProofForge.Wasm.Near.Runtime.nearTokenAddOk
+                  receiverW0 receiverW1 args.amount.w0 args.amount.w1 != 0 then
+                let nextSender : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                      senderW0 senderW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                      senderW0 senderW1 args.amount.w0 args.amount.w1⟩
+                let nextReceiver : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenAddW0
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenAddW1
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1⟩
                 let senderStatus := balances.put sender nextSender
                 let receiverStatus := balances.put args.receiverId nextReceiver
                 if args.memo.present = 0 then
@@ -412,18 +423,26 @@ def ft_transfer_call (state : State)
       if !Ledger.isZero args.amount then
         let _ := balances.read sender
         if Registration.readWasValidPresent then
-          let senderBalance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
-          if NearToken.canSub senderBalance args.amount then
-            let nextSender :=
-              NearToken.ofLimbs (NearToken.subW0 senderBalance args.amount)
-                (NearToken.subW1 senderBalance args.amount)
+          let senderW0 := resultNearTokenW0D 0
+          let senderW1 := resultNearTokenW1D 0
+          if ProofForge.Wasm.Near.Runtime.nearTokenSubOk
+              senderW0 senderW1 args.amount.w0 args.amount.w1 != 0 then
             let _ := balances.read args.receiverId
             if Registration.readWasValidPresent then
-              let receiverBalance : NearToken := ⟨resultNearTokenW0D 0, resultNearTokenW1D 0⟩
-              if NearToken.canAdd receiverBalance args.amount then
-                let nextReceiver :=
-                  NearToken.ofLimbs (NearToken.addW0 receiverBalance args.amount)
-                    (NearToken.addW1 receiverBalance args.amount)
+              let receiverW0 := resultNearTokenW0D 0
+              let receiverW1 := resultNearTokenW1D 0
+              if ProofForge.Wasm.Near.Runtime.nearTokenAddOk
+                  receiverW0 receiverW1 args.amount.w0 args.amount.w1 != 0 then
+                let nextSender : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenSubW0
+                      senderW0 senderW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenSubW1
+                      senderW0 senderW1 args.amount.w0 args.amount.w1⟩
+                let nextReceiver : NearToken :=
+                  ⟨ProofForge.Wasm.Near.Runtime.nearTokenAddW0
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1,
+                    ProofForge.Wasm.Near.Runtime.nearTokenAddW1
+                      receiverW0 receiverW1 args.amount.w0 args.amount.w1⟩
                 let senderStatus := balances.put sender nextSender
                 let receiverStatus := balances.put args.receiverId nextReceiver
                 let status := senderStatus ||| receiverStatus

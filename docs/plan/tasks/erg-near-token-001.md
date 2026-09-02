@@ -16,5 +16,5 @@ depends-on: []
 
 ## Follow-up
 
-- Refactor `NearFungibleLedger.ft_transfer` / `ft_transfer_call` to use `NearToken.canSub`/`canAdd` + `ofLimbs` (delivered; storage step order preserved, digest `fa280d85ffcd8859`)
+- Refactor `NearFungibleLedger.ft_transfer` / `ft_transfer_call` to use `NearToken.canSub`/`canAdd` + `ofLimbs` — **reverted for merge**: the helper form moved `nextSender` before the receiver `read` and broke present-zero retention under Extract (sandbox: `ft_transfer did not preserve registered present-zero source`). Restored main limb-capture order; digest `e1e290ddec221fa5`. Re-land only with an Extract-safe capture of sender limbs before any subsequent storage read.
 - Wire `Except.andThen` + `subChecked`/`addChecked` in NEAR effectful increment methods once Extract supports `match`/`andThen` inside nested payable/void entry bodies
