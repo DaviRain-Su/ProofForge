@@ -86,6 +86,7 @@ import Examples.Evm.EvmSearch
 import Examples.Evm.EvmFindIndex
 import Examples.Evm.EvmStaticCounter
 import Examples.Evm.EvmStaticRoster
+import Examples.Evm.EvmAggregateStorage
 import Examples.Evm.EvmOrderedStorage
 import Examples.Evm.EvmVecLog
 import Examples.Evm.EvmVecStack

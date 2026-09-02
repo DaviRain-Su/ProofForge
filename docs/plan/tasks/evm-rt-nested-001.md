@@ -4,7 +4,7 @@ scope: evm
 status: partial
 depends-on: []
 plan: ../multi-target-strategy.md
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # evm-rt-nested-001 — nested / constructed / wide dynamic returns
@@ -27,7 +27,7 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 | Tagged / Option elements inside dynamic arrays | fail-closed | follow-up |
 | Frames > `maxBoundedArrayLocalWords` (64) | fail-closed | resource ceiling |
 
-## Progress (2026-09-01)
+## Progress (2026-09-02)
 
 - **Ceiling landed**: `maxProductNesting = 2` + `Tests/CoreCodecSpec.lean`
 - **Wide returns**: `echoBoundedWide` (`uint128[]`) — Extract limb expansion, Codec
@@ -36,7 +36,12 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 - Spec coverage: `Tests/EvmBoundedSpec.lean`, `Tests/CoreCodecSpec.lean`
 - **Anvil OK/reject matrix** for wide/constructed: `runtime-tests/evm/anvil_bounded.sh`
   (`echoBoundedWide`, `echoBoundedPairs`, malformed/over-capacity calldata)
-- Still open: tagged-in-array; depth ceiling raise
+- **Aggregate storage slice**: `Storage.Static.nestedRecord` (Feature A depth ≤ 2) +
+  `Examples.Evm.EvmAggregateStorage` (digest `b752af207ed8254a`) — nested `Bundle` State,
+  leaf views, and flat product projection (`bundleSignal`); layout pinned by
+  `Tests/EvmStaticStorageSpec`
+- Still open: Anvil matrix for aggregate-storage consumer; nested product / constructed dynamic
+  return from storage field trees; tagged-in-array; depth ceiling raise
 
 ## Non-goals
 

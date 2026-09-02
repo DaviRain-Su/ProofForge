@@ -1,11 +1,13 @@
 import ProofForge
 import Examples.Evm.EvmStaticCounter
 import Examples.Evm.EvmStaticRoster
+import Examples.Evm.EvmAggregateStorage
 
 /-!
 EVM-SDK-2 focused suite: static storage descriptor units, cursor/allocation checks, and
-extraction-level proofs that the two consumers' declared layouts equal the real EVM state
-flattening. Hashed-map namespace semantics are pinned unchanged alongside.
+extraction-level proofs that the consumers' declared layouts equal the real EVM state
+flattening. Hashed-map namespace semantics are pinned unchanged alongside. Feature A nested
+aggregate storage (`nestedRecord`) is covered by `EvmAggregateStorage`.
 -/
 
 namespace Tests.EvmStaticStorageSpec
@@ -30,19 +32,28 @@ open Lean Elab Command
 
 #guard (Spec.leaf .u64).slots == 1
 #guard (Spec.record [("count", .u64), ("window", .u16)]).slots == 2
+#guard (Spec.nestedRecord
+  [("amount", .leaf .u64), ("details", .record [("side", .u8), ("enabled", .bool)])]).slots == 3
 #guard (Spec.arrayLeaves .u64 3).slots == 3
 #guard (Spec.arrayLeaves .uint256 2).slots == 8
 #guard (Spec.arrayRecords [("points", .u64), ("tier", .u8)] 3).slots == 6
 
 #guard (Spec.leaf .u64).wellFormed
 #guard (Spec.record [("count", .u64), ("window", .u16)]).wellFormed
+#guard (Spec.nestedRecord
+  [("amount", .leaf .u64), ("details", .record [("side", .u8), ("enabled", .bool)])]).wellFormed
 #guard (Spec.arrayLeaves .u64 3).wellFormed
 #guard (Spec.arrayRecords [("points", .u64), ("tier", .u8)] 3).wellFormed
--- fail closed: empty records, duplicate/empty field names, empty arrays, bad widths
+-- fail closed: empty records, duplicate/empty field names, empty arrays, bad widths,
+-- and depth ≥ 3 nested payloads
 #guard !(Spec.record []).wellFormed
 #guard !(Spec.record [("a", .u64), ("a", .u16)]).wellFormed
 #guard !(Spec.record [("", .u64)]).wellFormed
 #guard !(Spec.record [("bad", .scalar 5)]).wellFormed
+#guard !(Spec.nestedRecord []).wellFormed
+#guard !(Spec.nestedRecord [("a", .leaf .u64), ("a", .record [("b", .u8)])]).wellFormed
+#guard !(Spec.nestedRecord [("deep", .nestedRecord [("x", .leaf .u64)])]).wellFormed
+#guard !(Spec.nestedRecord [("arr", .arrayLeaves .u64 2)]).wellFormed
 #guard !(Spec.arrayLeaves .u64 0).wellFormed
 #guard !(Spec.arrayLeaves (.scalar 3) 2).wellFormed
 #guard !(Spec.arrayRecords [] 2).wellFormed
@@ -64,6 +75,12 @@ open Lean Elab Command
 #guard (Spec.record [("price", .u64), ("size", .u64)]).flatten "book" 0 ==
   #[{ name := "book_price", width := 8, slot := 0 },
     { name := "book_size", width := 8, slot := 1 }]
+#guard (Spec.nestedRecord
+  [("amount", .leaf .u64), ("details", .record [("side", .u8), ("enabled", .bool)])]).flatten
+    "bundle" 0 ==
+  #[{ name := "bundle_amount", width := 8, slot := 0 },
+    { name := "bundle_details_side", width := 1, slot := 1 },
+    { name := "bundle_details_enabled", width := 1, slot := 2 }]
 #guard (Spec.arrayLeaves .u64 2).flatten "cells" 0 ==
   #[{ name := "cells_0", width := 8, slot := 0 },
     { name := "cells_1", width := 8, slot := 1 }]
@@ -128,6 +145,18 @@ def recordHandles :=
 #guard recordHandles.2.slotOf? 2 == some 6
 #guard recordHandles.2.fieldSlot? "tier" == some 3
 #guard recordHandles.1.wellFormed && recordHandles.2.wellFormed
+
+def nestedHandles :=
+  let bundle := Layout.root.nestedRecord (α := Examples.Evm.EvmAggregateStorage.Bundle)
+    "bundle"
+    [ ("amount", .leaf .u64)
+    , ("details", .record [("side", .u8), ("enabled", .bool)]) ]
+  bundle.handle
+
+#guard nestedHandles.fieldSlot? "amount" == some 0
+#guard nestedHandles.fieldSlot? "details" == some 1
+#guard nestedHandles.slots == 3
+#guard nestedHandles.wellFormed
 
 /-! ## Hashed-map namespaces are untouched -/
 
@@ -202,6 +231,24 @@ open Examples.Evm.EvmStaticRoster in
   | .ok (s, r) => s.closed && r == 1 && closedOf s
   | _ => false
 
+open Examples.Evm.EvmAggregateStorage in
+#guard (init ⟨1, 2, 3⟩).bundle.amount == 0 &&
+  !(init ⟨1, 2, 3⟩).bundle.details.enabled
+
+open Examples.Evm.EvmAggregateStorage in
+#guard match setBundle (init ⟨1, 2, 3⟩) 11 4 true with
+  | .ok (s, r) =>
+      s.bundle.amount == 11 && s.bundle.details.side == 4 && s.bundle.details.enabled &&
+        r == 11 && bundleSignal s == (11, true) &&
+        amountOf s == 11 && sideOf s == 4 && enabledOf s
+  | _ => false
+
+open Examples.Evm.EvmAggregateStorage in
+#guard match setAmount (init ⟨1, 2, 3⟩) 9 with
+  | .ok (s, r) =>
+      s.bundle.amount == 9 && s.bundle.details.side == 0 && !s.bundle.details.enabled && r == 9
+  | _ => false
+
 /-! ## Consumer layouts pin the compile-time declaration -/
 
 def layoutSlots (layout : Layout) : List (String × Nat) :=
@@ -212,6 +259,9 @@ def counterSlots : List (String × Nat) :=
 
 def rosterSlots : List (String × Nat) :=
   layoutSlots Examples.Evm.EvmStaticRoster.layout
+
+def aggregateSlots : List (String × Nat) :=
+  layoutSlots Examples.Evm.EvmAggregateStorage.layout
 
 def rosterVectors : List (String × Nat × Nat × Nat) :=
   let seats := Examples.Evm.EvmStaticRoster.declared.handle.seats
@@ -231,6 +281,16 @@ def rosterVectors : List (String × Nat × Nat × Nat) :=
 #guard Examples.Evm.EvmStaticRoster.declared.handle.seats.slotOf? 2 == some 7
 #guard Examples.Evm.EvmStaticRoster.declared.handle.closed.slot? == some 9
 #guard Examples.Evm.EvmStaticRoster.declared.handle.closed.width? == some 1
+
+#guard Examples.Evm.EvmAggregateStorage.layout.wellFormed
+#guard Examples.Evm.EvmAggregateStorage.layout.matchesFlattened aggregateSlots
+#guard Examples.Evm.EvmAggregateStorage.layout.nextSlot == 6
+#guard Examples.Evm.EvmAggregateStorage.declared.handle.admin.wideLeaves? == some 3
+#guard Examples.Evm.EvmAggregateStorage.declared.handle.bundle.fieldSlot? "amount" == some 3
+#guard Examples.Evm.EvmAggregateStorage.declared.handle.bundle.fieldSlot? "details" == some 4
+#guard aggregateSlots ==
+  [("admin_w0", 8), ("admin_w1", 8), ("admin_w2", 8),
+   ("bundle_amount", 8), ("bundle_details_side", 1), ("bundle_details_enabled", 1)]
 
 /-! ## Extraction proof: declared layout == real EVM state flattening -/
 
@@ -271,7 +331,36 @@ elab "#pf_guard_evm_static_counter" : command =>
 elab "#pf_guard_evm_static_roster" : command =>
   expectStaticLayout `Examples.Evm.EvmStaticRoster rosterSlots rosterVectors
 
+elab "#pf_guard_evm_aggregate_storage" : command => do
+  expectStaticLayout `Examples.Evm.EvmAggregateStorage aggregateSlots []
+  let env ← getEnv
+  let source ←
+    match ProofForge.Extract.extractModuleIR env `Examples.Evm.EvmAggregateStorage with
+    | .ok source => pure source
+    | .error reason => throwError reason
+  let program ←
+    match ProofForge.Evm.IR.fromExtracted source with
+    | .ok program => pure program
+    | .error reason => throwError reason
+  let digest := ProofForge.Evm.IR.digestHex program
+  logInfo m!"proofforge-evm-aggregate-storage: digest = {digest}"
+  unless ProofForge.Evm.Registry.digestOf "EvmAggregateStorage" == some digest do
+    throwError s!"EvmAggregateStorage registry digest is stale: {digest}"
+  let some _bundleSignal := program.entries.find? (·.ixName == "bundleSignal")
+    | throwError "missing bundleSignal entry"
+  let some _amountOf := program.entries.find? (·.ixName == "amountOf")
+    | throwError "missing amountOf entry"
+  let abi ←
+    match ProofForge.Evm.Emit.emitAbiChecked program with
+    | .ok abi => pure abi
+    | .error reason => throwError reason
+  unless abi.contains "\"name\":\"bundleSignal\"" &&
+      abi.contains "\"name\":\"amountOf\"" &&
+      abi.contains "uint64" do
+    throwError s!"EvmAggregateStorage ABI missing nested/product surface: {abi}"
+
 #pf_guard_evm_static_counter
 #pf_guard_evm_static_roster
+#pf_guard_evm_aggregate_storage
 
 end Tests.EvmStaticStorageSpec

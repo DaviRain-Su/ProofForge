@@ -23,6 +23,9 @@ tables of each consumer.
 - one machine-wide field → one 8-byte slot per leaf: `Address` = 3 leaves
   (`name_w0..name_w2`), `UInt256`/`Bytes32` = 4 leaves (`name_w0..name_w3`);
 - a record field concatenates its fields in declaration order under `name_<field>` prefixes;
+- a Feature A nested record (depth ≤ 2) flattens as `name_<field>` for leaf children and
+  `name_<field>_<child>` for flat nested records — the same spelling Extract uses for nested
+  State structures;
 - a fixed array `Vector α n` repeats its element stride `n` times under `name_<i>` /
   `name_<i>_<field>` prefixes and produces one target vector entry `(base, length, stride)`;
 - slots are numbered consecutively from `0` in declaration order.
@@ -100,12 +103,15 @@ def Leaf.flatten (pfx : String) (base : Nat) : Leaf → Array FlatLeaf
       (List.range leaves).toArray.map fun i =>
         { name := s!"{pfx}_w{i}", width := 8, slot := base + i }
 
-/-- Static-storage element descriptor: one leaf, a flat record of leaves, or a fixed array of
-leaves / flat records. Deeper nesting is not expressible, matching what the current EVM
-flattening and emitter actually support. -/
+/-- Static-storage element descriptor: one leaf, a flat record of leaves, a Feature A nested
+record (depth ≤ 2: leaf or flat-record fields only), or a fixed array of leaves / flat records.
+Depth ≥ 3 nesting stays fail closed — matching Extract flattening and the codec ceiling. -/
 inductive Spec where
   | leaf (leaf : Leaf)
   | record (fields : List (String × Leaf))
+  /-- Nested aggregate: each field is a leaf or a flat record. Names flatten as
+  `prefix_field` / `prefix_field_child`, matching Extract's nested State spelling. -/
+  | nestedRecord (fields : List (String × Spec))
   | arrayLeaves (element : Leaf) (length : Nat)
   | arrayRecords (fields : List (String × Leaf)) (length : Nat)
   deriving BEq, Repr, Inhabited
@@ -115,10 +121,18 @@ def fieldListSlots : List (String × Leaf) → Nat
   | [] => 0
   | (_, leaf) :: rest => leaf.slots + fieldListSlots rest
 
+/-- Static slots of a nested-record field list. -/
+def nestedFieldListSlots : List (String × Spec) → Nat
+  | [] => 0
+  | (_, .leaf l) :: rest => l.slots + nestedFieldListSlots rest
+  | (_, .record fields) :: rest => fieldListSlots fields + nestedFieldListSlots rest
+  | _ :: rest => nestedFieldListSlots rest
+
 /-- Total static slots consumed by one declared element. -/
 def Spec.slots : Spec → Nat
   | .leaf l => l.slots
   | .record fields => fieldListSlots fields
+  | .nestedRecord fields => nestedFieldListSlots fields
   | .arrayLeaves element length => element.slots * length
   | .arrayRecords fields length => fieldListSlots fields * length
 
@@ -129,11 +143,22 @@ private def fieldListWellFormed (fields : List (String × Leaf)) : Bool :=
   !fields.isEmpty && namesUnique (fields.map (·.1)) &&
     fields.all fun (name, leaf) => !name.isEmpty && leaf.wellFormed
 
+/-- Nested-record field payloads may only be leaves or flat records (Feature A depth 2). -/
+def nestedFieldWellFormed : Spec → Bool
+  | .leaf l => l.wellFormed
+  | .record fields => fieldListWellFormed fields
+  | _ => false
+
+private def nestedFieldListWellFormed (fields : List (String × Spec)) : Bool :=
+  !fields.isEmpty && namesUnique (fields.map (·.1)) &&
+    fields.all fun (name, spec) => !name.isEmpty && nestedFieldWellFormed spec
+
 /-- Descriptor-level validity. Invalid descriptors still allocate (the cursor is total), but
 `Layout.wellFormed` and the focused tests reject them before any extraction is trusted. -/
 def Spec.wellFormed : Spec → Bool
   | .leaf l => l.wellFormed
   | .record fields => fieldListWellFormed fields
+  | .nestedRecord fields => nestedFieldListWellFormed fields
   | .arrayLeaves element length => element.wellFormed && 0 < length
   | .arrayRecords fields length => fieldListWellFormed fields && 0 < length
 
@@ -145,11 +170,26 @@ def flattenFieldList (pfx : String) (base : Nat) : List (String × Leaf) → Arr
       leaf.flatten s!"{pfx}_{name}" base ++
         flattenFieldList pfx (base + leaf.slots) rest
 
+/-- Flatten nested-record fields under Extract-compatible `prefix_field` /
+`prefix_field_child` names. -/
+def flattenNestedFieldList (pfx : String) (base : Nat) :
+    List (String × Spec) → Array FlatLeaf
+  | [] => #[]
+  | (name, .leaf leaf) :: rest =>
+      leaf.flatten s!"{pfx}_{name}" base ++
+        flattenNestedFieldList pfx (base + leaf.slots) rest
+  | (name, .record fields) :: rest =>
+      flattenFieldList s!"{pfx}_{name}" base fields ++
+        flattenNestedFieldList pfx (base + fieldListSlots fields) rest
+  | _ :: rest =>
+      flattenNestedFieldList pfx base rest
+
 /-- Flatten one declared element to its concrete slots, using the extractor's `name_<i>` /
 `name_<i>_<field>` array prefixes. -/
 def Spec.flatten (pfx : String) (base : Nat) : Spec → Array FlatLeaf
   | .leaf l => l.flatten pfx base
   | .record fields => flattenFieldList pfx base fields
+  | .nestedRecord fields => flattenNestedFieldList pfx base fields
   | .arrayLeaves element length =>
       (List.range length).foldl (init := #[]) fun acc i =>
         acc ++ element.flatten s!"{pfx}_{i}" (base + i * element.slots)
@@ -163,6 +203,17 @@ def fieldListOffset? (wanted : String) : List (String × Leaf) → Nat → Optio
   | (name, leaf) :: rest, offset =>
       if name == wanted then some offset
       else fieldListOffset? wanted rest (offset + leaf.slots)
+
+/-- Slot offset of one direct nested-record field, or `none` when absent. -/
+def nestedFieldListOffset? (wanted : String) : List (String × Spec) → Nat → Option Nat
+  | [], _ => none
+  | (name, .leaf leaf) :: rest, offset =>
+      if name == wanted then some offset
+      else nestedFieldListOffset? wanted rest (offset + leaf.slots)
+  | (name, .record fields) :: rest, offset =>
+      if name == wanted then some offset
+      else nestedFieldListOffset? wanted rest (offset + fieldListSlots fields)
+  | _ :: rest, offset => nestedFieldListOffset? wanted rest offset
 
 /-- Compile-time cursor assigning consecutive static slots, mirroring the extractor's
 declaration-order flattening of the contract `State` structure. The accumulated `leaves` are
@@ -234,6 +285,12 @@ fields in declaration order. -/
 @[pf_inline] def Layout.record (layout : Layout) (name : String)
     (fields : List (String × Leaf)) : Allocated (Handle α) :=
   layout.declare name (.record fields)
+
+/-- Allocate a Feature A nested aggregate (depth ≤ 2). Each field Spec must be a leaf or a
+flat record; deeper nesting fails `Spec.wellFormed`. -/
+@[pf_inline] def Layout.nestedRecord (layout : Layout) (name : String)
+    (fields : List (String × Spec)) : Allocated (Handle α) :=
+  layout.declare name (.nestedRecord fields)
 
 /-- Allocate a fixed array of scalar/wide elements; `α` is the source `Vector` type. -/
 @[pf_inline] def Layout.array (layout : Layout) (name : String)
@@ -309,6 +366,7 @@ same `base + i * stride` addressing the emitter derives from the target vector e
 def fieldSlot? (handle : Handle α) (field : String) : Option Nat :=
   match handle.spec with
   | .record fields => (fieldListOffset? field fields 0).map (handle.baseSlot + ·)
+  | .nestedRecord fields => (nestedFieldListOffset? field fields 0).map (handle.baseSlot + ·)
   | .arrayRecords fields _ => (fieldListOffset? field fields 0).map (handle.baseSlot + ·)
   | _ => none
 

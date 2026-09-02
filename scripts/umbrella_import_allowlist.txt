@@ -35,6 +35,7 @@ Examples/Evm/EvmScoreMap.lean
 Examples/Evm/EvmSearch.lean
 Examples/Evm/EvmStaticCounter.lean
 Examples/Evm/EvmStaticRoster.lean
+Examples/Evm/EvmAggregateStorage.lean
 Examples/Evm/EvmTypedErrors.lean
 Examples/Evm/EvmVecLog.lean
 Examples/Evm/EvmVecStack.lean
