@@ -33,13 +33,19 @@ updated: 2026-09-02
 4. IR digest **unchanged** `cd60fb0f3ce40ade`（Handle 为零成本 facade）；`Tests/NearVectorSpec`
    绿；registry pin 不变
 
+## Follow-up（Queue Handle）— landed 2026-09-02
+
+1. `DirectQueue64.Handle`（capacity + `Prefix4`）；`head`/`length` 仍在 STATE
+2. `Examples/NearQueue.lean` 经 `@[pf_inline] slots`；digest **unchanged** `a8bf10c3476ef45f`
+3. Lookup / Iterable Handle 仍开
+
 ## 非目标（本 task / follow-up）
 
-- Queue / Iterable / TreeMap Handle
+- Iterable / TreeMap Handle（Queue Handle 已落地）
 - 通用 `T`、Sha256 键
 - N>8 `andN`、N15 digest 表
 - near-sdk Drop 语义
 
 ## 验收
 
-N14 行 → **done**（Vector Handle + golden digest 稳定）；其余集合开 follow-up 切片。
+N14 行 → **done**（Vector + Queue Handle；golden digest 稳定）；Lookup/Iterable 开 follow-up。
