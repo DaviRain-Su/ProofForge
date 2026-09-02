@@ -391,6 +391,12 @@ Phase 7   收口
 | [svm-sem-138](tasks/svm-sem-138.md) | E∞ knife | Loader account-18 owner limbs 2/3 after skip chain | **done** — knife 133; acc18 owner hi |
 | [svm-sem-139](tasks/svm-sem-139.md) | E∞ knife | Loader account-18 executable/rent after skip chain | **done** — knife 134; acc18 exec/rent |
 | [svm-sem-140](tasks/svm-sem-140.md) | E∞ knife | Loader account-18 → account-19 skip chain | **done** — knife 135; acc19 skip |
+| [svm-sem-141](tasks/svm-sem-141.md) | E∞ knife | Loader account-19 header/key after skip chain | **done** — knife 136; acc19 header/key |
+| [svm-sem-142](tasks/svm-sem-142.md) | E∞ knife | Loader account-19 signer/writable after skip chain | **done** — knife 137; acc19 flags |
+| [svm-sem-143](tasks/svm-sem-143.md) | E∞ knife | Loader account-19 lamports/data_len after skip chain | **done** — knife 138; acc19 budget |
+| [svm-sem-144](tasks/svm-sem-144.md) | E∞ knife | Loader account-19 owner limbs 0/1 after skip chain | **done** — knife 139; acc19 owner lo |
+| [svm-sem-145](tasks/svm-sem-145.md) | E∞ knife | Loader account-19 owner limbs 2/3 after skip chain | **done** — knife 140; acc19 owner hi |
+| [svm-sem-146](tasks/svm-sem-146.md) | E∞ knife | Loader account-19 executable/rent after skip chain | **done** — knife 141; acc19 exec/rent |
 | — | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | **远景**；非本轨完成条件 |
 
 ### Track F — 工程

@@ -32,8 +32,8 @@ chains one more zero-`dataLen` skip so the host cursor lands on the account-19 d
 
 ## Still open after this knife
 
-account-19 field arc (header/key → exec/rent); full multi-account vectors; syscall/CPI/sysvar;
-ELF accept.
+account-19 field arc: **landed** as [svm-sem-141](svm-sem-141.md)–[146](svm-sem-146.md)
+(header/key → exec/rent); full multi-account vectors; syscall/CPI/sysvar; ELF accept.
 
 ## Notes
 

@@ -212,7 +212,7 @@ Optional thickenings (Tree reachability / inverse) do not block Track A closeout
 | E3 | [svm-sem-003](tasks/svm-sem-003.md) | Bounded CFG end-to-end (Counter) | **done** — 3-block increment; 7+5 / max+1 |
 | E4 | [svm-sem-004](tasks/svm-sem-004.md) | AccountWords ↔ typed `storev` | **done** — Counter value word |
 | E5 | [svm-sem-005](tasks/svm-sem-005.md) | Queue empty-push L3 | **done** |
-| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[139](tasks/svm-sem-139.md) | walked `r7` + account-0..18 skip host knives | **done** — account-18 field arc landed; next: account-19 field arc after [svm-sem-140](tasks/svm-sem-140.md) skip |
+| E∞ | [svm-sem-006](tasks/svm-sem-006.md)–[146](tasks/svm-sem-146.md) | walked `r7` + account-0..19 skip host knives | **done** — account-19 field arc landed (knives 135–141 / svm-sem-140–146); next: account-20 skip or multi-account / syscall backlog |
 | E∞ | — | Loader-v3 + full host/ELF | **not a completion condition** |
 
 ## 7. Track F — engineering (`svm-eng-*`)
