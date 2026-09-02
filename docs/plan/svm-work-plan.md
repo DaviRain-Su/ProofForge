@@ -241,6 +241,7 @@ Phase 7   收口
 | [svm-app-013](tasks/svm-app-013.md) | Phoenix DepositFunds tag 13 (exact-lots) | **done** — wire 17; digest `5e9097d41f7cefbf` (at land) |
 | [svm-app-014](tasks/svm-app-014.md) | Phoenix WithdrawFunds tag 12 (`Option<u64>` withdraw-all) | **done** — digest `f248b89dc0fb8def`; Mollusk Option matrix |
 | [svm-app-015](tasks/svm-app-015.md) | Phoenix DepositFunds tag 13 (`Option<u64>` deposit-all) | **done** — digest `1049b9843a832a95`; Mollusk Option matrix |
+| [svm-app-016](tasks/svm-app-016.md) | Phoenix RequestSeat tag 14 | **done** — seat PDA create + Approved record + trader-tree insert; digest `c50584a88d34bf4b` |
 | [svm-app-003](tasks/svm-app-003.md) | 非 Phoenix 小例子：Queue/Map/BitSet/Versioned 各一（证明 SDK 可复用） | **done** — TicketLine/FeatureBits/UniqueRoster/VersionedLedger + Mollusk |
 
 ### Track E — L3 sBPF 语义桥（阶梯 E0–E5）

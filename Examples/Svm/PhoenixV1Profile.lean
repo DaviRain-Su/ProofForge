@@ -12,7 +12,7 @@ plus allocator partitions against the pinned Sokoban 0.3.0 layout.
 This is deliberately a separate verifier/profile program. Generated probes keep ProofForge state in
 account 0 and the candidate market in account 1; the official raw adapter instead authenticates a
 physical program prefix and mutates the market in account 2. Its fixed-shape Sokoban routines are
-Official instruction coverage includes tags 4–12 plus a strict PostOnly/no-TIF/deposited-funds-only
+Official instruction coverage includes tags 4–14 plus a strict PostOnly/no-TIF/deposited-funds-only
 slice of tag 3, not the complete Phoenix instruction set.
 -/
 namespace Examples.Svm.PhoenixV1Profile
@@ -3103,6 +3103,69 @@ def depositFunds (_s : State) (quotePresent : UInt8) (quoteLots : UInt64)
           .error .overflow
 
 
+/--
+Authenticate the six-account official `RequestSeat` frame. Absolute indexes include the
+executable program prefix: log=1, market=2, payer=3, seat=4, System=5. PDA seed indexes are
+relative to the post-program region (log=0 … seat=3). Seat must still be empty so the System CPI
+owns allocation; market storage must already be the small 512-profile envelope.
+-/
+def requestSeatContextValid : UInt64 :=
+  if isWritable 0 ≠ 0 || isWritable 1 ≠ 0 || isWritable 2 = 0 ||
+      isWritable 3 = 0 || isWritable 4 = 0 || isWritable 5 ≠ 0 ||
+      isSigner 3 = 0 ||
+      checkPdaSeeds 0 #[.ascii "log"] ≠ 0 ||
+      checkPdaSeeds 3 #[.ascii "seat", .accKey 1, .accKey 2] ≠ 0 then
+    0
+  else if accDataLen 4 ≠ 0 || cancelAllStorageValid512At 2 = 0 then
+    0
+  else
+    1
+
+/-- Write the 128-byte Phoenix seat record after System create: discriminant, market key,
+trader key, and Approved status (word 9 = 1). Absolute seat account is 4. -/
+def initSeatRecordAt4 : UInt64 :=
+  let _ := accDataWordSetAt 4 0 1 1 0 seatDiscriminant
+  let _ := accDataWordSetAt 4 1 1 1 0 (accKeyWord 2 0)
+  let _ := accDataWordSetAt 4 2 1 1 0 (accKeyWord 2 1)
+  let _ := accDataWordSetAt 4 3 1 1 0 (accKeyWord 2 2)
+  let _ := accDataWordSetAt 4 4 1 1 0 (accKeyWord 2 3)
+  let _ := accDataWordSetAt 4 5 1 1 0 (accKeyWord 3 0)
+  let _ := accDataWordSetAt 4 6 1 1 0 (accKeyWord 3 1)
+  let _ := accDataWordSetAt 4 7 1 1 0 (accKeyWord 3 2)
+  let _ := accDataWordSetAt 4 8 1 1 0 (accKeyWord 3 3)
+  accDataWordSetAt 4 9 1 1 0 1
+
+/--
+Official Phoenix `RequestSeat` tag 14 wire: single discriminant byte `0e`. Creates the
+`["seat", market, trader]` PDA via System CPI, initializes the 128-byte Approved seat record, and
+registers the payer key into the market-resident 128-seat trader tree. Duplicate trader keys and
+pre-allocated seat accounts fail closed. No sequence bump / audit batch on this slice.
+-/
+@[pf_entry, pf_svm_raw 14 6 0]
+def requestSeat (_s : State) : Except Error (State × UInt64) := do
+  if requestSeatContextValid = 0 then
+    .error .overflow
+  else
+    let layout := Examples.Svm.PhoenixV1.small 2
+    let existing := layout.findTrader
+      (signerKey 3) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+    if existing ≠ 0 then
+      .error .overflow
+    else
+      let seeds := #[.ascii "seat", .accKey 1, .accKey 2]
+      let bump := findPdaSeeds seeds
+      let lamports := Sysvar.Rent.minimumBalance 128
+      let _ := invokeSignedSeeds 4
+        #[{ acc := 2, signer := true, writable := true },
+          { acc := 3, signer := true, writable := true }]
+        #[.u32le 0, .u64le lamports, .u64le 128, .programId]
+        seeds bump
+      let _ := initSeatRecordAt4
+      let _ := accDataRbTreeKey4Insert 2 8310 8314 8315 8316 18 128
+        (signerKey 3) (accKeyWord 3 1) (accKeyWord 3 2) (accKeyWord 3 3)
+      let size := accDataWord 2 8312
+      .ok (_s, size)
+
 /-- Direct boundary probe used to prove a short account fails before reading bytes 32..39. -/
 @[pf_entry]
 def headerSeats (_s : State) : UInt64 :=
@@ -3130,5 +3193,6 @@ attribute [pf_inline] accountBytesFor boundedBodyEntryCount lowUInt32 highUInt32
   finishCancelMultipleWithdraw512At
   addReleasedAcc512At
   creditFreeFunds512At depositAtomsAt depositLotsFromTokenAt
+  requestSeatContextValid initSeatRecordAt4
 
 end Examples.Svm.PhoenixV1Profile

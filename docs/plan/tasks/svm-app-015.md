@@ -29,4 +29,4 @@ both-`None` with empty balances is header-only).
 
 ## 仍未覆盖
 
-tags 0–2 / 14–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。
+tags 0–2 / 15–17 / admin 100+；tag-3 完整 TIF/self-trade/eviction。RequestSeat tag 14 — see [svm-app-016](svm-app-016.md).

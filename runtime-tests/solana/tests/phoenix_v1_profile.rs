@@ -734,6 +734,33 @@ fn raw_reduce_instruction(
     )
 }
 
+
+fn raw_request_seat_instruction(
+    program_account: Pubkey,
+    log_key: Pubkey,
+    market_key: Pubkey,
+    trader_key: Pubkey,
+    seat_key: Pubkey,
+    system_key: Pubkey,
+) -> Instruction {
+    Instruction::new_with_bytes(
+        PHOENIX_PROGRAM,
+        &[14u8],
+        vec![
+            AccountMeta::new_readonly(program_account, false),
+            AccountMeta::new_readonly(log_key, false),
+            AccountMeta::new(market_key, false),
+            AccountMeta::new(trader_key, true),
+            AccountMeta::new(seat_key, false),
+            AccountMeta::new_readonly(system_key, false),
+        ],
+    )
+}
+
+fn empty_seat_account() -> Account {
+    Account::new(0, 0, &Pubkey::default())
+}
+
 fn seat_account(market_key: Pubkey, trader_key: Pubkey) -> Account {
     let mut seat = Account::new(1, 128, &PHOENIX_PROGRAM);
     write_word(&mut seat, 0, SEAT_DISCRIMINANT);
@@ -7930,3 +7957,95 @@ fn generic_trader_removal_rejects_missing_and_noncanonical_inputs_atomically() {
     );
     assert_eq!(after_malformed.data, malformed.data);
 }
+
+#[test]
+fn official_raw_request_seat_creates_approved_seat_and_registers_trader() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let (system_key, system_acc) = mollusk_svm::program::keyed_account_for_system_program();
+    let market = empty_small_market();
+    let trader = Account::new(10 * LAMPORTS_PER_SOL, 0, &Pubkey::default());
+    let instruction = raw_request_seat_instruction(
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        trader_key,
+        seat_key,
+        system_key,
+    );
+    let result = mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (
+                PHOENIX_PROGRAM,
+                mollusk_svm::program::create_program_account_loader_v3(&PHOENIX_PROGRAM),
+            ),
+            (log_key, common::plain_account()),
+            (market_key, market),
+            (trader_key, trader),
+            (seat_key, empty_seat_account()),
+            (system_key, system_acc),
+        ],
+        &[Check::success(), Check::return_data(&1u64.to_le_bytes())],
+    );
+    let seat = resulting_account(&result, &seat_key);
+    assert_eq!(seat.data.len(), 128);
+    assert_eq!(seat.owner, PHOENIX_PROGRAM);
+    assert_eq!(read_word(&seat, 0), SEAT_DISCRIMINANT);
+    assert_eq!(read_word(&seat, 9), 1);
+    let market = resulting_account(&result, &market_key);
+    assert_eq!(read_word(&market, 8312), 1);
+}
+
+#[test]
+fn official_raw_request_seat_rejects_duplicate_trader_and_preallocated_seat() {
+    let trader_key = common::dummy_state_key(&PHOENIX_PROGRAM);
+    let market_key = Pubkey::new_unique();
+    let (mollusk, log_key) = raw_reduce_harness();
+    let (seat_key, _) = Pubkey::find_program_address(
+        &[b"seat", market_key.as_ref(), trader_key.as_ref()],
+        &PHOENIX_PROGRAM,
+    );
+    let (system_key, system_acc) = mollusk_svm::program::keyed_account_for_system_program();
+    let market = market_with_signer_trader();
+    let trader = Account::new(10 * LAMPORTS_PER_SOL, 0, &Pubkey::default());
+    let instruction = raw_request_seat_instruction(
+        PHOENIX_PROGRAM,
+        log_key,
+        market_key,
+        trader_key,
+        seat_key,
+        system_key,
+    );
+    let program_acc = mollusk_svm::program::create_program_account_loader_v3(&PHOENIX_PROGRAM);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (PHOENIX_PROGRAM, program_acc.clone()),
+            (log_key, common::plain_account()),
+            (market_key, market),
+            (trader_key, trader.clone()),
+            (seat_key, empty_seat_account()),
+            (system_key, system_acc.clone()),
+        ],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &[
+            (PHOENIX_PROGRAM, program_acc),
+            (log_key, common::plain_account()),
+            (market_key, empty_small_market()),
+            (trader_key, trader),
+            (seat_key, seat_account(market_key, trader_key)),
+            (system_key, system_acc),
+        ],
+        &[Check::err(ProgramError::Custom(0x1001))],
+    );
+}
+
