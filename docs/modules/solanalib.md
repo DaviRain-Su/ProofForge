@@ -93,7 +93,7 @@ E∞ 第五刀（`svm-sem-010`）：account-0 lamports/data_len walk ↔ 绝对 
 E∞ 第六刀（`svm-sem-011`）：account-0 owner 前两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER`/`+8`）。
 E∞ 第七刀（`svm-sem-012`）：account-0 owner 后两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER+16`/`+24`）。
 
-E∞ 的「刀」是封闭的具体字面量检查：固定 seeded 内存、固定指令片段、固定期望值，由 `native_decide` 经编译代码判定。它不是对 account 数量、data 长度或内存全称量化的定理；`#print axioms` 含 `Lean.ofReduceBool`，可信基因此包含 Lean 编译器。该族是 `Emit.emitSkipAccount` 几何对解释器的回归检查，account 10–19 的刀由 `scripts/regenerate_account{15,16,17,18,19}_knives.py` 文本替换生成。刀族停在第 135 刀（`svm-sem-140`，account-18 → account-19 skip）。skip 部分的替代物已落地：`ProofForge/Svm/SolanalibSkipChain.lean` 的 `skipChain_lands` 对任意 account 列表、任意 `data_len` 与任意满足 `WellFormed` 的内存，证明 `n` 个 skip block 经 `runDecodedFrom` 后 `r2` 落在 `accountHeaderAddr`，内存不变；归纳证明，公理仅 `propext` / `Classical.choice` / `Quot.sound`。field arc、align-8 分支、syscall、CPI、ELF 仍不在其中。
+E∞ 的「刀」是封闭的具体字面量检查：固定 seeded 内存、固定指令片段、固定期望值，由 `native_decide` 经编译代码判定。它不是对 account 数量、data 长度或内存全称量化的定理；`#print axioms` 含 `Lean.ofReduceBool`，可信基因此包含 Lean 编译器。该族是 `Emit.emitSkipAccount` 几何对解释器的回归检查，account 10–19 的刀由 `scripts/regenerate_account{15,16,17,18,19}_knives.py` 文本替换生成。刀族停在第 135 刀（`svm-sem-140`，account-18 → account-19 skip）。skip 部分的替代物已落地：`ProofForge/Svm/SolanalibSkipChain.lean` 的 `skipChain_lands` 对任意 account 列表、任意 `data_len` 与任意满足 `WellFormed` 的内存，证明 `n` 个 skip block 经 `runDecodedFrom` 后 `r2` 落在 `accountHeaderAddr`，内存不变；归纳证明，公理仅 `propext` / `Classical.choice` / `Quot.sound`。主语是刀所用的六指令 typed fragment，不是 `Emit.emitSkipAccount` 的原文：寄存器重命名，且只建模 `data_len` 8 字节对齐的路径。field arc、align-8 分支、emitter 寄存器分配、syscall、CPI、ELF 仍不在其中。
 仍不覆盖：完整 account 向量、executable/rent_epoch、Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests

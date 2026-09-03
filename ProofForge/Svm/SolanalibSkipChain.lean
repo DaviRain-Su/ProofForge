@@ -1,17 +1,23 @@
 import ProofForge.Svm.Solanalib
 
 /-!
-# Parametric Loader-v3 skip-chain lemma (prototype)
+# Parametric Loader-v3 skip-chain lemma
 
-One universally quantified theorem for the `emitSkipAccount` cursor walk that E∞ knives 9, 16,
-…, 135 restate per account with concrete literals and `native_decide`.
+One universally quantified theorem for the account-skip fragment that E∞ knives 9, 16, …, 135
+restate per account with concrete literals and `native_decide`.
 
-Covered: the six-instruction skip block repeated `n` times from an account header cursor in
-`r2`, under Solanalib's `step` semantics, over any memory that holds each account's `data_len`
-and rent word where the block reads them. Not covered: the field arcs (key, flags, lamports,
-owner, executable), the initial `r8 → r2` handoff of knife 9, the `emitSkipAccount` align-8
-branch (the knives seed `data_len = 0`, so their header arithmetic has no alignment term and
-neither does `accountHeaderAddr`), syscalls, CPI, or ELF acceptance.
+The subject is the knives' six-instruction typed fragment, not the text `Emit.emitSkipAccount`
+emits. The emitter walks with `r8`/`r5`/`r4`, loads `data_len` earlier, and has an align-8
+branch (`and64 r1, 7; jeq …`). The fragment here renames registers to `r1`/`r2`/`r3` and models
+only the aligned path, so it agrees with the emitter when every `data_len` is a multiple of 8,
+which is the layout Loader-v3 hands a program. `WellFormed` asks only for the two words the
+fragment loads; it does not assert account tags, non-overlap, or bounds.
+
+Covered: that fragment repeated `n` times from an account header cursor in `r2`, under
+Solanalib's `step` semantics, over any memory that holds each account's `data_len` and rent word
+where the fragment reads them. Not covered: the field arcs (key, flags, lamports, owner,
+executable), the initial `r8 → r2` handoff of knife 9, the align-8 branch, the emitter's
+register allocation, syscalls, CPI, or ELF acceptance.
 -/
 
 namespace ProofForge.Svm.Solanalib
