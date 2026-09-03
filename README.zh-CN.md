@@ -247,6 +247,7 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 （`Examples/Counter.lean`、`Examples/Capped.lean`、`Examples/Token.lean`）：
 成功路径精确后置条件、单调性、Token supply 效应与 Capped cap 不变量，
 全部只依赖标准公理 `propext` / `Quot.sound`。
+`ProofForge/Svm/Solanalib.lean` 中的 sBPF L3 桥另用 `native_decide`（`Lean.ofReduceBool`）做具体检查，可信基因此更宽。
 
 ### 本地形式化门（`svm-eng-001`）
 

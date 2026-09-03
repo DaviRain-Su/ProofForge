@@ -73,7 +73,7 @@ L3 在本计划里定义为 **阶梯**，不是二元「做/不做」：
 | E5 | 多入口程序 / 简单容器例（Queue push 空路径） | **done**（Queue empty-push L3） | `svm-sem-005` |
 | E∞ | Loader-v3 + syscall/CPI/sysvar 主机 + ELF 接受 | Agave 忠实全程序 | **不承诺为本轨完成条件** |
 
-**E0–E5 要规划、要做完。** E∞ 留作远景：缺主机模型就无法诚实声称；不挡 E0–E5 收口。
+**E0–E5 要规划、要做完。** E∞ 留作远景：缺主机模型就无法诚实声称；不挡 E0–E5 收口。E∞ 刀族已于 2026-09-02 停在 `svm-sem-140`（第 135 刀，account-19 skip；PR #24 account-19 field arc 已关闭），skip-chain 部分已由参数化引理 `skipChain_lands`（`ProofForge/Svm/SolanalibSkipChain.lean`）一次覆盖；field arc 仍待同样处理。
 
 **硬规则（来自 ownership freeze）**
 
