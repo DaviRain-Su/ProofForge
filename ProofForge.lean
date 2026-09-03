@@ -87,6 +87,7 @@ import ProofForge.Svm.IR
 import ProofForge.Svm.IRCompat
 import ProofForge.Svm.EntryAdapter.Emit
 import ProofForge.Svm.Solanalib
+import ProofForge.Svm.SolanalibSkipChain
 import ProofForge.Svm.Emit
 import ProofForge.Svm.EmitCompat
 import ProofForge.Svm.Assemble
