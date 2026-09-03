@@ -258,7 +258,9 @@ https://proof-forge-mcp.davirain-yin.workers.dev/mcp
 The first kernel-checked contract properties live in each example's `Proofs` section
 (`Examples/Counter.lean`, `Examples/Capped.lean`, `Examples/Token.lean`): exact success
 postconditions, monotonicity, Token supply effects, and the Capped cap invariant, all on
-standard axioms `propext` / `Quot.sound` only.
+standard axioms `propext` / `Quot.sound` only. The sBPF L3 bridge in
+`ProofForge/Svm/Solanalib.lean` additionally uses `native_decide` (`Lean.ofReduceBool`)
+for its concrete checks, so its trust base is wider.
 
 ### Local formalization gate (`svm-eng-001`)
 
