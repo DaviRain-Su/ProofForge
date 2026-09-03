@@ -18,41 +18,6 @@ namespace ProofForge.Svm.Solanalib
 
 open _root_.Solanalib.SBPF
 
-/-! ## Decoded dispatch (restated)
-
-`runDecodedFrom`, `stepDecoded`, and `decodedInstructionAt?` are `private` in
-`ProofForge.Svm.Solanalib`, so a proof in another module cannot name them. They are restated
-here with the same bodies. -/
-
-def stepDecoded (instruction : BpfInstruction) : BpfState → BpfState
-  | .ok pc regs memory stack sv functions current remaining =>
-      step pc instruction regs memory stack sv functions false 0 current remaining
-  | state => state
-
-def decodedSlots : BpfInstruction → Nat
-  | .ldImm .. => 2
-  | _ => 1
-
-def decodedInstructionAt? : EbpfAsm → Nat → Option BpfInstruction
-  | [], _ => none
-  | instruction :: rest, pc =>
-      if pc == 0 then some instruction
-      else if pc < decodedSlots instruction then none
-      else decodedInstructionAt? rest (pc - decodedSlots instruction)
-
-/-- Fuel-bounded PC dispatch over a decoded fragment (the body of `runDecodedFrom.go`). -/
-def runDecodedGo (basePC : Nat) (program : EbpfAsm) : Nat → BpfState → BpfState
-  | 0, state => state
-  | fuel + 1, state@(.ok pc _ _ _ _ _ _ _) =>
-      if pc.toNat < basePC then state
-      else match decodedInstructionAt? program (pc.toNat - basePC) with
-        | none => state
-        | some instruction => runDecodedGo basePC program fuel (stepDecoded instruction state)
-  | _, state => state
-
-def runDecodedFrom (basePC : Nat) (program : EbpfAsm) : BpfState → BpfState :=
-  runDecodedGo basePC program (program.length + 1)
-
 /-! ## The skip block -/
 
 /-- `ACC0_DATA_LEN - ACC0_HEADER` as the 16-bit displacement the knives pass to `ldx`. -/
@@ -170,25 +135,25 @@ theorem decodedInstructionAt?_skipChain_end (n t : Nat) :
 
 /-! ## Sequencing -/
 
-theorem runDecodedGo_step (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64) (rs : RegMap)
+theorem runDecodedFrom_go_step (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64) (rs : RegMap)
     (mem : Mem) (ss : StackState) (sv : SBPFV) (fm : FuncMap) (cu rem : U64)
     (instruction : BpfInstruction) (hpc : pc.toNat = basePC + k)
     (hins : decodedInstructionAt? program k = some instruction) :
-    runDecodedGo basePC program (fuel + 1) (.ok pc rs mem ss sv fm cu rem) =
-      runDecodedGo basePC program fuel
+    runDecodedFrom.go basePC program (fuel + 1) (.ok pc rs mem ss sv fm cu rem) =
+      runDecodedFrom.go basePC program fuel
         (stepDecoded instruction (.ok pc rs mem ss sv fm cu rem)) := by
-  simp [runDecodedGo, hpc, hins]
+  simp [runDecodedFrom.go, hpc, hins]
   intro h
   omega
 
-theorem runDecodedGo_stuck (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64) (rs : RegMap)
+theorem runDecodedFrom_go_stuck (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64) (rs : RegMap)
     (mem : Mem) (ss : StackState) (sv : SBPFV) (fm : FuncMap) (cu rem : U64)
     (hpc : pc.toNat = basePC + k) (hins : decodedInstructionAt? program k = none) :
-    runDecodedGo basePC program fuel (.ok pc rs mem ss sv fm cu rem) =
+    runDecodedFrom.go basePC program fuel (.ok pc rs mem ss sv fm cu rem) =
       .ok pc rs mem ss sv fm cu rem := by
   cases fuel with
   | zero => rfl
-  | succ fuel => simp [runDecodedGo, hpc, hins]
+  | succ fuel => simp [runDecodedFrom.go, hpc, hins]
 
 @[simp] theorem setReg_apply_same (rs : RegMap) (r : BpfIReg) (v : U64) :
     setReg rs r v r = v := by
@@ -247,7 +212,7 @@ private theorem toNat_add_six (pc : U64) (m : Nat) (hpc : pc.toNat = m) (hfit : 
 
 /-- One skip block, executed by PC dispatch inside any `program` that contains it at offset
 `k`, advances the cursor by `accountSpan` and consumes exactly six fuel. -/
-theorem runDecodedGo_skipBlock (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64)
+theorem runDecodedFrom_go_skipBlock (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64)
     (rs : RegMap) (mem : Mem) (ss : StackState) (sv : SBPFV) (fm : FuncMap) (cu rem : U64)
     (account : SkipAccount) (hblock : HasSkipBlockAt program k)
     (hpc : pc.toNat = basePC + k) (hfit : basePC + k + 6 < 2 ^ 64)
@@ -256,8 +221,8 @@ theorem runDecodedGo_skipBlock (program : EbpfAsm) (basePC k fuel : Nat) (pc : U
     (hrent : loadv .m64 mem (rs .br2 + BitVec.ofNat 64 accountHeaderToDataBytes +
       account.dataLen + BitVec.ofNat 64 maxPermittedDataIncrease) =
       some (.vlong account.rentEpoch)) :
-    runDecodedGo basePC program (fuel + 6) (.ok pc rs mem ss sv fm cu rem) =
-      runDecodedGo basePC program fuel
+    runDecodedFrom.go basePC program (fuel + 6) (.ok pc rs mem ss sv fm cu rem) =
+      runDecodedFrom.go basePC program fuel
         (.ok (pc + 6) (blockRegs rs account) mem ss sv fm (cu + 6) rem) := by
   have h0 := hblock 0 (by omega)
   have h1 := hblock 1 (by omega)
@@ -277,21 +242,21 @@ theorem runDecodedGo_skipBlock (program : EbpfAsm) (basePC k fuel : Nat) (pc : U
   have hpc5 : (pc + 1 + 1 + 1 + 1 + 1).toNat = basePC + (k + 5) :=
     toNat_add_one _ (basePC + (k + 4)) hpc4 (by omega)
   rw [show fuel + 6 = fuel + 5 + 1 from rfl,
-    runDecodedGo_step program basePC k _ _ _ _ _ _ _ _ _ _ hpc h0]
+    runDecodedFrom_go_step program basePC k _ _ _ _ _ _ _ _ _ _ hpc h0]
   simp only [stepDecoded, step, evalLoad, dataLenOff_signExtend, hlen]
-  rw [runDecodedGo_step program basePC (k + 1) _ _ _ _ _ _ _ _ _ _ hpc1 h1]
+  rw [runDecodedFrom_go_step program basePC (k + 1) _ _ _ _ _ _ _ _ _ _ hpc1 h1]
   simp only [stepDecoded, step, stepRegOutcome, evalAlu64, sndOp64, headerToData_signExtend,
     setReg_apply_ne, ne_eq, reduceCtorEq, not_false_eq_true]
-  rw [runDecodedGo_step program basePC (k + 2) _ _ _ _ _ _ _ _ _ _ hpc2 h2]
+  rw [runDecodedFrom_go_step program basePC (k + 2) _ _ _ _ _ _ _ _ _ _ hpc2 h2]
   simp only [stepDecoded, step, stepRegOutcome, evalAlu64, sndOp64,
     setReg_apply_same, setReg_apply_ne, ne_eq, reduceCtorEq, not_false_eq_true]
-  rw [runDecodedGo_step program basePC (k + 3) _ _ _ _ _ _ _ _ _ _ hpc3 h3]
+  rw [runDecodedFrom_go_step program basePC (k + 3) _ _ _ _ _ _ _ _ _ _ hpc3 h3]
   simp only [stepDecoded, step, stepRegOutcome, evalAlu64, sndOp64, maxIncrease_signExtend,
     setReg_apply_same]
-  rw [runDecodedGo_step program basePC (k + 4) _ _ _ _ _ _ _ _ _ _ hpc4 h4]
+  rw [runDecodedFrom_go_step program basePC (k + 4) _ _ _ _ _ _ _ _ _ _ hpc4 h4]
   simp only [stepDecoded, step, evalLoad, zeroOff_signExtend, BitVec.add_zero,
     setReg_apply_same, hrent]
-  rw [runDecodedGo_step program basePC (k + 5) _ _ _ _ _ _ _ _ _ _ hpc5 h5]
+  rw [runDecodedFrom_go_step program basePC (k + 5) _ _ _ _ _ _ _ _ _ _ hpc5 h5]
   simp only [stepDecoded, step, stepRegOutcome, evalAlu64, sndOp64, eight_signExtend,
     setReg_apply_same, setReg_apply_ne, ne_eq, reduceCtorEq, not_false_eq_true]
   rw [blockRegs_eq, add_six pc, add_six cu]
@@ -327,14 +292,14 @@ private theorem ofNat_six_mul_succ (n : Nat) :
 
 /-- `accounts.length` skip blocks, executed by PC dispatch inside any `program` that contains
 them consecutively from offset `k`, over a memory well-formed from the cursor in `r2`. -/
-theorem runDecodedGo_skipChain (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64)
+theorem runDecodedFrom_go_skipChain (program : EbpfAsm) (basePC k fuel : Nat) (pc : U64)
     (rs : RegMap) (mem : Mem) (ss : StackState) (sv : SBPFV) (fm : FuncMap) (cu rem : U64)
     (accounts : List SkipAccount)
     (hblocks : ∀ i, i < accounts.length → HasSkipBlockAt program (k + 6 * i))
     (hpc : pc.toNat = basePC + k) (hfit : basePC + k + 6 * accounts.length < 2 ^ 64)
     (hwf : WellFormed mem (rs .br2) accounts) :
-    runDecodedGo basePC program (fuel + 6 * accounts.length) (.ok pc rs mem ss sv fm cu rem) =
-      runDecodedGo basePC program fuel
+    runDecodedFrom.go basePC program (fuel + 6 * accounts.length) (.ok pc rs mem ss sv fm cu rem) =
+      runDecodedFrom.go basePC program fuel
         (.ok (pc + BitVec.ofNat 64 (6 * accounts.length)) (chainRegs rs accounts) mem ss sv fm
           (cu + BitVec.ofNat 64 (6 * accounts.length)) rem) := by
   induction accounts generalizing k pc rs cu with
@@ -343,8 +308,8 @@ theorem runDecodedGo_skipChain (program : EbpfAsm) (basePC k fuel : Nat) (pc : U
       obtain ⟨hlen, hrent, hrest⟩ := hwf
       have hblock : HasSkipBlockAt program k := by simpa using hblocks 0 (by simp)
       rw [List.length_cons, show fuel + 6 * (rest.length + 1) = fuel + 6 * rest.length + 6 by
-        omega, runDecodedGo_skipBlock program basePC k _ pc rs mem ss sv fm cu rem account hblock
-        hpc (by simp at hfit; omega) hlen hrent]
+        omega, runDecodedFrom_go_skipBlock program basePC k _ pc rs mem ss sv fm cu rem account
+        hblock hpc (by simp at hfit; omega) hlen hrent]
       rw [ih (k + 6) (pc + 6) (blockRegs rs account) (cu + 6)
         (fun i hi => by
           have := hblocks (i + 1) (by simp; omega)
@@ -376,17 +341,18 @@ theorem skipChain_lands (accounts : List SkipAccount) (mem : Mem) (fuel : U64)
         initStackState version initFuncMap (BitVec.ofNat 64 (6 * accounts.length)) fuel ∧
     chainRegs skipStartRegs accounts .br2 =
       accountHeaderAddr (accounts.map SkipAccount.dataLen) accounts.length ∧
-    ∀ r, r ≠ .br1 → r ≠ .br2 → r ≠ .br3 → chainRegs skipStartRegs accounts r = skipStartRegs r := by
+    ∀ r, r ≠ .br1 → r ≠ .br2 → r ≠ .br3 →
+      chainRegs skipStartRegs accounts r = skipStartRegs r := by
   refine ⟨?_, ?_, fun r h1 h2 h3 => chainRegs_other _ _ r h1 h2 h3⟩
   · have hstart : skipStartRegs .br2 = account0HeaderAddr := by
       simp [skipStartRegs, skipEntryRegs]
     rw [runDecodedFrom, skipChain_length, initBpfState, Nat.add_comm, ← skipStartRegs,
-      runDecodedGo_skipChain (skipChain accounts.length) 0 0 1 0 skipStartRegs mem
+      runDecodedFrom_go_skipChain (skipChain accounts.length) 0 0 1 0 skipStartRegs mem
         initStackState version initFuncMap 0 fuel accounts
         (fun i hi => by simpa using hasSkipBlockAt_skipChain accounts.length i hi)
         (by simp) (by omega) (by rw [hstart]; exact hwf)]
-    rw [runDecodedGo_stuck (skipChain accounts.length) 0 (6 * accounts.length) 1 _ _ _ _ _ _ _ _
-      (by simp [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hfit])
+    rw [runDecodedFrom_go_stuck (skipChain accounts.length) 0 (6 * accounts.length) 1
+      _ _ _ _ _ _ _ _ (by simp [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hfit])
       (decodedInstructionAt?_skipChain_end accounts.length 0)]
     simp
   · rw [chainRegs_br2, ← List.length_map (f := SkipAccount.dataLen) (as := accounts),

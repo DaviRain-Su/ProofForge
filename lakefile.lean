@@ -192,6 +192,7 @@ lean_lib ProofForge where
     `ProofForge.Svm.Semantics,
     `ProofForge.Svm.SemanticsBridge,
     `ProofForge.Svm.Solanalib,
+    `ProofForge.Svm.SolanalibSkipChain,
     `ProofForge.Svm.Sysvar,
     `ProofForge.Svm.Sysvar.Emit,
     `ProofForge.Svm.Telemetry.Emit,

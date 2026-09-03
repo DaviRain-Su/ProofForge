@@ -28,7 +28,8 @@ private def zeroMem : Mem :=
   seedWord account2DataLenAddr 0 <| seedWord account2RentEpochAddr 0xF0 initMem
 
 private def runChain (accounts : List SkipAccount) (mem : Mem) : Option (U64 × U64) :=
-  match runDecodedFrom 0 (skipChain accounts.length) (initBpfState skipEntryRegs mem 64 version) with
+  match runDecodedFrom 0 (skipChain accounts.length)
+      (initBpfState skipEntryRegs mem 64 version) with
   | .ok pc regs _ _ _ _ _ _ => some (pc, regs .br2)
   | .success _ | .eflag | .err => none
 
