@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Create the GitHub Release (otherwise dry run: build and stage artifacts only)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -98,8 +104,26 @@ jobs:
           name: pf-macos
           path: dist/*
 
+  dry-run-report:
+    name: Dry run report
+    if: github.event_name == 'workflow_dispatch' && inputs.publish != true
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Show staged artifacts
+        run: |
+          ls -la dist
+          cat dist/pf-version.txt
+
   publish:
     name: GitHub Release
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish == true)
     needs: [build-linux, build-macos]
     runs-on: ubuntu-24.04
     steps:
@@ -113,7 +137,11 @@ jobs:
 
       - name: Compose release notes
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF_TYPE}" == tag ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="dry-run-${GITHUB_SHA::8}"
+          fi
           {
             echo "## ProofForge ${TAG}"
             echo
