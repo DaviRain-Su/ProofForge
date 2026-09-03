@@ -17,10 +17,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decide which lanes must run for this PR. Pushes to main and manual dispatches
-  # always run every lane.
-  # Path sets are intentionally broad: shared compiler / toolchain / workflow changes
-  # force all lanes so a latent cross-target break still gets caught on main.
+  # Lean/SVM/EVM/NEAR run on every main push and dispatch, and on PRs whose own or `shared` paths match.
+  # Phoenix runs only on `phoenix`/`phoenix_codegen` paths, a `phoenix` PR label, or dispatch; ci-phoenix.yml covers it nightly.
   changes:
     name: Changes
     runs-on: ubuntu-24.04
@@ -35,7 +33,7 @@ jobs:
 
       - name: Detect changed paths
         id: filter
-        if: github.event_name == 'pull_request'
+        if: github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -128,6 +126,19 @@ jobs:
               - 'runtime-tests/phoenix/**'
               - 'runtime-tests/solana/tests/common/**'
               - 'runtime-tests/surfpool/**'
+            phoenix_codegen:
+              - 'ProofForge/Extract.lean'
+              - 'ProofForge/Extract/**'
+              - 'ProofForge/Core/**'
+              - 'ProofForge/Svm/Emit.lean'
+              - 'ProofForge/Svm/IR.lean'
+              - 'ProofForge/Svm/Ops.lean'
+              - 'ProofForge/Svm/Component/**'
+              - 'ProofForge/Svm/EntryAdapter/**'
+              - 'ProofForge/Svm/EntryAdapter.lean'
+              - 'lakefile.lean'
+              - 'lean-toolchain'
+              - 'lake-manifest.json'
 
       - name: Publish lane gates
         id: gate
@@ -139,40 +150,31 @@ jobs:
           EVM: ${{ steps.filter.outputs.evm }}
           NEAR: ${{ steps.filter.outputs.near }}
           PHOENIX: ${{ steps.filter.outputs.phoenix }}
+          PHOENIX_CODEGEN: ${{ steps.filter.outputs.phoenix_codegen }}
+          PHOENIX_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'phoenix') }}
         run: |
           set -euo pipefail
-          # main pushes always exercise every lane.
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "lean=true" >> "$GITHUB_OUTPUT"
-            echo "svm=true" >> "$GITHUB_OUTPUT"
-            echo "evm=true" >> "$GITHUB_OUTPUT"
-            echo "near=true" >> "$GITHUB_OUTPUT"
-            echo "phoenix=true" >> "$GITHUB_OUTPUT"
-            echo "changes: push event → all lanes"
-            exit 0
-          fi
-          or_shared() {
-            local lane="$1"
-            if [ "$SHARED" = "true" ] || [ "$lane" = "true" ]; then
-              echo "true"
-            else
-              echo "false"
-            fi
+          any_true() {
+            local v
+            for v in "$@"; do
+              if [ "$v" = "true" ]; then
+                echo true
+                return
+              fi
+            done
+            echo false
           }
-          lean="$(or_shared "$LEAN")"
-          svm="$(or_shared "$SVM")"
-          evm="$(or_shared "$EVM")"
-          near="$(or_shared "$NEAR")"
-          # Phoenix lane: Phoenix app paths or shared infrastructure.
-          phoenix="$(or_shared "$PHOENIX")"
-          {
-            echo "lean=$lean"
-            echo "svm=$svm"
-            echo "evm=$evm"
-            echo "near=$near"
-            echo "phoenix=$phoenix"
-          } >> "$GITHUB_OUTPUT"
-          echo "changes: lean=$lean svm=$svm evm=$evm near=$near phoenix=$phoenix"
+          lane_gates() {
+            local all_lanes=false dispatch=false
+            [ "$EVENT_NAME" = "pull_request" ] || all_lanes=true
+            [ "$EVENT_NAME" != "workflow_dispatch" ] || dispatch=true
+            echo "lean=$(any_true "$all_lanes" "$SHARED" "$LEAN")"
+            echo "svm=$(any_true "$all_lanes" "$SHARED" "$SVM")"
+            echo "evm=$(any_true "$all_lanes" "$SHARED" "$EVM")"
+            echo "near=$(any_true "$all_lanes" "$SHARED" "$NEAR")"
+            echo "phoenix=$(any_true "$dispatch" "$PHOENIX" "$PHOENIX_CODEGEN" "$PHOENIX_LABEL")"
+          }
+          lane_gates | tee -a "$GITHUB_OUTPUT"
 
   lean:
     name: Lean
@@ -236,7 +238,7 @@ jobs:
 
       # Save only from main so PR runs do not evict the toolchain cache.
       - name: Save Lean build products
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: .lake/build
@@ -370,7 +372,7 @@ jobs:
 
       # Save only from main so PR runs do not evict the toolchain cache.
       - name: Save Lean build products
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: .lake/build
