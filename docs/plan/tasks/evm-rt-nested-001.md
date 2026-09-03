@@ -24,7 +24,7 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
 | Top-level `BoundedVec` of **wide one-ABI-word** scalars (`UInt128`/`UInt256`/`Addr20`/…) | accepted | Extract expands limbs; Emit packs ABI word |
 | Top-level `BoundedVec` of **constructed static products** (one-limb leaves) | accepted | e.g. `(uint64,uint16)[]` |
 | Nested dynamics (array-of-bytes, dynamic-in-tuple, …) | fail-closed | `staticAbiLeaves` / codec reject |
-| Tagged / Option elements inside dynamic arrays | **partial ✓** | `echoBoundedOptions` → `(bool,uint64)[]`; one-limb Option only; enum-in-array still fail-closed |
+| Tagged / Option/enum elements inside dynamic arrays | **✓** | `echoBoundedOptions` → `(bool,uint64)[]`; `echoBoundedEnums` → `(uint8,uint64,uint64)[]`; one-limb Option; Tagged Tuple v1 enums |
 | Frames > `maxBoundedArrayLocalWords` (64) | fail-closed | resource ceiling |
 
 ## Progress (2026-09-02)
@@ -47,10 +47,12 @@ dynamic ABI policy for bounded arrays/bytes/strings (`ProofForge/Evm/Codec.lean`
   (`setBundle` / `setAmount`, leaf views, `bundleSignal` / `bundleView` / `detailsView`,
   Unauthorized non-admin)
 - Constructed dynamic return from storage field trees: **landed** (`amountSidePairs` → `(uint64,uint8)[]`)
-- **Tagged-in-array**: `echoBoundedOptions` (`BoundedVec (Option UInt64) 2` ↔ `(bool,uint64)[]`) —
+- **Tagged-in-array Option**: `echoBoundedOptions` (`BoundedVec (Option UInt64) 2` ↔ `(bool,uint64)[]`) —
   Codec wrap of Tagged Tuple v1 element plans + remapped `taggedGuards`, Extract 2-limb
   element expansion, Emit ABI JSON tuple[], Anvil OK/reject matrix
-- Still open: enum-in-array; depth ceiling raise
+- **Tagged-in-array enum**: `echoBoundedEnums` (`BoundedVec TaggedSlot 2` ↔ `(uint8,uint64,uint64)[]`) —
+  same wrap path for enum element plans; Extract tag+payload limbs; Anvil OK/reject matrix
+- Still open: depth ceiling raise
 
 ## Non-goals
 

@@ -69,6 +69,8 @@ elab "#pf_guard_evm_bounded_abi" : command => do
     | throwError "missing constructed bounded array result entry"
   let some echoOptions := program.entries.find? (·.ixName == "echoBoundedOptions")
     | throwError "missing tagged-in-array bounded Option result entry"
+  let some echoEnums := program.entries.find? (·.ixName == "echoBoundedEnums")
+    | throwError "missing tagged-in-array bounded enum result entry"
   let some echoBytes := program.entries.find? (·.ixName == "echoBoundedBytes")
     | throwError "missing bounded bytes result entry"
   let some echoString := program.entries.find? (·.ixName == "echoBoundedString")
@@ -136,6 +138,16 @@ elab "#pf_guard_evm_bounded_abi" : command => do
         "bounded-array-return-v1((bool,uint64)[];capacity=2;element-words=2)" &&
       echoOptions.inputPolicy ==
         "0=bounded-array-v1((bool,uint64)[];capacity=2;element-words=2)" &&
+      echoEnums.paramCount == 7 && echoEnums.retCount == 7 &&
+      echoEnums.retTypes == #[.uint32, .uint8, .uint64, .uint64, .uint8, .uint64, .uint64] &&
+      echoEnums.outputPlan == some (.dynamic (.boundedArray {
+        capacity := 2, elementTypeName := "(uint8,uint64,uint64)",
+        elementWords := #[.uint8, .uint64, .uint64]
+      })) &&
+      echoEnums.outputPolicy ==
+        "bounded-array-return-v1((uint8,uint64,uint64)[];capacity=2;element-words=3)" &&
+      echoEnums.inputPolicy ==
+        "0=bounded-array-v1((uint8,uint64,uint64)[];capacity=2;element-words=3)" &&
       echoBytes.retCount == 9 && echoBytes.outputPlan == some (.dynamic (.packedBytes {
         capacity := 8, validateUtf8 := false })) &&
       echoString.retCount == 9 && echoString.outputPlan == some (.dynamic (.packedBytes {
@@ -198,6 +210,10 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       abi.contains "\"name\":\"echoBoundedOptions\"" &&
       abi.contains "\"name\":\"present\",\"type\":\"bool\"" &&
       abi.contains "\"name\":\"value\",\"type\":\"uint64\"" &&
+      abi.contains "\"name\":\"echoBoundedEnums\"" &&
+      abi.contains "\"name\":\"tag\",\"type\":\"uint8\"" &&
+      abi.contains "\"name\":\"p0\",\"type\":\"uint64\"" &&
+      abi.contains "\"name\":\"p1\",\"type\":\"uint64\"" &&
       abi.contains "\"name\":\"echoBoundedBytes\"" &&
       abi.contains "\"outputs\":[{\"name\":\"\",\"type\":\"bytes\"}]" &&
       abi.contains "\"name\":\"echoBoundedString\"" &&
@@ -281,6 +297,35 @@ elab "#pf_guard_evm_bounded_abi" : command => do
   | .ok (some (.boundedArray plan)) =>
       plan.elementTypeName == "(bool,uint64)" &&
         plan.elementWords == #[.boolean, .uint64]
+  | _ => false
+
+
+#guard
+  match ProofForge.Evm.Codec.inputPlan
+      (ProofForge.Core.Codec.Schema.boundedArray 2
+        (ProofForge.Core.Codec.Schema.enumeration "TaggedSlot" 8 #[
+          ("idle", .unit),
+          ("one", .scalar .uint64),
+          ("pair", .tuple #[.scalar .uint64, .scalar .uint64])])) with
+  | .ok plan =>
+      plan.typeName == "(uint8,uint64,uint64)[]" &&
+        plan.wordCount == 7 &&
+        plan.taggedGuards.size == 2 &&
+        plan.dynamic == some (.boundedArray {
+          capacity := 2, elementWords := #[.uint8, .uint64, .uint64]
+        })
+  | .error _ => false
+
+#guard
+  match ProofForge.Evm.Codec.dynamicOutputPlan
+      (ProofForge.Core.Codec.Schema.boundedArray 2
+        (ProofForge.Core.Codec.Schema.enumeration "TaggedSlot" 8 #[
+          ("idle", .unit),
+          ("one", .scalar .uint64),
+          ("pair", .tuple #[.scalar .uint64, .scalar .uint64])])) with
+  | .ok (some (.boundedArray plan)) =>
+      plan.elementTypeName == "(uint8,uint64,uint64)" &&
+        plan.elementWords == #[.uint8, .uint64, .uint64]
   | _ => false
 
 #guard

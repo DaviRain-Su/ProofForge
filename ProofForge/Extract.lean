@@ -242,6 +242,19 @@ private def logicalReturnSchema (env : Environment) (kind : Core.IR.MethodKind) 
         throw "extract/unsupported: mutating boundary must return Except Error (State × Result)"
       return ← codecSchemaOfType env successArgs[successArgs.size - 1]!
 
+/-- Count the fixed UInt64 payload lanes in the source representation of one enum constructor.
+The shared frame deliberately follows the representation Extract already uses for tagged inputs;
+Borsh and ABI tag widths, active-lane rules, and wire encoding remain target-owned. -/
+private def enumReturnPayloadWords : Core.Codec.Schema → Except String Nat
+  | .unit => pure 0
+  | .scalar (.uint 64) => pure 1
+  | .tuple items => do
+      for item in items do
+        unless item == .scalar .uint64 do
+          throw "extract/unsupported: tagged enum result fields must be UInt64"
+      pure items.size
+  | _ => throw "extract/unsupported: tagged enum result fields must be UInt64"
+
 /-- How many UInt64 source limbs one static return element occupies. -/
 private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except String Nat := do
   match schema with
@@ -278,8 +291,14 @@ private partial def staticReturnLimbCount (schema : Core.Codec.Schema) : Except 
       pure 2
   | .option _ =>
       throw "extract/unsupported: tagged array Option requires a one-limb scalar payload"
+  | .enumeration _ tagBits variants => do
+      unless tagBits == 8 && !variants.isEmpty && variants.size ≤ 256 do
+        throw "extract/unsupported: tagged array enum requires a nonempty u8 tag space"
+      let counts ← variants.mapM fun variant => enumReturnPayloadWords variant.2
+      let payloadWords := counts.foldl (init := 0) max
+      pure (1 + payloadWords)
   | _ =>
-      throw "extract/unsupported: bounded result requires static scalar/tuple/record/option elements"
+      throw "extract/unsupported: bounded result requires static scalar/tuple/record/option/enum elements"
 
 /-- Expand one static element at `values[i]` into its fixed UInt64 return limbs. -/
 private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
@@ -316,7 +335,15 @@ private def expandStaticElementReturns (root : Ops.Val) (capacity index : Nat)
         .returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 0),
         .returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity 8)
       ]
-  | _ => throw "extract/unsupported: bounded result requires static scalar or tagged Option elements"
+  | .enumeration .. => do
+      -- Tagged Tuple v1 enum element: uint8 tag + UInt64 payload lanes at bytes 0,8,16,…
+      let limbs ← staticReturnLimbCount element
+      let mut out : Array Ops.Op := #[]
+      for part in [0:limbs] do
+        out := out.push
+          (.returnU64 (.indexGet root "values" (.lit (UInt64.ofNat index)) capacity (part * 8)))
+      pure out
+  | _ => throw "extract/unsupported: bounded result requires static scalar or tagged Option/enum elements"
 
 /-- Expand a top-level bounded result into its fixed scalar frame before either target chooses an
 output wire format. This is source projection only: Borsh/ABI length and padding remain target
@@ -353,18 +380,6 @@ private def expandBoundedReturnOps (schema : Core.Codec.Schema) (ops : Array Ops
         | _ => throw "extract/unsupported: constructed bounded result must contain scalar leaves"
   | _, _ => pure ops
 
-/-- Count the fixed UInt64 payload lanes in the source representation of one enum constructor.
-The shared frame deliberately follows the representation Extract already uses for tagged inputs;
-Borsh and ABI tag widths, active-lane rules, and wire encoding remain target-owned. -/
-private def enumReturnPayloadWords : Core.Codec.Schema → Except String Nat
-  | .unit => pure 0
-  | .scalar (.uint 64) => pure 1
-  | .tuple items => do
-      for item in items do
-        unless item == .scalar .uint64 do
-          throw "extract/unsupported: tagged enum result fields must be UInt64"
-      pure items.size
-  | _ => throw "extract/unsupported: tagged enum result fields must be UInt64"
 
 /-- Verify that control-owning construction preserved an exact logical result frame on every
 successful path. Error exits are intentionally frame-free; nearby locals are never inferred as

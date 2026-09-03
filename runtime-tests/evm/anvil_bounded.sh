@@ -356,6 +356,52 @@ for case in \
   solana_lean_require_equal "$echo_options" "$expected" "tagged Option array dynamic result $input"
 done
 
+# Tagged-in-array enum elements: each slot is Tagged Tuple v1 (uint8,uint64,uint64).
+enums_selector="$("$cast" sig 'echoBoundedEnums((uint8,uint64,uint64)[])')"
+enums_array_data() {
+  "$python" -I -S -c \
+    "import sys
+sel = sys.argv[1]
+offset = int(sys.argv[2])
+length = int(sys.argv[3])
+words = [f'{int(v):064x}' for v in sys.argv[4:]]
+print(sel + f'{offset:064x}{length:064x}' + ''.join(words))" \
+    "$enums_selector" "$@"
+}
+
+for malformed in \
+  "$(enums_array_data 0 1 0 0 0)" \
+  "$(enums_array_data 32 3 0 0 0 1 11 0 2 7 9)" \
+  "$(enums_array_data 32 1 0 0)" \
+  "$(enums_array_data 32 1 0 11 0)" \
+  "$(enums_array_data 32 1 1 11 5)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: malformed tagged-in-array enum calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+if "$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedEnums((uint8,uint64,uint64)[])((uint8,uint64,uint64)[])' \
+    '[(0,0,0),(1,11,0),(2,7,9)]' >/dev/null 2>&1; then
+  echo "FAIL: over-capacity tagged enum array unexpectedly succeeded" >&2
+  exit 1
+fi
+
+for case in \
+  '[]|[]' \
+  '[(0,0,0)]|[(0, 0, 0)]' \
+  '[(1,11,0)]|[(1, 11, 0)]' \
+  '[(2,7,9)]|[(2, 7, 9)]' \
+  '[(1,11,0),(0,0,0)]|[(1, 11, 0), (0, 0, 0)]' \
+  '[(0,0,0),(2,7,9)]|[(0, 0, 0), (2, 7, 9)]'; do
+  input="${case%%|*}"
+  expected="${case#*|}"
+  echo_enums="$("$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedEnums((uint8,uint64,uint64)[])((uint8,uint64,uint64)[])' "$input")"
+  solana_lean_require_equal "$echo_enums" "$expected" "tagged enum array dynamic result $input"
+done
+
 for input in 0x 0x0b0d 0x0b0d1113171d1f25; do
   echo_bytes="$("$cast" call --rpc-url "$rpc" "$addr" \
     'echoBoundedBytes(bytes)(bytes)' "$input")"
@@ -409,4 +455,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-bounded: ok (canonical dynamic input/output + wide/constructed/tagged-in-array + UTF-8 matrix; engineering only)"
+echo "evm-anvil-bounded: ok (canonical dynamic input/output + wide/constructed/tagged-in-array Option+enum + UTF-8 matrix; engineering only)"
