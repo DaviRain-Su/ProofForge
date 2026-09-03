@@ -151,7 +151,7 @@ jobs:
           NEAR: ${{ steps.filter.outputs.near }}
           PHOENIX: ${{ steps.filter.outputs.phoenix }}
           PHOENIX_CODEGEN: ${{ steps.filter.outputs.phoenix_codegen }}
-          PHOENIX_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'phoenix') }}
+          PHOENIX_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'phoenix') }}
         run: |
           set -euo pipefail
           any_true() {
