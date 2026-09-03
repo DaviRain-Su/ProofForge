@@ -1,4 +1,4 @@
-import ProofForge
+import ProofForge.Attr
 
 /-!
 # Shared TokenShape (N15 / wsm-near-conformance-001)
