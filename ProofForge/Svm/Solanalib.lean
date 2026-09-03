@@ -273,16 +273,16 @@ def evalStaticStore? (slot : IR.Slot) (regs : RegMap) (memory : Mem) : Option Me
   | .st chunk dst src offset => evalStore chunk dst src offset regs memory
   | _ => none
 
-private def stepDecoded (instruction : BpfInstruction) : BpfState → BpfState
+def stepDecoded (instruction : BpfInstruction) : BpfState → BpfState
   | .ok pc regs memory stack sv functions current remaining =>
       step pc instruction regs memory stack sv functions false 0 current remaining
   | state => state
 
-private def decodedSlots : BpfInstruction → Nat
+def decodedSlots : BpfInstruction → Nat
   | .ldImm .. => 2
   | _ => 1
 
-private def decodedInstructionAt? : EbpfAsm → Nat → Option BpfInstruction
+def decodedInstructionAt? : EbpfAsm → Nat → Option BpfInstruction
   | [], _ => none
   | instruction :: rest, pc =>
       if pc == 0 then some instruction
@@ -292,7 +292,7 @@ private def decodedInstructionAt? : EbpfAsm → Nat → Option BpfInstruction
 /-- Dispatch decoded instructions by the PC produced by upstream `step`. This is needed for the
 multiply guard's internal jump over its quotient check; reaching a PC outside the fragment returns
 the boundary state to the caller. -/
-private def runDecodedFrom (basePC : Nat) (program : EbpfAsm) : BpfState → BpfState :=
+def runDecodedFrom (basePC : Nat) (program : EbpfAsm) : BpfState → BpfState :=
   go (program.length + 1)
 where
   go : Nat → BpfState → BpfState
