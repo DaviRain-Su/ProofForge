@@ -137,7 +137,8 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       echoOptions.outputPolicy ==
         "bounded-array-return-v1((bool,uint64)[];capacity=2;element-words=2)" &&
       echoOptions.inputPolicy ==
-        "0=bounded-array-v1((bool,uint64)[];capacity=2;element-words=2)" &&
+        "0=bounded-array-v1((bool,uint64)[];capacity=2;element-words=2;" ++
+        "guards=tagged-tuple-v1((bool,uint64)[];1:2:1:[0,1],3:4:1:[0,1]))" &&
       echoEnums.paramCount == 7 && echoEnums.retCount == 7 &&
       echoEnums.retTypes == #[.uint32, .uint8, .uint64, .uint64, .uint8, .uint64, .uint64] &&
       echoEnums.outputPlan == some (.dynamic (.boundedArray {
@@ -147,7 +148,8 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       echoEnums.outputPolicy ==
         "bounded-array-return-v1((uint8,uint64,uint64)[];capacity=2;element-words=3)" &&
       echoEnums.inputPolicy ==
-        "0=bounded-array-v1((uint8,uint64,uint64)[];capacity=2;element-words=3)" &&
+        "0=bounded-array-v1((uint8,uint64,uint64)[];capacity=2;element-words=3;" ++
+        "guards=tagged-tuple-v1((uint8,uint64,uint64)[];1:2:2:[0,1,2],4:5:2:[0,1,2]))" &&
       echoBytes.retCount == 9 && echoBytes.outputPlan == some (.dynamic (.packedBytes {
         capacity := 8, validateUtf8 := false })) &&
       echoString.retCount == 9 && echoString.outputPlan == some (.dynamic (.packedBytes {
@@ -327,6 +329,25 @@ elab "#pf_guard_evm_bounded_abi" : command => do
       plan.elementTypeName == "(uint8,uint64,uint64)" &&
         plan.elementWords == #[.uint8, .uint64, .uint64]
   | _ => false
+
+#guard
+  match
+    ProofForge.Evm.Codec.inputPlan
+      (ProofForge.Core.Codec.Schema.boundedArray 2
+        (ProofForge.Core.Codec.Schema.enumeration "TwoLane" 8 #[
+          ("idle", .unit),
+          ("one", .scalar .uint64)])),
+    ProofForge.Evm.Codec.inputPlan
+      (ProofForge.Core.Codec.Schema.boundedArray 2
+        (ProofForge.Core.Codec.Schema.enumeration "ThreeLane" 8 #[
+          ("idle", .unit),
+          ("one", .scalar .uint64),
+          ("two", .scalar .uint64)])) with
+  | .ok two, .ok three =>
+      two.typeName == three.typeName &&
+        two.wordCount == three.wordCount &&
+        two.inputCanonical != three.inputCanonical
+  | _, _ => false
 
 #guard
   match ProofForge.Evm.Codec.inputPlan

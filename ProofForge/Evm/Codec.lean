@@ -317,8 +317,10 @@ def AbiInputPlan.taggedCanonical (plan : AbiInputPlan) : String :=
 def AbiInputPlan.inputCanonical (plan : AbiInputPlan) : String :=
   match plan.dynamic with
   | some (.boundedArray array) =>
+      let guards := plan.taggedCanonical
       s!"bounded-array-v1({plan.typeName};capacity={array.capacity};" ++
-        s!"element-words={array.elementWords.size})"
+        s!"element-words={array.elementWords.size}" ++
+        (if guards.isEmpty then ")" else s!";guards={guards})")
   | some (.packedBytes bytes) =>
       s!"packed-bytes-v1({plan.typeName};capacity={bytes.capacity};" ++
         s!"utf8={bytes.validateUtf8})"
