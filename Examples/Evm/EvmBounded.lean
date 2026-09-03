@@ -62,6 +62,12 @@ def echoBoundedWide (_s : State) (items : BoundedVec UInt128 2) : BoundedVec UIn
 def echoBoundedPairs (_s : State) (items : BoundedVec (UInt64 × UInt16) 2) :
     BoundedVec (UInt64 × UInt16) 2 := items
 
+/-- Tagged-in-array: each element is Tagged Tuple v1 `(bool,uint64)` for `Option UInt64`.
+Absent elements require a zero payload; nested tagged/dynamic children stay fail closed. -/
+@[pf_entry]
+def echoBoundedOptions (_s : State) (items : BoundedVec (Option UInt64) 2) :
+    BoundedVec (Option UInt64) 2 := items
+
 @[pf_entry]
 def echoBoundedBytes (_s : State) (bytes : BoundedBytes 8) : BoundedBytes 8 := bytes
 

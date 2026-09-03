@@ -101,7 +101,15 @@ def abiTypeOfSchema (schema : Schema) : Except String String := do
     throw s!"evm/codec: product nesting depth {depth} exceeds Feature A ceiling {maxProductNesting}"
   match schema with
   | .boundedArray _ element =>
-      return (← abiTypeOfSchemaAt element) ++ "[]"
+      match element with
+      | .option (.scalar type) =>
+          return "(bool," ++ (← abiType type) ++ ")[]"
+      | .option _ =>
+          throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
+      | .enumeration .. =>
+          throw "evm/codec: tagged array enum elements are not yet supported"
+      | _ =>
+          return (← abiTypeOfSchemaAt element) ++ "[]"
   | .boundedBytes _ => pure "bytes"
   | .boundedString _ => pure "string"
   | _ => abiTypeOfSchemaAt schema
@@ -304,13 +312,14 @@ private def staticInputPlan (schema : Schema) : Except String AbiInputPlan := do
 is a target resource bound on generated scalar locals, not an ABI or Core schema limit. -/
 def maxBoundedArrayLocalWords : Nat := 64
 
-/-- **ProofForge EVM Bounded Array v1** binds a top-level `BoundedVec α capacity` to canonical
-standard ABI `α[]` calldata. Elements must have a static ABI shape. The fixed source frame is
-`length:uint32 || capacity × flattened-element`; inactive element locals are zeroed by Emit. -/
-def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String AbiInputPlan := do
-  let elementPlan ← staticInputPlan element
+/-- Build a Bounded Array v1 plan from an already-selected element ABI plan (static product or
+Tagged Tuple v1). Remaps element projections and taggedGuards into the `length || slots` frame. -/
+def wrapBoundedArrayV1InputPlan (capacity : Nat) (elementPlan : AbiInputPlan) :
+    Except String AbiInputPlan := do
   unless !elementPlan.words.isEmpty do
     throw "evm/codec: bounded array element must contain a scalar"
+  unless elementPlan.dynamic.isNone do
+    throw "evm/codec: bounded array element must not itself be dynamic"
   let localWords := 1 + capacity * elementPlan.wordCount
   unless localWords ≤ maxBoundedArrayLocalWords do
     throw s!"evm/codec: bounded array local frame exceeds {maxBoundedArrayLocalWords} words"
@@ -320,6 +329,7 @@ def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String 
     wordIndex := 0
     partCount := 1
   }]
+  let mut taggedGuards : Array TaggedGuard := #[]
   for i in [0:capacity] do
     words := words ++ elementPlan.words
     let sourcePrefix := "values_" ++ toString i
@@ -330,12 +340,26 @@ def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String 
         wordIndex := 1 + i * elementPlan.wordCount + projection.wordIndex
         partCount := projection.partCount
       }
+    for guard in elementPlan.taggedGuards do
+      taggedGuards := taggedGuards.push {
+        tagWord := 1 + i * elementPlan.wordCount + guard.tagWord
+        payloadStart := 1 + i * elementPlan.wordCount + guard.payloadStart
+        payloadWords := guard.payloadWords
+        activePayloadWords := guard.activePayloadWords
+      }
   return {
     typeName := elementPlan.typeName ++ "[]"
     words
     projections
+    taggedGuards
     dynamic := some (.boundedArray { capacity, elementWords := elementPlan.words })
   }
+
+/-- **ProofForge EVM Bounded Array v1** binds a top-level `BoundedVec α capacity` to canonical
+standard ABI `α[]` calldata. Static product elements flatten through `staticInputPlan`. Option
+elements are selected by `inputPlan` via Tagged Tuple v1, then wrapped here. -/
+def boundedArrayV1InputPlan (capacity : Nat) (element : Schema) : Except String AbiInputPlan := do
+  wrapBoundedArrayV1InputPlan capacity (← staticInputPlan element)
 
 /-- Bind a bounded source byte frame to canonical standard ABI `bytes` or `string`: one dynamic
 head offset, a 32-byte length, packed active bytes, and zero right-padding to a word boundary. -/
@@ -365,23 +389,43 @@ def packedBytesV1InputPlan (capacity : Nat) (validateUtf8 : Bool) :
 /-- Select an independent top-level dynamic result policy. A bounded result is represented during
 source execution as `length || capacity × element source limbs`, then encoded as the canonical
 standard-ABI active prefix. Wide one-ABI-word scalars and constructed static products (flattenable
-by `staticAbiLeaves`) are accepted within the local-frame ceiling. Nested/tagged dynamics stay
-fail closed because `staticAbiLeaves` rejects them. -/
+by `staticAbiLeaves`) are accepted within the local-frame ceiling. Option elements opt into
+Tagged Tuple v1 `(bool,T)` words with remapped input guards; nested dynamics and enum-in-array
+stay fail closed. -/
 def dynamicOutputPlan (schema : Schema) : Except String (Option DynamicOutputPlan) := do
   let _ ← validate schema
   match schema with
   | .boundedArray capacity element =>
-      let elementWords := (← staticAbiLeaves element).map (·.type)
-      unless !elementWords.isEmpty do
-        throw "evm/codec: bounded array result element must contain a scalar"
-      for type in elementWords do
-        unless Scalar.isWellFormed type do
-          throw "evm/codec: bounded array result has a malformed element scalar"
+      let elementWords ← match element with
+        | .option (.scalar type) => do
+            unless Scalar.isWellFormed type && limbCount type == 1 do
+              throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
+            pure #[.boolean, type]
+        | .option _ =>
+            throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
+        | .enumeration .. =>
+            throw "evm/codec: tagged array enum elements are not yet supported"
+        | _ => do
+            let words := (← staticAbiLeaves element).map (·.type)
+            unless !words.isEmpty do
+              throw "evm/codec: bounded array result element must contain a scalar"
+            for type in words do
+              unless Scalar.isWellFormed type do
+                throw "evm/codec: bounded array result has a malformed element scalar"
+            pure words
       let localWords := 1 + capacity * elementSourceLimbCount elementWords
       unless localWords ≤ maxBoundedArrayLocalWords do
         throw s!"evm/codec: bounded array result frame exceeds {maxBoundedArrayLocalWords} words"
+      let elementTypeName ← match element with
+        | .option (.scalar type) =>
+            pure ("(bool," ++ (← abiType type) ++ ")")
+        | .option _ =>
+            throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
+        | .enumeration .. =>
+            throw "evm/codec: tagged array enum elements are not yet supported"
+        | _ => abiTypeOfSchema element
       return some (.boundedArray {
-        capacity, elementTypeName := ← abiTypeOfSchema element, elementWords
+        capacity, elementTypeName, elementWords
       })
   | .boundedBytes capacity =>
       unless 1 + capacity ≤ maxBoundedArrayLocalWords do
@@ -519,7 +563,17 @@ def inputPlan (schema : Schema) : Except String AbiInputPlan := do
   let _ ← validate schema
   match schema with
   | .option _ | .enumeration .. => taggedTupleV1InputPlan schema
-  | .boundedArray capacity element => boundedArrayV1InputPlan capacity element
+  | .boundedArray capacity element =>
+      match element with
+      | .option _ => do
+          let elementPlan ← taggedTupleV1InputPlan element
+          -- Extract expands Option array elements as tag+one payload limb only.
+          unless elementPlan.words.size == 2 && elementPlan.words[0]? == some .boolean do
+            throw "evm/codec: tagged array Option element requires a one-limb scalar payload"
+          wrapBoundedArrayV1InputPlan capacity elementPlan
+      | .enumeration .. =>
+          throw "evm/codec: tagged array enum elements are not yet supported"
+      | _ => boundedArrayV1InputPlan capacity element
   | .boundedBytes capacity => packedBytesV1InputPlan capacity false
   | .boundedString capacity => packedBytesV1InputPlan capacity true
   | _ => staticInputPlan schema

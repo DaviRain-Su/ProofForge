@@ -312,6 +312,50 @@ for case in \
   solana_lean_require_equal "$echo_pairs" "$expected" "constructed bounded array dynamic result $input"
 done
 
+# Tagged-in-array Option elements: each slot is Tagged Tuple v1 (bool,uint64).
+options_selector="$("$cast" sig 'echoBoundedOptions((bool,uint64)[])')"
+options_array_data() {
+  "$python" -I -S -c \
+    "import sys
+sel = sys.argv[1]
+offset = int(sys.argv[2])
+length = int(sys.argv[3])
+words = [f'{int(v):064x}' for v in sys.argv[4:]]
+print(sel + f'{offset:064x}{length:064x}' + ''.join(words))" \
+    "$options_selector" "$@"
+}
+
+for malformed in \
+  "$(options_array_data 0 1 1 11)" \
+  "$(options_array_data 32 3 1 1 1 2 1 3)" \
+  "$(options_array_data 32 1 1)" \
+  "$(options_array_data 32 1 0 11)"; do
+  if "$cast" call --rpc-url "$rpc" "$addr" --data "$malformed" >/dev/null 2>&1; then
+    echo "FAIL: malformed tagged-in-array Option calldata unexpectedly succeeded" >&2
+    exit 1
+  fi
+done
+
+if "$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedOptions((bool,uint64)[])((bool,uint64)[])' \
+    '[(true,1),(false,0),(true,3)]' >/dev/null 2>&1; then
+  echo "FAIL: over-capacity tagged Option array unexpectedly succeeded" >&2
+  exit 1
+fi
+
+for case in \
+  '[]|[]' \
+  '[(false,0)]|[(false, 0)]' \
+  '[(true,11)]|[(true, 11)]' \
+  '[(true,11),(false,0)]|[(true, 11), (false, 0)]' \
+  '[(false,0),(true,19)]|[(false, 0), (true, 19)]'; do
+  input="${case%%|*}"
+  expected="${case#*|}"
+  echo_options="$("$cast" call --rpc-url "$rpc" "$addr" \
+    'echoBoundedOptions((bool,uint64)[])((bool,uint64)[])' "$input")"
+  solana_lean_require_equal "$echo_options" "$expected" "tagged Option array dynamic result $input"
+done
+
 for input in 0x 0x0b0d 0x0b0d1113171d1f25; do
   echo_bytes="$("$cast" call --rpc-url "$rpc" "$addr" \
     'echoBoundedBytes(bytes)(bytes)' "$input")"
@@ -365,4 +409,4 @@ for malformed in \
   fi
 done
 
-echo "evm-anvil-bounded: ok (canonical dynamic input/output + wide/constructed + UTF-8 matrix; engineering only)"
+echo "evm-anvil-bounded: ok (canonical dynamic input/output + wide/constructed/tagged-in-array + UTF-8 matrix; engineering only)"
