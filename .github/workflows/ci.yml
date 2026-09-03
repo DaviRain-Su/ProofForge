@@ -4,17 +4,21 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read
 
+# Cancel superseded PR runs only. Pushes to main must each finish so every main
+# commit keeps a completed CI result.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decide which lanes must run for this PR. Pushes to main always run every lane.
+  # Decide which lanes must run for this PR. Pushes to main and manual dispatches
+  # always run every lane.
   # Path sets are intentionally broad: shared compiler / toolchain / workflow changes
   # force all lanes so a latent cross-target break still gets caught on main.
   changes:
@@ -200,6 +204,13 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
+      - name: Restore Lean build products
+        uses: actions/cache/restore@v4
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
       - name: Check Runtime / SDK ownership boundaries
         run: python3 scripts/check_ownership.py
 
@@ -222,6 +233,14 @@ jobs:
 
       - name: Build Lean test suite
         run: lake build Tests
+
+      # Save only from main so PR runs do not evict the toolchain cache.
+      - name: Save Lean build products
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
 
       - name: Check EVM Yul fragment audit (E-B1)
         run: python3 scripts/check_yul_fragment.py --self-test
@@ -257,6 +276,7 @@ jobs:
         with:
           path: runtime-tests/solana/target
           key: mollusk-${{ runner.os }}-${{ hashFiles('runtime-tests/solana/Cargo.lock', 'runtime-tests/solana/Cargo.toml') }}
+          restore-keys: mollusk-${{ runner.os }}-
 
       - name: Prepare pinned toolchains
         run: |
@@ -264,6 +284,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Lean build products
+        uses: actions/cache/restore@v4
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Check Runtime / SDK ownership boundaries
         run: python3 scripts/check_ownership.py
@@ -317,6 +344,7 @@ jobs:
         with:
           path: runtime-tests/phoenix/target
           key: mollusk-phoenix-${{ runner.os }}-${{ hashFiles('runtime-tests/phoenix/Cargo.lock', 'runtime-tests/phoenix/Cargo.toml') }}
+          restore-keys: mollusk-phoenix-${{ runner.os }}-
 
       - name: Prepare pinned toolchains
         run: |
@@ -325,11 +353,28 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
+      - name: Restore Lean build products
+        uses: actions/cache/restore@v4
+        with:
+          path: .lake/build
+          key: lake-build-phoenix-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            lake-build-phoenix-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+            lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
       - name: Build Phoenix sources and spec gates
         run: lake build PhoenixExamples PhoenixTests
 
       - name: Build Phoenix programs
         run: lake exe pf -- build --target svm --module Examples.Svm.Phoenix --module Examples.Svm.PhoenixV1Profile --out build/sbpf
+
+      # Save only from main so PR runs do not evict the toolchain cache.
+      - name: Save Lean build products
+        if: github.event_name != 'pull_request'
+        uses: actions/cache/save@v4
+        with:
+          path: .lake/build
+          key: lake-build-phoenix-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
 
       - name: Run Phoenix Mollusk suite
         run: cargo test --locked --manifest-path runtime-tests/phoenix/Cargo.toml
@@ -367,6 +412,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Lean build products
+        uses: actions/cache/restore@v4
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       - name: Build program source modules
         run: lake build Examples
@@ -435,6 +487,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Lean build products
+        uses: actions/cache/restore@v4
+        with:
+          path: .lake/build
+          key: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: lake-build-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
       # Align with ci-001 / SVM+EVM: do NOT recompile the full Tests aggregate.
       # Lean lane already owns `lake build` + `lake build Tests`.
@@ -546,49 +605,9 @@ jobs:
       - name: Run NEAR sandbox detached Promise function-call gate
         run: runtime-tests/near/promise.sh
 
-  evm-yulc:
-    name: EVM yulc (Feature B, optional)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache toolchains and yul-compiler build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.elan
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-            ~/.rustup
-            ~/.foundry
-            .lake/packages
-            powdr-probe/.lake/packages
-          key: evm-yulc-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'powdr-probe/lakefile.toml', 'powdr-probe/lean-toolchain', '.agents/setup') }}
-
-      - name: Prepare pinned toolchains
-        run: |
-          ./.agents/setup
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
-
-      - name: Build pf and fetch powdr-probe deps
-        run: |
-          lake build pf:exe
-          ./scripts/build_powdr_probe.sh
-
-      - name: Build yulc
-        run: ./scripts/build_yulc.sh
-
-      - name: Run yulc smoke and Counter Anvil dual-backend gate
-        run: runtime-tests/evm/yulc.sh
-
   # Required-check identity. Intentionally-skipped lanes (path filter) count as success;
-  # failed or cancelled lanes still fail the merge gate. Optional evm-yulc is not required.
+  # failed or cancelled lanes still fail the merge gate. The evm-yulc lane lives in
+  # ci-yulc.yml (weekly / manual) and is not required.
 
   test:
     if: always()

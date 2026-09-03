@@ -1,0 +1,60 @@
+name: CI yulc (Feature B, manual)
+
+# EVM Feature B (powdr / yulc L3) is paused per docs/plan/multi-target-strategy.md.
+# This lane is weekly / manual only so it never gates a PR; failures here are real.
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-yulc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evm-yulc:
+    name: EVM yulc (Feature B)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache toolchains and yul-compiler build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cargo/bin
+            ~/.cargo/git
+            ~/.cargo/registry
+            ~/.rustup
+            ~/.foundry
+            .lake/packages
+            powdr-probe/.lake/packages
+          key: evm-yulc-${{ runner.os }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'powdr-probe/lakefile.toml', 'powdr-probe/lean-toolchain', '.agents/setup') }}
+
+      - name: Prepare pinned toolchains
+        run: |
+          ./.agents/setup
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Build pf and program source modules
+        run: |
+          lake build pf:exe
+          lake build Examples
+
+      - name: Fetch powdr-probe deps
+        run: ./scripts/build_powdr_probe.sh
+
+      - name: Build yulc
+        run: ./scripts/build_yulc.sh
+
+      - name: Run yulc smoke and Counter Anvil dual-backend gate
+        run: runtime-tests/evm/yulc.sh
