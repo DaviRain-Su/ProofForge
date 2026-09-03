@@ -236,7 +236,7 @@ jobs:
 
       # Save only from main so PR runs do not evict the toolchain cache.
       - name: Save Lean build products
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: .lake/build
@@ -370,7 +370,7 @@ jobs:
 
       # Save only from main so PR runs do not evict the toolchain cache.
       - name: Save Lean build products
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: .lake/build
