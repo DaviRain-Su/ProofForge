@@ -41,14 +41,14 @@ class TargetSpec:
 SVM = TargetSpec(
     key="svm",
     registry_rel=Path("ProofForge/Svm/Registry.lean"),
-    expected_count=79,
+    expected_count=80,
     suffixes=(".so", ".s", ".idl.json"),
     digest_suffix=".s",
 )
 EVM = TargetSpec(
     key="evm",
     registry_rel=Path("ProofForge/Evm/Registry.lean"),
-    expected_count=47,
+    expected_count=48,
     suffixes=(".bin", ".yul", ".abi.json"),
     digest_suffix=".yul",
 )
@@ -62,7 +62,7 @@ XRPL = TargetSpec(
 NEAR = TargetSpec(
     key="near",
     registry_rel=Path("ProofForge/Wasm/Near/Registry.lean"),
-    expected_count=40,
+    expected_count=41,
     suffixes=(".wasm", ".wat"),
     digest_suffix=".wat",
 )

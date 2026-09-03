@@ -42,12 +42,14 @@ surfaces:
 **Shared conceptual subset:** transfer-shaped on all three (names differ:
 `send` / `transfer` / `ft_transfer`); approve-shaped on SVM+EVM only.
 
-**Gaps (remaining N15):**
-- No shared Lean source module for Token (unlike Counter)
-- NEAR has no `approve` / allowance surface (NEP-141)
-- SVM transfer entry is named `send`, not `transfer`
-- Full EVM `Examples.Evm.Token` (`7d01d10202d87dd3`) and NEAR `NearTokenErgonomics`
-  arithmetic remain outside this approve/transfer digest table
+**Gaps / decisions (remaining N15):**
+- ✓ Shared Lean transfer-shaped stub: `Examples.TokenShape` (`credit`/`debit`/`get`/`init`)
+  pinned by `Tests/CrossTargetTokenShapeSpec` (SVM/EVM/NEAR digests)
+- NEAR `approve` / allowance → **intentional N/A** (NEP-141 has no approve; SVM+EVM keep
+  target-local approve fixtures)
+- SVM transfer entry is named `send`, not `transfer` (target-local naming)
+- Full EVM `Examples.Evm.Token` and NEAR `NearTokenErgonomics` arithmetic remain outside the
+  approve/transfer digest table
 - Optional CI lane label `conformance` (Lean gate already covers digests)
 
 ## Landed (runtime sandbox matrix pointers)
@@ -69,8 +71,8 @@ Lean digest authority remains `Tests/CrossTargetTokenSpec.lean` +
 
 ## Follow-up
 
-- Optional shared `Examples.TokenShape` UInt64 stub if a true three-target source is needed
 - Optional CI lane label `conformance` (currently covered by aggregate Lean gate)
+- Optional richer shared TokenShape (multi-account balances) — out of N15 scope
 
 ## Non-goals
 
@@ -80,5 +82,5 @@ Lean digest authority remains `Tests/CrossTargetTokenSpec.lean` +
 ## Acceptance
 
 N15 Counter row → **done** (digest table + method surface pinned).
-N15 Token row → **partial** (target-local digest table + method surface + gaps documented +
-runtime sandbox matrix pointers landed).
+N15 Token row → **partial** (target-local approve/xfer digests + shared `TokenShape`
+transfer stub + NEAR approve = NEP-141 N/A + runtime sandbox matrix pointers).

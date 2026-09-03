@@ -146,7 +146,7 @@ private def selectSvmNames (names : Array String) : Except String (Array String)
 /-- Dual-target fixtures stay at `Examples.<Name>`; target-only fixtures live under
 `Examples.{Svm,Evm,Xrpl,Near}.<Name>`. Program registry names are the last component. -/
 private def sharedFixtureNames : Array String :=
-  #["Counter", "Flag", "Lang", "Maybe", "Pair", "Phase", "Window"]
+  #["Counter", "Flag", "Lang", "Maybe", "Pair", "Phase", "TokenShape", "Window"]
 
 /-- Ergonomics / handle fixtures not yet moved under `Examples.{Evm,Svm,Near}.`. -/
 private def rootTargetFixtureNames (target : Target) : Array String :=
