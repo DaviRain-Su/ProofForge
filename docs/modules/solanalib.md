@@ -92,6 +92,8 @@ E∞ 第四刀（`svm-sem-009`）：account-0 signer/writable 标志字节 walk 
 E∞ 第五刀（`svm-sem-010`）：account-0 lamports/data_len walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_LAMPORTS`/`ACC0_DATA_LEN`）。
 E∞ 第六刀（`svm-sem-011`）：account-0 owner 前两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER`/`+8`）。
 E∞ 第七刀（`svm-sem-012`）：account-0 owner 后两 limb walk ↔ 绝对 `r6` 加载（对齐 Emit `ACC0_OWNER+16`/`+24`）。
+
+E∞ 的「刀」是封闭的具体字面量检查：固定 seeded 内存、固定指令片段、固定期望值，由 `native_decide` 经编译代码判定。它不是对 account 数量、data 长度或内存全称量化的定理；`#print axioms` 含 `Lean.ofReduceBool`，可信基因此包含 Lean 编译器。该族是 `Emit.emitSkipAccount` 几何对解释器的回归检查，account 10–19 的刀由 `scripts/regenerate_account{15,16,17,18,19}_knives.py` 文本替换生成。刀族停在第 135 刀（`svm-sem-140`，account-18 → account-19 skip）。预期替代物是一条对 account 数量与 data 长度参数化的 skip-chain 引理，尚未落地。
 仍不覆盖：完整 account 向量、executable/rent_epoch、Loader/syscall/CPI/ELF、Queue 非空/绕回/pop 分支、whole-program Agave execution。
 
 ## Tests
